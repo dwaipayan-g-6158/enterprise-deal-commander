@@ -9,6 +9,7 @@ import type { ListDealsHealth } from './listDealsHealth';
 import type { ListDealsState } from './listDealsState';
 
 export type ListDealsParams = {
+search?: string;
 stage?: string;
 health?: ListDealsHealth;
 sort?: string;

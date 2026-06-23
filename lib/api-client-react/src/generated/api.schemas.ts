@@ -870,6 +870,7 @@ export interface FxRatesUpdate {
 }
 
 export type ListDealsParams = {
+search?: string;
 stage?: string;
 health?: ListDealsHealth;
 sort?: string;

@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Activity,
   ShieldAlert,
@@ -14,6 +15,8 @@ import {
   Pencil,
   Radio,
   Presentation,
+  Sparkles,
+  AlertCircle,
 } from "lucide-react";
 import { EditDealSheet } from "@/components/cockpit/edit-deal-sheet";
 import { BatSignalDialog } from "@/components/cockpit/bat-signal-dialog";
@@ -23,23 +26,71 @@ import { BlockersPanel } from "@/components/cockpit/blockers-panel";
 import { CrossSellPanel } from "@/components/cockpit/cross-sell-panel";
 import { ActivityFeed } from "@/components/cockpit/activity-feed";
 import { BriefingMode } from "@/components/cockpit/briefing-mode";
+import { RiskSimulator } from "@/components/cockpit/risk-simulator";
+import { SnapshotScrubber } from "@/components/cockpit/snapshot-scrubber";
 import { formatCurrency } from "@/components/cockpit/use-invalidate";
+
+function CockpitSkeleton() {
+  return (
+    <div className="p-8 max-w-[1600px] mx-auto space-y-6">
+      <div className="flex justify-between gap-4">
+        <div className="space-y-2">
+          <Skeleton className="h-9 w-72" />
+          <Skeleton className="h-5 w-48" />
+        </div>
+        <Skeleton className="h-20 w-64" />
+      </div>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <Skeleton className="h-64 w-full" />
+        <Skeleton className="h-96 w-full lg:col-span-2" />
+      </div>
+    </div>
+  );
+}
 
 export default function DealCockpit() {
   const params = useParams();
   const id = params.id as string;
 
-  const { data: dealResponse, isLoading: isLoadingDeal } = useGetDeal(id);
-  const { data: intelligenceResponse, isLoading: isLoadingIntel } = useGetDealIntelligence(id);
+  const {
+    data: dealResponse,
+    isLoading: isLoadingDeal,
+    isError: isErrorDeal,
+    refetch: refetchDeal,
+  } = useGetDeal(id);
+  const {
+    data: intelligenceResponse,
+    isLoading: isLoadingIntel,
+    isError: isErrorIntel,
+    refetch: refetchIntel,
+  } = useGetDealIntelligence(id);
 
   const [editOpen, setEditOpen] = useState(false);
   const [batOpen, setBatOpen] = useState(false);
   const [briefingOpen, setBriefingOpen] = useState(false);
+  const [simOpen, setSimOpen] = useState(false);
 
   const deal = dealResponse?.data;
   const intel = intelligenceResponse?.data;
 
-  if (isLoadingDeal || isLoadingIntel) return <div className="p-8">Loading cockpit...</div>;
+  if (isLoadingDeal || isLoadingIntel) return <CockpitSkeleton />;
+  if (isErrorDeal || isErrorIntel) {
+    return (
+      <div className="p-8 max-w-md mx-auto mt-16 flex flex-col items-center gap-4 text-center">
+        <AlertCircle className="h-10 w-10 text-destructive" />
+        <p className="text-muted-foreground">Could not load this deal.</p>
+        <Button
+          variant="outline"
+          onClick={() => {
+            refetchDeal();
+            refetchIntel();
+          }}
+        >
+          Retry
+        </Button>
+      </div>
+    );
+  }
   if (!deal || !intel) return <div className="p-8 text-destructive">Deal not found</div>;
 
   return (
@@ -73,9 +124,12 @@ export default function DealCockpit() {
               {formatCurrency(deal.calculatedTCV, deal.dealCurrency)}
             </p>
           </div>
-          <div className="flex flex-col gap-2">
+          <div className="grid grid-cols-2 gap-2">
             <Button size="sm" onClick={() => setEditOpen(true)}>
               <Pencil className="h-4 w-4 mr-2" /> Edit
+            </Button>
+            <Button size="sm" variant="outline" onClick={() => setSimOpen(true)}>
+              <Sparkles className="h-4 w-4 mr-2" /> Simulate
             </Button>
             <Button size="sm" variant="outline" onClick={() => setBatOpen(true)}>
               <Radio className="h-4 w-4 mr-2" /> Bat-Signal
@@ -86,6 +140,8 @@ export default function DealCockpit() {
           </div>
         </div>
       </div>
+
+      <SnapshotScrubber dealId={id} intel={intel} />
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Left Column - Financials & Team */}
@@ -215,6 +271,7 @@ export default function DealCockpit() {
 
       <EditDealSheet deal={deal} open={editOpen} onOpenChange={setEditOpen} />
       <BatSignalDialog dealId={id} open={batOpen} onOpenChange={setBatOpen} />
+      <RiskSimulator deal={deal} intel={intel} open={simOpen} onOpenChange={setSimOpen} />
       {briefingOpen && <BriefingMode deal={deal} intel={intel} onClose={() => setBriefingOpen(false)} />}
     </div>
   );

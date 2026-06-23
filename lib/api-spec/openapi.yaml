@@ -106,6 +106,7 @@ paths:
       tags: [deals]
       summary: List deals
       parameters:
+        - { name: search, in: query, required: false, schema: { type: string } }
         - { name: stage, in: query, required: false, schema: { type: string } }
         - { name: health, in: query, required: false, schema: { type: string, enum: [GREEN, YELLOW, RED] } }
         - { name: sort, in: query, required: false, schema: { type: string } }

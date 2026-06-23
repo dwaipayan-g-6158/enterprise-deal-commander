@@ -66,6 +66,19 @@ router.get("/deals", async (req: Request, res: Response) => {
     await Promise.all(rows.map((r) => serializeDeal(r.id)))
   ).filter((d): d is NonNullable<typeof d> => d !== null);
 
+  if (q.search) {
+    const needle = q.search.trim().toLowerCase();
+    if (needle) {
+      items = items.filter(
+        (d) =>
+          d.dealName.toLowerCase().includes(needle) ||
+          d.accountName.toLowerCase().includes(needle) ||
+          d.accountManager.toLowerCase().includes(needle) ||
+          d.technicalLead.toLowerCase().includes(needle),
+      );
+    }
+  }
+
   if (q.health) {
     items = items.filter((d) => d.healthStatus === q.health);
   }

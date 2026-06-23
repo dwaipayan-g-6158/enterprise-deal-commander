@@ -3,6 +3,7 @@ import { Link, useLocation } from "wouter";
 import { LogOut, LayoutDashboard, Briefcase, BarChart, Settings, Activity } from "lucide-react";
 import { useLogout, useGetMe } from "@workspace/api-client-react";
 import { Button } from "./ui/button";
+import { ThemeToggle } from "./theme-toggle";
 
 export function Layout({ children }: { children: ReactNode }) {
   const [location, setLocation] = useLocation();
@@ -49,11 +50,15 @@ export function Layout({ children }: { children: ReactNode }) {
           })}
         </nav>
 
-        <div className="p-4 border-t border-border">
-          <div className="mb-4">
+        <div className="p-4 border-t border-border space-y-2">
+          <p className="text-[10px] text-muted-foreground uppercase tracking-wider px-1 pb-1">
+            Press <kbd className="font-mono">Cmd K</kbd> for quick search
+          </p>
+          <div className="mb-2">
             <p className="text-sm font-medium">{user?.email}</p>
             <p className="text-xs text-muted-foreground capitalize">{user?.role}</p>
           </div>
+          <ThemeToggle />
           <Button variant="outline" className="w-full justify-start text-muted-foreground" onClick={handleLogout}>
             <LogOut className="mr-2 h-4 w-4" />
             Logout

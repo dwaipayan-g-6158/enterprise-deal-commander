@@ -51,6 +51,7 @@ export const GetMeResponse = zod.object({
  * @summary List deals
  */
 export const ListDealsQueryParams = zod.object({
+  "search": zod.coerce.string().optional(),
   "stage": zod.coerce.string().optional(),
   "health": zod.enum(['GREEN', 'YELLOW', 'RED']).optional(),
   "sort": zod.coerce.string().optional(),
