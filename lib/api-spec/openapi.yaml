@@ -2,21 +2,39 @@ openapi: 3.1.0
 info:
   # Do not change the title, if the title changes, the import paths will be broken
   title: Api
-  version: 0.1.0
-  description: API specification
+  version: 1.0.0
+  description: Enterprise Deal Commander (EDC) Phase 1 API
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: auth
+    description: Authentication
+  - name: deals
+    description: Enterprise deal CRUD and lifecycle
+  - name: gates
+    description: Technical gate progression
+  - name: blockers
+    description: Deal blockers
+  - name: crossSells
+    description: Cross-sell products
+  - name: intelligence
+    description: Pattern engine and analytics
+  - name: audit
+    description: Audit trail, change digest, replay
+  - name: governance
+    description: Dispositions, interventions, bat-signal
+  - name: lookups
+    description: Reference data and engine tuning
+
 paths:
   /healthz:
     get:
       operationId: healthCheck
       tags: [health]
       summary: Health check
-      description: Returns server health status
       responses:
         "200":
           description: Healthy
@@ -24,13 +42,1665 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  # ============ AUTH ============
+  /v1/auth/login:
+    post:
+      operationId: login
+      tags: [auth]
+      summary: Authenticate the commander
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginInput"
+      responses:
+        "200":
+          description: Authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResponse"
+        "401":
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /v1/auth/logout:
+    post:
+      operationId: logout
+      tags: [auth]
+      summary: Log out
+      responses:
+        "200":
+          description: Logged out
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResponse"
+  /v1/auth/me:
+    get:
+      operationId: getMe
+      tags: [auth]
+      summary: Current commander
+      responses:
+        "200":
+          description: Current user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthUser"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  # ============ DEALS ============
+  /v1/deals:
+    get:
+      operationId: listDeals
+      tags: [deals]
+      summary: List deals
+      parameters:
+        - { name: stage, in: query, required: false, schema: { type: string } }
+        - { name: health, in: query, required: false, schema: { type: string, enum: [GREEN, YELLOW, RED] } }
+        - { name: sort, in: query, required: false, schema: { type: string } }
+        - { name: state, in: query, required: false, schema: { type: string, enum: [active, archived, deleted] } }
+        - { name: limit, in: query, required: false, schema: { type: integer } }
+        - { name: offset, in: query, required: false, schema: { type: integer } }
+      responses:
+        "200":
+          description: Deal list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DealListResponse"
+    post:
+      operationId: createDeal
+      tags: [deals]
+      summary: Create a deal
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DealInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DealResponse"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Already exists
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /v1/deals/{id}:
+    get:
+      operationId: getDeal
+      tags: [deals]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Deal
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DealResponse"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    put:
+      operationId: updateDeal
+      tags: [deals]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DealUpdate"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DealResponse"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Stage guardrail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StageGuardrailError"
+        "422":
+          description: Loss archetype required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      operationId: deleteDeal
+      tags: [deals]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "204":
+          description: Soft-deleted
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /v1/deals/{id}/restore:
+    post:
+      operationId: restoreDeal
+      tags: [deals]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Restored
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DealResponse"
+        "409":
+          description: Not removed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /v1/deals/{id}/archive:
+    post:
+      operationId: archiveDeal
+      tags: [deals]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Archived
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DealResponse"
+
+  # ============ GATES ============
+  /v1/deals/{dealId}/gates:
+    get:
+      operationId: listGates
+      tags: [gates]
+      parameters:
+        - { name: dealId, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Gates
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GateListResponse"
+  /v1/deals/{dealId}/gates/{gateCode}:
+    put:
+      operationId: updateGate
+      tags: [gates]
+      parameters:
+        - { name: dealId, in: path, required: true, schema: { type: string } }
+        - { name: gateCode, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GateUpdateInput"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GateMutationResponse"
+  /v1/deals/{dealId}/gates/batch:
+    put:
+      operationId: updateGatesBatch
+      tags: [gates]
+      parameters:
+        - { name: dealId, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GateBatchInput"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GateBatchResponse"
+
+  # ============ BLOCKERS ============
+  /v1/deals/{dealId}/blockers:
+    get:
+      operationId: listBlockers
+      tags: [blockers]
+      parameters:
+        - { name: dealId, in: path, required: true, schema: { type: string } }
+        - { name: resolved, in: query, required: false, schema: { type: boolean } }
+      responses:
+        "200":
+          description: Blockers
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BlockerListResponse"
+    post:
+      operationId: createBlocker
+      tags: [blockers]
+      parameters:
+        - { name: dealId, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BlockerInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BlockerResponse"
+  /v1/deals/{dealId}/blockers/{blockerId}:
+    put:
+      operationId: updateBlocker
+      tags: [blockers]
+      parameters:
+        - { name: dealId, in: path, required: true, schema: { type: string } }
+        - { name: blockerId, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BlockerUpdate"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BlockerResponse"
+    delete:
+      operationId: deleteBlocker
+      tags: [blockers]
+      parameters:
+        - { name: dealId, in: path, required: true, schema: { type: string } }
+        - { name: blockerId, in: path, required: true, schema: { type: string } }
+      responses:
+        "204":
+          description: Deleted
+
+  # ============ CROSS-SELLS ============
+  /v1/deals/{dealId}/cross-sells:
+    get:
+      operationId: listCrossSells
+      tags: [crossSells]
+      parameters:
+        - { name: dealId, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Cross-sells
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CrossSellListResponse"
+    put:
+      operationId: updateCrossSells
+      tags: [crossSells]
+      parameters:
+        - { name: dealId, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CrossSellUpdate"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CrossSellListResponse"
+
+  # ============ INTELLIGENCE ============
+  /v1/deals/{dealId}/intelligence:
+    get:
+      operationId: getDealIntelligence
+      tags: [intelligence]
+      parameters:
+        - { name: dealId, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Intelligence
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IntelligenceResponse"
+  /v1/intelligence/summary:
+    get:
+      operationId: getIntelligenceSummary
+      tags: [intelligence]
+      responses:
+        "200":
+          description: Summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SummaryResponse"
+  /v1/intelligence/portfolio-analysis:
+    get:
+      operationId: getPortfolioAnalysis
+      tags: [intelligence]
+      responses:
+        "200":
+          description: Portfolio analysis
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PortfolioAnalysisResponse"
+  /v1/analytics/autopsy:
+    get:
+      operationId: getAutopsy
+      tags: [intelligence]
+      parameters:
+        - { name: archetypeId, in: query, required: false, schema: { type: integer } }
+      responses:
+        "200":
+          description: Autopsy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AutopsyResponse"
+
+  # ============ AUDIT / TEMPORAL ============
+  /v1/deals/{dealId}/audit:
+    get:
+      operationId: listAudit
+      tags: [audit]
+      parameters:
+        - { name: dealId, in: path, required: true, schema: { type: string } }
+        - { name: entity_type, in: query, required: false, schema: { type: string } }
+        - { name: field_changed, in: query, required: false, schema: { type: string } }
+        - { name: since, in: query, required: false, schema: { type: string } }
+        - { name: until, in: query, required: false, schema: { type: string } }
+        - { name: limit, in: query, required: false, schema: { type: integer } }
+        - { name: offset, in: query, required: false, schema: { type: integer } }
+      responses:
+        "200":
+          description: Audit log
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuditListResponse"
+  /v1/deals/{dealId}/changes:
+    get:
+      operationId: listChanges
+      tags: [audit]
+      parameters:
+        - { name: dealId, in: path, required: true, schema: { type: string } }
+        - { name: since, in: query, required: false, schema: { type: string } }
+      responses:
+        "200":
+          description: Change digest
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChangesResponse"
+  /v1/deals/{dealId}/review-marker:
+    post:
+      operationId: setReviewMarker
+      tags: [audit]
+      parameters:
+        - { name: dealId, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Marker set
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReviewMarkerResponse"
+  /v1/deals/{dealId}/snapshot:
+    get:
+      operationId: getSnapshot
+      tags: [audit]
+      parameters:
+        - { name: dealId, in: path, required: true, schema: { type: string } }
+        - { name: date, in: query, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Reconstructed snapshot
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SnapshotResponse"
+
+  # ============ GOVERNANCE ============
+  /v1/deals/{dealId}/alerts/{patternCode}/disposition:
+    put:
+      operationId: setDisposition
+      tags: [governance]
+      parameters:
+        - { name: dealId, in: path, required: true, schema: { type: string } }
+        - { name: patternCode, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DispositionInput"
+      responses:
+        "200":
+          description: Disposition set
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DispositionResponse"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      operationId: clearDisposition
+      tags: [governance]
+      parameters:
+        - { name: dealId, in: path, required: true, schema: { type: string } }
+        - { name: patternCode, in: path, required: true, schema: { type: string } }
+      responses:
+        "204":
+          description: Cleared
+  /v1/deals/{dealId}/interventions:
+    post:
+      operationId: launchIntervention
+      tags: [governance]
+      parameters:
+        - { name: dealId, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InterventionInput"
+      responses:
+        "201":
+          description: Launched
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InterventionResponse"
+  /v1/deals/{dealId}/bat-signal:
+    post:
+      operationId: createBatSignal
+      tags: [governance]
+      parameters:
+        - { name: dealId, in: path, required: true, schema: { type: string } }
+      responses:
+        "201":
+          description: Share link minted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BatSignalResponse"
+  /v1/share/{token}:
+    get:
+      operationId: getSharedRiskCard
+      tags: [governance]
+      parameters:
+        - { name: token, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Read-only risk card
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ShareCardResponse"
+        "401":
+          description: Expired
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  # ============ LOOKUPS ============
+  /v1/lookups/pipeline-stages:
+    get:
+      operationId: listPipelineStages
+      tags: [lookups]
+      responses:
+        "200":
+          description: Stages
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PipelineStageListResponse"
+  /v1/lookups/pricing-models:
+    get:
+      operationId: listPricingModels
+      tags: [lookups]
+      responses:
+        "200":
+          description: Models
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PricingModelListResponse"
+  /v1/lookups/services-tiers:
+    get:
+      operationId: listServicesTiers
+      tags: [lookups]
+      responses:
+        "200":
+          description: Tiers
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServicesTierListResponse"
+  /v1/lookups/product-catalog:
+    get:
+      operationId: listProductCatalog
+      tags: [lookups]
+      responses:
+        "200":
+          description: Products
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProductListResponse"
+  /v1/lookups/gate-definitions:
+    get:
+      operationId: listGateDefinitions
+      tags: [lookups]
+      responses:
+        "200":
+          description: Gate definitions
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GateDefinitionListResponse"
+  /v1/lookups/blocker-categories:
+    get:
+      operationId: listBlockerCategories
+      tags: [lookups]
+      responses:
+        "200":
+          description: Categories
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BlockerCategoryListResponse"
+  /v1/lookups/blocker-severities:
+    get:
+      operationId: listBlockerSeverities
+      tags: [lookups]
+      responses:
+        "200":
+          description: Severities
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BlockerSeverityListResponse"
+  /v1/lookups/loss-archetypes:
+    get:
+      operationId: listLossArchetypes
+      tags: [lookups]
+      responses:
+        "200":
+          description: Archetypes
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LossArchetypeListResponse"
+  /v1/lookups/intervention-checklists:
+    get:
+      operationId: listInterventionChecklists
+      tags: [lookups]
+      responses:
+        "200":
+          description: Checklists
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InterventionChecklistListResponse"
+  /v1/lookups/engine-thresholds:
+    get:
+      operationId: listEngineThresholds
+      tags: [lookups]
+      responses:
+        "200":
+          description: Thresholds
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EngineThresholdListResponse"
+    put:
+      operationId: updateEngineThresholds
+      tags: [lookups]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ThresholdsUpdate"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EngineThresholdListResponse"
+  /v1/lookups/fx-rates:
+    get:
+      operationId: listFxRates
+      tags: [lookups]
+      responses:
+        "200":
+          description: FX rates
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FxRateListResponse"
+    put:
+      operationId: updateFxRates
+      tags: [lookups]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FxRatesUpdate"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FxRateListResponse"
+
 components:
   schemas:
     HealthStatus:
       type: object
       properties:
-        status:
-          type: string
-      required:
-        - status
+        status: { type: string }
+      required: [status]
 
+    MessageResponse:
+      type: object
+      properties:
+        message: { type: string }
+      required: [message]
+
+    ErrorDetail:
+      type: object
+      properties:
+        code: { type: string }
+        message: { type: string }
+        details:
+          type: array
+          items: { type: object, additionalProperties: true }
+      required: [code, message]
+    ErrorResponse:
+      type: object
+      properties:
+        error: { $ref: "#/components/schemas/ErrorDetail" }
+      required: [error]
+    StageGuardrailError:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            code: { type: string }
+            message: { type: string }
+            patternCodes:
+              type: array
+              items: { type: string }
+          required: [code, message, patternCodes]
+      required: [error]
+
+    LoginInput:
+      type: object
+      properties:
+        email: { type: string }
+        password: { type: string }
+      required: [email, password]
+    AuthUser:
+      type: object
+      properties:
+        id: { type: string }
+        email: { type: string }
+        role: { type: string }
+      required: [id, email, role]
+
+    Deal:
+      type: object
+      properties:
+        id: { type: string }
+        dealName: { type: string }
+        accountName: { type: string }
+        crmRecordUrl: { type: ["string", "null"] }
+        accountManager: { type: string }
+        technicalLead: { type: string }
+        salesStageId: { type: integer }
+        salesStage: { type: string }
+        stageEnteredAt: { type: string }
+        productRevenue: { type: number }
+        pricingModelId: { type: integer }
+        pricingModel: { type: string }
+        contractTermYears: { type: integer }
+        dealCurrency: { type: string }
+        expectedCloseDate: { type: ["string", "null"] }
+        winProbabilityPct: { type: ["integer", "null"] }
+        servicesRevenue: { type: number }
+        servicesTierId: { type: integer }
+        servicesTier: { type: string }
+        managerStrategicBlueprint: { type: ["string", "null"] }
+        speakerNotes: { type: ["string", "null"] }
+        lossReason: { type: ["string", "null"] }
+        lossArchetypeId: { type: ["integer", "null"] }
+        calculatedTCV: { type: number }
+        normalizedTCV: { type: number }
+        healthStatus: { type: string }
+        archivedAt: { type: ["string", "null"] }
+        deletedAt: { type: ["string", "null"] }
+        createdAt: { type: string }
+        updatedAt: { type: string }
+      required:
+        - id
+        - dealName
+        - accountName
+        - accountManager
+        - technicalLead
+        - salesStageId
+        - salesStage
+        - productRevenue
+        - servicesRevenue
+        - dealCurrency
+        - calculatedTCV
+        - normalizedTCV
+        - healthStatus
+    DealInput:
+      type: object
+      properties:
+        deal_name: { type: string, minLength: 1, maxLength: 255 }
+        account_name: { type: string, minLength: 1, maxLength: 255 }
+        crm_record_url: { type: ["string", "null"] }
+        account_manager: { type: string, minLength: 1, maxLength: 255 }
+        technical_lead: { type: string, minLength: 1, maxLength: 255 }
+        sales_stage_id: { type: integer }
+        product_revenue: { type: number, minimum: 0 }
+        pricing_model_id: { type: integer }
+        contract_term_years: { type: integer, minimum: 1, maximum: 10 }
+        deal_currency: { type: string, minLength: 3, maxLength: 3 }
+        expected_close_date: { type: ["string", "null"] }
+        win_probability_pct: { type: ["integer", "null"] }
+        services_revenue: { type: number, minimum: 0 }
+        services_tier_id: { type: integer }
+        manager_strategic_blueprint: { type: ["string", "null"] }
+        speaker_notes: { type: ["string", "null"] }
+        loss_archetype_id: { type: ["integer", "null"] }
+      required:
+        - deal_name
+        - account_name
+        - account_manager
+        - technical_lead
+        - sales_stage_id
+        - product_revenue
+        - pricing_model_id
+        - contract_term_years
+        - services_revenue
+        - services_tier_id
+    DealUpdate:
+      type: object
+      properties:
+        deal_name: { type: string, minLength: 1, maxLength: 255 }
+        account_name: { type: string, minLength: 1, maxLength: 255 }
+        crm_record_url: { type: ["string", "null"] }
+        account_manager: { type: string, minLength: 1, maxLength: 255 }
+        technical_lead: { type: string, minLength: 1, maxLength: 255 }
+        sales_stage_id: { type: integer }
+        product_revenue: { type: number, minimum: 0 }
+        pricing_model_id: { type: integer }
+        contract_term_years: { type: integer, minimum: 1, maximum: 10 }
+        deal_currency: { type: string, minLength: 3, maxLength: 3 }
+        expected_close_date: { type: ["string", "null"] }
+        win_probability_pct: { type: ["integer", "null"] }
+        services_revenue: { type: number, minimum: 0 }
+        services_tier_id: { type: integer }
+        manager_strategic_blueprint: { type: ["string", "null"] }
+        speaker_notes: { type: ["string", "null"] }
+        loss_archetype_id: { type: ["integer", "null"] }
+        override_reason: { type: string, minLength: 10, maxLength: 1000 }
+    DealResponse:
+      type: object
+      properties:
+        data: { $ref: "#/components/schemas/Deal" }
+      required: [data]
+    ListMeta:
+      type: object
+      properties:
+        total: { type: integer }
+        limit: { type: integer }
+        offset: { type: integer }
+      required: [total, limit, offset]
+    DealListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/Deal" }
+        meta: { $ref: "#/components/schemas/ListMeta" }
+      required: [data, meta]
+
+    Gate:
+      type: object
+      properties:
+        gateCode: { type: string }
+        label: { type: string }
+        gateGroup: { type: integer }
+        description: { type: ["string", "null"] }
+        sortOrder: { type: integer }
+        isCompleted: { type: boolean }
+        completedAt: { type: ["string", "null"] }
+        completedBy: { type: ["string", "null"] }
+        notes: { type: ["string", "null"] }
+        prerequisiteGateCodes:
+          type: array
+          items: { type: string }
+      required: [gateCode, label, gateGroup, sortOrder, isCompleted]
+    IntegrityWarning:
+      type: object
+      properties:
+        gateCode: { type: string }
+        type: { type: string, enum: [out_of_order, regression] }
+        message: { type: string }
+      required: [gateCode, type, message]
+    GateUpdateInput:
+      type: object
+      properties:
+        is_completed: { type: boolean }
+        notes: { type: string, maxLength: 1000 }
+      required: [is_completed]
+    GateBatchItem:
+      type: object
+      properties:
+        gate_code: { type: string }
+        is_completed: { type: boolean }
+        notes: { type: string, maxLength: 1000 }
+      required: [gate_code, is_completed]
+    GateBatchInput:
+      type: object
+      properties:
+        updates:
+          type: array
+          items: { $ref: "#/components/schemas/GateBatchItem" }
+      required: [updates]
+    GateListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/Gate" }
+      required: [data]
+    GateMutationResponse:
+      type: object
+      properties:
+        data: { $ref: "#/components/schemas/Gate" }
+        integrityWarnings:
+          type: array
+          items: { $ref: "#/components/schemas/IntegrityWarning" }
+      required: [data, integrityWarnings]
+    GateBatchResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/Gate" }
+        integrityWarnings:
+          type: array
+          items: { $ref: "#/components/schemas/IntegrityWarning" }
+      required: [data, integrityWarnings]
+
+    Blocker:
+      type: object
+      properties:
+        id: { type: string }
+        categoryId: { type: integer }
+        category: { type: string }
+        severityId: { type: integer }
+        severity: { type: string }
+        description: { type: string }
+        isResolved: { type: boolean }
+        resolvedAt: { type: ["string", "null"] }
+        resolutionNotes: { type: ["string", "null"] }
+        loggedAt: { type: string }
+      required: [id, categoryId, category, severityId, severity, description, isResolved]
+    BlockerInput:
+      type: object
+      properties:
+        category_id: { type: integer }
+        severity_id: { type: integer }
+        description: { type: string, minLength: 6, maxLength: 2000 }
+      required: [category_id, severity_id, description]
+    BlockerUpdate:
+      type: object
+      properties:
+        is_resolved: { type: boolean }
+        resolution_notes: { type: string, maxLength: 2000 }
+        severity_id: { type: integer }
+    BlockerListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/Blocker" }
+      required: [data]
+    BlockerResponse:
+      type: object
+      properties:
+        data: { $ref: "#/components/schemas/Blocker" }
+      required: [data]
+
+    CrossSell:
+      type: object
+      properties:
+        productId: { type: string }
+        productName: { type: string }
+        productCategory: { type: ["string", "null"] }
+        isPitched: { type: boolean }
+      required: [productId, productName, isPitched]
+    CrossSellUpdate:
+      type: object
+      properties:
+        product_ids:
+          type: array
+          items: { type: string }
+      required: [product_ids]
+    CrossSellListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/CrossSell" }
+      required: [data]
+
+    AlertInput:
+      type: object
+      properties:
+        label: { type: string }
+        value: {}
+      required: [label]
+    AlertThreshold:
+      type: object
+      properties:
+        key: { type: string }
+        value: {}
+        source: { type: string, enum: [default, tuned] }
+      required: [key, value, source]
+    AlertExplanation:
+      type: object
+      properties:
+        inputs:
+          type: array
+          items: { $ref: "#/components/schemas/AlertInput" }
+        thresholdsUsed:
+          type: array
+          items: { $ref: "#/components/schemas/AlertThreshold" }
+        clearsWhen: { type: string }
+      required: [inputs, thresholdsUsed, clearsWhen]
+    AlertDisposition:
+      type: object
+      properties:
+        state: { type: string, enum: [acknowledge, accept, snooze] }
+        rationale: { type: ["string", "null"] }
+        snoozeUntilFieldChange: { type: ["string", "null"] }
+      required: [state]
+    AlertIntervention:
+      type: object
+      properties:
+        checklistId: { type: integer }
+        name: { type: string }
+      required: [checklistId, name]
+    Alert:
+      type: object
+      properties:
+        code: { type: string }
+        severity: { type: string, enum: [RED, YELLOW] }
+        message: { type: string }
+        weight: { type: integer }
+        explanation: { $ref: "#/components/schemas/AlertExplanation" }
+        disposition:
+          oneOf:
+            - { $ref: "#/components/schemas/AlertDisposition" }
+            - { type: "null" }
+        intervention:
+          oneOf:
+            - { $ref: "#/components/schemas/AlertIntervention" }
+            - { type: "null" }
+      required: [code, severity, message, explanation]
+    DataQualityNote:
+      type: object
+      properties:
+        code: { type: string }
+        message: { type: string }
+      required: [code, message]
+    IntelligenceCrossSell:
+      type: object
+      properties:
+        pitchedCount: { type: integer }
+        catalogCount: { type: integer }
+        attachRate: { type: number }
+        whitespace:
+          type: array
+          items: { $ref: "#/components/schemas/CrossSell" }
+      required: [pitchedCount, catalogCount, attachRate, whitespace]
+    IntelligenceFinancials:
+      type: object
+      properties:
+        calculatedTCV: { type: number }
+        normalizedTCV: { type: number }
+        reportingCurrency: { type: string }
+        fxRateApplied: { type: ["number", "null"] }
+        productRevenue: { type: number }
+        servicesRevenue: { type: number }
+        pricingModel: { type: string }
+        termYears: { type: integer }
+        dealCurrency: { type: string }
+        expectedCloseDate: { type: ["string", "null"] }
+        daysToClose: { type: ["integer", "null"] }
+        winProbability: { type: ["integer", "null"] }
+        servicesTier: { type: string }
+        crossSells:
+          type: array
+          items: { $ref: "#/components/schemas/CrossSell" }
+        crossSell: { $ref: "#/components/schemas/IntelligenceCrossSell" }
+      required: [calculatedTCV, normalizedTCV, reportingCurrency, productRevenue, servicesRevenue, pricingModel, termYears, dealCurrency, servicesTier, crossSells, crossSell]
+    IntelligenceTeam:
+      type: object
+      properties:
+        accountManager: { type: string }
+        technicalLead: { type: string }
+      required: [accountManager, technicalLead]
+    IntelligenceTechnicalTrack:
+      type: object
+      properties:
+        progressPercentage: { type: number }
+        currentMilestone: { type: string }
+        stepsCompleted: { type: integer }
+        totalSteps: { type: integer }
+        gates:
+          type: array
+          items: { $ref: "#/components/schemas/Gate" }
+        integrityWarnings:
+          type: array
+          items: { $ref: "#/components/schemas/IntegrityWarning" }
+      required: [progressPercentage, currentMilestone, stepsCompleted, totalSteps, gates, integrityWarnings]
+    IntelligenceGovernance:
+      type: object
+      properties:
+        healthStatus: { type: string, enum: [GREEN, YELLOW, RED] }
+        alerts:
+          type: array
+          items: { $ref: "#/components/schemas/Alert" }
+        managedAlerts:
+          type: array
+          items: { $ref: "#/components/schemas/Alert" }
+        unmanagedAlertCount: { type: integer }
+        activeBlockerCount: { type: integer }
+        highSeverityBlockerCount: { type: integer }
+        blueprintNotes: { type: ["string", "null"] }
+        dataQualityNotes:
+          type: array
+          items: { $ref: "#/components/schemas/DataQualityNote" }
+      required: [healthStatus, alerts, managedAlerts, unmanagedAlertCount, activeBlockerCount, highSeverityBlockerCount, dataQualityNotes]
+    Intelligence:
+      type: object
+      properties:
+        id: { type: string }
+        accountName: { type: string }
+        dealName: { type: string }
+        crmRecordUrl: { type: ["string", "null"] }
+        team: { $ref: "#/components/schemas/IntelligenceTeam" }
+        salesStage: { type: string }
+        stageEnteredAt: { type: ["string", "null"] }
+        daysInStage: { type: integer }
+        financials: { $ref: "#/components/schemas/IntelligenceFinancials" }
+        technicalTrack: { $ref: "#/components/schemas/IntelligenceTechnicalTrack" }
+        governance: { $ref: "#/components/schemas/IntelligenceGovernance" }
+      required: [id, accountName, dealName, team, salesStage, daysInStage, financials, technicalTrack, governance]
+    IntelligenceResponse:
+      type: object
+      properties:
+        data: { $ref: "#/components/schemas/Intelligence" }
+      required: [data]
+
+    HealthCounts:
+      type: object
+      properties:
+        GREEN: { type: integer }
+        YELLOW: { type: integer }
+        RED: { type: integer }
+      required: [GREEN, YELLOW, RED]
+    CriticalAlert:
+      type: object
+      properties:
+        dealId: { type: string }
+        dealName: { type: string }
+        accountName: { type: string }
+        alert: { $ref: "#/components/schemas/Alert" }
+      required: [dealId, dealName, accountName, alert]
+    StaleDeal:
+      type: object
+      properties:
+        dealId: { type: string }
+        dealName: { type: string }
+        daysInStage: { type: integer }
+      required: [dealId, dealName, daysInStage]
+    TopMover:
+      type: object
+      properties:
+        dealId: { type: string }
+        dealName: { type: string }
+        changeCount: { type: integer }
+      required: [dealId, dealName, changeCount]
+    ChangesSinceLastReview:
+      type: object
+      properties:
+        dealsWithChanges: { type: integer }
+        topMovers:
+          type: array
+          items: { $ref: "#/components/schemas/TopMover" }
+      required: [dealsWithChanges, topMovers]
+    Summary:
+      type: object
+      properties:
+        totalDealsMonitored: { type: integer }
+        totalTCV: { type: number }
+        reportingCurrency: { type: string }
+        dealsByHealth: { $ref: "#/components/schemas/HealthCounts" }
+        dealsByStage:
+          type: object
+          additionalProperties: { type: integer }
+        criticalAlerts:
+          type: array
+          items: { $ref: "#/components/schemas/CriticalAlert" }
+        staleDeals:
+          type: array
+          items: { $ref: "#/components/schemas/StaleDeal" }
+        changesSinceLastReview: { $ref: "#/components/schemas/ChangesSinceLastReview" }
+      required: [totalDealsMonitored, totalTCV, reportingCurrency, dealsByHealth, dealsByStage, criticalAlerts, staleDeals]
+    SummaryResponse:
+      type: object
+      properties:
+        data: { $ref: "#/components/schemas/Summary" }
+      required: [data]
+
+    AlertCorrelation:
+      type: object
+      properties:
+        code: { type: string }
+        share: { type: number }
+        lift: { type: number }
+      required: [code, share, lift]
+    ManagerCorrelation:
+      type: object
+      properties:
+        accountManager: { type: string }
+        dealCount: { type: integer }
+        alertCorrelations:
+          type: array
+          items: { $ref: "#/components/schemas/AlertCorrelation" }
+        avgCycleTimeDays: { type: number }
+      required: [accountManager, dealCount, alertCorrelations, avgCycleTimeDays]
+    LeadCorrelation:
+      type: object
+      properties:
+        technicalLead: { type: string }
+        dealCount: { type: integer }
+        alertCorrelations:
+          type: array
+          items: { $ref: "#/components/schemas/AlertCorrelation" }
+        avgCycleTimeDays: { type: number }
+      required: [technicalLead, dealCount, alertCorrelations, avgCycleTimeDays]
+    ProductCorrelation:
+      type: object
+      properties:
+        productName: { type: string }
+        dealCount: { type: integer }
+        presentInStalledShare: { type: number }
+        alertCorrelations:
+          type: array
+          items: { $ref: "#/components/schemas/AlertCorrelation" }
+      required: [productName, dealCount, presentInStalledShare, alertCorrelations]
+    PortfolioAnalysis:
+      type: object
+      properties:
+        byAccountManager:
+          type: array
+          items: { $ref: "#/components/schemas/ManagerCorrelation" }
+        byTechnicalLead:
+          type: array
+          items: { $ref: "#/components/schemas/LeadCorrelation" }
+        byProduct:
+          type: array
+          items: { $ref: "#/components/schemas/ProductCorrelation" }
+        noTechnicalLeadCycleTimeDays: { type: ["number", "null"] }
+      required: [byAccountManager, byTechnicalLead, byProduct]
+    PortfolioAnalysisResponse:
+      type: object
+      properties:
+        data: { $ref: "#/components/schemas/PortfolioAnalysis" }
+      required: [data]
+
+    PatternShare:
+      type: object
+      properties:
+        code: { type: string }
+        share: { type: number }
+      required: [code, share]
+    ArchetypeAutopsy:
+      type: object
+      properties:
+        archetypeId: { type: integer }
+        archetypeName: { type: string }
+        lossCount: { type: integer }
+        avgGateCompletionPct: { type: number }
+        servicesAttachShare: { type: number }
+        patternsThatFired:
+          type: array
+          items: { $ref: "#/components/schemas/PatternShare" }
+        neverPassedGate2Share: { type: number }
+      required: [archetypeId, archetypeName, lossCount, avgGateCompletionPct, servicesAttachShare, patternsThatFired, neverPassedGate2Share]
+    Autopsy:
+      type: object
+      properties:
+        byArchetype:
+          type: array
+          items: { $ref: "#/components/schemas/ArchetypeAutopsy" }
+      required: [byArchetype]
+    AutopsyResponse:
+      type: object
+      properties:
+        data: { $ref: "#/components/schemas/Autopsy" }
+      required: [data]
+
+    AuditLog:
+      type: object
+      properties:
+        id: { type: string }
+        entityType: { type: string }
+        fieldChanged: { type: string }
+        oldValue: { type: ["string", "null"] }
+        newValue: { type: ["string", "null"] }
+        changedBy: { type: string }
+        changedAt: { type: string }
+      required: [id, entityType, fieldChanged, changedBy, changedAt]
+    AuditListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/AuditLog" }
+        meta: { $ref: "#/components/schemas/ListMeta" }
+      required: [data, meta]
+    ChangeLine:
+      type: object
+      properties:
+        line: { type: string }
+        field: { type: string }
+        at: { type: string }
+      required: [line, field, at]
+    ChangesResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/ChangeLine" }
+      required: [data]
+    ReviewMarker:
+      type: object
+      properties:
+        lastReviewedAt: { type: string }
+        reviewedBy: { type: string }
+      required: [lastReviewedAt, reviewedBy]
+    ReviewMarkerResponse:
+      type: object
+      properties:
+        data: { $ref: "#/components/schemas/ReviewMarker" }
+      required: [data]
+    Snapshot:
+      type: object
+      properties:
+        asOf: { type: string }
+        deal: { type: object, additionalProperties: true }
+        gates:
+          type: array
+          items: { $ref: "#/components/schemas/Gate" }
+        salesStage: { type: string }
+        reconstructed: { type: boolean }
+      required: [asOf, deal, gates, salesStage, reconstructed]
+    SnapshotResponse:
+      type: object
+      properties:
+        data: { $ref: "#/components/schemas/Snapshot" }
+      required: [data]
+
+    DispositionInput:
+      type: object
+      properties:
+        disposition: { type: string, enum: [acknowledge, accept, snooze] }
+        rationale: { type: string, minLength: 10, maxLength: 2000 }
+        snooze_until_field_change: { type: string, minLength: 1, maxLength: 100 }
+      required: [disposition]
+    Disposition:
+      type: object
+      properties:
+        id: { type: string }
+        dealId: { type: string }
+        patternCode: { type: string }
+        disposition: { type: string }
+        rationale: { type: ["string", "null"] }
+        snoozeUntilFieldChange: { type: ["string", "null"] }
+        createdBy: { type: string }
+        createdAt: { type: string }
+      required: [id, dealId, patternCode, disposition, createdBy]
+    DispositionResponse:
+      type: object
+      properties:
+        data: { $ref: "#/components/schemas/Disposition" }
+      required: [data]
+
+    InterventionInput:
+      type: object
+      properties:
+        pattern_code: { type: string, minLength: 1, maxLength: 50 }
+        checklist_id: { type: integer }
+      required: [pattern_code, checklist_id]
+    Intervention:
+      type: object
+      properties:
+        id: { type: string }
+        dealId: { type: string }
+        patternCode: { type: string }
+        checklistId: { type: integer }
+        launchedBy: { type: string }
+        launchedAt: { type: string }
+      required: [id, dealId, patternCode, checklistId, launchedBy, launchedAt]
+    InterventionResponse:
+      type: object
+      properties:
+        data: { $ref: "#/components/schemas/Intervention" }
+      required: [data]
+    BatSignal:
+      type: object
+      properties:
+        shareUrl: { type: string }
+        expiresAt: { type: string }
+      required: [shareUrl, expiresAt]
+    BatSignalResponse:
+      type: object
+      properties:
+        data: { $ref: "#/components/schemas/BatSignal" }
+      required: [data]
+    ShareCard:
+      type: object
+      properties:
+        dealName: { type: string }
+        accountName: { type: string }
+        normalizedTCV: { type: number }
+        reportingCurrency: { type: string }
+        healthStatus: { type: string }
+        salesStage: { type: string }
+        progressPercentage: { type: number }
+        currentMilestone: { type: string }
+        alerts:
+          type: array
+          items: { $ref: "#/components/schemas/Alert" }
+        strategicAsk: { type: ["string", "null"] }
+      required: [dealName, accountName, normalizedTCV, reportingCurrency, healthStatus, salesStage, progressPercentage, currentMilestone, alerts]
+    ShareCardResponse:
+      type: object
+      properties:
+        data: { $ref: "#/components/schemas/ShareCard" }
+      required: [data]
+
+    PipelineStage:
+      type: object
+      properties:
+        id: { type: integer }
+        stageName: { type: string }
+        sortOrder: { type: integer }
+        description: { type: ["string", "null"] }
+      required: [id, stageName, sortOrder]
+    PipelineStageListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/PipelineStage" }
+      required: [data]
+    PricingModel:
+      type: object
+      properties:
+        id: { type: integer }
+        modelName: { type: string }
+      required: [id, modelName]
+    PricingModelListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/PricingModel" }
+      required: [data]
+    ServicesTier:
+      type: object
+      properties:
+        id: { type: integer }
+        tierName: { type: string }
+      required: [id, tierName]
+    ServicesTierListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/ServicesTier" }
+      required: [data]
+    Product:
+      type: object
+      properties:
+        id: { type: string }
+        productName: { type: string }
+        productCategory: { type: ["string", "null"] }
+      required: [id, productName]
+    ProductListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/Product" }
+      required: [data]
+    GateDefinition:
+      type: object
+      properties:
+        gateGroup: { type: integer }
+        gateCode: { type: string }
+        label: { type: string }
+        description: { type: ["string", "null"] }
+        sortOrder: { type: integer }
+        prerequisiteGateCodes:
+          type: array
+          items: { type: string }
+      required: [gateGroup, gateCode, label, sortOrder, prerequisiteGateCodes]
+    GateDefinitionListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/GateDefinition" }
+      required: [data]
+    BlockerCategory:
+      type: object
+      properties:
+        id: { type: integer }
+        categoryName: { type: string }
+      required: [id, categoryName]
+    BlockerCategoryListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/BlockerCategory" }
+      required: [data]
+    BlockerSeverity:
+      type: object
+      properties:
+        id: { type: integer }
+        severityName: { type: string }
+        sortOrder: { type: integer }
+      required: [id, severityName, sortOrder]
+    BlockerSeverityListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/BlockerSeverity" }
+      required: [data]
+    LossArchetype:
+      type: object
+      properties:
+        id: { type: integer }
+        archetypeName: { type: string }
+      required: [id, archetypeName]
+    LossArchetypeListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/LossArchetype" }
+      required: [data]
+    InterventionChecklist:
+      type: object
+      properties:
+        id: { type: integer }
+        triggerPatternCode: { type: string }
+        name: { type: string }
+        steps:
+          type: array
+          items: { type: string }
+      required: [id, triggerPatternCode, name, steps]
+    InterventionChecklistListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/InterventionChecklist" }
+      required: [data]
+    EngineThreshold:
+      type: object
+      properties:
+        parameterKey: { type: string }
+        parameterValue: { type: string }
+        dataType: { type: string }
+        description: { type: ["string", "null"] }
+      required: [parameterKey, parameterValue, dataType]
+    EngineThresholdListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/EngineThreshold" }
+      required: [data]
+    ThresholdUpdateItem:
+      type: object
+      properties:
+        parameter_key: { type: string }
+        parameter_value: { type: string }
+      required: [parameter_key, parameter_value]
+    ThresholdsUpdate:
+      type: object
+      properties:
+        updates:
+          type: array
+          items: { $ref: "#/components/schemas/ThresholdUpdateItem" }
+      required: [updates]
+    FxRate:
+      type: object
+      properties:
+        baseCurrency: { type: string }
+        quoteCurrency: { type: string }
+        rate: { type: number }
+        asOf: { type: string }
+      required: [baseCurrency, quoteCurrency, rate, asOf]
+    FxRateListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/FxRate" }
+      required: [data]
+    FxRateUpdateItem:
+      type: object
+      properties:
+        base_currency: { type: string }
+        quote_currency: { type: string }
+        rate: { type: number }
+        as_of: { type: string }
+      required: [base_currency, quote_currency, rate, as_of]
+    FxRatesUpdate:
+      type: object
+      properties:
+        updates:
+          type: array
+          items: { $ref: "#/components/schemas/FxRateUpdateItem" }
+      required: [updates]

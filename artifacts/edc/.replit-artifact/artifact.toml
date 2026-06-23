@@ -1,0 +1,31 @@
+kind = "web"
+previewPath = "/"
+title = "Enterprise Deal Commander"
+version = "1.0.0"
+id = "artifacts/edc"
+router = "path"
+
+[[integratedSkills]]
+name = "react-vite"
+version = "1.0.0"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 23037
+
+[services.development]
+run = "pnpm --filter @workspace/edc run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/edc", "run", "build" ]
+publicDir = "artifacts/edc/dist/public"
+serve = "static"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "23037"
+BASE_PATH = "/"

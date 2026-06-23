@@ -1,0 +1,3 @@
+- [api-server build & run](api-server-build.md) — esbuild bundles TS workspace pkgs; restart workflow after edits; run one-off scripts via dist build.
+- [EDC auth & client wiring](edc-auth-client.md) — login uses `email` field mapping to commanders.username; React Query hooks live in @workspace/api-client-react, paths /api/v1/*.
+- [EDC server gotchas](edc-server-gotchas.md) — Express route ordering (batch before :param), deal update is PUT+PATCH, server-side stage guardrail (409 patternCodes), audit entity_id for snapshot reconstruction.
