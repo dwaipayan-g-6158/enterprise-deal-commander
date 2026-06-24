@@ -4,3 +4,4 @@
 - [EDC client engine recompute](edc-client-engine-recompute.md) — Simulator + historical Briefing re-run pure engine via shared engine-recompute.ts; audit caps at 200 rows; snapshot reconstructs gates only (economics/stage stay current).
 - [EDC Phase 2 backbone](edc-phase2-backbone.md) — event bus + edc_v2 durable history + /api/v2 reads; cache invalidation via middleware (not just events), wrap() generation guard, per-deal serialized health reconciliation.
 - [Briefing export & privacy](briefing-export-privacy.md) — Briefing has 2 export paths (PNG=toPng(contentRef), Print=window.print minus print:hidden); presenter-private content must be outside contentRef AND print:hidden.
+- [EDC v2 snapshot payload](edc-snapshot-payload.md) — deal_snapshots.payload = {deal,gates,governance}; deal includes speakerNotes, so any payload-rendering UI must whitelist fields.
