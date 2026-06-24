@@ -2,3 +2,4 @@
 - [EDC auth & client wiring](edc-auth-client.md) — login uses `email` field mapping to commanders.username; React Query hooks live in @workspace/api-client-react, paths /api/v1/*.
 - [EDC server gotchas](edc-server-gotchas.md) — Express route ordering (batch before :param), deal update is PUT+PATCH, server-side stage guardrail (409 patternCodes), audit entity_id for snapshot reconstruction.
 - [EDC client engine recompute](edc-client-engine-recompute.md) — Simulator + historical Briefing re-run pure engine via shared engine-recompute.ts; audit caps at 200 rows; snapshot reconstructs gates only (economics/stage stay current).
+- [Briefing export & privacy](briefing-export-privacy.md) — Briefing has 2 export paths (PNG=toPng(contentRef), Print=window.print minus print:hidden); presenter-private content must be outside contentRef AND print:hidden.
