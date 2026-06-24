@@ -27,6 +27,7 @@ import {
   type RawGate,
   type IntelligenceOutput,
 } from "@workspace/engine";
+import { cache, CacheKeys, CacheTtl } from "./cache";
 
 export const DEFAULT_THRESHOLDS: EngineThresholds = {
   elephant_tcv_threshold: 250000,
@@ -53,23 +54,36 @@ export function toISO(value: Date | string | null | undefined): string | null {
   return value.toISOString();
 }
 
+/**
+ * Engine thresholds are lookup data: read on every intelligence assembly and on
+ * the portfolio summary, but they change only via the `/lookups/` config routes.
+ * Cache them under the long-TTL `lookup:` tier; the cache-invalidation
+ * middleware drops the whole `lookup:` prefix whenever a config route mutates,
+ * so a threshold change is reflected immediately on the next read.
+ */
 export async function getThresholds(): Promise<{
   thresholds: EngineThresholds;
   seededDefaults: EngineThresholds;
 }> {
-  const rows = await db.select().from(engineThresholds);
-  const thresholds: EngineThresholds = { ...DEFAULT_THRESHOLDS };
-  for (const row of rows) {
-    if (row.dataType === "string") {
-      thresholds[row.parameterKey] = row.parameterValue;
-    } else {
-      const num = Number(row.parameterValue);
-      thresholds[row.parameterKey] = Number.isNaN(num)
-        ? row.parameterValue
-        : num;
-    }
-  }
-  return { thresholds, seededDefaults: { ...DEFAULT_THRESHOLDS } };
+  return cache.wrap(
+    `${CacheKeys.lookupPrefix}thresholds`,
+    CacheTtl.lookup,
+    async () => {
+      const rows = await db.select().from(engineThresholds);
+      const thresholds: EngineThresholds = { ...DEFAULT_THRESHOLDS };
+      for (const row of rows) {
+        if (row.dataType === "string") {
+          thresholds[row.parameterKey] = row.parameterValue;
+        } else {
+          const num = Number(row.parameterValue);
+          thresholds[row.parameterKey] = Number.isNaN(num)
+            ? row.parameterValue
+            : num;
+        }
+      }
+      return { thresholds, seededDefaults: { ...DEFAULT_THRESHOLDS } };
+    },
+  );
 }
 
 export async function getFxRate(
@@ -77,14 +91,24 @@ export async function getFxRate(
   quote: string,
 ): Promise<number | null> {
   if (base === quote) return 1;
-  const rows = await db
-    .select()
-    .from(fxRates)
-    .where(and(eq(fxRates.baseCurrency, base), eq(fxRates.quoteCurrency, quote)))
-    .orderBy(desc(fxRates.asOf))
-    .limit(1);
-  if (rows.length === 0) return null;
-  return Number(rows[0].rate);
+  // FX rates are lookup data keyed by currency pair; invalidated with the rest
+  // of the `lookup:` tier whenever a config route mutates.
+  return cache.wrap(
+    `${CacheKeys.lookupPrefix}fx:${base}:${quote}`,
+    CacheTtl.lookup,
+    async () => {
+      const rows = await db
+        .select()
+        .from(fxRates)
+        .where(
+          and(eq(fxRates.baseCurrency, base), eq(fxRates.quoteCurrency, quote)),
+        )
+        .orderBy(desc(fxRates.asOf))
+        .limit(1);
+      if (rows.length === 0) return null;
+      return Number(rows[0].rate);
+    },
+  );
 }
 
 interface GateView {

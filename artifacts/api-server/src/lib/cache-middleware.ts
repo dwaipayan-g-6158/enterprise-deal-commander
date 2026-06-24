@@ -42,7 +42,9 @@ export function cacheInvalidationMiddleware(
     }
 
     if (GLOBAL_CONFIG_PATH.test(path)) {
-      // Threshold / FX changes re-shape every deal's intelligence.
+      // Threshold / FX changes re-shape every deal's intelligence, and the
+      // cached lookup tier (thresholds/FX) is now stale.
+      cache.invalidatePrefix(CacheKeys.lookupPrefix);
       cache.invalidatePrefix(CacheKeys.intelligencePrefix);
       cache.invalidatePrefix(CacheKeys.summaryPrefix);
     }

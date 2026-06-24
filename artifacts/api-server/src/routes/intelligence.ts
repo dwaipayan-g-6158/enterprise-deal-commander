@@ -68,9 +68,25 @@ async function loadActiveIntel(): Promise<Intel[]> {
   return results.filter((r): r is Intel => r !== null);
 }
 
+/**
+ * Portfolio rollups are short-TTL summaries: assembled from every active deal,
+ * served from the `summary:` tier and briefly stale-tolerant. The
+ * cache-invalidation middleware drops the whole `summary:` prefix on any
+ * mutation, so a write is reflected on the next read.
+ */
 router.get(
   "/intelligence/summary",
   async (_req: Request, res: Response) => {
+    const data = await cache.wrap(
+      `${CacheKeys.summaryPrefix}overview`,
+      CacheTtl.summary,
+      () => computeSummary(),
+    );
+    res.json(GetIntelligenceSummaryResponse.parse({ data }));
+  },
+);
+
+async function computeSummary() {
     const { thresholds } = await getThresholds();
     const reportingCurrency = String(thresholds.reporting_currency || "USD");
     const staleStageDays = Number(thresholds.stale_stage_days) || 21;
@@ -147,25 +163,20 @@ router.get(
     }
     movers.sort((a, b) => b.changeCount - a.changeCount);
 
-    res.json(
-      GetIntelligenceSummaryResponse.parse({
-        data: {
-          totalDealsMonitored: deals.length,
-          totalTCV,
-          reportingCurrency,
-          dealsByHealth,
-          dealsByStage,
-          criticalAlerts: criticalAlerts.slice(0, 10),
-          staleDeals: staleDeals.slice(0, 10),
-          changesSinceLastReview: {
-            dealsWithChanges,
-            topMovers: movers.slice(0, 5),
-          },
-        },
-      }),
-    );
-  },
-);
+    return {
+      totalDealsMonitored: deals.length,
+      totalTCV,
+      reportingCurrency,
+      dealsByHealth,
+      dealsByStage,
+      criticalAlerts: criticalAlerts.slice(0, 10),
+      staleDeals: staleDeals.slice(0, 10),
+      changesSinceLastReview: {
+        dealsWithChanges,
+        topMovers: movers.slice(0, 5),
+      },
+    };
+}
 
 interface PortfolioRecord {
   accountManager: string;
@@ -200,6 +211,16 @@ function correlations(
 router.get(
   "/intelligence/portfolio-analysis",
   async (_req: Request, res: Response) => {
+    const data = await cache.wrap(
+      `${CacheKeys.summaryPrefix}portfolio-analysis`,
+      CacheTtl.summary,
+      () => computePortfolioAnalysis(),
+    );
+    res.json(GetPortfolioAnalysisResponse.parse({ data }));
+  },
+);
+
+async function computePortfolioAnalysis() {
     const deals = await loadActiveIntel();
     const records: PortfolioRecord[] = deals.map((d) => ({
       accountManager: d.team.accountManager,
@@ -282,18 +303,13 @@ router.get(
       alertCorrelations: correlations(recs, globalShares),
     }));
 
-    res.json(
-      GetPortfolioAnalysisResponse.parse({
-        data: {
-          byAccountManager,
-          byTechnicalLead,
-          byProduct,
-          noTechnicalLeadCycleTimeDays,
-        },
-      }),
-    );
-  },
-);
+    return {
+      byAccountManager,
+      byTechnicalLead,
+      byProduct,
+      noTechnicalLeadCycleTimeDays,
+    };
+}
 
 router.get("/analytics/autopsy", async (req: Request, res: Response) => {
   const q = GetAutopsyQueryParams.parse(req.query);

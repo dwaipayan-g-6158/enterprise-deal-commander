@@ -10,12 +10,23 @@ snapshots, health history, cache invalidation). New durable tables live in the
 `edc_v2` pgSchema (distinct from Phase 1 `deal_audit_log`). v2 reads are served
 from `/api/v2/*` (contract-first OpenAPI -> Orval, same as v1).
 
+## Three cache tiers (intel / lookup / summary), all READ-path only
+**Rule:** Caching wraps READ paths only; write paths use uncached assemblers so
+Phase 1 mutation responses stay fresh.
+- `intel:` — per-deal assembled intelligence (`cachedIntel`), 30s.
+- `lookup:` — engine thresholds (`getThresholds`) + FX rates (`getFxRate`) in
+  `lib/intelligence.ts`, 10m. These are read on EVERY assembly + the summary.
+- `summary:` — portfolio summary + portfolio-analysis responses, 15s. Both
+  endpoints are refactored so the handler only calls `cache.wrap(...)` around a
+  `compute*()` function; the response shaping/parse stays in the handler.
+
 ## Cache invalidation must NOT rely solely on emitted events
-**Rule:** Intelligence is cached only on the READ path (`routes/intelligence.ts`
-`cachedIntel`); write paths use the uncached assembler. Cache invalidation is
-guaranteed by `lib/cache-middleware.ts` (`cacheInvalidationMiddleware`), which
-invalidates on EVERY successful non-GET request — not by the event subscriber
-alone.
+**Rule:** Cache invalidation is guaranteed by `lib/cache-middleware.ts`
+(`cacheInvalidationMiddleware`), which invalidates on EVERY successful non-GET
+request — not by the event subscriber alone. Per-deal mutations drop that deal's
+`intel:` key + the whole `summary:` prefix; `/lookups/*` config mutations drop
+the `lookup:` + `intel:` + `summary:` prefixes (thresholds/FX reshape every
+deal).
 **Why:** The event bus only fires for routes that emit (deals/gates/blockers).
 Routes that mutate intelligence inputs but emit nothing (blocker DELETE,
 cross-sells, dispositions, interventions) would otherwise serve stale cached
