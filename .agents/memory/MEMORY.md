@@ -5,3 +5,4 @@
 - [EDC Phase 2 backbone](edc-phase2-backbone.md) — event bus + edc_v2 durable history + /api/v2 reads; cache invalidation via middleware (not just events), wrap() generation guard, per-deal serialized health reconciliation.
 - [Briefing export & privacy](briefing-export-privacy.md) — Briefing has 2 export paths (PNG=toPng(contentRef), Print=window.print minus print:hidden); presenter-private content must be outside contentRef AND print:hidden.
 - [EDC v2 snapshot payload](edc-snapshot-payload.md) — deal_snapshots.payload = {deal,gates,governance}; deal includes speakerNotes, so any payload-rendering UI must whitelist fields.
+- [EDC cache generation guard quirk](edc-cache-generation-guard.md) — wrap() generation guard only protects already-tracked keys; invalidatePrefix won't bump a first-ever in-flight key. Tests live in api-server (vitest run).
