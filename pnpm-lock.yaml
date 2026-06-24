@@ -655,7 +655,11 @@ importers:
         specifier: ^0.31.10
         version: 0.31.10
 
-  lib/engine: {}
+  lib/engine:
+    devDependencies:
+      vitest:
+        specifier: ^4.1.9
+        version: 4.1.9(@types/node@25.6.2)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.21.0)(yaml@2.8.4)
 
   scripts:
     devDependencies:
