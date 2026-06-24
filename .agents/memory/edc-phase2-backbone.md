@@ -53,3 +53,21 @@ each is dispatched async. Concurrent reconciliations would both read the same
 prior health and both insert -> duplicate `deal_health_history` rows + duplicate
 `health.changed` cascades (which fan out to activity + snapshot). Serializing per
 deal makes the read-then-insert atomic so the second run no-ops.
+
+## Portfolio/summary rollups are a maintained TABLE, not a SQL materialized view
+**Rule:** The portfolio summary + portfolio-analysis aggregates are precomputed
+into the `edc_v2.portfolio_rollups` table (one row per named rollup, `payload`
+JSONB = the endpoint's `data` body). The read endpoints serve the rollup row
+when present and fall back to the live `summary:` cache tier compute when absent.
+**Why:** Health/alerts come from the in-process intelligence engine (JS), so a
+pure Postgres `REFRESH MATERIALIZED VIEW` can't compute them. The MV registry
+(`lib/materialized-views.ts`) was therefore generalized to accept a custom
+`refresh()` fn; the rollup registers one instead of a SQL view.
+**How to apply:** The shared compute lives in `lib/portfolio.ts`
+(`computeSummary`/`computePortfolioAnalysis`) — used by BOTH the live fallback
+and the rollup refresher so they never diverge. Freshness: the 15-min MV job
+repopulates; any mutation calls `invalidatePortfolioRollups()` (DELETE all rows
++ debounced ~2s background refresh). Invalidation is wired in lockstep with the
+`summary:` tier — both the event subscriber (`cache-invalidation.ts`) AND the
+`cache-middleware.ts` finish handler. If you add a rollup, register it in
+`registerPortfolioRollupView()` and warm it in `registerSubscribers()`.

@@ -2,6 +2,10 @@ import { db, enterpriseDeals } from "@workspace/db";
 import { and, isNull } from "drizzle-orm";
 import { logger } from "../logger";
 import { refreshMaterializedViews } from "../materialized-views";
+import {
+  registerPortfolioRollupView,
+  refreshPortfolioRollups,
+} from "../portfolio-rollups";
 import { registerActivityLogger } from "./activity-logger";
 import { registerSnapshotService, snapshotAllActiveDeals } from "./snapshot-service";
 import { registerHealthTracker } from "./health-tracker";
@@ -40,6 +44,13 @@ export function registerSubscribers(): void {
   disposers.push(registerSnapshotService());
   disposers.push(registerHealthTracker());
   disposers.push(registerCacheInvalidation());
+
+  // Register portfolio rollups with the MV refresh registry and warm them once
+  // at startup so the first portfolio/summary read is already precomputed.
+  registerPortfolioRollupView();
+  void refreshPortfolioRollups().catch((err) =>
+    logger.error({ err }, "Initial portfolio rollup warm-up failed"),
+  );
 
   const snapshotTimer = setInterval(() => {
     void (async () => {

@@ -3,14 +3,13 @@ import { sql } from "drizzle-orm";
 import { logger } from "./logger";
 
 /**
- * Materialized-view refresh scaffolding for future Phase 2 analytics.
+ * Materialized-view refresh registry for Phase 2 analytics.
  *
- * Later milestones will introduce Postgres materialized views (e.g. portfolio
- * rollups, momentum aggregates) backed by the edc_v2 history tables. This
- * registry + refresher provides the mechanism now so those views can be
- * registered and refreshed on a schedule (or on demand after large mutations)
- * without rewiring startup. The registry is intentionally empty today — the
- * point of this milestone is the swappable mechanism, not specific views.
+ * Views (true Postgres materialized views) or JS-backed maintained rollup
+ * tables register here and are refreshed on a schedule by the periodic job (or
+ * on demand after large mutations) without rewiring startup. The portfolio
+ * rollups (`edc_v2.portfolio_rollups`) register a custom `refresh` because
+ * their values come from the in-process intelligence engine, not SQL.
  */
 
 export interface MaterializedView {
@@ -18,6 +17,13 @@ export interface MaterializedView {
   name: string;
   /** Refresh concurrently (requires a unique index on the view). */
   concurrently?: boolean;
+  /**
+   * Custom refresh implementation. When provided it is used instead of the SQL
+   * `REFRESH MATERIALIZED VIEW` statement — this lets JS-backed maintained
+   * rollup tables (whose values come from the in-process intelligence engine,
+   * not SQL) register alongside true Postgres materialized views.
+   */
+  refresh?: () => Promise<void>;
 }
 
 const registry = new Map<string, MaterializedView>();
@@ -31,6 +37,10 @@ export function listMaterializedViews(): MaterializedView[] {
 }
 
 async function refreshOne(view: MaterializedView): Promise<void> {
+  if (view.refresh) {
+    await view.refresh();
+    return;
+  }
   const mode = view.concurrently ? "CONCURRENTLY " : "";
   await db.execute(
     sql.raw(`REFRESH MATERIALIZED VIEW ${mode}${view.name}`),

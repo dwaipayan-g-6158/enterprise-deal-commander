@@ -101,3 +101,22 @@ export const dealHealthHistory = edcV2.table(
   },
   (t) => [index("health_deal_time_idx").on(t.dealId, t.changedAt.desc())],
 );
+
+/**
+ * Precomputed portfolio/summary rollups. Each row is one named aggregate (e.g.
+ * `summary`, `portfolio-analysis`) whose `payload` is the fully-assembled
+ * response body for the matching read endpoint.
+ *
+ * These rollups are derived from the JS intelligence engine (health/alerts are
+ * computed in-process, not in SQL), so this is a maintained table rather than a
+ * Postgres materialized view: the periodic refresh job recomputes and upserts
+ * each row, and any deal mutation deletes the rows so reads fall back to live
+ * compute until the next refresh repopulates them.
+ */
+export const portfolioRollups = edcV2.table("portfolio_rollups", {
+  name: varchar("name", { length: 60 }).primaryKey(),
+  payload: jsonb("payload").notNull().$type<Record<string, unknown>>(),
+  computedAt: timestamp("computed_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
