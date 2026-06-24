@@ -13,3 +13,5 @@ The Risk Simulator and the Briefing's historical date view both re-run the pure 
 - The Briefing date `<input type=date>` fires the snapshot query on intermediate keystrokes, producing a transient 400 that self-recovers. Pre-existing; only worth fixing if it becomes user-visible.
 
 **How to apply:** when changing engine inputs or the simulator/briefing, edit `engine-recompute.ts` once; reset simulator local state on dialog open (`useEffect` on `open`) so reopening shows current deal values, not stale edits.
+
+**Provenance seededDefaults trap:** the engine decides threshold "tuned" vs "default" by comparing active thresholds against `ctx.seededDefaults`. Both adapters MUST seed with the true defaults (`DEFAULT_THRESHOLDS`), not the already-tuned active thresholds — seeding with the active set makes every threshold report "default" and the simulator's explanation badges silently diverge from the server. A parity test (`engine-recompute.test.ts`) now guards this round-trip.

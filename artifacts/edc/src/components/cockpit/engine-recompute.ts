@@ -162,6 +162,10 @@ export function recomputeIntelligence(
     catalogCount: intel.financials.crossSell.catalogCount,
     ownMomentum: ctx.ownMomentum,
     dispositions: ctx.dispositions,
-    seededDefaults: ctx.thresholds as Record<string, string | number>,
+    // Provenance ("tuned" vs "default") is decided by comparing the active
+    // thresholds against the seeded defaults. Seed with DEFAULT_THRESHOLDS (as
+    // the server does) — NOT ctx.thresholds, which already includes tuned
+    // overrides and would make every threshold report "default".
+    seededDefaults: DEFAULT_THRESHOLDS as Record<string, string | number>,
   });
 }
