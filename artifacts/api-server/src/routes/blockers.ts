@@ -22,6 +22,7 @@ import { requireAuth, getActor } from "../lib/auth";
 import { badRequest, notFound } from "../lib/http";
 import { toISO } from "../lib/intelligence";
 import { writeAudit } from "../lib/audit";
+import { emitDealEvent } from "../lib/events";
 
 const router: IRouter = Router();
 
@@ -156,6 +157,12 @@ router.post("/deals/:dealId/blockers", async (req: Request, res: Response) => {
     newValue: body.description.slice(0, 200),
     changedBy: actor.displayName,
   });
+  emitDealEvent("blocker.created", {
+    dealId,
+    actor: actor.displayName,
+    blockerId: inserted[0].id,
+    description: body.description,
+  });
 
   const data = await serializeBlocker(inserted[0].id);
   res.status(201).json(UpdateBlockerResponse.parse({ data }));
@@ -213,6 +220,12 @@ router.put(
         oldValue: String(existing.isResolved),
         newValue: String(body.is_resolved),
         changedBy: actor.displayName,
+      });
+      emitDealEvent("blocker.resolved", {
+        dealId,
+        actor: actor.displayName,
+        blockerId,
+        isResolved: body.is_resolved,
       });
     }
 

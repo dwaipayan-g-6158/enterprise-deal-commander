@@ -20,6 +20,7 @@ import type {
 } from '@tanstack/react-query';
 
 import type {
+  ActivityListResponse,
   AuditListResponse,
   AuthUser,
   AutopsyResponse,
@@ -51,6 +52,7 @@ import type {
   GateUpdateInput,
   GetAutopsyParams,
   GetSnapshotParams,
+  HealthHistoryListResponse,
   HealthStatus,
   IntelligenceResponse,
   InterventionChecklistListResponse,
@@ -59,6 +61,9 @@ import type {
   ListAuditParams,
   ListBlockersParams,
   ListChangesParams,
+  ListDealActivityParams,
+  ListDealHealthHistoryParams,
+  ListDealSnapshotsParams,
   ListDealsParams,
   LoginInput,
   LossArchetypeListResponse,
@@ -70,6 +75,8 @@ import type {
   ReviewMarkerResponse,
   ServicesTierListResponse,
   ShareCardResponse,
+  SnapshotDetailResponse,
+  SnapshotListResponse,
   SnapshotResponse,
   StageGuardrailError,
   SummaryResponse,
@@ -2084,6 +2091,326 @@ export function useGetSnapshot<TData = Awaited<ReturnType<typeof getSnapshot>>, 
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getGetSnapshotQueryOptions(dealId,params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getListDealActivityUrl = (dealId: string,
+    params?: ListDealActivityParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/v2/deals/${dealId}/activity?${stringifiedParams}` : `/api/v2/deals/${dealId}/activity`
+}
+
+export const listDealActivity = async (dealId: string,
+    params?: ListDealActivityParams, options?: RequestInit): Promise<ActivityListResponse> => {
+
+  return customFetch<ActivityListResponse>(getListDealActivityUrl(dealId,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListDealActivityQueryKey = (dealId: string,
+    params?: ListDealActivityParams,) => {
+    return [
+    `/api/v2/deals/${dealId}/activity`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListDealActivityQueryOptions = <TData = Awaited<ReturnType<typeof listDealActivity>>, TError = ErrorType<unknown>>(dealId: string,
+    params?: ListDealActivityParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listDealActivity>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListDealActivityQueryKey(dealId,params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listDealActivity>>> = ({ signal }) => listDealActivity(dealId,params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: !!(dealId), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listDealActivity>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListDealActivityQueryResult = NonNullable<Awaited<ReturnType<typeof listDealActivity>>>
+export type ListDealActivityQueryError = ErrorType<unknown>
+
+
+
+export function useListDealActivity<TData = Awaited<ReturnType<typeof listDealActivity>>, TError = ErrorType<unknown>>(
+ dealId: string,
+    params?: ListDealActivityParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listDealActivity>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListDealActivityQueryOptions(dealId,params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getListDealHealthHistoryUrl = (dealId: string,
+    params?: ListDealHealthHistoryParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/v2/deals/${dealId}/health-history?${stringifiedParams}` : `/api/v2/deals/${dealId}/health-history`
+}
+
+export const listDealHealthHistory = async (dealId: string,
+    params?: ListDealHealthHistoryParams, options?: RequestInit): Promise<HealthHistoryListResponse> => {
+
+  return customFetch<HealthHistoryListResponse>(getListDealHealthHistoryUrl(dealId,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListDealHealthHistoryQueryKey = (dealId: string,
+    params?: ListDealHealthHistoryParams,) => {
+    return [
+    `/api/v2/deals/${dealId}/health-history`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListDealHealthHistoryQueryOptions = <TData = Awaited<ReturnType<typeof listDealHealthHistory>>, TError = ErrorType<unknown>>(dealId: string,
+    params?: ListDealHealthHistoryParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listDealHealthHistory>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListDealHealthHistoryQueryKey(dealId,params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listDealHealthHistory>>> = ({ signal }) => listDealHealthHistory(dealId,params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: !!(dealId), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listDealHealthHistory>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListDealHealthHistoryQueryResult = NonNullable<Awaited<ReturnType<typeof listDealHealthHistory>>>
+export type ListDealHealthHistoryQueryError = ErrorType<unknown>
+
+
+
+export function useListDealHealthHistory<TData = Awaited<ReturnType<typeof listDealHealthHistory>>, TError = ErrorType<unknown>>(
+ dealId: string,
+    params?: ListDealHealthHistoryParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listDealHealthHistory>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListDealHealthHistoryQueryOptions(dealId,params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getListDealSnapshotsUrl = (dealId: string,
+    params?: ListDealSnapshotsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/v2/deals/${dealId}/snapshots?${stringifiedParams}` : `/api/v2/deals/${dealId}/snapshots`
+}
+
+export const listDealSnapshots = async (dealId: string,
+    params?: ListDealSnapshotsParams, options?: RequestInit): Promise<SnapshotListResponse> => {
+
+  return customFetch<SnapshotListResponse>(getListDealSnapshotsUrl(dealId,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListDealSnapshotsQueryKey = (dealId: string,
+    params?: ListDealSnapshotsParams,) => {
+    return [
+    `/api/v2/deals/${dealId}/snapshots`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListDealSnapshotsQueryOptions = <TData = Awaited<ReturnType<typeof listDealSnapshots>>, TError = ErrorType<unknown>>(dealId: string,
+    params?: ListDealSnapshotsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listDealSnapshots>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListDealSnapshotsQueryKey(dealId,params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listDealSnapshots>>> = ({ signal }) => listDealSnapshots(dealId,params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: !!(dealId), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listDealSnapshots>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListDealSnapshotsQueryResult = NonNullable<Awaited<ReturnType<typeof listDealSnapshots>>>
+export type ListDealSnapshotsQueryError = ErrorType<unknown>
+
+
+
+export function useListDealSnapshots<TData = Awaited<ReturnType<typeof listDealSnapshots>>, TError = ErrorType<unknown>>(
+ dealId: string,
+    params?: ListDealSnapshotsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listDealSnapshots>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListDealSnapshotsQueryOptions(dealId,params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getGetDealSnapshotUrl = (snapshotId: string,) => {
+
+
+
+
+  return `/api/v2/snapshots/${snapshotId}`
+}
+
+export const getDealSnapshot = async (snapshotId: string, options?: RequestInit): Promise<SnapshotDetailResponse> => {
+
+  return customFetch<SnapshotDetailResponse>(getGetDealSnapshotUrl(snapshotId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetDealSnapshotQueryKey = (snapshotId: string,) => {
+    return [
+    `/api/v2/snapshots/${snapshotId}`
+    ] as const;
+    }
+
+
+export const getGetDealSnapshotQueryOptions = <TData = Awaited<ReturnType<typeof getDealSnapshot>>, TError = ErrorType<unknown>>(snapshotId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getDealSnapshot>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetDealSnapshotQueryKey(snapshotId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getDealSnapshot>>> = ({ signal }) => getDealSnapshot(snapshotId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: !!(snapshotId), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getDealSnapshot>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetDealSnapshotQueryResult = NonNullable<Awaited<ReturnType<typeof getDealSnapshot>>>
+export type GetDealSnapshotQueryError = ErrorType<unknown>
+
+
+
+export function useGetDealSnapshot<TData = Awaited<ReturnType<typeof getDealSnapshot>>, TError = ErrorType<unknown>>(
+ snapshotId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getDealSnapshot>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetDealSnapshotQueryOptions(snapshotId,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

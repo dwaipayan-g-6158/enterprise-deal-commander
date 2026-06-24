@@ -6,6 +6,9 @@
  * OpenAPI spec version: 1.0.0
  */
 
+export * from './activityEvent';
+export * from './activityEventMetadata';
+export * from './activityListResponse';
 export * from './alert';
 export * from './alertCorrelation';
 export * from './alertDisposition';
@@ -71,7 +74,9 @@ export * from './gateUpdateInput';
 export * from './getAutopsyParams';
 export * from './getSnapshotParams';
 export * from './healthCounts';
+export * from './healthHistoryListResponse';
 export * from './healthStatus';
+export * from './healthTransition';
 export * from './integrityWarning';
 export * from './integrityWarningType';
 export * from './intelligence';
@@ -91,7 +96,10 @@ export * from './leadCorrelation';
 export * from './listAuditParams';
 export * from './listBlockersParams';
 export * from './listChangesParams';
+export * from './listDealActivityParams';
+export * from './listDealHealthHistoryParams';
 export * from './listDealsHealth';
+export * from './listDealSnapshotsParams';
 export * from './listDealsParams';
 export * from './listDealsState';
 export * from './listMeta';
@@ -118,7 +126,12 @@ export * from './shareCard';
 export * from './shareCardResponse';
 export * from './snapshot';
 export * from './snapshotDeal';
+export * from './snapshotDetail';
+export * from './snapshotDetailPayload';
+export * from './snapshotDetailResponse';
+export * from './snapshotListResponse';
 export * from './snapshotResponse';
+export * from './snapshotSummary';
 export * from './stageGuardrailError';
 export * from './stageGuardrailErrorError';
 export * from './staleDeal';

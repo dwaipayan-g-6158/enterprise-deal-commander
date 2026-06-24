@@ -12,6 +12,7 @@ import {
   ShieldX,
   Layers,
   ClipboardList,
+  History,
   Pencil,
   Radio,
   Presentation,
@@ -25,6 +26,7 @@ import { TechnicalGates } from "@/components/cockpit/technical-gates";
 import { BlockersPanel } from "@/components/cockpit/blockers-panel";
 import { CrossSellPanel } from "@/components/cockpit/cross-sell-panel";
 import { ActivityFeed } from "@/components/cockpit/activity-feed";
+import { HistoryPanel } from "@/components/cockpit/history-panel";
 import { BriefingMode } from "@/components/cockpit/briefing-mode";
 import { RiskSimulator } from "@/components/cockpit/risk-simulator";
 import { SnapshotScrubber } from "@/components/cockpit/snapshot-scrubber";
@@ -240,6 +242,13 @@ export default function DealCockpit() {
                 <ClipboardList className="w-4 h-4 mr-2" />
                 Activity
               </TabsTrigger>
+              <TabsTrigger
+                value="history"
+                className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-6"
+              >
+                <History className="w-4 h-4 mr-2" />
+                History
+              </TabsTrigger>
             </TabsList>
 
             <TabsContent value="risk" className="pt-6">
@@ -264,6 +273,10 @@ export default function DealCockpit() {
 
             <TabsContent value="activity" className="pt-6">
               <ActivityFeed dealId={id} />
+            </TabsContent>
+
+            <TabsContent value="history" className="pt-6">
+              <HistoryPanel dealId={id} />
             </TabsContent>
           </Tabs>
         </div>

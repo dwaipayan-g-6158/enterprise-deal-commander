@@ -24,6 +24,8 @@ tags:
     description: Pattern engine and analytics
   - name: audit
     description: Audit trail, change digest, replay
+  - name: history
+    description: Phase 2 durable history (activity, health, snapshots)
   - name: governance
     description: Dispositions, interventions, bat-signal
   - name: lookups
@@ -518,6 +520,73 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/SnapshotResponse"
+
+  # ============ V2 DURABLE HISTORY ============
+  /v2/deals/{dealId}/activity:
+    get:
+      operationId: listDealActivity
+      tags: [history]
+      parameters:
+        - { name: dealId, in: path, required: true, schema: { type: string } }
+        - { name: event_type, in: query, required: false, schema: { type: string } }
+        - { name: since, in: query, required: false, schema: { type: string } }
+        - { name: until, in: query, required: false, schema: { type: string } }
+        - { name: limit, in: query, required: false, schema: { type: integer } }
+        - { name: offset, in: query, required: false, schema: { type: integer } }
+      responses:
+        "200":
+          description: Deal activity stream
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ActivityListResponse"
+  /v2/deals/{dealId}/health-history:
+    get:
+      operationId: listDealHealthHistory
+      tags: [history]
+      parameters:
+        - { name: dealId, in: path, required: true, schema: { type: string } }
+        - { name: since, in: query, required: false, schema: { type: string } }
+        - { name: until, in: query, required: false, schema: { type: string } }
+        - { name: limit, in: query, required: false, schema: { type: integer } }
+        - { name: offset, in: query, required: false, schema: { type: integer } }
+      responses:
+        "200":
+          description: Deal health transition history
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthHistoryListResponse"
+  /v2/deals/{dealId}/snapshots:
+    get:
+      operationId: listDealSnapshots
+      tags: [history]
+      parameters:
+        - { name: dealId, in: path, required: true, schema: { type: string } }
+        - { name: since, in: query, required: false, schema: { type: string } }
+        - { name: until, in: query, required: false, schema: { type: string } }
+        - { name: limit, in: query, required: false, schema: { type: integer } }
+        - { name: offset, in: query, required: false, schema: { type: integer } }
+      responses:
+        "200":
+          description: Deal snapshot list (metadata only)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SnapshotListResponse"
+  /v2/snapshots/{snapshotId}:
+    get:
+      operationId: getDealSnapshot
+      tags: [history]
+      parameters:
+        - { name: snapshotId, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Full snapshot with payload
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SnapshotDetailResponse"
 
   # ============ GOVERNANCE ============
   /v1/deals/{dealId}/alerts/{patternCode}/disposition:
@@ -1395,6 +1464,82 @@ components:
           items: { $ref: "#/components/schemas/AuditLog" }
         meta: { $ref: "#/components/schemas/ListMeta" }
       required: [data, meta]
+    ActivityEvent:
+      type: object
+      properties:
+        id: { type: string }
+        dealId: { type: string }
+        eventType: { type: string }
+        entityType: { type: string }
+        entityId: { type: ["string", "null"] }
+        summary: { type: string }
+        metadata: { type: ["object", "null"], additionalProperties: true }
+        actor: { type: string }
+        occurredAt: { type: string }
+      required:
+        [id, dealId, eventType, entityType, summary, actor, occurredAt]
+    ActivityListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/ActivityEvent" }
+        meta: { $ref: "#/components/schemas/ListMeta" }
+      required: [data, meta]
+    HealthTransition:
+      type: object
+      properties:
+        id: { type: string }
+        dealId: { type: string }
+        fromStatus: { type: ["string", "null"] }
+        toStatus: { type: string }
+        reason: { type: ["string", "null"] }
+        actor: { type: string }
+        changedAt: { type: string }
+      required: [id, dealId, toStatus, actor, changedAt]
+    HealthHistoryListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/HealthTransition" }
+        meta: { $ref: "#/components/schemas/ListMeta" }
+      required: [data, meta]
+    SnapshotSummary:
+      type: object
+      properties:
+        id: { type: string }
+        dealId: { type: string }
+        reason: { type: string }
+        triggerEvent: { type: ["string", "null"] }
+        healthStatus: { type: string }
+        salesStageId: { type: ["integer", "null"] }
+        salesStage: { type: ["string", "null"] }
+        calculatedTcv: { type: ["string", "null"] }
+        normalizedTcv: { type: ["string", "null"] }
+        createdBy: { type: string }
+        snapshotAt: { type: string }
+      required: [id, dealId, reason, healthStatus, createdBy, snapshotAt]
+    SnapshotListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/SnapshotSummary" }
+        meta: { $ref: "#/components/schemas/ListMeta" }
+      required: [data, meta]
+    SnapshotDetail:
+      allOf:
+        - $ref: "#/components/schemas/SnapshotSummary"
+        - type: object
+          properties:
+            payload: { type: object, additionalProperties: true }
+          required: [payload]
+    SnapshotDetailResponse:
+      type: object
+      properties:
+        data: { $ref: "#/components/schemas/SnapshotDetail" }
+      required: [data]
     ChangeLine:
       type: object
       properties:

@@ -903,6 +903,123 @@ export const GetSnapshotResponse = zod.object({
 })
 
 
+export const ListDealActivityParams = zod.object({
+  "dealId": zod.coerce.string()
+})
+
+export const ListDealActivityQueryParams = zod.object({
+  "event_type": zod.coerce.string().optional(),
+  "since": zod.coerce.string().optional(),
+  "until": zod.coerce.string().optional(),
+  "limit": zod.coerce.number().optional(),
+  "offset": zod.coerce.number().optional()
+})
+
+export const ListDealActivityResponse = zod.object({
+  "data": zod.array(zod.object({
+  "id": zod.string(),
+  "dealId": zod.string(),
+  "eventType": zod.string(),
+  "entityType": zod.string(),
+  "entityId": zod.string().nullish(),
+  "summary": zod.string(),
+  "metadata": zod.record(zod.string(), zod.unknown()).nullish(),
+  "actor": zod.string(),
+  "occurredAt": zod.string()
+})),
+  "meta": zod.object({
+  "total": zod.number(),
+  "limit": zod.number(),
+  "offset": zod.number()
+})
+})
+
+
+export const ListDealHealthHistoryParams = zod.object({
+  "dealId": zod.coerce.string()
+})
+
+export const ListDealHealthHistoryQueryParams = zod.object({
+  "since": zod.coerce.string().optional(),
+  "until": zod.coerce.string().optional(),
+  "limit": zod.coerce.number().optional(),
+  "offset": zod.coerce.number().optional()
+})
+
+export const ListDealHealthHistoryResponse = zod.object({
+  "data": zod.array(zod.object({
+  "id": zod.string(),
+  "dealId": zod.string(),
+  "fromStatus": zod.string().nullish(),
+  "toStatus": zod.string(),
+  "reason": zod.string().nullish(),
+  "actor": zod.string(),
+  "changedAt": zod.string()
+})),
+  "meta": zod.object({
+  "total": zod.number(),
+  "limit": zod.number(),
+  "offset": zod.number()
+})
+})
+
+
+export const ListDealSnapshotsParams = zod.object({
+  "dealId": zod.coerce.string()
+})
+
+export const ListDealSnapshotsQueryParams = zod.object({
+  "since": zod.coerce.string().optional(),
+  "until": zod.coerce.string().optional(),
+  "limit": zod.coerce.number().optional(),
+  "offset": zod.coerce.number().optional()
+})
+
+export const ListDealSnapshotsResponse = zod.object({
+  "data": zod.array(zod.object({
+  "id": zod.string(),
+  "dealId": zod.string(),
+  "reason": zod.string(),
+  "triggerEvent": zod.string().nullish(),
+  "healthStatus": zod.string(),
+  "salesStageId": zod.number().nullish(),
+  "salesStage": zod.string().nullish(),
+  "calculatedTcv": zod.string().nullish(),
+  "normalizedTcv": zod.string().nullish(),
+  "createdBy": zod.string(),
+  "snapshotAt": zod.string()
+})),
+  "meta": zod.object({
+  "total": zod.number(),
+  "limit": zod.number(),
+  "offset": zod.number()
+})
+})
+
+
+export const GetDealSnapshotParams = zod.object({
+  "snapshotId": zod.coerce.string()
+})
+
+export const GetDealSnapshotResponse = zod.object({
+  "data": zod.object({
+  "id": zod.string(),
+  "dealId": zod.string(),
+  "reason": zod.string(),
+  "triggerEvent": zod.string().nullish(),
+  "healthStatus": zod.string(),
+  "salesStageId": zod.number().nullish(),
+  "salesStage": zod.string().nullish(),
+  "calculatedTcv": zod.string().nullish(),
+  "normalizedTcv": zod.string().nullish(),
+  "createdBy": zod.string(),
+  "snapshotAt": zod.string()
+}).and(zod.object({
+  "payload": zod.record(zod.string(), zod.unknown())
+}))
+})
+
+
 export const SetDispositionParams = zod.object({
   "dealId": zod.coerce.string(),
   "patternCode": zod.coerce.string()

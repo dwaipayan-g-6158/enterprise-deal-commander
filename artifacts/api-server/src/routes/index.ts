@@ -12,10 +12,13 @@ import auditRouter from "./audit";
 import batSignalRouter from "./batsignal";
 import sharedRouter from "./shared";
 import lookupsRouter from "./lookups";
+import v2Router from "./v2";
+import { cacheInvalidationMiddleware } from "../lib/cache-middleware";
 
 const router: IRouter = Router();
 
 router.use(healthRouter);
+router.use(cacheInvalidationMiddleware);
 
 router.use("/v1", authRouter);
 router.use("/v1", sharedRouter);
@@ -29,5 +32,6 @@ router.use("/v1", interventionsRouter);
 router.use("/v1", auditRouter);
 router.use("/v1", batSignalRouter);
 router.use("/v1", lookupsRouter);
+router.use("/v2", v2Router);
 
 export default router;

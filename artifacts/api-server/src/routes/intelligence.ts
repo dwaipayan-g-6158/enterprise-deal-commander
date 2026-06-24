@@ -19,16 +19,29 @@ import {
 import { requireAuth } from "../lib/auth";
 import { notFound } from "../lib/http";
 import { assembleDealIntelligence, getThresholds } from "../lib/intelligence";
+import { cache, CacheKeys, CacheTtl } from "../lib/cache";
 
 const router: IRouter = Router();
 
 router.use(requireAuth);
 
+/**
+ * Cached read of assembled intelligence. Reads are served from the in-process
+ * cache (TTL) and dropped immediately by the event bus on any deal mutation,
+ * so stale data never outlives a write. Write paths call the uncached
+ * assembler directly, so Phase 1 mutation responses are always fresh.
+ */
+function cachedIntel(dealId: string) {
+  return cache.wrap(CacheKeys.intelligence(dealId), CacheTtl.intelligence, () =>
+    assembleDealIntelligence(dealId),
+  );
+}
+
 router.get(
   "/deals/:dealId/intelligence",
   async (req: Request, res: Response) => {
     const { dealId } = GetDealIntelligenceParams.parse(req.params);
-    const data = await assembleDealIntelligence(dealId);
+    const data = await cachedIntel(dealId);
     if (!data) throw notFound("Deal not found");
     res.json(GetDealIntelligenceResponse.parse({ data }));
   },
@@ -51,9 +64,7 @@ type Intel = NonNullable<Awaited<ReturnType<typeof assembleDealIntelligence>>>;
 
 async function loadActiveIntel(): Promise<Intel[]> {
   const ids = await activeDealIds();
-  const results = await Promise.all(
-    ids.map((id) => assembleDealIntelligence(id)),
-  );
+  const results = await Promise.all(ids.map((id) => cachedIntel(id)));
   return results.filter((r): r is Intel => r !== null);
 }
 

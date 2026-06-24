@@ -610,6 +610,81 @@ export interface AuditListResponse {
   meta: ListMeta;
 }
 
+/**
+ * @nullable
+ */
+export type ActivityEventMetadata = { [key: string]: unknown } | null;
+
+export interface ActivityEvent {
+  id: string;
+  dealId: string;
+  eventType: string;
+  entityType: string;
+  /** @nullable */
+  entityId?: string | null;
+  summary: string;
+  /** @nullable */
+  metadata?: ActivityEventMetadata;
+  actor: string;
+  occurredAt: string;
+}
+
+export interface ActivityListResponse {
+  data: ActivityEvent[];
+  meta: ListMeta;
+}
+
+export interface HealthTransition {
+  id: string;
+  dealId: string;
+  /** @nullable */
+  fromStatus?: string | null;
+  toStatus: string;
+  /** @nullable */
+  reason?: string | null;
+  actor: string;
+  changedAt: string;
+}
+
+export interface HealthHistoryListResponse {
+  data: HealthTransition[];
+  meta: ListMeta;
+}
+
+export interface SnapshotSummary {
+  id: string;
+  dealId: string;
+  reason: string;
+  /** @nullable */
+  triggerEvent?: string | null;
+  healthStatus: string;
+  /** @nullable */
+  salesStageId?: number | null;
+  /** @nullable */
+  salesStage?: string | null;
+  /** @nullable */
+  calculatedTcv?: string | null;
+  /** @nullable */
+  normalizedTcv?: string | null;
+  createdBy: string;
+  snapshotAt: string;
+}
+
+export interface SnapshotListResponse {
+  data: SnapshotSummary[];
+  meta: ListMeta;
+}
+
+export type SnapshotDetailPayload = { [key: string]: unknown };
+
+export type SnapshotDetail = SnapshotSummary & {
+  payload: SnapshotDetailPayload;
+};
+
+export interface SnapshotDetailResponse {
+  data: SnapshotDetail;
+}
+
 export interface ChangeLine {
   line: string;
   field: string;
@@ -920,5 +995,27 @@ since?: string;
 
 export type GetSnapshotParams = {
 date: string;
+};
+
+export type ListDealActivityParams = {
+event_type?: string;
+since?: string;
+until?: string;
+limit?: number;
+offset?: number;
+};
+
+export type ListDealHealthHistoryParams = {
+since?: string;
+until?: string;
+limit?: number;
+offset?: number;
+};
+
+export type ListDealSnapshotsParams = {
+since?: string;
+until?: string;
+limit?: number;
+offset?: number;
 };
 

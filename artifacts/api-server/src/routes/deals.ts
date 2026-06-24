@@ -27,6 +27,7 @@ import { requireAuth, getActor } from "../lib/auth";
 import { badRequest, notFound, conflict, stageGuardrail } from "../lib/http";
 import { serializeDeal, assembleDealIntelligence } from "../lib/intelligence";
 import { writeAudit } from "../lib/audit";
+import { emitDealEvent } from "../lib/events";
 
 const router: IRouter = Router();
 
@@ -174,6 +175,11 @@ router.post("/deals", async (req: Request, res: Response) => {
     fieldChanged: "created",
     newValue: body.deal_name,
     changedBy: actor.displayName,
+  });
+  emitDealEvent("deal.created", {
+    dealId: created.id,
+    actor: actor.displayName,
+    dealName: body.deal_name,
   });
 
   const data = await serializeDeal(created.id);
@@ -370,6 +376,27 @@ const updateDealHandler = async (req: Request, res: Response) => {
   }
   if (audits.length > 0) await writeAudit(audits);
 
+  const changedFields = Object.keys(updates);
+  if (changedFields.length > 0) {
+    emitDealEvent("deal.updated", {
+      dealId: id,
+      actor: actor.displayName,
+      changedFields,
+    });
+  }
+  if (
+    body.sales_stage_id !== undefined &&
+    body.sales_stage_id !== existing.salesStageId
+  ) {
+    emitDealEvent("deal.stage_changed", {
+      dealId: id,
+      actor: actor.displayName,
+      fromStageId: existing.salesStageId,
+      toStageId: body.sales_stage_id,
+      overridden: stageOverride !== null,
+    });
+  }
+
   const data = await serializeDeal(id);
   res.json(UpdateDealResponse.parse({ data }));
 };
@@ -393,6 +420,7 @@ router.delete("/deals/:id", async (req: Request, res: Response) => {
     newValue: "deleted",
     changedBy: actor.displayName,
   });
+  emitDealEvent("deal.deleted", { dealId: id, actor: actor.displayName });
   res.status(204).end();
 });
 
@@ -412,6 +440,7 @@ router.post("/deals/:id/restore", async (req: Request, res: Response) => {
     newValue: "restored",
     changedBy: actor.displayName,
   });
+  emitDealEvent("deal.restored", { dealId: id, actor: actor.displayName });
   const data = await serializeDeal(id);
   res.json(RestoreDealResponse.parse({ data }));
 });
@@ -432,6 +461,7 @@ router.post("/deals/:id/archive", async (req: Request, res: Response) => {
     newValue: "archived",
     changedBy: actor.displayName,
   });
+  emitDealEvent("deal.archived", { dealId: id, actor: actor.displayName });
   const data = await serializeDeal(id);
   res.json(ArchiveDealResponse.parse({ data }));
 });

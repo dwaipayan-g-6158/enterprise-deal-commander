@@ -15,6 +15,7 @@ import { requireAuth, getActor } from "../lib/auth";
 import { badRequest, notFound } from "../lib/http";
 import { getDealGates } from "../lib/intelligence";
 import { writeAudit, type AuditEntry } from "../lib/audit";
+import { emitDealEvent } from "../lib/events";
 
 const router: IRouter = Router();
 
@@ -116,6 +117,16 @@ router.put(
       }
     }
     if (audits.length > 0) await writeAudit(audits);
+    for (const a of audits) {
+      if (a.entityType === "gate" && a.entityId) {
+        emitDealEvent("gate.toggled", {
+          dealId,
+          actor: actor.displayName,
+          gateCode: a.entityId,
+          isCompleted: a.newValue === "true",
+        });
+      }
+    }
 
     const gates = await getDealGates(dealId);
     res.json(
@@ -184,6 +195,12 @@ router.put(
         oldValue: String(wasCompleted),
         newValue: String(body.is_completed),
         changedBy: actor.displayName,
+      });
+      emitDealEvent("gate.toggled", {
+        dealId,
+        actor: actor.displayName,
+        gateCode,
+        isCompleted: body.is_completed,
       });
     }
 

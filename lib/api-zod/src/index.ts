@@ -12,4 +12,7 @@ export {
   ListAuditParams,
   ListBlockersParams,
   ListChangesParams,
+  ListDealActivityParams,
+  ListDealHealthHistoryParams,
+  ListDealSnapshotsParams,
 } from "./generated/api";
