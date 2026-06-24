@@ -354,6 +354,208 @@ describe("calculateOwnMomentum", () => {
   });
 });
 
+describe("intelligence engine — TCV calculation", () => {
+  it("multiplies product revenue by term years for Multi-Year Committed deals", () => {
+    const deal = makeDeal({
+      pricing_model: "Multi-Year Committed",
+      product_revenue: 100000,
+      contract_term_years: 3,
+      services_revenue: 50000,
+    });
+    const out = processDealIntelligence(deal, [], [], DEFAULTS);
+    // 100000 * 3 + 50000
+    expect(out.financials.calculatedTCV).toBe(350000);
+    expect(out.financials.productRevenue).toBe(100000);
+    expect(out.financials.servicesRevenue).toBe(50000);
+    expect(out.financials.termYears).toBe(3);
+  });
+
+  it("adds product and services revenue for non-committed pricing models", () => {
+    const deal = makeDeal({
+      pricing_model: "Annual",
+      product_revenue: 100000,
+      contract_term_years: 3,
+      services_revenue: 50000,
+    });
+    const out = processDealIntelligence(deal, [], [], DEFAULTS);
+    // term years are ignored for additive pricing: 100000 + 50000
+    expect(out.financials.calculatedTCV).toBe(150000);
+  });
+
+  it("coerces string revenue/term inputs and defaults missing values", () => {
+    const deal = makeDeal({
+      pricing_model: "Multi-Year Committed",
+      product_revenue: "200000",
+      contract_term_years: "2",
+      services_revenue: "25000",
+    });
+    const out = processDealIntelligence(deal, [], [], DEFAULTS);
+    // 200000 * 2 + 25000
+    expect(out.financials.calculatedTCV).toBe(425000);
+  });
+});
+
+describe("intelligence engine — currency normalization", () => {
+  it("applies an fx rate of 1 and emits no data-quality note when currencies match", () => {
+    const deal = makeDeal({
+      deal_currency: "USD",
+      pricing_model: "Annual",
+      product_revenue: 100000,
+      services_revenue: 50000,
+    });
+    const out = processDealIntelligence(deal, [], [], DEFAULTS);
+    expect(out.financials.reportingCurrency).toBe("USD");
+    expect(out.financials.fxRateApplied).toBe(1);
+    expect(out.financials.normalizedTCV).toBe(150000);
+    expect(out.financials.normalizedTCV).toBe(out.financials.calculatedTCV);
+    expect(
+      out.governance.dataQualityNotes.some((n) => n.code === "MISSING_FX_RATE"),
+    ).toBe(false);
+  });
+
+  it("applies a supplied fx rate when the deal currency differs", () => {
+    const deal = makeDeal({
+      deal_currency: "EUR",
+      pricing_model: "Annual",
+      product_revenue: 100000,
+      services_revenue: 50000,
+    });
+    const out = processDealIntelligence(deal, [], [], DEFAULTS, { fxRate: 1.1 });
+    expect(out.financials.reportingCurrency).toBe("USD");
+    expect(out.financials.fxRateApplied).toBe(1.1);
+    // 150000 * 1.1
+    expect(out.financials.normalizedTCV).toBeCloseTo(165000, 5);
+    expect(
+      out.governance.dataQualityNotes.some((n) => n.code === "MISSING_FX_RATE"),
+    ).toBe(false);
+  });
+
+  it("falls back to native value and emits MISSING_FX_RATE when no rate is supplied", () => {
+    const deal = makeDeal({
+      deal_currency: "EUR",
+      pricing_model: "Annual",
+      product_revenue: 100000,
+      services_revenue: 50000,
+    });
+    const out = processDealIntelligence(deal, [], [], DEFAULTS);
+    expect(out.financials.fxRateApplied).toBeNull();
+    // native value preserved (no conversion applied)
+    expect(out.financials.normalizedTCV).toBe(150000);
+    expect(out.financials.normalizedTCV).toBe(out.financials.calculatedTCV);
+    const note = out.governance.dataQualityNotes.find(
+      (n) => n.code === "MISSING_FX_RATE",
+    );
+    expect(note).toBeDefined();
+    expect(note?.message).toContain("EUR");
+    expect(note?.message).toContain("USD");
+  });
+
+  it("uses the reporting currency from context to decide whether a rate is needed", () => {
+    const deal = makeDeal({
+      deal_currency: "EUR",
+      pricing_model: "Annual",
+      product_revenue: 100000,
+      services_revenue: 50000,
+    });
+    const out = processDealIntelligence(deal, [], [], DEFAULTS, {
+      reportingCurrency: "EUR",
+    });
+    expect(out.financials.reportingCurrency).toBe("EUR");
+    expect(out.financials.fxRateApplied).toBe(1);
+    expect(out.financials.normalizedTCV).toBe(150000);
+    expect(
+      out.governance.dataQualityNotes.some((n) => n.code === "MISSING_FX_RATE"),
+    ).toBe(false);
+  });
+});
+
+describe("intelligence engine — technical track roll-up", () => {
+  it("computes progress, steps completed, and total steps", () => {
+    const gates = [
+      makeGate("G1", true),
+      makeGate("G2", true),
+      makeGate("G3", false),
+      makeGate("G4", false),
+    ];
+    const out = processDealIntelligence(makeDeal(), gates, [], DEFAULTS);
+    expect(out.technicalTrack.stepsCompleted).toBe(2);
+    expect(out.technicalTrack.totalSteps).toBe(4);
+    expect(out.technicalTrack.progressPercentage).toBe(50);
+  });
+
+  it("rounds the progress percentage", () => {
+    const gates = [
+      makeGate("G1", true),
+      makeGate("G2", false),
+      makeGate("G3", false),
+    ];
+    const out = processDealIntelligence(makeDeal(), gates, [], DEFAULTS);
+    // 1 / 3 = 33.33 -> 33
+    expect(out.technicalTrack.progressPercentage).toBe(33);
+  });
+
+  it("reports zero progress and the pending milestone when there are no gates", () => {
+    const out = processDealIntelligence(makeDeal(), [], [], DEFAULTS);
+    expect(out.technicalTrack.totalSteps).toBe(0);
+    expect(out.technicalTrack.stepsCompleted).toBe(0);
+    expect(out.technicalTrack.progressPercentage).toBe(0);
+    expect(out.technicalTrack.currentMilestone).toBe(
+      "Gate 1: Success Criteria Pending",
+    );
+  });
+
+  it("derives the current milestone from the highest fully-completed gate group", () => {
+    const gates = [
+      makeGate("G1a", true, { gate_group: 1 }),
+      makeGate("G1b", true, { gate_group: 1 }),
+      makeGate("G2a", true, { gate_group: 2 }),
+      makeGate("G2b", true, { gate_group: 2 }),
+      makeGate("G3a", false, { gate_group: 3 }),
+    ];
+    const out = processDealIntelligence(makeDeal(), gates, [], DEFAULTS);
+    expect(out.technicalTrack.currentMilestone).toBe(
+      "Gate 2: Core MVP Validated",
+    );
+  });
+
+  it("requires every gate in a group to be complete before crediting that milestone", () => {
+    const gates = [
+      makeGate("G1a", true, { gate_group: 1 }),
+      makeGate("G1b", false, { gate_group: 1 }),
+      makeGate("G2a", true, { gate_group: 2 }),
+      makeGate("G2b", true, { gate_group: 2 }),
+    ];
+    // Group 1 is incomplete; only the fully-complete group 2 counts.
+    const out = processDealIntelligence(makeDeal(), gates, [], DEFAULTS);
+    expect(out.technicalTrack.currentMilestone).toBe(
+      "Gate 2: Core MVP Validated",
+    );
+  });
+
+  it("flags an out-of-order integrity warning when a completed gate has an incomplete prerequisite", () => {
+    const gates = [
+      makeGate("G1", false),
+      makeGate("G2", true, { prerequisite_gate_codes: ["G1"] }),
+    ];
+    const out = processDealIntelligence(makeDeal(), gates, [], DEFAULTS);
+    expect(out.technicalTrack.integrityWarnings).toHaveLength(1);
+    expect(out.technicalTrack.integrityWarnings[0]).toMatchObject({
+      gateCode: "G2",
+      type: "out_of_order",
+    });
+    expect(out.technicalTrack.integrityWarnings[0].message).toContain("G1");
+  });
+
+  it("emits no integrity warning when prerequisites are satisfied", () => {
+    const gates = [
+      makeGate("G1", true),
+      makeGate("G2", true, { prerequisite_gate_codes: ["G1"] }),
+    ];
+    const out = processDealIntelligence(makeDeal(), gates, [], DEFAULTS);
+    expect(out.technicalTrack.integrityWarnings).toHaveLength(0);
+  });
+});
+
 describe("intelligence engine — health roll-up", () => {
   it("rolls up to RED when an unmanaged RED pattern fires", () => {
     const deal = makeDeal({ sales_stage: "Commercial" });
