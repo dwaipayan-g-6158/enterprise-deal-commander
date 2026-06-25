@@ -7,6 +7,7 @@ import { Button } from "./ui/button";
 import { ThemeToggle } from "./theme-toggle";
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { EdcLogoMark } from "./edc-logo-mark";
 
 const navItems = [
   { href: "/", label: "Command Center", icon: LayoutDashboard },
@@ -26,9 +27,12 @@ function SidebarBody({ location, user, onNavigate, onLogout }: {
 }) {
   return (
     <>
-      <div className="p-6 border-b border-border">
-        <h1 className="text-xl font-bold tracking-tight text-primary">EDC</h1>
-        <p className="text-xs text-muted-foreground mt-1 uppercase tracking-widest font-mono">Commander Console</p>
+      <div className="p-6 border-b border-border flex items-center gap-3">
+        <EdcLogoMark size={52} animated={true} className="shrink-0" />
+        <div className="min-w-0">
+          <h1 className="text-sm font-bold tracking-tight text-foreground leading-snug">Enterprise Deal Commander</h1>
+          <p className="text-[10px] text-muted-foreground mt-1 uppercase tracking-widest font-mono">Commander Console</p>
+        </div>
       </div>
 
       <nav className="flex-1 p-4 space-y-1">
@@ -121,7 +125,8 @@ export function Layout({ children }: { children: ReactNode }) {
                 />
               </SheetContent>
             </Sheet>
-            <span className="font-bold tracking-tight text-primary">EDC</span>
+            <EdcLogoMark size={24} animated={false} />
+            <span className="font-bold tracking-tight text-foreground text-sm">Enterprise Deal Commander</span>
           </header>
         )}
         <main className="flex-1 overflow-auto bg-background">
