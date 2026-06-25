@@ -28,13 +28,19 @@ export function EdcLogoMark({
   const groupClassName = `edc-logo-group-${uid}`;
   const breatheClassName = `edc-breathing-${uid}`;
 
+  const reducedMotion =
+    typeof window !== "undefined" &&
+    window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
   const petalRefs = useRef<(SVGPathElement | null)[]>([]);
   const groupRef = useRef<SVGGElement | null>(null);
   const timeoutsRef = useRef<ReturnType<typeof setTimeout>[]>([]);
 
-  // Set initial animation state synchronously (before paint) to avoid flash
+  // Set initial animation state synchronously (before paint) to avoid flash.
+  // Skip if reduced-motion is preferred — petals will render fully filled via
+  // their static attributes and useEffect will not try to restore them.
   useLayoutEffect(() => {
-    if (!animated) return;
+    if (!animated || reducedMotion) return;
 
     petalRefs.current.forEach((petal) => {
       if (!petal) return;
@@ -45,7 +51,7 @@ export function EdcLogoMark({
       petal.style.strokeOpacity = "1";
       petal.style.strokeWidth = "1.1";
     });
-  }, [animated]);
+  }, [animated, reducedMotion]);
 
   useEffect(() => {
     if (!animated) return;
@@ -146,7 +152,7 @@ export function EdcLogoMark({
           y2="100%"
         >
           <stop offset="0%" stopColor="hsl(var(--primary))" stopOpacity={1}>
-            {animated && (
+            {animated && !reducedMotion && (
               <animate
                 attributeName="stop-opacity"
                 values="1;0.8;1"
@@ -161,7 +167,7 @@ export function EdcLogoMark({
             stopColor="hsl(var(--primary))"
             stopOpacity={0.75}
           >
-            {animated && (
+            {animated && !reducedMotion && (
               <animate
                 attributeName="stop-opacity"
                 values="0.75;1;0.75"
@@ -176,7 +182,7 @@ export function EdcLogoMark({
             stopColor="hsl(var(--primary))"
             stopOpacity={0.55}
           >
-            {animated && (
+            {animated && !reducedMotion && (
               <animate
                 attributeName="stop-opacity"
                 values="0.55;0.7;0.55"
