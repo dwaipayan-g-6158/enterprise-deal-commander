@@ -16,12 +16,9 @@ const PETAL_PATHS = [
 const DELAYS = [0.25, 0.72, 1.25, 1.62];
 const DRAW_DUR = 1.1;
 const FILL_LAG = 0.72;
-// Loop timing: after the petals draw + fill, the mark breathes for a hold,
-// pauses briefly, then the whole draw-in sequence replays.
+// After the petals draw + fill once, the mark settles into a gentle, infinite
+// breathe — no replay of the draw-in (that loop read as distracting).
 const BREATHE_START = (DELAYS[3] + DRAW_DUR + 0.5) * 1000; // 3220ms
-const BREATHE_HOLD = 3800; // ms of breathing before the pause
-const PAUSE = 1200; // ms of stillness before replay
-const CYCLE = BREATHE_START + BREATHE_HOLD + PAUSE; // full loop period
 
 // Square viewBox centered on the petal artwork (content bbox center ≈ 68.9,67.4;
 // size ≈ 137.8) with ~10px padding so the glow filter isn't clipped.
@@ -85,65 +82,44 @@ export function EdcLogoMark({
       return;
     }
 
-    // One full pass: reset → draw → fill → breathe → (hold + pause) → replay.
-    const runCycle = () => {
-      // Prior cycle's timers have all fired by now; start a fresh list.
-      timeoutsRef.current = [];
+    // Re-initialise lengths (in case layout effect ran in a different frame)
+    petalRefs.current.forEach((petal) => {
+      if (!petal) return;
+      const len = petal.getTotalLength();
+      petal.style.transition = "";
+      petal.style.strokeDasharray = String(len);
+      petal.style.strokeDashoffset = String(len);
+      petal.style.fillOpacity = "0";
+      petal.style.strokeOpacity = "1";
+      petal.style.strokeWidth = "1.1";
+    });
 
-      groupRef.current?.classList.remove(breatheClassName);
+    DELAYS.forEach((delay, i) => {
+      const petal = petalRefs.current[i];
+      if (!petal) return;
 
-      // Reset every petal to the hidden (undrawn) state with no transition,
-      // forcing a reflow so the upcoming draw animates from offset → 0.
-      petalRefs.current.forEach((petal) => {
-        if (!petal) return;
-        const len = petal.getTotalLength();
-        petal.style.transition = "none";
-        petal.style.strokeDasharray = String(len);
-        petal.style.strokeDashoffset = String(len);
-        petal.style.fillOpacity = "0";
-        petal.style.strokeOpacity = "1";
-        petal.style.strokeWidth = "1.1";
-        // Force reflow so the reset is committed before transitions re-enable.
-        void petal.getBoundingClientRect();
-      });
+      // Phase 1 — stroke draws in
+      const t1 = setTimeout(() => {
+        petal.style.transition = `stroke-dashoffset ${DRAW_DUR}s cubic-bezier(0.35, 0, 0.2, 1)`;
+        petal.style.strokeDashoffset = "0";
+      }, delay * 1000);
 
-      DELAYS.forEach((delay, i) => {
-        const petal = petalRefs.current[i];
-        if (!petal) return;
+      // Phase 2 — fill floods in, stroke dissolves
+      const t2 = setTimeout(() => {
+        petal.style.transition =
+          "fill-opacity 0.7s ease, stroke-opacity 0.55s ease";
+        petal.style.fillOpacity = "1";
+        petal.style.strokeOpacity = "0";
+      }, (delay + FILL_LAG) * 1000);
 
-        // Phase 1 — stroke draws in
-        const t1 = setTimeout(() => {
-          petal.style.transition = `stroke-dashoffset ${DRAW_DUR}s cubic-bezier(0.35, 0, 0.2, 1)`;
-          petal.style.strokeDashoffset = "0";
-        }, delay * 1000);
+      timeoutsRef.current.push(t1, t2);
+    });
 
-        // Phase 2 — fill floods in, stroke dissolves
-        const t2 = setTimeout(() => {
-          petal.style.transition =
-            "fill-opacity 0.7s ease, stroke-opacity 0.55s ease";
-          petal.style.fillOpacity = "1";
-          petal.style.strokeOpacity = "0";
-        }, (delay + FILL_LAG) * 1000);
-
-        timeoutsRef.current.push(t1, t2);
-      });
-
-      // Phase 3 — breathing starts after all petals are revealed
-      const t3 = setTimeout(() => {
-        groupRef.current?.classList.add(breatheClassName);
-      }, BREATHE_START);
-
-      // Phase 4 — stop breathing, then replay after a brief pause
-      const t4 = setTimeout(() => {
-        groupRef.current?.classList.remove(breatheClassName);
-      }, BREATHE_START + BREATHE_HOLD);
-
-      const t5 = setTimeout(runCycle, CYCLE);
-
-      timeoutsRef.current.push(t3, t4, t5);
-    };
-
-    runCycle();
+    // Phase 3 — settle into a gentle breathe once all petals are revealed
+    const t3 = setTimeout(() => {
+      groupRef.current?.classList.add(breatheClassName);
+    }, BREATHE_START);
+    timeoutsRef.current.push(t3);
 
     return () => {
       timeoutsRef.current.forEach(clearTimeout);

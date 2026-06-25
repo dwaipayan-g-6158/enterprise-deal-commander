@@ -28,10 +28,10 @@ function SidebarBody({ location, user, onNavigate, onLogout }: {
   return (
     <>
       <div className="p-6 border-b border-border flex items-center gap-3">
-        <EdcLogoMark size={40} animated={true} />
-        <div>
-          <h1 className="text-sm font-bold tracking-tight text-foreground leading-tight">Enterprise Deal Commander</h1>
-          <p className="text-[10px] text-muted-foreground mt-0.5 uppercase tracking-widest font-mono">Commander Console</p>
+        <EdcLogoMark size={52} animated={true} className="shrink-0" />
+        <div className="min-w-0">
+          <h1 className="text-sm font-bold tracking-tight text-foreground leading-snug">Enterprise Deal Commander</h1>
+          <p className="text-[10px] text-muted-foreground mt-1 uppercase tracking-widest font-mono">Commander Console</p>
         </div>
       </div>
 
