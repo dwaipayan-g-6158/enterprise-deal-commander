@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { Switch, Route, Router as WouterRouter, useLocation } from "wouter";
+import { Switch, Route, Router as WouterRouter, useLocation, Redirect } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -21,7 +21,6 @@ import Autopsy from "@/pages/autopsy";
 import Settings from "@/pages/settings";
 import Analytics from "@/pages/analytics";
 import Memory from "@/pages/memory";
-import MobileHome from "@/pages/mobile";
 import Share from "@/pages/share";
 
 const queryClient = new QueryClient({
@@ -70,7 +69,7 @@ function Router() {
       <Route path="/analytics" component={() => <ProtectedRoute component={Analytics} />} />
       <Route path="/memory" component={() => <ProtectedRoute component={Memory} />} />
       <Route path="/settings" component={() => <ProtectedRoute component={Settings} />} />
-      <Route path="/m" component={() => <ProtectedRoute component={MobileHome} />} />
+      <Route path="/m"><Redirect to="/" /></Route>
       <Route component={NotFound} />
     </Switch>
   );

@@ -2,6 +2,7 @@ import { useState, ReactNode } from "react";
 import { Link, useLocation } from "wouter";
 import { LogOut, LayoutDashboard, Briefcase, BarChart, Settings, Activity, TrendingUp, BookMarked, Menu } from "lucide-react";
 import { useLogout, useGetMe } from "@workspace/api-client-react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "./ui/button";
 import { ThemeToggle } from "./theme-toggle";
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
@@ -68,10 +69,16 @@ export function Layout({ children }: { children: ReactNode }) {
   const { data: user } = useGetMe();
   const isMobile = useIsMobile();
   const [navOpen, setNavOpen] = useState(false);
+  const queryClient = useQueryClient();
 
   const handleLogout = async () => {
     try {
       await logout.mutateAsync();
+      queryClient.clear();
+      if ("caches" in window) {
+        const keys = await caches.keys();
+        await Promise.all(keys.filter((k) => k.includes("edc-api-reads")).map((k) => caches.delete(k)));
+      }
       setLocation("/login");
     } catch (e) {
       console.error(e);
