@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { useLocation } from "wouter";
 import {
@@ -5,8 +6,11 @@ import {
   useListPipelineStages,
   useListPricingModels,
   useListServicesTiers,
+  useListCompetitors,
+  useListComplianceDrivers,
   getListDealsQueryKey,
 } from "@workspace/api-client-react";
+import { ProductPicker } from "./product-picker";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   Sheet,
@@ -20,6 +24,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select,
   SelectContent,
@@ -45,6 +50,10 @@ interface FormState {
   win_probability_pct: number | "";
   manager_strategic_blueprint: string;
   speaker_notes: string;
+  competitor_id: number | "";
+  compliance_driver_id: number | "";
+  compliance_deadline: string;
+  estimated_log_sources: number | "";
 }
 
 export function CreateDealSheet({
@@ -61,6 +70,10 @@ export function CreateDealSheet({
   const { data: stages } = useListPipelineStages();
   const { data: models } = useListPricingModels();
   const { data: tiers } = useListServicesTiers();
+  const { data: competitors } = useListCompetitors();
+  const { data: drivers } = useListComplianceDrivers();
+  const [interestIds, setInterestIds] = useState<string[]>([]);
+  const [extraDriverIds, setExtraDriverIds] = useState<number[]>([]);
 
   const defaultValues: FormState = {
     deal_name: "",
@@ -78,6 +91,10 @@ export function CreateDealSheet({
     win_probability_pct: "",
     manager_strategic_blueprint: "",
     speaker_notes: "",
+    competitor_id: "",
+    compliance_driver_id: "",
+    compliance_deadline: "",
+    estimated_log_sources: "",
   };
 
   const { register, handleSubmit, setValue, watch, reset } = useForm<FormState>({
@@ -110,12 +127,22 @@ export function CreateDealSheet({
         values.win_probability_pct === "" ? null : Number(values.win_probability_pct),
       manager_strategic_blueprint: values.manager_strategic_blueprint || null,
       speaker_notes: values.speaker_notes || null,
+      competitor_id: values.competitor_id === "" ? null : Number(values.competitor_id),
+      compliance_driver_id:
+        values.compliance_driver_id === "" ? null : Number(values.compliance_driver_id),
+      compliance_deadline: values.compliance_deadline || null,
+      estimated_log_sources:
+        values.estimated_log_sources === "" ? null : Number(values.estimated_log_sources),
+      product_interest_ids: interestIds,
+      compliance_driver_ids: extraDriverIds,
     };
     try {
       const created = await createDeal.mutateAsync({ data: data as never });
       await queryClient.invalidateQueries({ queryKey: getListDealsQueryKey() });
       toast({ title: "Deal created", description: "Technical gates seeded and intelligence computed." });
       reset(defaultValues);
+      setInterestIds([]);
+      setExtraDriverIds([]);
       onOpenChange(false);
       const newId = created?.data?.id;
       if (newId) setLocation(`/deals/${newId}`);
@@ -252,6 +279,94 @@ export function CreateDealSheet({
           <div className="grid gap-2">
             <Label>Expected Close Date</Label>
             <Input type="date" {...register("expected_close_date")} />
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="grid gap-2">
+              <Label>Incumbent / Competitor</Label>
+              <Select
+                value={watch("competitor_id") ? String(watch("competitor_id")) : ""}
+                onValueChange={(v) => setValue("competitor_id", Number(v))}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="None" />
+                </SelectTrigger>
+                <SelectContent>
+                  {competitors?.data.map((c) => (
+                    <SelectItem key={c.id} value={String(c.id)}>
+                      {c.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid gap-2">
+              <Label>Compliance Driver</Label>
+              <Select
+                value={
+                  watch("compliance_driver_id")
+                    ? String(watch("compliance_driver_id"))
+                    : ""
+                }
+                onValueChange={(v) => setValue("compliance_driver_id", Number(v))}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="None" />
+                </SelectTrigger>
+                <SelectContent>
+                  {drivers?.data.map((d) => (
+                    <SelectItem key={d.id} value={String(d.id)}>
+                      {d.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="grid gap-2">
+              <Label>Compliance Deadline</Label>
+              <Input type="date" {...register("compliance_deadline")} />
+            </div>
+            <div className="grid gap-2">
+              <Label>Est. Log Sources (SIEM)</Label>
+              <Input
+                type="number"
+                min={0}
+                placeholder="e.g. 1500"
+                {...register("estimated_log_sources", { valueAsNumber: true })}
+              />
+            </div>
+          </div>
+
+          {drivers?.data && drivers.data.length > 0 && (
+            <div className="grid gap-2">
+              <Label>Additional Compliance Drivers</Label>
+              <div className="flex flex-wrap gap-3 rounded-md border p-3">
+                {drivers.data.map((d) => (
+                  <label key={d.id} className="flex items-center gap-2 text-sm">
+                    <Checkbox
+                      checked={extraDriverIds.includes(d.id)}
+                      onCheckedChange={(c) =>
+                        setExtraDriverIds((prev) =>
+                          c ? [...prev, d.id] : prev.filter((x) => x !== d.id),
+                        )
+                      }
+                    />
+                    {d.name}
+                  </label>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div className="grid gap-2">
+            <Label>Products of Interest</Label>
+            <p className="text-xs text-muted-foreground">
+              What the customer landed for — drives next-best-product guidance.
+            </p>
+            <ProductPicker selected={interestIds} onChange={setInterestIds} />
           </div>
 
           <div className="grid gap-2">

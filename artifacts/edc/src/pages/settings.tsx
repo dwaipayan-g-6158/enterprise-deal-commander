@@ -7,6 +7,12 @@ import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { Settings as SettingsIcon, Save } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  WebhooksSettings,
+  NotificationSettings,
+  CustomPatternsSettings,
+} from "@/components/settings/v2-panels";
 
 export default function Settings() {
   const { data: response, isLoading } = useListEngineThresholds();
@@ -51,19 +57,28 @@ export default function Settings() {
   if (isLoading) return <div className="p-8">Initializing tuning console...</div>;
 
   return (
-    <div className="p-8 max-w-[1000px] mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Engine Tuning Console</h1>
-          <p className="text-muted-foreground mt-2">Configure core intelligence thresholds and detection parameters</p>
-        </div>
-        <Button onClick={handleSave} disabled={!hasChanges || updateThresholds.isPending} className="gap-2">
-          <Save className="w-4 h-4" />
-          {updateThresholds.isPending ? "Applying..." : "Apply Changes"}
-        </Button>
+    <div className="p-8 max-w-[1000px] mx-auto space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+      <div>
+        <h1 className="text-3xl font-bold tracking-tight">Settings</h1>
+        <p className="text-muted-foreground mt-2">Engine tuning, automation, and integrations</p>
       </div>
 
-      <Card>
+      <Tabs defaultValue="thresholds" className="w-full">
+        <TabsList>
+          <TabsTrigger value="thresholds">Thresholds</TabsTrigger>
+          <TabsTrigger value="patterns">Custom Patterns</TabsTrigger>
+          <TabsTrigger value="alerts">Smart Alerts</TabsTrigger>
+          <TabsTrigger value="webhooks">Webhooks</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="thresholds" className="pt-4 space-y-4">
+          <div className="flex justify-end">
+            <Button onClick={handleSave} disabled={!hasChanges || updateThresholds.isPending} className="gap-2">
+              <Save className="w-4 h-4" />
+              {updateThresholds.isPending ? "Applying..." : "Apply Changes"}
+            </Button>
+          </div>
+          <Card>
         <CardHeader>
           <div className="flex items-center gap-3">
             <div className="p-2 bg-primary/10 text-primary rounded-md">
@@ -94,6 +109,18 @@ export default function Settings() {
           ))}
         </CardContent>
       </Card>
+        </TabsContent>
+
+        <TabsContent value="patterns" className="pt-4">
+          <CustomPatternsSettings />
+        </TabsContent>
+        <TabsContent value="alerts" className="pt-4">
+          <NotificationSettings />
+        </TabsContent>
+        <TabsContent value="webhooks" className="pt-4">
+          <WebhooksSettings />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

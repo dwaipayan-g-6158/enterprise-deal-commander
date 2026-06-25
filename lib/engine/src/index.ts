@@ -21,6 +21,13 @@ export interface EngineThresholds {
   momentum_window_days: number;
   momentum_min_gate_pct: number;
   low_attach_rate_threshold: number;
+  // IAM/SIEM sales additions
+  competitive_stall_days: number;
+  compliance_deadline_warning_days: number;
+  compliance_min_gate_pct: number;
+  suite_bundle_min_components: number;
+  poc_max_validation_days: number;
+  siem_high_volume_log_sources: number;
   [key: string]: number | string;
 }
 
@@ -29,6 +36,16 @@ export interface RawCrossSell {
   productName: string;
   productCategory: string | null;
   isPitched: boolean;
+  // Stable code + suite let the engine reason about product mix (optional so
+  // existing callers/tests that omit them keep compiling).
+  code?: string;
+  suite?: string | null;
+}
+
+export interface RawProductRef {
+  code: string;
+  productName?: string;
+  suite?: string | null;
 }
 
 export interface RawDeal {
@@ -52,6 +69,13 @@ export interface RawDeal {
   created_at: string | Date;
   updated_at: string | Date;
   cross_sells?: RawCrossSell[];
+  // IAM/SIEM sales context (all optional)
+  competitor?: string | null;
+  compliance_driver?: string | null;
+  compliance_drivers?: string[];
+  compliance_deadline?: string | null;
+  estimated_log_sources?: number | null;
+  anchor_products?: RawProductRef[];
 }
 
 export interface RawGate {
@@ -142,6 +166,11 @@ interface DealContext {
   technicalProgressPct: number;
   attachRate: number | null;
   gateMap: Record<string, boolean>;
+  competitor: string | null;
+  complianceDriver: string | null;
+  daysToComplianceDeadline: number | null;
+  estimatedLogSources: number | null;
+  hasLog360: boolean;
 }
 
 interface BlockersContext {
@@ -176,6 +205,138 @@ interface RiskPattern {
 }
 
 const fmt = (n: number) => Math.round(n).toLocaleString("en-US");
+
+// ---------------------------------------------------------------------------
+// IAM/SIEM product intelligence — domain constants (pure, isomorphic).
+// Keyed by stable product `code`, never UUID or display name.
+// ---------------------------------------------------------------------------
+
+/** Suite membership for bundle-upsell detection (primary assignment, no overlap). */
+export const SUITE_MEMBERS: Record<"AD360" | "LOG360", string[]> = {
+  AD360: [
+    "ADMANAGER_PLUS",
+    "ADAUDIT_PLUS",
+    "ADSELFSERVICE_PLUS",
+    "M365_MANAGER_PLUS",
+    "SHAREPOINT_MANAGER_PLUS",
+    "EXCHANGE_REPORTER_PLUS",
+    "RECOVERYMANAGER_PLUS",
+  ],
+  LOG360: ["EVENTLOG_ANALYZER", "DATA_SECURITY_PLUS", "CLOUD_SECURITY_PLUS"],
+};
+
+/** Next-best-product affinity: real AD360/Log360 land-and-expand paths. */
+export const PRODUCT_AFFINITY: Record<string, string[]> = {
+  ADMANAGER_PLUS: ["ADAUDIT_PLUS", "ADSELFSERVICE_PLUS", "RECOVERYMANAGER_PLUS"],
+  ADAUDIT_PLUS: ["ADMANAGER_PLUS", "DATA_SECURITY_PLUS", "EVENTLOG_ANALYZER"],
+  ADSELFSERVICE_PLUS: ["ADMANAGER_PLUS", "M365_MANAGER_PLUS"],
+  M365_MANAGER_PLUS: [
+    "EXCHANGE_REPORTER_PLUS",
+    "ADSELFSERVICE_PLUS",
+    "RECOVERYMANAGER_PLUS",
+  ],
+  SHAREPOINT_MANAGER_PLUS: ["M365_MANAGER_PLUS", "DATA_SECURITY_PLUS"],
+  EXCHANGE_REPORTER_PLUS: ["M365_MANAGER_PLUS", "ADAUDIT_PLUS"],
+  RECOVERYMANAGER_PLUS: ["ADMANAGER_PLUS", "ADAUDIT_PLUS"],
+  EVENTLOG_ANALYZER: ["ADAUDIT_PLUS", "DATA_SECURITY_PLUS", "CLOUD_SECURITY_PLUS"],
+  DATA_SECURITY_PLUS: ["EVENTLOG_ANALYZER", "CLOUD_SECURITY_PLUS"],
+  CLOUD_SECURITY_PLUS: ["EVENTLOG_ANALYZER", "DATA_SECURITY_PLUS"],
+};
+
+/** Compliance driver -> products that carry the strongest story (keyed by driver name). */
+export const COMPLIANCE_PRODUCTS: Record<string, string[]> = {
+  SOX: ["ADAUDIT_PLUS", "EVENTLOG_ANALYZER"],
+  HIPAA: ["DATA_SECURITY_PLUS", "EVENTLOG_ANALYZER", "ADAUDIT_PLUS"],
+  "PCI-DSS": ["EVENTLOG_ANALYZER", "DATA_SECURITY_PLUS"],
+  GDPR: ["DATA_SECURITY_PLUS", "CLOUD_SECURITY_PLUS"],
+  NIS2: ["EVENTLOG_ANALYZER", "ADAUDIT_PLUS", "CLOUD_SECURITY_PLUS"],
+  "ISO 27001": ["ADAUDIT_PLUS", "EVENTLOG_ANALYZER", "DATA_SECURITY_PLUS"],
+  "Ransomware/Recovery": ["RECOVERYMANAGER_PLUS", "ADAUDIT_PLUS"],
+};
+
+export type RecommendationType =
+  | "NEXT_BEST_PRODUCT"
+  | "SUITE_BUNDLE"
+  | "RECOVERY_GAP";
+
+export interface Recommendation {
+  type: RecommendationType;
+  productCodes: string[];
+  suite: string | null;
+  rationale: string;
+}
+
+/**
+ * Opportunity engine (NOT risk): derives next-best-product, recovery-gap, and
+ * suite-bundle recommendations from the deal's anchor + pitched product mix.
+ * Pure — emitted alongside (never folded into) governance health.
+ */
+export function generateRecommendations(
+  anchorCodes: string[],
+  pitchedCodes: string[],
+  complianceDrivers: string[],
+  thresholds: EngineThresholds,
+): Recommendation[] {
+  const owned = new Set(
+    [...anchorCodes, ...pitchedCodes].filter((c): c is string => !!c),
+  );
+  const drivers = (complianceDrivers || []).filter(Boolean);
+  const recs: Recommendation[] = [];
+
+  // Next-best-product: affinity of owned products + compliance-driven picks.
+  const nbp = new Set<string>();
+  for (const code of owned) {
+    for (const rec of PRODUCT_AFFINITY[code] || []) {
+      if (!owned.has(rec)) nbp.add(rec);
+    }
+  }
+  for (const driver of drivers) {
+    for (const rec of COMPLIANCE_PRODUCTS[driver] || []) {
+      if (!owned.has(rec)) nbp.add(rec);
+    }
+  }
+  if (nbp.size > 0) {
+    recs.push({
+      type: "NEXT_BEST_PRODUCT",
+      productCodes: [...nbp],
+      suite: null,
+      rationale: drivers.length
+        ? `Natural expansion from the current footprint, including components that strengthen the ${drivers.join(" / ")} compliance story.`
+        : `Natural expansion from the current footprint — these components are commonly deployed alongside what the customer is evaluating.`,
+    });
+  }
+
+  // Recovery gap: AD/M365 footprint with no backup & recovery line.
+  const adFootprint = [...owned].some(
+    (c) => SUITE_MEMBERS.AD360.includes(c) && c !== "RECOVERYMANAGER_PLUS",
+  );
+  if (adFootprint && !owned.has("RECOVERYMANAGER_PLUS")) {
+    recs.push({
+      type: "RECOVERY_GAP",
+      productCodes: ["RECOVERYMANAGER_PLUS"],
+      suite: "AD360",
+      rationale:
+        "AD/M365 deal with no backup & recovery line. RecoveryManager Plus pre-empts the common ransomware / accidental-deletion objection and protects the deployment.",
+    });
+  }
+
+  // Suite-bundle upsell: enough à-la-carte components to justify the bundle.
+  const minComp = Number(thresholds.suite_bundle_min_components) || 3;
+  for (const suite of ["AD360", "LOG360"] as const) {
+    const display = suite === "LOG360" ? "Log360" : "AD360";
+    const ownedInSuite = SUITE_MEMBERS[suite].filter((c) => owned.has(c));
+    if (ownedInSuite.length >= minComp) {
+      recs.push({
+        type: "SUITE_BUNDLE",
+        productCodes: ownedInSuite,
+        suite: display,
+        rationale: `${ownedInSuite.length} ${display} components are being taken à la carte — position the ${display} bundle for better economics and a unified console.`,
+      });
+    }
+  }
+
+  return recs;
+}
 
 export const riskPatterns: RiskPattern[] = [
   {
@@ -546,6 +707,148 @@ export const riskPatterns: RiskPattern[] = [
         "Pitch additional catalog products to raise the attach rate above the threshold.",
     }),
   },
+  {
+    // IAM/SIEM — a displacement deal stalling in evaluation snaps back to the incumbent
+    code: "COMPETITIVE_DISPLACEMENT_STALL",
+    severity: "YELLOW",
+    weight: 80,
+    evaluate: (deal, _b, thresholds) =>
+      !!deal.competitor &&
+      ["Validation", "Commercial"].includes(deal.salesStage) &&
+      deal.daysInStage > thresholds.competitive_stall_days,
+    formatMessage: (deal) =>
+      `COMPETITIVE DISPLACEMENT STALL: This is a displacement play against ${deal.competitor}, ` +
+      `and it has sat in ${deal.salesStage} for ${deal.daysInStage} days. Stalled displacement deals ` +
+      `snap back to the incumbent — the longer the evaluation drags, the more the status quo wins.`,
+    explain: (deal, thresholds, _b, provenance) => ({
+      inputs: [
+        { label: "Incumbent / Competitor", value: deal.competitor ?? "(none)" },
+        { label: "Sales Stage", value: deal.salesStage },
+        { label: "Days In Stage", value: deal.daysInStage },
+      ],
+      thresholdsUsed: [
+        {
+          key: "competitive_stall_days",
+          value: thresholds.competitive_stall_days,
+          source: provenance("competitive_stall_days"),
+        },
+      ],
+      clearsWhen:
+        "Advance the deal to the next stage, or lock a differentiated win-criteria gate the incumbent cannot meet.",
+    }),
+  },
+  {
+    // IAM/SIEM — a hard compliance deadline is both the risk and the leverage
+    code: "COMPLIANCE_DEADLINE_RISK",
+    severity: "YELLOW",
+    weight: 82,
+    evaluate: (deal, _b, thresholds) => {
+      if (deal.daysToComplianceDeadline == null) return false;
+      return (
+        deal.daysToComplianceDeadline <=
+          thresholds.compliance_deadline_warning_days &&
+        deal.technicalProgressPct < thresholds.compliance_min_gate_pct
+      );
+    },
+    formatMessage: (deal) =>
+      `COMPLIANCE DEADLINE RISK: A ${deal.complianceDriver ?? "compliance"} mandate is due in ` +
+      `${deal.daysToComplianceDeadline} days, but only ${deal.technicalProgressPct}% of technical gates ` +
+      `are complete. The deal risks slipping the audit window — the very leverage that should be ` +
+      `accelerating it.`,
+    explain: (deal, thresholds, _b, provenance) => ({
+      inputs: [
+        { label: "Compliance Driver", value: deal.complianceDriver ?? "(none)" },
+        {
+          label: "Days To Compliance Deadline",
+          value: deal.daysToComplianceDeadline ?? "(none)",
+        },
+        { label: "Technical Progress %", value: deal.technicalProgressPct },
+      ],
+      thresholdsUsed: [
+        {
+          key: "compliance_deadline_warning_days",
+          value: thresholds.compliance_deadline_warning_days,
+          source: provenance("compliance_deadline_warning_days"),
+        },
+        {
+          key: "compliance_min_gate_pct",
+          value: thresholds.compliance_min_gate_pct,
+          source: provenance("compliance_min_gate_pct"),
+        },
+      ],
+      clearsWhen:
+        "Raise gate completion above the compliance threshold, or re-baseline the compliance deadline with the customer.",
+    }),
+  },
+  {
+    // IAM/SIEM — a PoC dragging in Validation with no locked success criteria
+    code: "POC_DEATH_MARCH",
+    severity: "YELLOW",
+    weight: 58,
+    evaluate: (deal, _b, thresholds) =>
+      deal.salesStage === "Validation" &&
+      deal.daysInStage > thresholds.poc_max_validation_days &&
+      !deal.gateMap["G1_CRITERIA_LOCKED"],
+    formatMessage: (deal) =>
+      `POC DEATH MARCH: The proof-of-concept has run ${deal.daysInStage} days in Validation ` +
+      `without locked success criteria (Gate 1). Open-ended PoCs without agreed exit criteria ` +
+      `rarely convert — the customer cannot say yes to a target that was never defined.`,
+    explain: (deal, thresholds, _b, provenance) => ({
+      inputs: [
+        { label: "Sales Stage", value: deal.salesStage },
+        { label: "Days In Stage", value: deal.daysInStage },
+        {
+          label: "Gate 1 Criteria Locked",
+          value: !!deal.gateMap["G1_CRITERIA_LOCKED"],
+        },
+      ],
+      thresholdsUsed: [
+        {
+          key: "poc_max_validation_days",
+          value: thresholds.poc_max_validation_days,
+          source: provenance("poc_max_validation_days"),
+        },
+      ],
+      clearsWhen:
+        "Lock Gate 1 success criteria with the customer, or exit Validation with a go/no-go decision.",
+    }),
+  },
+  {
+    // SIEM — a large log environment paired with an undersized deal = mis-licensing
+    code: "SIEM_UNDERSCOPED",
+    severity: "YELLOW",
+    weight: 48,
+    evaluate: (deal, _b, thresholds) =>
+      deal.hasLog360 &&
+      deal.estimatedLogSources != null &&
+      deal.estimatedLogSources >= thresholds.siem_high_volume_log_sources &&
+      deal.normalizedTCV < thresholds.elephant_tcv_threshold,
+    formatMessage: (deal) =>
+      `SIEM UNDER-SCOPED: A Log360/SIEM deal sized at ${deal.reportingCurrency} ${fmt(deal.normalizedTCV)} ` +
+      `is being scoped against ~${deal.estimatedLogSources} log sources. The environment looks larger than ` +
+      `the deal — high risk of under-licensing, ingestion overruns, and a painful true-up at renewal.`,
+    explain: (deal, thresholds, _b, provenance) => ({
+      inputs: [
+        { label: "Estimated Log Sources", value: deal.estimatedLogSources ?? "(none)" },
+        { label: "Normalized TCV", value: deal.normalizedTCV },
+        { label: "Has Log360 Product", value: deal.hasLog360 },
+      ],
+      thresholdsUsed: [
+        {
+          key: "siem_high_volume_log_sources",
+          value: thresholds.siem_high_volume_log_sources,
+          source: provenance("siem_high_volume_log_sources"),
+        },
+        {
+          key: "elephant_tcv_threshold",
+          value: thresholds.elephant_tcv_threshold,
+          source: provenance("elephant_tcv_threshold"),
+        },
+      ],
+      clearsWhen:
+        "Re-scope the licensing to the log-source/EPS volume, or confirm the environment is smaller than estimated.",
+    }),
+  },
 ];
 
 /**
@@ -642,6 +945,8 @@ export interface IntelligenceOutput {
     blueprintNotes: string | null;
     dataQualityNotes: { code: string; message: string }[];
   };
+  // Opportunity recommendations (separate channel from risk — do not affect health).
+  recommendations: Recommendation[];
 }
 
 /**
@@ -761,11 +1066,29 @@ export function processDealIntelligence(
     if (daysToClose < 0) daysToClose = 0;
   }
 
+  let daysToComplianceDeadline: number | null = null;
+  if (deal.compliance_deadline) {
+    daysToComplianceDeadline = Math.floor(
+      (new Date(deal.compliance_deadline).getTime() - now.getTime()) / DAY,
+    );
+    if (daysToComplianceDeadline < 0) daysToComplianceDeadline = 0;
+  }
+
   // F13: cross-sell whitespace + attach rate
   const crossSells = deal.cross_sells || [];
   const pitchedCount = crossSells.filter((c) => c.isPitched).length;
   const catalogCount = ctx.catalogCount || 0;
   const attachRate = catalogCount > 0 ? pitchedCount / catalogCount : null;
+
+  // SIEM context: does the deal touch any Log360 product (anchor or pitched)?
+  const anchorProducts = deal.anchor_products || [];
+  const hasLog360 =
+    crossSells.some((c) => c.isPitched && c.suite === "Log360") ||
+    anchorProducts.some((a) => a.suite === "Log360");
+  const estimatedLogSources =
+    deal.estimated_log_sources == null
+      ? null
+      : Number(deal.estimated_log_sources);
 
   // blocker analysis
   const highSeverityBlockers = activeBlockers.filter(
@@ -794,6 +1117,11 @@ export function processDealIntelligence(
     technicalProgressPct,
     attachRate,
     gateMap,
+    competitor: deal.competitor ?? null,
+    complianceDriver: deal.compliance_driver ?? null,
+    daysToComplianceDeadline,
+    estimatedLogSources,
+    hasLog360,
   };
 
   // F2 provenance: default vs tuned
@@ -816,6 +1144,23 @@ export function processDealIntelligence(
         dealContext.daysToClose != null &&
         dealContext.daysToClose <=
           Math.round(thresholds.close_date_warning_days / 2)
+      ) {
+        severity = "RED";
+      }
+      // Compliance deadline inside half the warning window is critical.
+      if (
+        pattern.code === "COMPLIANCE_DEADLINE_RISK" &&
+        dealContext.daysToComplianceDeadline != null &&
+        dealContext.daysToComplianceDeadline <=
+          Math.round(thresholds.compliance_deadline_warning_days / 2)
+      ) {
+        severity = "RED";
+      }
+      // Displacement stall with collapsing momentum is critical.
+      if (
+        pattern.code === "COMPETITIVE_DISPLACEMENT_STALL" &&
+        evalContext.ownMomentum != null &&
+        evalContext.ownMomentum.dropPct >= thresholds.momentum_drop_pct
       ) {
         severity = "RED";
       }
@@ -882,6 +1227,27 @@ export function processDealIntelligence(
       ? "YELLOW"
       : "GREEN";
 
+  // Opportunity recommendations from the anchor + pitched product mix.
+  const anchorCodes = (deal.anchor_products || [])
+    .map((a) => a.code)
+    .filter((c): c is string => !!c);
+  const pitchedCodes = crossSells
+    .filter((c) => c.isPitched)
+    .map((c) => c.code)
+    .filter((c): c is string => !!c);
+  const complianceDriverList =
+    deal.compliance_drivers && deal.compliance_drivers.length > 0
+      ? deal.compliance_drivers
+      : deal.compliance_driver
+        ? [deal.compliance_driver]
+        : [];
+  const recommendations = generateRecommendations(
+    anchorCodes,
+    pitchedCodes,
+    complianceDriverList,
+    thresholds,
+  );
+
   return {
     id: deal.id,
     accountName: deal.account_name,
@@ -941,7 +1307,19 @@ export function processDealIntelligence(
       blueprintNotes: deal.manager_strategic_blueprint,
       dataQualityNotes,
     },
+    recommendations,
   };
 }
 
 export const PATTERN_CODES = riskPatterns.map((p) => p.code);
+
+// ---------------------------------------------------------------------------
+// V2 Sovereign Intelligence — pure modules (scoring, simulation, custom
+// patterns, ramp pricing, natural-language command parsing).
+export * from "./scoring";
+export * from "./simulation";
+export * from "./custom-patterns";
+export * from "./ramp";
+export * from "./nlc";
+
+export * from "./contextual-patterns";

@@ -1,12 +1,15 @@
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import {
   useUpdateDeal,
   useListPipelineStages,
   useListPricingModels,
   useListServicesTiers,
+  useListCompetitors,
+  useListComplianceDrivers,
   type Deal,
 } from "@workspace/api-client-react";
+import { ProductPicker } from "./product-picker";
 import {
   Sheet,
   SheetContent,
@@ -19,6 +22,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select,
   SelectContent,
@@ -27,6 +31,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
+import { ToastAction } from "@/components/ui/toast";
 import { useCockpitInvalidate } from "./use-invalidate";
 import { AlertTriangle } from "lucide-react";
 
@@ -46,16 +51,22 @@ interface FormState {
   win_probability_pct: number | "";
   manager_strategic_blueprint: string;
   speaker_notes: string;
+  competitor_id: number | "";
+  compliance_driver_id: number | "";
+  compliance_deadline: string;
+  estimated_log_sources: number | "";
 }
 
 export function EditDealSheet({
   deal,
   open,
   onOpenChange,
+  dirtyRef,
 }: {
   deal: Deal;
   open: boolean;
   onOpenChange: (v: boolean) => void;
+  dirtyRef?: React.MutableRefObject<boolean>;
 }) {
   const { toast } = useToast();
   const invalidate = useCockpitInvalidate(deal.id);
@@ -63,11 +74,21 @@ export function EditDealSheet({
   const { data: stages } = useListPipelineStages();
   const { data: models } = useListPricingModels();
   const { data: tiers } = useListServicesTiers();
+  const { data: competitors } = useListCompetitors();
+  const { data: drivers } = useListComplianceDrivers();
 
   const [guardrail, setGuardrail] = useState<{ message: string; patternCodes: string[] } | null>(null);
   const [overrideReason, setOverrideReason] = useState("");
+  const [interestIds, setInterestIds] = useState<string[]>(
+    deal.productsOfInterest?.map((p) => p.productId) ?? [],
+  );
+  const [extraDriverIds, setExtraDriverIds] = useState<number[]>(
+    (deal.complianceDrivers ?? [])
+      .filter((d) => d.id !== deal.complianceDriverId)
+      .map((d) => d.id),
+  );
 
-  const { register, handleSubmit, setValue, watch, reset } = useForm<FormState>({
+  const { register, handleSubmit, setValue, watch, reset, formState } = useForm<FormState>({
     defaultValues: {
       deal_name: deal.dealName,
       account_name: deal.accountName,
@@ -84,10 +105,42 @@ export function EditDealSheet({
       win_probability_pct: deal.winProbabilityPct ?? "",
       manager_strategic_blueprint: deal.managerStrategicBlueprint ?? "",
       speaker_notes: deal.speakerNotes ?? "",
+      competitor_id: deal.competitorId ?? "",
+      compliance_driver_id: deal.complianceDriverId ?? "",
+      compliance_deadline: deal.complianceDeadline?.slice(0, 10) ?? "",
+      estimated_log_sources: deal.estimatedLogSources ?? "",
     },
   });
 
-  const onSubmit = async (values: FormState) => {
+  const autosaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const undoDataRef = useRef<FormState | null>(null);
+  const onAutoSaveRef = useRef<((values: FormState) => Promise<void>) | null>(null);
+
+  // Surface dirty state to the parent cockpit's deal-switch guard.
+  const { isDirty } = formState;
+  useEffect(() => {
+    if (dirtyRef) dirtyRef.current = isDirty;
+    return () => {
+      if (dirtyRef) dirtyRef.current = false;
+    };
+  }, [isDirty, dirtyRef]);
+
+  // Auto-save: debounce any field change by 1s while the sheet is open.
+  useEffect(() => {
+    if (!open) return;
+    const subscription = watch(() => {
+      if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
+      autosaveTimerRef.current = setTimeout(() => {
+        if (onAutoSaveRef.current) void handleSubmit(onAutoSaveRef.current)();
+      }, 1000);
+    });
+    return () => {
+      subscription.unsubscribe();
+      if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
+    };
+  }, [open, watch, handleSubmit]);
+
+  const buildPayload = (values: FormState): Record<string, unknown> => {
     const data: Record<string, unknown> = {
       deal_name: values.deal_name,
       account_name: values.account_name,
@@ -105,10 +158,60 @@ export function EditDealSheet({
         values.win_probability_pct === "" ? null : Number(values.win_probability_pct),
       manager_strategic_blueprint: values.manager_strategic_blueprint || null,
       speaker_notes: values.speaker_notes || null,
+      competitor_id: values.competitor_id === "" ? null : Number(values.competitor_id),
+      compliance_driver_id:
+        values.compliance_driver_id === "" ? null : Number(values.compliance_driver_id),
+      compliance_deadline: values.compliance_deadline || null,
+      estimated_log_sources:
+        values.estimated_log_sources === "" ? null : Number(values.estimated_log_sources),
+      product_interest_ids: interestIds,
+      compliance_driver_ids: extraDriverIds,
     };
     if (overrideReason.trim().length >= 10) {
       data.override_reason = overrideReason.trim();
     }
+    return data;
+  };
+
+  // Auto-save handler — saves without closing the sheet; offers an undo.
+  onAutoSaveRef.current = async (values: FormState) => {
+    const prevUndo = undoDataRef.current;
+    undoDataRef.current = values;
+    try {
+      await updateDeal.mutateAsync({ id: deal.id, data: buildPayload(values) as never });
+      await invalidate();
+      toast({
+        title: "Auto-saved",
+        description: "Changes saved automatically.",
+        action: prevUndo ? (
+          <ToastAction
+            altText="Undo last change"
+            onClick={() => {
+              reset(prevUndo);
+              undoDataRef.current = null;
+              if (onAutoSaveRef.current) void handleSubmit(onAutoSaveRef.current)();
+            }}
+          >
+            Undo
+          </ToastAction>
+        ) : undefined,
+      });
+      setGuardrail(null);
+    } catch (err: unknown) {
+      const body = (err as { data?: { error?: { code?: string; message?: string; patternCodes?: string[] } } })?.data;
+      const apiErr = body?.error;
+      if (apiErr?.code === "STAGE_GUARDRAIL" || (apiErr?.patternCodes && apiErr.patternCodes.length > 0)) {
+        setGuardrail({
+          message: apiErr.message ?? "Stage advancement is blocked by active risk patterns.",
+          patternCodes: apiErr.patternCodes ?? [],
+        });
+      }
+      // Otherwise stay silent — don't interrupt the user mid-edit on auto-save.
+    }
+  };
+
+  const onSubmit = async (values: FormState) => {
+    const data = buildPayload(values);
     try {
       await updateDeal.mutateAsync({ id: deal.id, data: data as never });
       await invalidate();
@@ -259,6 +362,91 @@ export function EditDealSheet({
           <div className="grid gap-2">
             <Label>Expected Close Date</Label>
             <Input type="date" {...register("expected_close_date")} />
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="grid gap-2">
+              <Label>Incumbent / Competitor</Label>
+              <Select
+                value={watch("competitor_id") ? String(watch("competitor_id")) : ""}
+                onValueChange={(v) => setValue("competitor_id", Number(v))}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="None" />
+                </SelectTrigger>
+                <SelectContent>
+                  {competitors?.data.map((c) => (
+                    <SelectItem key={c.id} value={String(c.id)}>
+                      {c.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid gap-2">
+              <Label>Compliance Driver</Label>
+              <Select
+                value={
+                  watch("compliance_driver_id")
+                    ? String(watch("compliance_driver_id"))
+                    : ""
+                }
+                onValueChange={(v) => setValue("compliance_driver_id", Number(v))}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="None" />
+                </SelectTrigger>
+                <SelectContent>
+                  {drivers?.data.map((d) => (
+                    <SelectItem key={d.id} value={String(d.id)}>
+                      {d.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="grid gap-2">
+              <Label>Compliance Deadline</Label>
+              <Input type="date" {...register("compliance_deadline")} />
+            </div>
+            <div className="grid gap-2">
+              <Label>Est. Log Sources (SIEM)</Label>
+              <Input
+                type="number"
+                min={0}
+                placeholder="e.g. 1500"
+                {...register("estimated_log_sources", { valueAsNumber: true })}
+              />
+            </div>
+          </div>
+
+          {drivers?.data && drivers.data.length > 0 && (
+            <div className="grid gap-2">
+              <Label>Additional Compliance Drivers</Label>
+              <div className="flex flex-wrap gap-3 rounded-md border p-3">
+                {drivers.data.map((d) => (
+                  <label key={d.id} className="flex items-center gap-2 text-sm">
+                    <Checkbox
+                      checked={extraDriverIds.includes(d.id)}
+                      onCheckedChange={(c) =>
+                        setExtraDriverIds((prev) =>
+                          c ? [...prev, d.id] : prev.filter((x) => x !== d.id),
+                        )
+                      }
+                    />
+                    {d.name}
+                  </label>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div className="grid gap-2">
+            <Label>Products of Interest</Label>
+            <ProductPicker selected={interestIds} onChange={setInterestIds} />
           </div>
 
           <div className="grid gap-2">

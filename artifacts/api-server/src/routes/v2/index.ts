@@ -23,10 +23,20 @@ import {
 import { requireAuth } from "../../lib/auth";
 import { notFound } from "../../lib/http";
 import { toISO } from "../../lib/intelligence";
+import crudRouter from "./crud";
+import analyticsRouter from "./analytics";
+import configRouter from "./config";
+import exportsRouter from "./exports";
 
 const router: IRouter = Router();
 
 router.use(requireAuth);
+
+// V2 Sovereign Intelligence sub-routers (auth applied above).
+router.use(crudRouter);
+router.use(analyticsRouter);
+router.use(configRouter);
+router.use(exportsRouter);
 
 async function ensureDeal(dealId: string) {
   const rows = await db

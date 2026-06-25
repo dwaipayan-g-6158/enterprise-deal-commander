@@ -1,0 +1,215 @@
+import {
+  useGetVelocityAnalytics,
+  useGetPipelineSimulation,
+  useGetWinLossAnalytics,
+  useGetCompetitiveAnalytics,
+  useGetPipelineAnalytics,
+} from "@workspace/api-client-react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { FileText, Download, TrendingUp } from "lucide-react";
+
+function money(n: number): string {
+  return "$" + Math.round(Number(n) || 0).toLocaleString("en-US");
+}
+
+interface VelocityDeal {
+  id: string;
+  dealName: string;
+  accountName: string;
+  stage: string;
+  daysInStage: number;
+  benchmarkDays: number;
+  deltaDays: number;
+  velocity: string;
+}
+interface CompetitorRow {
+  name: string;
+  encounters: number;
+  wins: number;
+  losses: number;
+  winRatePct: number | null;
+}
+
+export default function Analytics() {
+  const velocity = useGetVelocityAnalytics();
+  const sim = useGetPipelineSimulation();
+  const winLoss = useGetWinLossAnalytics();
+  const competitive = useGetCompetitiveAnalytics();
+  const pipeline = useGetPipelineAnalytics();
+
+  const vDeals = ((velocity.data?.data as { deals?: VelocityDeal[] })?.deals ?? []) as VelocityDeal[];
+  const simData = sim.data?.data as
+    | { percentiles: Record<string, number>; weightedPipeline: number; mean: number }
+    | undefined;
+  const wl = winLoss.data?.data as
+    | { won: number; lost: number; winRatePct: number | null; byTcvRange: { range: string; total: number; wins: number; winRatePct: number | null }[] }
+    | undefined;
+  const comps = ((competitive.data?.data as { competitors?: CompetitorRow[] })?.competitors ?? []) as CompetitorRow[];
+  const pipe = pipeline.data?.data as { totalTcv: number; activeDeals: number } | undefined;
+
+  const velocityColor: Record<string, string> = {
+    SLOW: "bg-destructive text-white",
+    FAST: "bg-emerald-500 text-white",
+    NORMAL: "bg-muted text-muted-foreground",
+  };
+
+  return (
+    <div className="p-8 max-w-[1400px] mx-auto space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold">Pipeline Analytics</h1>
+          <p className="text-muted-foreground">
+            {pipe ? `${money(pipe.totalTcv)} across ${pipe.activeDeals} active deals` : "Loading..."}
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <Button variant="outline" asChild>
+            <a href="/api/v2/reports/pipeline" target="_blank" rel="noreferrer">
+              <FileText className="h-4 w-4 mr-2" /> Board Report
+            </a>
+          </Button>
+          <Button variant="outline" asChild>
+            <a href="/api/v2/export/deals?format=csv">
+              <Download className="h-4 w-4 mr-2" /> Export CSV
+            </a>
+          </Button>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Monte Carlo */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg flex items-center gap-2">
+              <TrendingUp className="h-5 w-5" /> Probabilistic Forecast
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {simData ? (
+              <div className="space-y-3">
+                <div className="grid grid-cols-5 gap-2 text-center">
+                  {(["p10", "p25", "p50", "p75", "p90"] as const).map((p) => (
+                    <div key={p} className="rounded-md border p-2">
+                      <p className="text-xs uppercase text-muted-foreground">{p}</p>
+                      <p className="font-mono text-sm font-semibold">{money(simData.percentiles[p])}</p>
+                    </div>
+                  ))}
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  Weighted pipeline (traditional): <span className="font-mono">{money(simData.weightedPipeline)}</span>.
+                  Use <b>P50</b> ({money(simData.percentiles.p50)}) for planning, <b>P25</b> for conservative budgeting.
+                </p>
+              </div>
+            ) : (
+              <p className="text-muted-foreground text-sm">Computing simulation…</p>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Win/Loss */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">Win / Loss</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {wl && wl.won + wl.lost > 0 ? (
+              <div className="space-y-3">
+                <div className="flex items-baseline gap-3">
+                  <span className="text-4xl font-bold">{wl.winRatePct}%</span>
+                  <span className="text-sm text-muted-foreground">{wl.won} won · {wl.lost} lost</span>
+                </div>
+                <table className="w-full text-sm">
+                  <tbody>
+                    {wl.byTcvRange.map((r) => (
+                      <tr key={r.range} className="border-t">
+                        <td className="py-1">{r.range}</td>
+                        <td className="py-1 text-right text-muted-foreground">{r.total} deals</td>
+                        <td className="py-1 text-right font-mono">{r.winRatePct == null ? "—" : `${r.winRatePct}%`}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <p className="text-muted-foreground text-sm">No closed deals yet — win/loss populates as deals close.</p>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Velocity heatmap */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg">Velocity — Most Overdue First</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-xs uppercase text-muted-foreground border-b">
+                <th className="text-left py-2">Deal</th>
+                <th className="text-left py-2">Stage</th>
+                <th className="text-right py-2">Days</th>
+                <th className="text-right py-2">Benchmark</th>
+                <th className="text-right py-2">Delta</th>
+                <th className="text-right py-2">Velocity</th>
+              </tr>
+            </thead>
+            <tbody>
+              {vDeals.map((d) => (
+                <tr key={d.id} className="border-b">
+                  <td className="py-2">{d.dealName}<span className="text-muted-foreground"> · {d.accountName}</span></td>
+                  <td className="py-2">{d.stage}</td>
+                  <td className="py-2 text-right font-mono">{d.daysInStage}</td>
+                  <td className="py-2 text-right font-mono text-muted-foreground">{d.benchmarkDays}</td>
+                  <td className={`py-2 text-right font-mono ${d.deltaDays > 0 ? "text-destructive" : "text-emerald-600"}`}>
+                    {d.deltaDays > 0 ? `+${d.deltaDays}` : d.deltaDays}
+                  </td>
+                  <td className="py-2 text-right">
+                    <Badge className={velocityColor[d.velocity] ?? ""}>{d.velocity}</Badge>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </CardContent>
+      </Card>
+
+      {/* Competitive */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg">Competitive Win Rates</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {comps.length === 0 ? (
+            <p className="text-muted-foreground text-sm">No competitor encounters logged.</p>
+          ) : (
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-xs uppercase text-muted-foreground border-b">
+                  <th className="text-left py-2">Competitor</th>
+                  <th className="text-right py-2">Encounters</th>
+                  <th className="text-right py-2">Wins</th>
+                  <th className="text-right py-2">Losses</th>
+                  <th className="text-right py-2">Win Rate</th>
+                </tr>
+              </thead>
+              <tbody>
+                {comps.map((c) => (
+                  <tr key={c.name} className="border-b">
+                    <td className="py-2">{c.name}</td>
+                    <td className="py-2 text-right font-mono">{c.encounters}</td>
+                    <td className="py-2 text-right font-mono">{c.wins}</td>
+                    <td className="py-2 text-right font-mono">{c.losses}</td>
+                    <td className="py-2 text-right font-mono">{c.winRatePct == null ? "—" : `${c.winRatePct}%`}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}

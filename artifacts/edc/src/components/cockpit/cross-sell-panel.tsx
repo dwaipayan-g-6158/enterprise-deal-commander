@@ -3,19 +3,30 @@ import {
   useListCrossSells,
   useListProductCatalog,
   useUpdateCrossSells,
+  useGetDealIntelligence,
 } from "@workspace/api-client-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { useCockpitInvalidate } from "./use-invalidate";
+import { groupProductsBySuite } from "./product-picker";
 
 export function CrossSellPanel({ dealId }: { dealId: string }) {
   const { toast } = useToast();
   const invalidate = useCockpitInvalidate(dealId);
   const { data: crossSells } = useListCrossSells(dealId);
   const { data: catalog } = useListProductCatalog();
+  const { data: intel } = useGetDealIntelligence(dealId);
   const updateCrossSells = useUpdateCrossSells();
+
+  // Products the engine recommends attaching — highlighted as "Recommended".
+  const recommendedIds = new Set(
+    (intel?.data?.recommendations ?? []).flatMap((r) =>
+      (r.products ?? []).map((p) => p.productId),
+    ),
+  );
 
   const [selected, setSelected] = useState<Set<string>>(new Set());
 
@@ -53,17 +64,32 @@ export function CrossSellPanel({ dealId }: { dealId: string }) {
     <Card>
       <CardContent className="p-4 space-y-3">
         <p className="font-semibold text-sm">Cross-Sell Opportunities</p>
-        <div className="space-y-2">
-          {products.map((p) => (
-            <label key={p.id} className="flex items-center gap-3 p-2 rounded-md hover:bg-muted/50 cursor-pointer">
-              <Checkbox checked={selected.has(p.id)} onCheckedChange={() => toggle(p.id)} />
-              <div className="flex-1">
-                <p className="text-sm font-medium">{p.productName}</p>
-                {p.productCategory && (
-                  <p className="text-xs text-muted-foreground">{p.productCategory}</p>
-                )}
-              </div>
-            </label>
+        <div className="space-y-3">
+          {groupProductsBySuite(products).map(({ suite, products: items }) => (
+            <div key={suite} className="space-y-1">
+              <Badge variant="secondary" className="text-xs">
+                {suite}
+              </Badge>
+              {items.map((p) => (
+                <label
+                  key={p.id}
+                  className="flex items-center gap-3 p-2 rounded-md hover:bg-muted/50 cursor-pointer"
+                >
+                  <Checkbox checked={selected.has(p.id)} onCheckedChange={() => toggle(p.id)} />
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm font-medium">{p.productName}</p>
+                      {recommendedIds.has(p.id) && !selected.has(p.id) && (
+                        <Badge className="text-[10px]">Recommended</Badge>
+                      )}
+                    </div>
+                    {p.productCategory && (
+                      <p className="text-xs text-muted-foreground">{p.productCategory}</p>
+                    )}
+                  </div>
+                </label>
+              ))}
+            </div>
           ))}
         </div>
         <Button size="sm" onClick={save} disabled={!dirty || updateCrossSells.isPending}>

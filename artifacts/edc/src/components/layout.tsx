@@ -1,6 +1,6 @@
 import { ReactNode } from "react";
 import { Link, useLocation } from "wouter";
-import { LogOut, LayoutDashboard, Briefcase, BarChart, Settings, Activity } from "lucide-react";
+import { LogOut, LayoutDashboard, Briefcase, BarChart, Settings, Activity, TrendingUp, BookMarked } from "lucide-react";
 import { useLogout, useGetMe } from "@workspace/api-client-react";
 import { Button } from "./ui/button";
 import { ThemeToggle } from "./theme-toggle";
@@ -23,7 +23,9 @@ export function Layout({ children }: { children: ReactNode }) {
     { href: "/", label: "Command Center", icon: LayoutDashboard },
     { href: "/deals", label: "Deals", icon: Briefcase },
     { href: "/portfolio", label: "Portfolio", icon: BarChart },
+    { href: "/analytics", label: "Analytics", icon: TrendingUp },
     { href: "/autopsy", label: "Autopsy", icon: Activity },
+    { href: "/memory", label: "Deal Memory", icon: BookMarked },
     { href: "/settings", label: "Settings", icon: Settings },
   ];
 

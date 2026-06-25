@@ -5,10 +5,13 @@
  * Enterprise Deal Commander (EDC) Phase 1 API
  * OpenAPI spec version: 1.0.0
  */
+import type { Battlecard } from './battlecard';
+import type { ComplianceGuidance } from './complianceGuidance';
 import type { IntelligenceFinancials } from './intelligenceFinancials';
 import type { IntelligenceGovernance } from './intelligenceGovernance';
 import type { IntelligenceTeam } from './intelligenceTeam';
 import type { IntelligenceTechnicalTrack } from './intelligenceTechnicalTrack';
+import type { Recommendation } from './recommendation';
 
 export interface Intelligence {
   id: string;
@@ -24,4 +27,7 @@ export interface Intelligence {
   financials: IntelligenceFinancials;
   technicalTrack: IntelligenceTechnicalTrack;
   governance: IntelligenceGovernance;
+  recommendations: Recommendation[];
+  battlecard?: Battlecard | null;
+  complianceGuidance?: ComplianceGuidance | null;
 }

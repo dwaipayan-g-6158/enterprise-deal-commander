@@ -1,9 +1,17 @@
 import { useState } from "react";
+import { Link } from "wouter";
 import { useGetAutopsy, useListLossArchetypes } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Progress } from "@/components/ui/progress";
+import { ArrowUpRight } from "lucide-react";
+
+function compactUSD(n: number): string {
+  if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(2)}M`;
+  if (n >= 1_000) return `$${Math.round(n / 1_000)}K`;
+  return `$${Math.round(n)}`;
+}
 
 export default function Autopsy() {
   const [archetypeId, setArchetypeId] = useState<string>("all");
@@ -53,6 +61,34 @@ export default function Autopsy() {
                 </CardTitle>
               </CardHeader>
               <CardContent className="p-6">
+                <div className="mb-8">
+                  <h4 className="text-sm font-medium mb-3 uppercase tracking-wider text-muted-foreground">
+                    Lost Deals
+                  </h4>
+                  <div className="rounded-md border divide-y divide-border">
+                    {arch.deals.map((d) => (
+                      <Link
+                        key={d.id}
+                        href={`/deals/${d.id}`}
+                        className="group flex items-center gap-3 px-4 py-2.5 hover:bg-muted/50 transition-colors"
+                      >
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-medium group-hover:underline">
+                            {d.dealName}
+                          </p>
+                          <p className="truncate text-xs text-muted-foreground">
+                            {d.accountName}
+                          </p>
+                        </div>
+                        <span className="font-mono text-xs tabular-nums text-muted-foreground">
+                          {compactUSD(d.tcv)}
+                        </span>
+                        <ArrowUpRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
+                      </Link>
+                    ))}
+                  </div>
+                </div>
+
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-8">
                   <div>
                     <p className="text-sm text-muted-foreground mb-2">Avg Gate Completion</p>

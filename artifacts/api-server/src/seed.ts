@@ -17,7 +17,12 @@ import {
   enterpriseDeals,
   dealTechnicalGates,
   dealCrossSells,
+  dealProductInterests,
+  dealComplianceDrivers,
   dealBlockers,
+  competitors,
+  complianceDrivers,
+  competitorBattlecards,
 } from "@workspace/db";
 import { logger } from "./lib/logger";
 
@@ -56,15 +61,51 @@ async function seedLookups() {
     ])
     .onConflictDoNothing();
 
+  // ManageEngine AD360 (IAM) + Log360 (SIEM) component catalog.
   await db
     .insert(productCatalog)
     .values([
-      { productName: "Core Platform License", productCategory: "Platform" },
-      { productName: "Advanced Analytics Package", productCategory: "Analytics" },
-      { productName: "Dedicated Edge Node Gateway", productCategory: "Infrastructure" },
-      { productName: "Threat Detection Engine", productCategory: "Security" },
-      { productName: "API Management Suite", productCategory: "Integration" },
-      { productName: "Data Residency Module", productCategory: "Compliance" },
+      { code: "ADMANAGER_PLUS", productName: "ADManager Plus", productCategory: "Identity Management", suite: "AD360" },
+      { code: "ADAUDIT_PLUS", productName: "ADAudit Plus", productCategory: "Auditing/UBA", suite: "AD360" },
+      { code: "ADSELFSERVICE_PLUS", productName: "ADSelfService Plus", productCategory: "SSPR/MFA/SSO", suite: "AD360" },
+      { code: "M365_MANAGER_PLUS", productName: "M365 Manager Plus", productCategory: "M365 Management", suite: "AD360" },
+      { code: "SHAREPOINT_MANAGER_PLUS", productName: "SharePoint Manager Plus", productCategory: "SharePoint", suite: "AD360" },
+      { code: "EXCHANGE_REPORTER_PLUS", productName: "Exchange Reporter Plus", productCategory: "Exchange", suite: "AD360" },
+      { code: "RECOVERYMANAGER_PLUS", productName: "RecoveryManager Plus", productCategory: "Backup/Recovery", suite: "AD360" },
+      { code: "EVENTLOG_ANALYZER", productName: "EventLog Analyzer", productCategory: "Log Management/SIEM", suite: "Log360" },
+      { code: "DATA_SECURITY_PLUS", productName: "Data Security Plus", productCategory: "DLP/FIM", suite: "Log360" },
+      { code: "CLOUD_SECURITY_PLUS", productName: "Cloud Security Plus", productCategory: "Cloud Log", suite: "Log360" },
+    ])
+    .onConflictDoNothing();
+
+  await db
+    .insert(competitors)
+    .values([
+      { name: "Quest", category: "IAM" },
+      { name: "Netwrix", category: "IAM" },
+      { name: "Microsoft Entra", category: "IAM" },
+      { name: "Okta", category: "IAM" },
+      { name: "SailPoint", category: "IAM" },
+      { name: "One Identity", category: "IAM" },
+      { name: "Semperis", category: "IAM" },
+      { name: "Splunk", category: "SIEM" },
+      { name: "IBM QRadar", category: "SIEM" },
+      { name: "Microsoft Sentinel", category: "SIEM" },
+      { name: "LogRhythm", category: "SIEM" },
+      { name: "Securonix", category: "SIEM" },
+    ])
+    .onConflictDoNothing();
+
+  await db
+    .insert(complianceDrivers)
+    .values([
+      { name: "SOX" },
+      { name: "HIPAA" },
+      { name: "PCI-DSS" },
+      { name: "GDPR" },
+      { name: "NIS2" },
+      { name: "ISO 27001" },
+      { name: "Ransomware/Recovery" },
     ])
     .onConflictDoNothing();
 
@@ -122,8 +163,34 @@ async function seedLookups() {
       { triggerPatternCode: "DISCOUNT_TRAP", name: "Discount Trap Recovery", steps: ["Freeze discount approval", "Build services-attached business case", "Escalate to deal desk"] },
       { triggerPatternCode: "UNPROTECTED_ELEPHANT", name: "Elephant Protection", steps: ["Draft Professional Services SOW", "Confirm deployment ownership", "Add Premium Support line"] },
       { triggerPatternCode: "MISSING_STRUCTURAL_ANCHOR", name: "Anchor Reset", steps: ["Convene success-criteria workshop", "Lock Gate 1 criteria", "Obtain executive sign-off"] },
+      { triggerPatternCode: "COMPETITIVE_DISPLACEMENT_STALL", name: "Displacement Acceleration", steps: ["Re-confirm the cost/pain of staying on the incumbent", "Lock a differentiated win-criterion the incumbent cannot meet", "Set a mutual close plan with a hard decision date", "Escalate to the executive sponsor"] },
+      { triggerPatternCode: "COMPLIANCE_DEADLINE_RISK", name: "Compliance Deadline Drive", steps: ["Map remaining gates to the audit deadline", "Stand up a focused validation sprint on the gating controls", "Confirm the audit date with the customer's compliance owner", "Offer Professional Services to compress the timeline"] },
     ])
     .onConflictDoNothing();
+
+  // Competitor battlecards (talking points surfaced in the Next-Best-Action panel).
+  const competitorRows = await db.select().from(competitors);
+  const competitorIdByName = (name: string) =>
+    competitorRows.find((c) => c.name === name)?.id;
+  const battlecardData: { name: string; talkingPoints: string[] }[] = [
+    { name: "Quest", talkingPoints: ["Single integrated AD360 console vs Quest's stitched-together GPOADmin / Change Auditor / Recovery Manager line-up.", "Faster time-to-value and a materially lower TCO at comparable scale.", "Unified AD + M365 + Exchange auditing under one license."] },
+    { name: "Netwrix", talkingPoints: ["ADManager Plus adds delegated management & provisioning — Netwrix Auditor is read-only auditing.", "Real-time alerting and automated remediation, not just after-the-fact reports.", "One vendor for management, auditing, and recovery."] },
+    { name: "Microsoft Entra", talkingPoints: ["Deep on-prem AD management & granular auditing that native Entra tooling leaves thin.", "Works across hybrid AD + M365, not cloud-only.", "Pre-built compliance reports (SOX/HIPAA/PCI) out of the box."] },
+    { name: "Splunk", talkingPoints: ["Predictable per-device licensing vs Splunk's volume-based bill shock.", "Security-first SIEM with built-in compliance packs — no app sprawl to buy.", "Faster deployment and a far lower entry price for mid-market."] },
+    { name: "IBM QRadar", talkingPoints: ["Lower operational overhead and a gentler learning curve.", "Integrated AD threat detection via ADAudit Plus feeding Log360.", "Predictable licensing without QRadar's EPS cliff."] },
+    { name: "Microsoft Sentinel", talkingPoints: ["No metered cloud ingestion costs that scale unpredictably with log volume.", "On-prem and hybrid coverage, not Azure-centric.", "Bundled file-integrity & DLP via Data Security Plus."] },
+  ];
+  const battlecardValues = battlecardData
+    .map((b) => {
+      const competitorId = competitorIdByName(b.name);
+      return competitorId
+        ? { competitorId, talkingPoints: b.talkingPoints }
+        : null;
+    })
+    .filter((v): v is NonNullable<typeof v> => v !== null);
+  if (battlecardValues.length > 0) {
+    await db.insert(competitorBattlecards).values(battlecardValues).onConflictDoNothing();
+  }
 
   await db
     .insert(engineThresholds)
@@ -140,6 +207,12 @@ async function seedLookups() {
       { parameterKey: "momentum_window_days", parameterValue: "30", dataType: "number", description: "Window size in days to split the deal's own history into recent vs earlier rates" },
       { parameterKey: "momentum_min_gate_pct", parameterValue: "60", dataType: "number", description: "Gate-completion pct below which a decelerating deal nearing close fires SLOW_MOTION_COLLISION" },
       { parameterKey: "low_attach_rate_threshold", parameterValue: "0.34", dataType: "number", description: "Attach rate at or below which a large deal fires LOW_ATTACH_ELEPHANT" },
+      { parameterKey: "competitive_stall_days", parameterValue: "21", dataType: "number", description: "Days in Validation/Commercial against an incumbent before COMPETITIVE_DISPLACEMENT_STALL fires" },
+      { parameterKey: "compliance_deadline_warning_days", parameterValue: "45", dataType: "number", description: "Days before a compliance deadline to start firing COMPLIANCE_DEADLINE_RISK" },
+      { parameterKey: "compliance_min_gate_pct", parameterValue: "60", dataType: "number", description: "Gate-completion pct below which a near compliance deadline fires COMPLIANCE_DEADLINE_RISK" },
+      { parameterKey: "suite_bundle_min_components", parameterValue: "3", dataType: "number", description: "À-la-carte components in one suite at or above which a bundle upsell is recommended" },
+      { parameterKey: "poc_max_validation_days", parameterValue: "30", dataType: "number", description: "Days a PoC can sit in Validation without locked criteria before POC_DEATH_MARCH fires" },
+      { parameterKey: "siem_high_volume_log_sources", parameterValue: "500", dataType: "number", description: "Estimated log sources at or above which an undersized Log360 deal fires SIEM_UNDERSCOPED" },
     ])
     .onConflictDoNothing();
 
@@ -187,14 +260,25 @@ async function seedDeals() {
   const cats = await db.select().from(blockerCategories);
   const sevs = await db.select().from(blockerSeverities);
   const archetypes = await db.select().from(lossArchetypes);
+  const comps = await db.select().from(competitors);
+  const drivers = await db.select().from(complianceDrivers);
 
   const stageId = (name: string) => stages.find((s) => s.stageName === name)!.id;
   const pricingId = (name: string) => pricing.find((p) => p.modelName === name)!.id;
   const tierId = (name: string) => tiers.find((t) => t.tierName === name)!.id;
-  const productId = (name: string) => products.find((p) => p.productName === name)!.id;
+  const productId = (code: string) => products.find((p) => p.code === code)!.id;
   const catId = (name: string) => cats.find((c) => c.categoryName === name)!.id;
   const sevId = (name: string) => sevs.find((s) => s.severityName === name)!.id;
   const archetypeId = (name: string) => archetypes.find((a) => a.archetypeName === name)!.id;
+  const competitorId = (name: string) => comps.find((c) => c.name === name)!.id;
+  const driverId = (name: string) => drivers.find((d) => d.name === name)!.id;
+
+  async function insertInterests(dealId: string, codes: string[]) {
+    if (codes.length === 0) return;
+    await db
+      .insert(dealProductInterests)
+      .values(codes.map((code) => ({ dealId, productId: productId(code) })));
+  }
 
   async function insertGates(dealId: string, completed: string[]) {
     const codes = [
@@ -232,13 +316,17 @@ async function seedDeals() {
       winProbabilityPct: 60,
       servicesRevenue: "0",
       servicesTierId: tierId("None"),
-      managerStrategicBlueprint: "Land the platform deal, expand into analytics in year two.",
-      speakerNotes: "Champion is nervous about InfoSec timeline — do not share.",
+      managerStrategicBlueprint: "Land ADAudit Plus for the SOX audit, expand into the AD360 suite next year.",
+      speakerNotes: "Champion is nervous about the SOX timeline — do not share.",
+      competitorId: competitorId("Quest"),
+      complianceDriverId: driverId("SOX"),
+      complianceDeadline: dateInDays(25),
     })
     .returning({ id: enterpriseDeals.id });
   await insertGates(d1.id, ["G1_CRITERIA_LOCKED"]);
+  await insertInterests(d1.id, ["ADAUDIT_PLUS"]);
   await db.insert(dealCrossSells).values([
-    { dealId: d1.id, productId: productId("Core Platform License") },
+    { dealId: d1.id, productId: productId("ADMANAGER_PLUS") },
   ]);
   await db.insert(dealBlockers).values([
     { dealId: d1.id, categoryId: catId("Technical"), severityId: sevId("High"), description: "Performance benchmark not yet scheduled with customer infra team." },
@@ -264,13 +352,23 @@ async function seedDeals() {
       servicesRevenue: "60000",
       servicesTierId: tierId("Professional Services Pitched"),
       managerStrategicBlueprint: "Technical win first; commercial follows once Gate 3 passes.",
+      competitorId: competitorId("Splunk"),
+      complianceDriverId: driverId("PCI-DSS"),
+      complianceDeadline: dateInDays(75),
+      estimatedLogSources: 1500,
     })
     .returning({ id: enterpriseDeals.id });
   await insertGates(d2.id, ["G1_CRITERIA_LOCKED", "G1_EXECUTIVE_AGREED", "G2_WORKFLOW_VERIFIED"]);
+  await insertInterests(d2.id, ["EVENTLOG_ANALYZER"]);
+  // Multi-driver demo: Beacon is also driven by GDPR alongside its primary PCI-DSS.
+  await db
+    .insert(dealComplianceDrivers)
+    .values([{ dealId: d2.id, complianceDriverId: driverId("GDPR") }])
+    .onConflictDoNothing();
   await db.insert(dealCrossSells).values([
-    { dealId: d2.id, productId: productId("Core Platform License") },
-    { dealId: d2.id, productId: productId("Advanced Analytics Package") },
-    { dealId: d2.id, productId: productId("API Management Suite") },
+    { dealId: d2.id, productId: productId("EVENTLOG_ANALYZER") },
+    { dealId: d2.id, productId: productId("DATA_SECURITY_PLUS") },
+    { dealId: d2.id, productId: productId("CLOUD_SECURITY_PLUS") },
   ]);
 
   // Deal 3: Procurement stage, near close, mega deal, stale
@@ -293,16 +391,20 @@ async function seedDeals() {
       servicesRevenue: "180000",
       servicesTierId: tierId("Combined SOW Shared"),
       managerStrategicBlueprint: "Close before quarter end; legal redlines are the last gate.",
+      competitorId: competitorId("Microsoft Entra"),
+      complianceDriverId: driverId("ISO 27001"),
+      complianceDeadline: dateInDays(60),
     })
     .returning({ id: enterpriseDeals.id });
   await insertGates(d3.id, [
     "G1_CRITERIA_LOCKED", "G1_EXECUTIVE_AGREED", "G2_WORKFLOW_VERIFIED",
     "G2_CHAMPION_DEFENSIBLE", "G3_PERFORMANCE_PASSED",
   ]);
+  await insertInterests(d3.id, ["ADMANAGER_PLUS"]);
   await db.insert(dealCrossSells).values([
-    { dealId: d3.id, productId: productId("Core Platform License") },
-    { dealId: d3.id, productId: productId("Threat Detection Engine") },
-    { dealId: d3.id, productId: productId("Data Residency Module") },
+    { dealId: d3.id, productId: productId("ADAUDIT_PLUS") },
+    { dealId: d3.id, productId: productId("ADSELFSERVICE_PLUS") },
+    { dealId: d3.id, productId: productId("M365_MANAGER_PLUS") },
   ]);
   await db.insert(dealBlockers).values([
     { dealId: d3.id, categoryId: catId("Legal"), severityId: sevId("Medium"), description: "Liability cap redline pending customer counsel review." },
@@ -330,9 +432,11 @@ async function seedDeals() {
       managerStrategicBlueprint: "Lost momentum after champion left mid-evaluation.",
       lossReason: "Customer champion departed; replacement favored incumbent.",
       lossArchetypeId: archetypeId("Champion Departure"),
+      competitorId: competitorId("Okta"),
     })
     .returning({ id: enterpriseDeals.id });
   await insertGates(d4.id, ["G1_CRITERIA_LOCKED", "G1_EXECUTIVE_AGREED"]);
+  await insertInterests(d4.id, ["ADSELFSERVICE_PLUS"]);
 
   logger.info("Seeded 4 demo deals");
 }

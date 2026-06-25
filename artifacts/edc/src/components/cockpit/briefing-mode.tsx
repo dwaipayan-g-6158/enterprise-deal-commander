@@ -44,7 +44,12 @@ import { useToast } from "@/hooks/use-toast";
 import { formatCurrency } from "./use-invalidate";
 import { useEngineContext, recomputeIntelligence } from "./engine-recompute";
 
-type QueueItem = { id: string; dealName: string; accountName: string };
+type QueueItem = {
+  id: string;
+  dealName: string;
+  accountName: string;
+  healthStatus?: string;
+};
 
 function formatElapsed(totalSeconds: number): string {
   const s = Math.max(0, Math.floor(totalSeconds));
@@ -66,9 +71,15 @@ export function BriefingMode({
   onClose: () => void;
 }) {
   const [queue, setQueue] = useState<QueueItem[]>([
-    { id: deal.id, dealName: deal.dealName, accountName: deal.accountName },
+    {
+      id: deal.id,
+      dealName: deal.dealName,
+      accountName: deal.accountName,
+      healthStatus: deal.healthStatus,
+    },
   ]);
   const [activeId, setActiveId] = useState<string>(deal.id);
+  const [filterGreen, setFilterGreen] = useState(false);
 
   const activeIndex = Math.max(
     0,
@@ -96,11 +107,36 @@ export function BriefingMode({
   }, [activeId]);
 
   const goPrev = () => {
-    if (activeIndex > 0) setActiveId(queue[activeIndex - 1].id);
+    if (!filterGreen) {
+      if (activeIndex > 0) setActiveId(queue[activeIndex - 1].id);
+      return;
+    }
+    for (let i = activeIndex - 1; i >= 0; i--) {
+      if (queue[i].healthStatus !== "GREEN") {
+        setActiveId(queue[i].id);
+        return;
+      }
+    }
   };
   const goNext = () => {
-    if (activeIndex < queue.length - 1) setActiveId(queue[activeIndex + 1].id);
+    if (!filterGreen) {
+      if (activeIndex < queue.length - 1) setActiveId(queue[activeIndex + 1].id);
+      return;
+    }
+    for (let i = activeIndex + 1; i < queue.length; i++) {
+      if (queue[i].healthStatus !== "GREEN") {
+        setActiveId(queue[i].id);
+        return;
+      }
+    }
   };
+  // When skipping GREEN, disable arrows only when no eligible deal remains.
+  const hasPrev = filterGreen
+    ? queue.slice(0, activeIndex).some((q) => q.healthStatus !== "GREEN")
+    : activeIndex > 0;
+  const hasNext = filterGreen
+    ? queue.slice(activeIndex + 1).some((q) => q.healthStatus !== "GREEN")
+    : activeIndex < queue.length - 1;
 
   const resetTimer = () => {
     setRunning(false);
@@ -146,7 +182,7 @@ export function BriefingMode({
             variant="outline"
             size="icon"
             onClick={goPrev}
-            disabled={activeIndex === 0}
+            disabled={!hasPrev}
             aria-label="Previous deal"
           >
             <ChevronLeft className="h-4 w-4" />
@@ -158,7 +194,7 @@ export function BriefingMode({
             variant="outline"
             size="icon"
             onClick={goNext}
-            disabled={activeIndex >= queue.length - 1}
+            disabled={!hasNext}
             aria-label="Next deal"
           >
             <ChevronRight className="h-4 w-4" />
@@ -173,6 +209,16 @@ export function BriefingMode({
           onRemove={removeFromQueue}
           onMove={moveInQueue}
         />
+
+        <Button
+          variant={filterGreen ? "default" : "ghost"}
+          size="sm"
+          onClick={() => setFilterGreen((v) => !v)}
+          title="Skip GREEN deals when navigating the queue"
+        >
+          <EyeOff className="h-4 w-4 mr-1" />
+          Skip GREEN
+        </Button>
 
         <div className="flex items-center gap-1 ml-auto rounded-md border px-2 py-1">
           <Timer className="h-4 w-4 text-muted-foreground" />
@@ -346,6 +392,7 @@ function AgendaManager({
                         id: d.id,
                         dealName: d.dealName,
                         accountName: d.accountName,
+                        healthStatus: d.healthStatus,
                       })
                     }
                   >

@@ -30,6 +30,12 @@ export const DEFAULT_THRESHOLDS: EngineThresholds = {
   momentum_window_days: 30,
   momentum_min_gate_pct: 60,
   low_attach_rate_threshold: 0.34,
+  competitive_stall_days: 21,
+  compliance_deadline_warning_days: 45,
+  compliance_min_gate_pct: 60,
+  suite_bundle_min_components: 3,
+  poc_max_validation_days: 30,
+  siem_high_volume_log_sources: 500,
 };
 
 export interface EngineOverrides {
@@ -134,7 +140,19 @@ export function recomputeIntelligence(
       productId: c.productId,
       productName: c.productName,
       productCategory: c.productCategory ?? null,
+      code: c.code ?? undefined,
+      suite: c.suite ?? null,
       isPitched: c.isPitched,
+    })),
+    competitor: deal.competitorName ?? null,
+    compliance_driver: deal.complianceDriverName ?? null,
+    compliance_drivers: (deal.complianceDrivers ?? []).map((d) => d.name),
+    compliance_deadline: deal.complianceDeadline ?? null,
+    estimated_log_sources: deal.estimatedLogSources ?? null,
+    anchor_products: (deal.productsOfInterest ?? []).map((p) => ({
+      code: p.code ?? "",
+      productName: p.productName,
+      suite: p.suite ?? null,
     })),
   };
 

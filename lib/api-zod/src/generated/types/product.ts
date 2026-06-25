@@ -8,7 +8,11 @@
 
 export interface Product {
   id: string;
+  /** @nullable */
+  code?: string | null;
   productName: string;
   /** @nullable */
   productCategory?: string | null;
+  /** @nullable */
+  suite?: string | null;
 }

@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   processDealIntelligence,
   calculateOwnMomentum,
+  generateRecommendations,
   PATTERN_CODES,
   type EngineThresholds,
   type RawDeal,
@@ -30,6 +31,12 @@ const DEFAULTS: EngineThresholds = {
   momentum_window_days: 30,
   momentum_min_gate_pct: 60,
   low_attach_rate_threshold: 0.34,
+  competitive_stall_days: 21,
+  compliance_deadline_warning_days: 45,
+  compliance_min_gate_pct: 60,
+  suite_bundle_min_components: 3,
+  poc_max_validation_days: 30,
+  siem_high_volume_log_sources: 500,
 };
 
 // A deal that, on its own with no gates/blockers, fires zero risk patterns.
@@ -282,9 +289,139 @@ describe("intelligence engine — 12 risk patterns", () => {
     ).not.toContain("LOW_ATTACH_ELEPHANT");
   });
 
-  it("exports exactly the 12 pattern codes", () => {
-    expect(PATTERN_CODES).toHaveLength(12);
-    expect(new Set(PATTERN_CODES).size).toBe(12);
+  it("COMPETITIVE_DISPLACEMENT_STALL fires for a displacement deal stuck in Validation", () => {
+    const fire = makeDeal({
+      sales_stage: "Validation",
+      competitor: "Quest",
+      stage_entered_at: daysAgo(30),
+    });
+    expect(triggeredCodes(fire, [makeGate("G1_CRITERIA_LOCKED", true)])).toContain(
+      "COMPETITIVE_DISPLACEMENT_STALL",
+    );
+    // No competitor -> does not fire.
+    const noCompetitor = makeDeal({
+      sales_stage: "Validation",
+      stage_entered_at: daysAgo(30),
+    });
+    expect(
+      triggeredCodes(noCompetitor, [makeGate("G1_CRITERIA_LOCKED", true)]),
+    ).not.toContain("COMPETITIVE_DISPLACEMENT_STALL");
+  });
+
+  it("COMPLIANCE_DEADLINE_RISK fires (and escalates to RED) for a near deadline with behind gates", () => {
+    const deal = makeDeal({
+      compliance_driver: "PCI-DSS",
+      compliance_deadline: daysFromNow(15),
+    });
+    const gates = [makeGate("G1", true), makeGate("G2", false), makeGate("G3", false)];
+    const out = processDealIntelligence(deal, gates, [], DEFAULTS);
+    const alert = out.governance.alerts.find(
+      (a) => a.code === "COMPLIANCE_DEADLINE_RISK",
+    );
+    expect(alert).toBeDefined();
+    // 15 days <= warning/2 (22) -> escalated to RED.
+    expect(alert?.severity).toBe("RED");
+    // A far deadline does not fire.
+    const clear = makeDeal({
+      compliance_driver: "PCI-DSS",
+      compliance_deadline: daysFromNow(180),
+    });
+    expect(triggeredCodes(clear, gates)).not.toContain("COMPLIANCE_DEADLINE_RISK");
+  });
+
+  it("recommendations do not affect health status (opportunities, not risk)", () => {
+    const deal = makeDeal({
+      anchor_products: [{ code: "ADAUDIT_PLUS" }],
+    });
+    const out = processDealIntelligence(deal, [], [], DEFAULTS);
+    expect(out.recommendations.length).toBeGreaterThan(0);
+    expect(out.governance.healthStatus).toBe("GREEN");
+  });
+
+  it("POC_DEATH_MARCH fires for a long Validation PoC without locked criteria", () => {
+    const fire = makeDeal({
+      sales_stage: "Validation",
+      stage_entered_at: daysAgo(40),
+    });
+    expect(triggeredCodes(fire, [makeGate("G1_CRITERIA_LOCKED", false)])).toContain(
+      "POC_DEATH_MARCH",
+    );
+    // Locking Gate 1 criteria clears it.
+    expect(
+      triggeredCodes(fire, [makeGate("G1_CRITERIA_LOCKED", true)]),
+    ).not.toContain("POC_DEATH_MARCH");
+  });
+
+  it("SIEM_UNDERSCOPED fires for a small Log360 deal against a large log estate", () => {
+    const fire = makeDeal({
+      product_revenue: 80000,
+      services_revenue: 0,
+      estimated_log_sources: 1200,
+      anchor_products: [{ code: "EVENTLOG_ANALYZER", suite: "Log360" }],
+    });
+    expect(triggeredCodes(fire)).toContain("SIEM_UNDERSCOPED");
+    // No log-source estimate -> cannot fire.
+    const noEstimate = makeDeal({
+      product_revenue: 80000,
+      anchor_products: [{ code: "EVENTLOG_ANALYZER", suite: "Log360" }],
+    });
+    expect(triggeredCodes(noEstimate)).not.toContain("SIEM_UNDERSCOPED");
+  });
+
+  it("exports exactly the 16 pattern codes", () => {
+    expect(PATTERN_CODES).toHaveLength(16);
+    expect(new Set(PATTERN_CODES).size).toBe(16);
+  });
+});
+
+describe("generateRecommendations — product intelligence", () => {
+  it("recommends affinity products for an anchor and excludes owned products", () => {
+    const recs = generateRecommendations(["ADAUDIT_PLUS"], [], [], DEFAULTS);
+    const nbp = recs.find((r) => r.type === "NEXT_BEST_PRODUCT");
+    expect(nbp).toBeDefined();
+    expect(nbp?.productCodes).toContain("ADMANAGER_PLUS");
+    expect(nbp?.productCodes).not.toContain("ADAUDIT_PLUS");
+  });
+
+  it("unions compliance-driven products across multiple drivers", () => {
+    const recs = generateRecommendations(
+      [],
+      [],
+      ["PCI-DSS", "GDPR"],
+      DEFAULTS,
+    );
+    const nbp = recs.find((r) => r.type === "NEXT_BEST_PRODUCT");
+    expect(nbp?.productCodes).toEqual(
+      expect.arrayContaining([
+        "EVENTLOG_ANALYZER",
+        "DATA_SECURITY_PLUS",
+        "CLOUD_SECURITY_PLUS",
+      ]),
+    );
+  });
+
+  it("flags a recovery gap for an AD footprint with no RecoveryManager Plus", () => {
+    const recs = generateRecommendations(["ADMANAGER_PLUS"], [], [], DEFAULTS);
+    expect(recs.some((r) => r.type === "RECOVERY_GAP")).toBe(true);
+    // Owning RecoveryManager Plus clears the gap.
+    const recs2 = generateRecommendations(
+      ["ADMANAGER_PLUS", "RECOVERYMANAGER_PLUS"],
+      [],
+      [],
+      DEFAULTS,
+    );
+    expect(recs2.some((r) => r.type === "RECOVERY_GAP")).toBe(false);
+  });
+
+  it("recommends the suite bundle once enough components are taken à la carte", () => {
+    const recs = generateRecommendations(
+      ["ADMANAGER_PLUS", "ADAUDIT_PLUS", "ADSELFSERVICE_PLUS"],
+      [],
+      [],
+      DEFAULTS,
+    );
+    const bundle = recs.find((r) => r.type === "SUITE_BUNDLE");
+    expect(bundle?.suite).toBe("AD360");
   });
 });
 

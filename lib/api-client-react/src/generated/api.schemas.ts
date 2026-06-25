@@ -46,6 +46,23 @@ export interface AuthUser {
   role: string;
 }
 
+export interface CrossSell {
+  productId: string;
+  productName: string;
+  /** @nullable */
+  productCategory?: string | null;
+  /** @nullable */
+  code?: string | null;
+  /** @nullable */
+  suite?: string | null;
+  isPitched: boolean;
+}
+
+export interface ComplianceDriver {
+  id: number;
+  name: string;
+}
+
 export interface Deal {
   id: string;
   dealName: string;
@@ -77,6 +94,20 @@ export interface Deal {
   lossReason?: string | null;
   /** @nullable */
   lossArchetypeId?: number | null;
+  /** @nullable */
+  competitorId?: number | null;
+  /** @nullable */
+  competitorName?: string | null;
+  /** @nullable */
+  complianceDriverId?: number | null;
+  /** @nullable */
+  complianceDriverName?: string | null;
+  /** @nullable */
+  complianceDeadline?: string | null;
+  /** @nullable */
+  estimatedLogSources?: number | null;
+  productsOfInterest?: CrossSell[];
+  complianceDrivers?: ComplianceDriver[];
   calculatedTCV: number;
   normalizedTCV: number;
   healthStatus: string;
@@ -138,6 +169,16 @@ export interface DealInput {
   speaker_notes?: string | null;
   /** @nullable */
   loss_archetype_id?: number | null;
+  /** @nullable */
+  competitor_id?: number | null;
+  /** @nullable */
+  compliance_driver_id?: number | null;
+  /** @nullable */
+  compliance_deadline?: string | null;
+  /** @nullable */
+  estimated_log_sources?: number | null;
+  product_interest_ids?: string[];
+  compliance_driver_ids?: number[];
 }
 
 export interface DealUpdate {
@@ -190,6 +231,16 @@ export interface DealUpdate {
   speaker_notes?: string | null;
   /** @nullable */
   loss_archetype_id?: number | null;
+  /** @nullable */
+  competitor_id?: number | null;
+  /** @nullable */
+  compliance_driver_id?: number | null;
+  /** @nullable */
+  compliance_deadline?: string | null;
+  /** @nullable */
+  estimated_log_sources?: number | null;
+  product_interest_ids?: string[];
+  compliance_driver_ids?: number[];
   /**
      * @minLength 10
      * @maxLength 1000
@@ -312,14 +363,6 @@ export interface BlockerListResponse {
 
 export interface BlockerResponse {
   data: Blocker;
-}
-
-export interface CrossSell {
-  productId: string;
-  productName: string;
-  /** @nullable */
-  productCategory?: string | null;
-  isPitched: boolean;
 }
 
 export interface CrossSellUpdate {
@@ -464,6 +507,38 @@ export interface IntelligenceGovernance {
   dataQualityNotes: DataQualityNote[];
 }
 
+export type RecommendationType = typeof RecommendationType[keyof typeof RecommendationType];
+
+
+export const RecommendationType = {
+  NEXT_BEST_PRODUCT: 'NEXT_BEST_PRODUCT',
+  SUITE_BUNDLE: 'SUITE_BUNDLE',
+  RECOVERY_GAP: 'RECOVERY_GAP',
+} as const;
+
+export interface Recommendation {
+  type: RecommendationType;
+  productCodes: string[];
+  products?: CrossSell[];
+  /** @nullable */
+  suite?: string | null;
+  rationale: string;
+}
+
+export interface Battlecard {
+  competitor: string;
+  talkingPoints: string[];
+}
+
+export interface ComplianceGuidance {
+  driver: string;
+  /** @nullable */
+  deadline?: string | null;
+  /** @nullable */
+  daysToDeadline?: number | null;
+  recommendedProductCodes: string[];
+}
+
 export interface Intelligence {
   id: string;
   accountName: string;
@@ -478,6 +553,9 @@ export interface Intelligence {
   financials: IntelligenceFinancials;
   technicalTrack: IntelligenceTechnicalTrack;
   governance: IntelligenceGovernance;
+  recommendations: Recommendation[];
+  battlecard?: Battlecard | null;
+  complianceGuidance?: ComplianceGuidance | null;
 }
 
 export interface IntelligenceResponse {
@@ -570,6 +648,45 @@ export interface PortfolioAnalysisResponse {
   data: PortfolioAnalysis;
 }
 
+export interface ProductMixDeal {
+  id: string;
+  dealName: string;
+  accountName: string;
+  salesStage: string;
+  tcv: number;
+}
+
+export interface SuitePipeline {
+  suite: string;
+  dealCount: number;
+  totalTCV: number;
+  deals: ProductMixDeal[];
+}
+
+export interface ProductWhitespace {
+  /** @nullable */
+  code?: string | null;
+  productName: string;
+  /** @nullable */
+  suite?: string | null;
+  pitchedDealCount: number;
+  interestedDealCount: number;
+  totalDeals: number;
+  attachPct: number;
+  pitchedDeals: ProductMixDeal[];
+  whitespaceDeals: ProductMixDeal[];
+}
+
+export interface ProductMix {
+  totalActiveDeals: number;
+  pipelineBySuite: SuitePipeline[];
+  productWhitespace: ProductWhitespace[];
+}
+
+export interface ProductMixResponse {
+  data: ProductMix;
+}
+
 export interface PatternShare {
   code: string;
   share: number;
@@ -583,6 +700,7 @@ export interface ArchetypeAutopsy {
   servicesAttachShare: number;
   patternsThatFired: PatternShare[];
   neverPassedGate2Share: number;
+  deals: ProductMixDeal[];
 }
 
 export interface Autopsy {
@@ -839,13 +957,41 @@ export interface ServicesTierListResponse {
 
 export interface Product {
   id: string;
+  /** @nullable */
+  code?: string | null;
   productName: string;
   /** @nullable */
   productCategory?: string | null;
+  /** @nullable */
+  suite?: string | null;
 }
 
 export interface ProductListResponse {
   data: Product[];
+}
+
+export interface Competitor {
+  id: number;
+  name: string;
+  category?: string;
+}
+
+export interface CompetitorListResponse {
+  data: Competitor[];
+}
+
+export interface ComplianceDriverListResponse {
+  data: ComplianceDriver[];
+}
+
+export interface CompetitorBattlecard {
+  competitorId: number;
+  competitorName: string;
+  talkingPoints: string[];
+}
+
+export interface CompetitorBattlecardListResponse {
+  data: CompetitorBattlecard[];
 }
 
 export interface GateDefinition {
@@ -944,6 +1090,567 @@ export interface FxRatesUpdate {
   updates: FxRateUpdateItem[];
 }
 
+export type GenericDataResponseData = { [key: string]: unknown };
+
+export interface GenericDataResponse {
+  data: GenericDataResponseData;
+}
+
+export type DealScoreBreakdownItem = { [key: string]: unknown };
+
+export interface DealScore {
+  score: number;
+  confidence: string;
+  breakdown: DealScoreBreakdownItem[];
+  /** @nullable */
+  computedAt?: string | null;
+}
+
+export interface DealScoreResponse {
+  data: DealScore;
+}
+
+export interface DealCompetitor {
+  id: string;
+  dealId: string;
+  competitorId: number;
+  /** @nullable */
+  competitorName?: string | null;
+  status: string;
+  /** @nullable */
+  displacementStrategy?: string | null;
+  /** @nullable */
+  outcomeNotes?: string | null;
+}
+
+export interface DealCompetitorInput {
+  competitor_id: number;
+  status?: string;
+  /** @nullable */
+  displacement_strategy?: string | null;
+  /** @nullable */
+  outcome_notes?: string | null;
+}
+
+export interface DealCompetitorListResponse {
+  data: DealCompetitor[];
+}
+
+export interface DealCompetitorResponse {
+  data: DealCompetitor;
+}
+
+export interface DealMemory {
+  id: string;
+  dealId: string;
+  accountName: string;
+  dealName: string;
+  outcome: string;
+  /** @nullable */
+  finalTcv?: string | null;
+  /** @nullable */
+  pricingModel?: string | null;
+  /** @nullable */
+  servicesTier?: string | null;
+  /** @nullable */
+  totalGatesCompleted?: number | null;
+  /** @nullable */
+  totalBlockersEncountered?: number | null;
+  /** @nullable */
+  totalDaysActive?: number | null;
+  /** @nullable */
+  competitorsFaced?: string[] | null;
+  /** @nullable */
+  winLossNarrative?: string | null;
+  /** @nullable */
+  keyLessons?: string[] | null;
+  /** @nullable */
+  tags?: string[] | null;
+  archivedAt: string;
+}
+
+export interface DealMemoryUpdate {
+  /** @nullable */
+  win_loss_narrative?: string | null;
+  key_lessons?: string[];
+  tags?: string[];
+}
+
+export interface DealMemoryListResponse {
+  data: DealMemory[];
+}
+
+export interface DealMemoryResponse {
+  data: DealMemory;
+}
+
+export interface Stakeholder {
+  id: string;
+  dealId: string;
+  name: string;
+  /** @nullable */
+  title?: string | null;
+  /** @nullable */
+  company?: string | null;
+  roleType: string;
+  influenceLevel: string;
+  sentiment: string;
+  /** @nullable */
+  email?: string | null;
+  /** @nullable */
+  phone?: string | null;
+  /** @nullable */
+  notes?: string | null;
+  /** @nullable */
+  reportsToId?: string | null;
+  isDecisionMaker: boolean;
+}
+
+export interface StakeholderInput {
+  name: string;
+  /** @nullable */
+  title?: string | null;
+  /** @nullable */
+  company?: string | null;
+  role_type: string;
+  influence_level: string;
+  sentiment: string;
+  /** @nullable */
+  email?: string | null;
+  /** @nullable */
+  phone?: string | null;
+  /** @nullable */
+  notes?: string | null;
+  /** @nullable */
+  reports_to_id?: string | null;
+  is_decision_maker?: boolean;
+}
+
+export interface StakeholderListResponse {
+  data: Stakeholder[];
+}
+
+export interface StakeholderResponse {
+  data: Stakeholder;
+}
+
+export interface Decision {
+  id: string;
+  dealId: string;
+  /** @nullable */
+  meetingSessionId?: string | null;
+  decisionText: string;
+  /** @nullable */
+  rationale?: string | null;
+  owner: string;
+  status: string;
+  decidedAt: string;
+  /** @nullable */
+  dueDate?: string | null;
+  /** @nullable */
+  completedAt?: string | null;
+}
+
+export interface DecisionInput {
+  decision_text: string;
+  /** @nullable */
+  rationale?: string | null;
+  owner: string;
+  /** @nullable */
+  decided_at?: string | null;
+  /** @nullable */
+  due_date?: string | null;
+  /** @nullable */
+  meeting_session_id?: string | null;
+}
+
+export interface DecisionUpdate {
+  status?: string;
+  /** @nullable */
+  rationale?: string | null;
+  /** @nullable */
+  due_date?: string | null;
+}
+
+export interface DecisionListResponse {
+  data: Decision[];
+}
+
+export interface DecisionResponse {
+  data: Decision;
+}
+
+export interface MeetingSession {
+  id: string;
+  sessionType: string;
+  /** @nullable */
+  title?: string | null;
+  occurredAt: string;
+  /** @nullable */
+  durationMinutes?: number | null;
+  /** @nullable */
+  attendees?: string[] | null;
+  /** @nullable */
+  notes?: string | null;
+}
+
+export interface MeetingSessionInput {
+  session_type: string;
+  /** @nullable */
+  title?: string | null;
+  occurred_at: string;
+  /** @nullable */
+  duration_minutes?: number | null;
+  attendees?: string[];
+  /** @nullable */
+  notes?: string | null;
+}
+
+export interface MeetingSessionListResponse {
+  data: MeetingSession[];
+}
+
+export interface MeetingSessionResponse {
+  data: MeetingSession;
+}
+
+export interface PlaybookStep {
+  id: string;
+  stepOrder: number;
+  stepName: string;
+  /** @nullable */
+  description?: string | null;
+  /** @nullable */
+  triggerCondition?: string | null;
+  recommendedAction: string;
+  /** @nullable */
+  expectedDurationDays?: number | null;
+  isCritical: boolean;
+}
+
+export interface Playbook {
+  id: string;
+  playbookName: string;
+  /** @nullable */
+  description?: string | null;
+  /** @nullable */
+  applicableStage?: string | null;
+  isActive: boolean;
+  steps?: PlaybookStep[];
+}
+
+export interface PlaybookStepInput {
+  step_order: number;
+  step_name: string;
+  /** @nullable */
+  description?: string | null;
+  /** @nullable */
+  trigger_condition?: string | null;
+  recommended_action: string;
+  /** @nullable */
+  expected_duration_days?: number | null;
+  is_critical?: boolean;
+}
+
+export interface PlaybookInput {
+  playbook_name: string;
+  /** @nullable */
+  description?: string | null;
+  /** @nullable */
+  applicable_stage?: string | null;
+  is_active?: boolean;
+  steps?: PlaybookStepInput[];
+}
+
+export interface PlaybookStepActionInput {
+  /** @nullable */
+  notes?: string | null;
+  /** @nullable */
+  skip_reason?: string | null;
+}
+
+export interface PlaybookListResponse {
+  data: Playbook[];
+}
+
+export interface PlaybookResponse {
+  data: Playbook;
+}
+
+export interface PricingYear {
+  yearNumber: number;
+  productRevenue: number;
+  servicesRevenue: number;
+  discountPct?: number;
+  /** @nullable */
+  notes?: string | null;
+}
+
+export interface PricingYearInput {
+  year_number: number;
+  product_revenue: number;
+  services_revenue?: number;
+  discount_pct?: number;
+  /** @nullable */
+  notes?: string | null;
+}
+
+export interface PricingScheduleInput {
+  years: PricingYearInput[];
+}
+
+export interface PricingScheduleResponse {
+  data: PricingYear[];
+  rampTCV: number;
+}
+
+export type ScenarioModificationsItem = { [key: string]: unknown };
+
+/**
+ * @nullable
+ */
+export type ScenarioComputedResults = { [key: string]: unknown } | null;
+
+export interface Scenario {
+  id: string;
+  scenarioName: string;
+  /** @nullable */
+  description?: string | null;
+  /** @nullable */
+  dealId?: string | null;
+  isGlobal: boolean;
+  modifications: ScenarioModificationsItem[];
+  /** @nullable */
+  computedResults?: ScenarioComputedResults;
+}
+
+export type ScenarioInputModificationsItem = { [key: string]: unknown };
+
+export interface ScenarioInput {
+  scenario_name: string;
+  /** @nullable */
+  description?: string | null;
+  /** @nullable */
+  deal_id?: string | null;
+  is_global?: boolean;
+  modifications: ScenarioInputModificationsItem[];
+}
+
+export type ScenarioComputeInputModificationsItem = { [key: string]: unknown };
+
+export interface ScenarioComputeInput {
+  /** @nullable */
+  deal_id?: string | null;
+  modifications: ScenarioComputeInputModificationsItem[];
+}
+
+export interface ScenarioListResponse {
+  data: Scenario[];
+}
+
+export interface ScenarioResponse {
+  data: Scenario;
+}
+
+export interface Webhook {
+  id: string;
+  webhookName: string;
+  targetUrl: string;
+  events: string[];
+  isActive: boolean;
+  failureCount: number;
+  /** @nullable */
+  lastTriggeredAt?: string | null;
+  createdAt?: string;
+}
+
+export interface WebhookInput {
+  webhook_name: string;
+  target_url: string;
+  secret_key?: string;
+  events: string[];
+  is_active?: boolean;
+}
+
+export interface WebhookListResponse {
+  data: Webhook[];
+}
+
+export interface WebhookResponse {
+  data: Webhook;
+}
+
+export interface WebhookDelivery {
+  id: string;
+  eventType: string;
+  /** @nullable */
+  responseStatus?: number | null;
+  success: boolean;
+  deliveredAt: string;
+}
+
+export interface WebhookDeliveryListResponse {
+  data: WebhookDelivery[];
+}
+
+export interface CustomPatternConditionInput {
+  field_path: string;
+  operator: string;
+  comparison_value: string;
+  sort_order: number;
+}
+
+export type CustomPatternConditionsItem = { [key: string]: unknown };
+
+export interface CustomPattern {
+  id: string;
+  patternName: string;
+  /** @nullable */
+  description?: string | null;
+  severity: string;
+  weight: number;
+  alertMessageTemplate: string;
+  isActive: boolean;
+  triggerCount?: number;
+  conditions?: CustomPatternConditionsItem[];
+}
+
+export interface CustomPatternInput {
+  pattern_name: string;
+  /** @nullable */
+  description?: string | null;
+  severity: string;
+  weight: number;
+  alert_message_template: string;
+  is_active?: boolean;
+  conditions: CustomPatternConditionInput[];
+}
+
+export interface CustomPatternListResponse {
+  data: CustomPattern[];
+}
+
+export interface CustomPatternResponse {
+  data: CustomPattern;
+}
+
+/**
+ * @nullable
+ */
+export type NotificationRuleTriggerConditions = { [key: string]: unknown } | null;
+
+export interface NotificationRule {
+  id: string;
+  ruleName: string;
+  triggerEvent: string;
+  /** @nullable */
+  triggerConditions?: NotificationRuleTriggerConditions;
+  channel: string;
+  isActive: boolean;
+}
+
+/**
+ * @nullable
+ */
+export type NotificationRuleInputTriggerConditions = { [key: string]: unknown } | null;
+
+export interface NotificationRuleInput {
+  rule_name: string;
+  trigger_event: string;
+  /** @nullable */
+  trigger_conditions?: NotificationRuleInputTriggerConditions;
+  channel?: string;
+  is_active?: boolean;
+}
+
+export interface NotificationRuleListResponse {
+  data: NotificationRule[];
+}
+
+export interface NotificationRuleResponse {
+  data: NotificationRule;
+}
+
+export interface Notification {
+  id: string;
+  /** @nullable */
+  dealId?: string | null;
+  channel: string;
+  /** @nullable */
+  subject?: string | null;
+  message: string;
+  sentAt: string;
+  /** @nullable */
+  acknowledgedAt?: string | null;
+}
+
+export interface NotificationListResponse {
+  data: Notification[];
+}
+
+export interface CustomFieldDef {
+  id: string;
+  fieldName: string;
+  fieldKey: string;
+  fieldType: string;
+  /** @nullable */
+  options?: string[] | null;
+  isRequired: boolean;
+  displayOrder?: number;
+}
+
+export interface CustomFieldDefInput {
+  field_name: string;
+  field_key: string;
+  field_type: string;
+  options?: string[];
+  is_required?: boolean;
+  display_order?: number;
+}
+
+export interface CustomFieldDefListResponse {
+  data: CustomFieldDef[];
+}
+
+export interface CustomFieldDefResponse {
+  data: CustomFieldDef;
+}
+
+export interface CustomFieldValueInput {
+  /** @nullable */
+  value_text?: string | null;
+  /** @nullable */
+  value_number?: number | null;
+  /** @nullable */
+  value_date?: string | null;
+  /** @nullable */
+  value_select?: string | null;
+  value_multi_select?: string[];
+}
+
+export interface Tag {
+  id: string;
+  tagName: string;
+  color: string;
+}
+
+export interface TagInput {
+  tag_name: string;
+  color: string;
+}
+
+export interface TagListResponse {
+  data: Tag[];
+}
+
+export interface TagResponse {
+  data: Tag;
+}
+
+export interface NlcParseInput {
+  query: string;
+}
+
 export type ListDealsParams = {
 search?: string;
 stage?: string;
@@ -1017,5 +1724,22 @@ since?: string;
 until?: string;
 limit?: number;
 offset?: number;
+};
+
+export type GetPipelineSimulationParams = {
+iterations?: number;
+};
+
+export type SearchDealMemoryParams = {
+q?: string;
+outcome?: string;
+};
+
+export type ListScenariosParams = {
+deal_id?: string;
+};
+
+export type ListNotificationsParams = {
+unacknowledged?: boolean;
 };
 

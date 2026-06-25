@@ -14,7 +14,7 @@ import {
   requireAuth,
   getActor,
 } from "../lib/auth";
-import { badRequest, unauthorized } from "../lib/http";
+import { badRequest, unauthorized, HttpError } from "../lib/http";
 
 const router: IRouter = Router();
 
@@ -33,10 +33,38 @@ router.post("/auth/login", async (req: Request, res: Response) => {
   if (!commander) {
     throw unauthorized("Invalid email or password");
   }
+
+  // Account lockout check
+  if (commander.lockedUntil && commander.lockedUntil > new Date()) {
+    const retryAfterSec = Math.ceil(
+      (commander.lockedUntil.getTime() - Date.now()) / 1000,
+    );
+    res.setHeader("Retry-After", String(retryAfterSec));
+    throw new HttpError(
+      429,
+      "ACCOUNT_LOCKED",
+      "Account locked due to too many failed attempts. Try again in 15 minutes.",
+    );
+  }
+
   const ok = await bcrypt.compare(password, commander.passwordHash);
   if (!ok) {
+    const newAttempts = commander.loginAttempts + 1;
+    const lockedUntil =
+      newAttempts >= 5 ? new Date(Date.now() + 15 * 60 * 1000) : null;
+    await db
+      .update(commanders)
+      .set({ loginAttempts: newAttempts, lockedUntil })
+      .where(eq(commanders.id, commander.id));
     throw unauthorized("Invalid email or password");
   }
+
+  // Reset attempts on successful login
+  await db
+    .update(commanders)
+    .set({ loginAttempts: 0, lockedUntil: null })
+    .where(eq(commanders.id, commander.id));
+
   issueSession(res, {
     id: commander.id,
     username: commander.username,

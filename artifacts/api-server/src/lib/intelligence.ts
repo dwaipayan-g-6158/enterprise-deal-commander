@@ -11,17 +11,23 @@ import {
   gateDefinitions,
   dealTechnicalGates,
   dealCrossSells,
+  dealProductInterests,
+  dealComplianceDrivers,
   dealBlockers,
   dealAlertDispositions,
   dealAuditLog,
   interventionChecklists,
   engineThresholds,
   fxRates,
+  competitors,
+  complianceDrivers,
+  competitorBattlecards,
 } from "@workspace/db";
 import {
   processDealIntelligence,
   calculateOwnMomentum,
   riskPatterns,
+  COMPLIANCE_PRODUCTS,
   type EngineThresholds,
   type RawDeal,
   type RawGate,
@@ -42,6 +48,12 @@ export const DEFAULT_THRESHOLDS: EngineThresholds = {
   momentum_window_days: 30,
   momentum_min_gate_pct: 60,
   low_attach_rate_threshold: 0.34,
+  competitive_stall_days: 21,
+  compliance_deadline_warning_days: 45,
+  compliance_min_gate_pct: 60,
+  suite_bundle_min_components: 3,
+  poc_max_validation_days: 30,
+  siem_high_volume_log_sources: 500,
 };
 
 const WEIGHT_MAP: Record<string, number> = Object.fromEntries(
@@ -158,6 +170,8 @@ interface DealWithLookups {
   salesStage: string;
   pricingModel: string;
   servicesTier: string;
+  competitorName: string | null;
+  complianceDriverName: string | null;
 }
 
 export async function getDealWithLookups(
@@ -169,14 +183,54 @@ export async function getDealWithLookups(
       salesStage: pipelineStages.stageName,
       pricingModel: pricingModels.modelName,
       servicesTier: servicesTiers.tierName,
+      competitorName: competitors.name,
+      complianceDriverName: complianceDrivers.name,
     })
     .from(enterpriseDeals)
     .innerJoin(pipelineStages, eq(enterpriseDeals.salesStageId, pipelineStages.id))
     .innerJoin(pricingModels, eq(enterpriseDeals.pricingModelId, pricingModels.id))
     .innerJoin(servicesTiers, eq(enterpriseDeals.servicesTierId, servicesTiers.id))
+    .leftJoin(competitors, eq(enterpriseDeals.competitorId, competitors.id))
+    .leftJoin(
+      complianceDrivers,
+      eq(enterpriseDeals.complianceDriverId, complianceDrivers.id),
+    )
     .where(eq(enterpriseDeals.id, dealId))
     .limit(1);
   return rows[0] ?? null;
+}
+
+/** Products the customer landed for / is initially evaluating (anchor set). */
+export async function getProductsOfInterest(dealId: string) {
+  const rows = await db
+    .select({ product: productCatalog })
+    .from(dealProductInterests)
+    .innerJoin(
+      productCatalog,
+      eq(dealProductInterests.productId, productCatalog.id),
+    )
+    .where(eq(dealProductInterests.dealId, dealId));
+  return rows.map(({ product }) => ({
+    productId: product.id,
+    productName: product.productName,
+    productCategory: product.productCategory ?? null,
+    code: product.code,
+    suite: product.suite ?? null,
+    isPitched: false,
+  }));
+}
+
+/** Additional compliance drivers (beyond the deal's primary driver). */
+export async function getExtraComplianceDrivers(dealId: string) {
+  const rows = await db
+    .select({ id: complianceDrivers.id, name: complianceDrivers.name })
+    .from(dealComplianceDrivers)
+    .innerJoin(
+      complianceDrivers,
+      eq(dealComplianceDrivers.complianceDriverId, complianceDrivers.id),
+    )
+    .where(eq(dealComplianceDrivers.dealId, dealId));
+  return rows;
 }
 
 function enrichAlert(alert: IntelligenceOutput["governance"]["alerts"][number], interventionMap: Map<string, { checklistId: number; name: string }>) {
@@ -189,16 +243,34 @@ function enrichAlert(alert: IntelligenceOutput["governance"]["alerts"][number], 
 
 export type AssembledIntelligence = ReturnType<typeof shapeIntelligence>;
 
+interface ProductRef {
+  productId: string;
+  productName: string;
+  productCategory: string | null;
+  code: string | null;
+  suite: string | null;
+  isPitched: boolean;
+}
+
+interface IntelligenceExtras {
+  recommendations: (IntelligenceOutput["recommendations"][number] & {
+    products: ProductRef[];
+  })[];
+  battlecard: { competitor: string; talkingPoints: string[] } | null;
+  complianceGuidance: {
+    driver: string;
+    deadline: string | null;
+    daysToDeadline: number | null;
+    recommendedProductCodes: string[];
+  } | null;
+}
+
 function shapeIntelligence(
   output: IntelligenceOutput,
   gates: GateView[],
-  whitespace: {
-    productId: string;
-    productName: string;
-    productCategory: string | null;
-    isPitched: boolean;
-  }[],
+  whitespace: ProductRef[],
   interventionMap: Map<string, { checklistId: number; name: string }>,
+  extras: IntelligenceExtras,
 ) {
   return {
     ...output,
@@ -224,6 +296,9 @@ function shapeIntelligence(
         enrichAlert(a, interventionMap),
       ),
     },
+    recommendations: extras.recommendations,
+    battlecard: extras.battlecard,
+    complianceGuidance: extras.complianceGuidance,
   };
 }
 
@@ -253,6 +328,8 @@ export async function assembleDealIntelligence(dealId: string) {
         productId: p.productId,
         productName: product.productName,
         productCategory: product.productCategory ?? null,
+        code: product.code,
+        suite: product.suite ?? null,
         isPitched: p.isPitched,
       };
     });
@@ -262,8 +339,17 @@ export async function assembleDealIntelligence(dealId: string) {
       productId: c.id,
       productName: c.productName,
       productCategory: c.productCategory ?? null,
+      code: c.code,
+      suite: c.suite ?? null,
       isPitched: false,
     }));
+
+  const productsOfInterest = await getProductsOfInterest(dealId);
+  const extraDrivers = await getExtraComplianceDrivers(dealId);
+  const complianceDriverNames = [
+    ...(dealRow.complianceDriverName ? [dealRow.complianceDriverName] : []),
+    ...extraDrivers.map((d) => d.name),
+  ].filter((v, i, arr) => arr.indexOf(v) === i);
 
   const blockerRows = await db
     .select({
@@ -357,6 +443,16 @@ export async function assembleDealIntelligence(dealId: string) {
     created_at: deal.createdAt,
     updated_at: deal.updatedAt,
     cross_sells: crossSells,
+    competitor: dealRow.competitorName,
+    compliance_driver: dealRow.complianceDriverName,
+    compliance_drivers: complianceDriverNames,
+    compliance_deadline: deal.complianceDeadline,
+    estimated_log_sources: deal.estimatedLogSources,
+    anchor_products: productsOfInterest.map((p) => ({
+      code: p.code ?? "",
+      productName: p.productName,
+      suite: p.suite,
+    })),
   };
 
   const engineGates: RawGate[] = gates.map((g) => ({
@@ -383,14 +479,85 @@ export async function assembleDealIntelligence(dealId: string) {
     },
   );
 
-  return shapeIntelligence(output, gates, whitespace, interventionMap);
+  // Enrich engine recommendations (codes only) with display-ready products.
+  const catalogByCode = new Map(catalog.map((c) => [c.code, c]));
+  const recommendations = output.recommendations.map((r) => ({
+    ...r,
+    products: r.productCodes
+      .map((code) => catalogByCode.get(code))
+      .filter((c): c is NonNullable<typeof c> => !!c)
+      .map((c) => ({
+        productId: c.id,
+        productName: c.productName,
+        productCategory: c.productCategory ?? null,
+        code: c.code,
+        suite: c.suite ?? null,
+        isPitched: false,
+      })),
+  }));
+
+  // Competitor battlecard (editable content keyed by competitor).
+  let battlecard: IntelligenceExtras["battlecard"] = null;
+  if (deal.competitorId && dealRow.competitorName) {
+    const bcRows = await db
+      .select()
+      .from(competitorBattlecards)
+      .where(
+        and(
+          eq(competitorBattlecards.competitorId, deal.competitorId),
+          eq(competitorBattlecards.isActive, true),
+        ),
+      )
+      .limit(1);
+    if (bcRows.length > 0) {
+      battlecard = {
+        competitor: dealRow.competitorName,
+        talkingPoints: bcRows[0].talkingPoints,
+      };
+    }
+  }
+
+  // Compliance guidance: deadline countdown + the products that carry the story.
+  let complianceGuidance: IntelligenceExtras["complianceGuidance"] = null;
+  if (dealRow.complianceDriverName) {
+    const daysToDeadline = deal.complianceDeadline
+      ? Math.max(
+          0,
+          Math.floor(
+            (new Date(deal.complianceDeadline).getTime() - Date.now()) /
+              86400000,
+          ),
+        )
+      : null;
+    complianceGuidance = {
+      driver: dealRow.complianceDriverName,
+      deadline: deal.complianceDeadline,
+      daysToDeadline,
+      recommendedProductCodes:
+        COMPLIANCE_PRODUCTS[dealRow.complianceDriverName] ?? [],
+    };
+  }
+
+  return shapeIntelligence(output, gates, whitespace, interventionMap, {
+    recommendations,
+    battlecard,
+    complianceGuidance,
+  });
 }
 
 export async function serializeDeal(dealId: string) {
   const dealRow = await getDealWithLookups(dealId);
   if (!dealRow) return null;
   const intel = await assembleDealIntelligence(dealId);
+  const productsOfInterest = await getProductsOfInterest(dealId);
+  const extraDrivers = await getExtraComplianceDrivers(dealId);
   const { deal, salesStage, pricingModel, servicesTier } = dealRow;
+  const complianceDriverList = [
+    ...(deal.complianceDriverId && dealRow.complianceDriverName
+      ? [{ id: deal.complianceDriverId, name: dealRow.complianceDriverName }]
+      : []),
+    ...extraDrivers,
+  ].filter((d, i, arr) => arr.findIndex((x) => x.id === d.id) === i);
   return {
     id: deal.id,
     dealName: deal.dealName,
@@ -415,6 +582,14 @@ export async function serializeDeal(dealId: string) {
     speakerNotes: deal.speakerNotes,
     lossReason: deal.lossReason,
     lossArchetypeId: deal.lossArchetypeId,
+    competitorId: deal.competitorId,
+    competitorName: dealRow.competitorName,
+    complianceDriverId: deal.complianceDriverId,
+    complianceDriverName: dealRow.complianceDriverName,
+    complianceDeadline: deal.complianceDeadline,
+    estimatedLogSources: deal.estimatedLogSources,
+    productsOfInterest,
+    complianceDrivers: complianceDriverList,
     calculatedTCV: intel?.financials.calculatedTCV ?? 0,
     normalizedTCV: intel?.financials.normalizedTCV ?? 0,
     healthStatus: intel?.governance.healthStatus ?? "GREEN",

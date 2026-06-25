@@ -17,6 +17,9 @@ import DealCockpit from "@/pages/deal-cockpit";
 import Portfolio from "@/pages/portfolio";
 import Autopsy from "@/pages/autopsy";
 import Settings from "@/pages/settings";
+import Analytics from "@/pages/analytics";
+import Memory from "@/pages/memory";
+import MobileHome from "@/pages/mobile";
 import Share from "@/pages/share";
 
 const queryClient = new QueryClient({
@@ -62,7 +65,10 @@ function Router() {
       <Route path="/deals/:id" component={() => <ProtectedRoute component={DealCockpit} />} />
       <Route path="/portfolio" component={() => <ProtectedRoute component={Portfolio} />} />
       <Route path="/autopsy" component={() => <ProtectedRoute component={Autopsy} />} />
+      <Route path="/analytics" component={() => <ProtectedRoute component={Analytics} />} />
+      <Route path="/memory" component={() => <ProtectedRoute component={Memory} />} />
       <Route path="/settings" component={() => <ProtectedRoute component={Settings} />} />
+      <Route path="/m" component={() => <ProtectedRoute component={MobileHome} />} />
       <Route component={NotFound} />
     </Switch>
   );

@@ -10,6 +10,10 @@ import { registerActivityLogger } from "./activity-logger";
 import { registerSnapshotService, snapshotAllActiveDeals } from "./snapshot-service";
 import { registerHealthTracker } from "./health-tracker";
 import { registerCacheInvalidation } from "./cache-invalidation";
+import { registerWebhookDispatcher } from "./webhook-dispatcher";
+import { registerNotificationService } from "./notification-service";
+import { registerPlaybookEngine } from "./playbook-engine";
+import { registerPostMortem } from "./post-mortem";
 
 export { captureSnapshot } from "./snapshot-service";
 export { reconcileHealth } from "./health-tracker";
@@ -44,6 +48,11 @@ export function registerSubscribers(): void {
   disposers.push(registerSnapshotService());
   disposers.push(registerHealthTracker());
   disposers.push(registerCacheInvalidation());
+  // V2 Sovereign Intelligence subscribers.
+  disposers.push(registerWebhookDispatcher());
+  disposers.push(registerNotificationService());
+  disposers.push(registerPlaybookEngine());
+  disposers.push(registerPostMortem());
 
   // Register portfolio rollups with the MV refresh registry and warm them once
   // at startup so the first portfolio/summary read is already precomputed.

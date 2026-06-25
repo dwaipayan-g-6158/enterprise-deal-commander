@@ -85,6 +85,24 @@ export const ListDealsResponse = zod.object({
   "speakerNotes": zod.string().nullish(),
   "lossReason": zod.string().nullish(),
   "lossArchetypeId": zod.number().nullish(),
+  "competitorId": zod.number().nullish(),
+  "competitorName": zod.string().nullish(),
+  "complianceDriverId": zod.number().nullish(),
+  "complianceDriverName": zod.string().nullish(),
+  "complianceDeadline": zod.string().nullish(),
+  "estimatedLogSources": zod.number().nullish(),
+  "productsOfInterest": zod.array(zod.object({
+  "productId": zod.string(),
+  "productName": zod.string(),
+  "productCategory": zod.string().nullish(),
+  "code": zod.string().nullish(),
+  "suite": zod.string().nullish(),
+  "isPitched": zod.boolean()
+})).optional(),
+  "complianceDrivers": zod.array(zod.object({
+  "id": zod.number(),
+  "name": zod.string()
+})).optional(),
   "calculatedTCV": zod.number(),
   "normalizedTCV": zod.number(),
   "healthStatus": zod.string(),
@@ -140,7 +158,13 @@ export const CreateDealBody = zod.object({
   "services_tier_id": zod.number(),
   "manager_strategic_blueprint": zod.string().nullish(),
   "speaker_notes": zod.string().nullish(),
-  "loss_archetype_id": zod.number().nullish()
+  "loss_archetype_id": zod.number().nullish(),
+  "competitor_id": zod.number().nullish(),
+  "compliance_driver_id": zod.number().nullish(),
+  "compliance_deadline": zod.string().nullish(),
+  "estimated_log_sources": zod.number().nullish(),
+  "product_interest_ids": zod.array(zod.string()).optional(),
+  "compliance_driver_ids": zod.array(zod.number()).optional()
 })
 
 
@@ -173,6 +197,24 @@ export const GetDealResponse = zod.object({
   "speakerNotes": zod.string().nullish(),
   "lossReason": zod.string().nullish(),
   "lossArchetypeId": zod.number().nullish(),
+  "competitorId": zod.number().nullish(),
+  "competitorName": zod.string().nullish(),
+  "complianceDriverId": zod.number().nullish(),
+  "complianceDriverName": zod.string().nullish(),
+  "complianceDeadline": zod.string().nullish(),
+  "estimatedLogSources": zod.number().nullish(),
+  "productsOfInterest": zod.array(zod.object({
+  "productId": zod.string(),
+  "productName": zod.string(),
+  "productCategory": zod.string().nullish(),
+  "code": zod.string().nullish(),
+  "suite": zod.string().nullish(),
+  "isPitched": zod.boolean()
+})).optional(),
+  "complianceDrivers": zod.array(zod.object({
+  "id": zod.number(),
+  "name": zod.string()
+})).optional(),
   "calculatedTCV": zod.number(),
   "normalizedTCV": zod.number(),
   "healthStatus": zod.string(),
@@ -228,6 +270,12 @@ export const UpdateDealBody = zod.object({
   "manager_strategic_blueprint": zod.string().nullish(),
   "speaker_notes": zod.string().nullish(),
   "loss_archetype_id": zod.number().nullish(),
+  "competitor_id": zod.number().nullish(),
+  "compliance_driver_id": zod.number().nullish(),
+  "compliance_deadline": zod.string().nullish(),
+  "estimated_log_sources": zod.number().nullish(),
+  "product_interest_ids": zod.array(zod.string()).optional(),
+  "compliance_driver_ids": zod.array(zod.number()).optional(),
   "override_reason": zod.string().min(updateDealBodyOverrideReasonMin).max(updateDealBodyOverrideReasonMax).optional()
 })
 
@@ -256,6 +304,24 @@ export const UpdateDealResponse = zod.object({
   "speakerNotes": zod.string().nullish(),
   "lossReason": zod.string().nullish(),
   "lossArchetypeId": zod.number().nullish(),
+  "competitorId": zod.number().nullish(),
+  "competitorName": zod.string().nullish(),
+  "complianceDriverId": zod.number().nullish(),
+  "complianceDriverName": zod.string().nullish(),
+  "complianceDeadline": zod.string().nullish(),
+  "estimatedLogSources": zod.number().nullish(),
+  "productsOfInterest": zod.array(zod.object({
+  "productId": zod.string(),
+  "productName": zod.string(),
+  "productCategory": zod.string().nullish(),
+  "code": zod.string().nullish(),
+  "suite": zod.string().nullish(),
+  "isPitched": zod.boolean()
+})).optional(),
+  "complianceDrivers": zod.array(zod.object({
+  "id": zod.number(),
+  "name": zod.string()
+})).optional(),
   "calculatedTCV": zod.number(),
   "normalizedTCV": zod.number(),
   "healthStatus": zod.string(),
@@ -301,6 +367,24 @@ export const RestoreDealResponse = zod.object({
   "speakerNotes": zod.string().nullish(),
   "lossReason": zod.string().nullish(),
   "lossArchetypeId": zod.number().nullish(),
+  "competitorId": zod.number().nullish(),
+  "competitorName": zod.string().nullish(),
+  "complianceDriverId": zod.number().nullish(),
+  "complianceDriverName": zod.string().nullish(),
+  "complianceDeadline": zod.string().nullish(),
+  "estimatedLogSources": zod.number().nullish(),
+  "productsOfInterest": zod.array(zod.object({
+  "productId": zod.string(),
+  "productName": zod.string(),
+  "productCategory": zod.string().nullish(),
+  "code": zod.string().nullish(),
+  "suite": zod.string().nullish(),
+  "isPitched": zod.boolean()
+})).optional(),
+  "complianceDrivers": zod.array(zod.object({
+  "id": zod.number(),
+  "name": zod.string()
+})).optional(),
   "calculatedTCV": zod.number(),
   "normalizedTCV": zod.number(),
   "healthStatus": zod.string(),
@@ -341,6 +425,24 @@ export const ArchiveDealResponse = zod.object({
   "speakerNotes": zod.string().nullish(),
   "lossReason": zod.string().nullish(),
   "lossArchetypeId": zod.number().nullish(),
+  "competitorId": zod.number().nullish(),
+  "competitorName": zod.string().nullish(),
+  "complianceDriverId": zod.number().nullish(),
+  "complianceDriverName": zod.string().nullish(),
+  "complianceDeadline": zod.string().nullish(),
+  "estimatedLogSources": zod.number().nullish(),
+  "productsOfInterest": zod.array(zod.object({
+  "productId": zod.string(),
+  "productName": zod.string(),
+  "productCategory": zod.string().nullish(),
+  "code": zod.string().nullish(),
+  "suite": zod.string().nullish(),
+  "isPitched": zod.boolean()
+})).optional(),
+  "complianceDrivers": zod.array(zod.object({
+  "id": zod.number(),
+  "name": zod.string()
+})).optional(),
   "calculatedTCV": zod.number(),
   "normalizedTCV": zod.number(),
   "healthStatus": zod.string(),
@@ -530,6 +632,8 @@ export const ListCrossSellsResponse = zod.object({
   "productId": zod.string(),
   "productName": zod.string(),
   "productCategory": zod.string().nullish(),
+  "code": zod.string().nullish(),
+  "suite": zod.string().nullish(),
   "isPitched": zod.boolean()
 }))
 })
@@ -548,6 +652,8 @@ export const UpdateCrossSellsResponse = zod.object({
   "productId": zod.string(),
   "productName": zod.string(),
   "productCategory": zod.string().nullish(),
+  "code": zod.string().nullish(),
+  "suite": zod.string().nullish(),
   "isPitched": zod.boolean()
 }))
 })
@@ -588,6 +694,8 @@ export const GetDealIntelligenceResponse = zod.object({
   "productId": zod.string(),
   "productName": zod.string(),
   "productCategory": zod.string().nullish(),
+  "code": zod.string().nullish(),
+  "suite": zod.string().nullish(),
   "isPitched": zod.boolean()
 })),
   "crossSell": zod.object({
@@ -598,6 +706,8 @@ export const GetDealIntelligenceResponse = zod.object({
   "productId": zod.string(),
   "productName": zod.string(),
   "productCategory": zod.string().nullish(),
+  "code": zod.string().nullish(),
+  "suite": zod.string().nullish(),
   "isPitched": zod.boolean()
 }))
 })
@@ -689,7 +799,31 @@ export const GetDealIntelligenceResponse = zod.object({
   "code": zod.string(),
   "message": zod.string()
 }))
-})
+}),
+  "recommendations": zod.array(zod.object({
+  "type": zod.enum(['NEXT_BEST_PRODUCT', 'SUITE_BUNDLE', 'RECOVERY_GAP']),
+  "productCodes": zod.array(zod.string()),
+  "products": zod.array(zod.object({
+  "productId": zod.string(),
+  "productName": zod.string(),
+  "productCategory": zod.string().nullish(),
+  "code": zod.string().nullish(),
+  "suite": zod.string().nullish(),
+  "isPitched": zod.boolean()
+})).optional(),
+  "suite": zod.string().nullish(),
+  "rationale": zod.string()
+})),
+  "battlecard": zod.union([zod.object({
+  "competitor": zod.string(),
+  "talkingPoints": zod.array(zod.string())
+}),zod.null()]).optional(),
+  "complianceGuidance": zod.union([zod.object({
+  "driver": zod.string(),
+  "deadline": zod.string().nullish(),
+  "daysToDeadline": zod.number().nullish(),
+  "recommendedProductCodes": zod.array(zod.string())
+}),zod.null()]).optional()
 })
 })
 
@@ -791,6 +925,48 @@ export const GetPortfolioAnalysisResponse = zod.object({
 })
 
 
+export const GetProductMixResponse = zod.object({
+  "data": zod.object({
+  "totalActiveDeals": zod.number(),
+  "pipelineBySuite": zod.array(zod.object({
+  "suite": zod.string(),
+  "dealCount": zod.number(),
+  "totalTCV": zod.number(),
+  "deals": zod.array(zod.object({
+  "id": zod.string(),
+  "dealName": zod.string(),
+  "accountName": zod.string(),
+  "salesStage": zod.string(),
+  "tcv": zod.number()
+}))
+})),
+  "productWhitespace": zod.array(zod.object({
+  "code": zod.string().nullish(),
+  "productName": zod.string(),
+  "suite": zod.string().nullish(),
+  "pitchedDealCount": zod.number(),
+  "interestedDealCount": zod.number(),
+  "totalDeals": zod.number(),
+  "attachPct": zod.number(),
+  "pitchedDeals": zod.array(zod.object({
+  "id": zod.string(),
+  "dealName": zod.string(),
+  "accountName": zod.string(),
+  "salesStage": zod.string(),
+  "tcv": zod.number()
+})),
+  "whitespaceDeals": zod.array(zod.object({
+  "id": zod.string(),
+  "dealName": zod.string(),
+  "accountName": zod.string(),
+  "salesStage": zod.string(),
+  "tcv": zod.number()
+}))
+}))
+})
+})
+
+
 export const GetAutopsyQueryParams = zod.object({
   "archetypeId": zod.coerce.number().optional()
 })
@@ -807,7 +983,14 @@ export const GetAutopsyResponse = zod.object({
   "code": zod.string(),
   "share": zod.number()
 })),
-  "neverPassedGate2Share": zod.number()
+  "neverPassedGate2Share": zod.number(),
+  "deals": zod.array(zod.object({
+  "id": zod.string(),
+  "dealName": zod.string(),
+  "accountName": zod.string(),
+  "salesStage": zod.string(),
+  "tcv": zod.number()
+}))
 }))
 })
 })
@@ -1152,8 +1335,36 @@ export const ListServicesTiersResponse = zod.object({
 export const ListProductCatalogResponse = zod.object({
   "data": zod.array(zod.object({
   "id": zod.string(),
+  "code": zod.string().nullish(),
   "productName": zod.string(),
-  "productCategory": zod.string().nullish()
+  "productCategory": zod.string().nullish(),
+  "suite": zod.string().nullish()
+}))
+})
+
+
+export const ListCompetitorsResponse = zod.object({
+  "data": zod.array(zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "category": zod.string().optional()
+}))
+})
+
+
+export const ListComplianceDriversResponse = zod.object({
+  "data": zod.array(zod.object({
+  "id": zod.number(),
+  "name": zod.string()
+}))
+})
+
+
+export const ListCompetitorBattlecardsResponse = zod.object({
+  "data": zod.array(zod.object({
+  "competitorId": zod.number(),
+  "competitorName": zod.string(),
+  "talkingPoints": zod.array(zod.string())
 }))
 })
 
@@ -1258,6 +1469,998 @@ export const UpdateFxRatesResponse = zod.object({
   "rate": zod.number(),
   "asOf": zod.string()
 }))
+})
+
+
+export const GetDealScoreParams = zod.object({
+  "dealId": zod.coerce.string()
+})
+
+export const GetDealScoreResponse = zod.object({
+  "data": zod.object({
+  "score": zod.number(),
+  "confidence": zod.string(),
+  "breakdown": zod.array(zod.record(zod.string(), zod.unknown())),
+  "computedAt": zod.string().nullish()
+})
+})
+
+
+export const RecalculateScoresResponse = zod.object({
+  "data": zod.record(zod.string(), zod.unknown())
+})
+
+
+export const GetVelocityAnalyticsResponse = zod.object({
+  "data": zod.record(zod.string(), zod.unknown())
+})
+
+
+export const GetVelocityBenchmarksResponse = zod.object({
+  "data": zod.record(zod.string(), zod.unknown())
+})
+
+
+export const GetPipelineAnalyticsResponse = zod.object({
+  "data": zod.record(zod.string(), zod.unknown())
+})
+
+
+export const GetPipelineSimulationQueryParams = zod.object({
+  "iterations": zod.coerce.number().optional()
+})
+
+export const GetPipelineSimulationResponse = zod.object({
+  "data": zod.record(zod.string(), zod.unknown())
+})
+
+
+export const GetCompetitiveAnalyticsResponse = zod.object({
+  "data": zod.record(zod.string(), zod.unknown())
+})
+
+
+export const GetWinLossAnalyticsResponse = zod.object({
+  "data": zod.record(zod.string(), zod.unknown())
+})
+
+
+export const ListDealCompetitorsParams = zod.object({
+  "dealId": zod.coerce.string()
+})
+
+export const ListDealCompetitorsResponse = zod.object({
+  "data": zod.array(zod.object({
+  "id": zod.string(),
+  "dealId": zod.string(),
+  "competitorId": zod.number(),
+  "competitorName": zod.string().nullish(),
+  "status": zod.string(),
+  "displacementStrategy": zod.string().nullish(),
+  "outcomeNotes": zod.string().nullish()
+}))
+})
+
+
+export const AddDealCompetitorParams = zod.object({
+  "dealId": zod.coerce.string()
+})
+
+export const AddDealCompetitorBody = zod.object({
+  "competitor_id": zod.number(),
+  "status": zod.string().optional(),
+  "displacement_strategy": zod.string().nullish(),
+  "outcome_notes": zod.string().nullish()
+})
+
+
+export const UpdateDealCompetitorParams = zod.object({
+  "dealId": zod.coerce.string(),
+  "id": zod.coerce.string()
+})
+
+export const UpdateDealCompetitorBody = zod.object({
+  "competitor_id": zod.number(),
+  "status": zod.string().optional(),
+  "displacement_strategy": zod.string().nullish(),
+  "outcome_notes": zod.string().nullish()
+})
+
+export const UpdateDealCompetitorResponse = zod.object({
+  "data": zod.object({
+  "id": zod.string(),
+  "dealId": zod.string(),
+  "competitorId": zod.number(),
+  "competitorName": zod.string().nullish(),
+  "status": zod.string(),
+  "displacementStrategy": zod.string().nullish(),
+  "outcomeNotes": zod.string().nullish()
+})
+})
+
+
+export const DeleteDealCompetitorParams = zod.object({
+  "dealId": zod.coerce.string(),
+  "id": zod.coerce.string()
+})
+
+export const DeleteDealCompetitorResponse = zod.object({
+  "message": zod.string()
+})
+
+
+export const ListDealMemoryResponse = zod.object({
+  "data": zod.array(zod.object({
+  "id": zod.string(),
+  "dealId": zod.string(),
+  "accountName": zod.string(),
+  "dealName": zod.string(),
+  "outcome": zod.string(),
+  "finalTcv": zod.string().nullish(),
+  "pricingModel": zod.string().nullish(),
+  "servicesTier": zod.string().nullish(),
+  "totalGatesCompleted": zod.number().nullish(),
+  "totalBlockersEncountered": zod.number().nullish(),
+  "totalDaysActive": zod.number().nullish(),
+  "competitorsFaced": zod.array(zod.string()).nullish(),
+  "winLossNarrative": zod.string().nullish(),
+  "keyLessons": zod.array(zod.string()).nullish(),
+  "tags": zod.array(zod.string()).nullish(),
+  "archivedAt": zod.string()
+}))
+})
+
+
+export const SearchDealMemoryQueryParams = zod.object({
+  "q": zod.coerce.string().optional(),
+  "outcome": zod.coerce.string().optional()
+})
+
+export const SearchDealMemoryResponse = zod.object({
+  "data": zod.array(zod.object({
+  "id": zod.string(),
+  "dealId": zod.string(),
+  "accountName": zod.string(),
+  "dealName": zod.string(),
+  "outcome": zod.string(),
+  "finalTcv": zod.string().nullish(),
+  "pricingModel": zod.string().nullish(),
+  "servicesTier": zod.string().nullish(),
+  "totalGatesCompleted": zod.number().nullish(),
+  "totalBlockersEncountered": zod.number().nullish(),
+  "totalDaysActive": zod.number().nullish(),
+  "competitorsFaced": zod.array(zod.string()).nullish(),
+  "winLossNarrative": zod.string().nullish(),
+  "keyLessons": zod.array(zod.string()).nullish(),
+  "tags": zod.array(zod.string()).nullish(),
+  "archivedAt": zod.string()
+}))
+})
+
+
+export const GetSimilarDealsParams = zod.object({
+  "dealId": zod.coerce.string()
+})
+
+export const GetSimilarDealsResponse = zod.object({
+  "data": zod.array(zod.object({
+  "id": zod.string(),
+  "dealId": zod.string(),
+  "accountName": zod.string(),
+  "dealName": zod.string(),
+  "outcome": zod.string(),
+  "finalTcv": zod.string().nullish(),
+  "pricingModel": zod.string().nullish(),
+  "servicesTier": zod.string().nullish(),
+  "totalGatesCompleted": zod.number().nullish(),
+  "totalBlockersEncountered": zod.number().nullish(),
+  "totalDaysActive": zod.number().nullish(),
+  "competitorsFaced": zod.array(zod.string()).nullish(),
+  "winLossNarrative": zod.string().nullish(),
+  "keyLessons": zod.array(zod.string()).nullish(),
+  "tags": zod.array(zod.string()).nullish(),
+  "archivedAt": zod.string()
+}))
+})
+
+
+export const GetDealMemoryParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const GetDealMemoryResponse = zod.object({
+  "data": zod.object({
+  "id": zod.string(),
+  "dealId": zod.string(),
+  "accountName": zod.string(),
+  "dealName": zod.string(),
+  "outcome": zod.string(),
+  "finalTcv": zod.string().nullish(),
+  "pricingModel": zod.string().nullish(),
+  "servicesTier": zod.string().nullish(),
+  "totalGatesCompleted": zod.number().nullish(),
+  "totalBlockersEncountered": zod.number().nullish(),
+  "totalDaysActive": zod.number().nullish(),
+  "competitorsFaced": zod.array(zod.string()).nullish(),
+  "winLossNarrative": zod.string().nullish(),
+  "keyLessons": zod.array(zod.string()).nullish(),
+  "tags": zod.array(zod.string()).nullish(),
+  "archivedAt": zod.string()
+})
+})
+
+
+export const UpdateDealMemoryParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const UpdateDealMemoryBody = zod.object({
+  "win_loss_narrative": zod.string().nullish(),
+  "key_lessons": zod.array(zod.string()).optional(),
+  "tags": zod.array(zod.string()).optional()
+})
+
+export const UpdateDealMemoryResponse = zod.object({
+  "data": zod.object({
+  "id": zod.string(),
+  "dealId": zod.string(),
+  "accountName": zod.string(),
+  "dealName": zod.string(),
+  "outcome": zod.string(),
+  "finalTcv": zod.string().nullish(),
+  "pricingModel": zod.string().nullish(),
+  "servicesTier": zod.string().nullish(),
+  "totalGatesCompleted": zod.number().nullish(),
+  "totalBlockersEncountered": zod.number().nullish(),
+  "totalDaysActive": zod.number().nullish(),
+  "competitorsFaced": zod.array(zod.string()).nullish(),
+  "winLossNarrative": zod.string().nullish(),
+  "keyLessons": zod.array(zod.string()).nullish(),
+  "tags": zod.array(zod.string()).nullish(),
+  "archivedAt": zod.string()
+})
+})
+
+
+export const ListStakeholdersParams = zod.object({
+  "dealId": zod.coerce.string()
+})
+
+export const ListStakeholdersResponse = zod.object({
+  "data": zod.array(zod.object({
+  "id": zod.string(),
+  "dealId": zod.string(),
+  "name": zod.string(),
+  "title": zod.string().nullish(),
+  "company": zod.string().nullish(),
+  "roleType": zod.string(),
+  "influenceLevel": zod.string(),
+  "sentiment": zod.string(),
+  "email": zod.string().nullish(),
+  "phone": zod.string().nullish(),
+  "notes": zod.string().nullish(),
+  "reportsToId": zod.string().nullish(),
+  "isDecisionMaker": zod.boolean()
+}))
+})
+
+
+export const CreateStakeholderParams = zod.object({
+  "dealId": zod.coerce.string()
+})
+
+export const CreateStakeholderBody = zod.object({
+  "name": zod.string(),
+  "title": zod.string().nullish(),
+  "company": zod.string().nullish(),
+  "role_type": zod.string(),
+  "influence_level": zod.string(),
+  "sentiment": zod.string(),
+  "email": zod.string().nullish(),
+  "phone": zod.string().nullish(),
+  "notes": zod.string().nullish(),
+  "reports_to_id": zod.string().nullish(),
+  "is_decision_maker": zod.boolean().optional()
+})
+
+
+export const UpdateStakeholderParams = zod.object({
+  "dealId": zod.coerce.string(),
+  "id": zod.coerce.string()
+})
+
+export const UpdateStakeholderBody = zod.object({
+  "name": zod.string(),
+  "title": zod.string().nullish(),
+  "company": zod.string().nullish(),
+  "role_type": zod.string(),
+  "influence_level": zod.string(),
+  "sentiment": zod.string(),
+  "email": zod.string().nullish(),
+  "phone": zod.string().nullish(),
+  "notes": zod.string().nullish(),
+  "reports_to_id": zod.string().nullish(),
+  "is_decision_maker": zod.boolean().optional()
+})
+
+export const UpdateStakeholderResponse = zod.object({
+  "data": zod.object({
+  "id": zod.string(),
+  "dealId": zod.string(),
+  "name": zod.string(),
+  "title": zod.string().nullish(),
+  "company": zod.string().nullish(),
+  "roleType": zod.string(),
+  "influenceLevel": zod.string(),
+  "sentiment": zod.string(),
+  "email": zod.string().nullish(),
+  "phone": zod.string().nullish(),
+  "notes": zod.string().nullish(),
+  "reportsToId": zod.string().nullish(),
+  "isDecisionMaker": zod.boolean()
+})
+})
+
+
+export const DeleteStakeholderParams = zod.object({
+  "dealId": zod.coerce.string(),
+  "id": zod.coerce.string()
+})
+
+export const DeleteStakeholderResponse = zod.object({
+  "message": zod.string()
+})
+
+
+export const ListDecisionsParams = zod.object({
+  "dealId": zod.coerce.string()
+})
+
+export const ListDecisionsResponse = zod.object({
+  "data": zod.array(zod.object({
+  "id": zod.string(),
+  "dealId": zod.string(),
+  "meetingSessionId": zod.string().nullish(),
+  "decisionText": zod.string(),
+  "rationale": zod.string().nullish(),
+  "owner": zod.string(),
+  "status": zod.string(),
+  "decidedAt": zod.string(),
+  "dueDate": zod.string().nullish(),
+  "completedAt": zod.string().nullish()
+}))
+})
+
+
+export const CreateDecisionParams = zod.object({
+  "dealId": zod.coerce.string()
+})
+
+export const CreateDecisionBody = zod.object({
+  "decision_text": zod.string(),
+  "rationale": zod.string().nullish(),
+  "owner": zod.string(),
+  "decided_at": zod.string().nullish(),
+  "due_date": zod.string().nullish(),
+  "meeting_session_id": zod.string().nullish()
+})
+
+
+export const UpdateDecisionParams = zod.object({
+  "dealId": zod.coerce.string(),
+  "id": zod.coerce.string()
+})
+
+export const UpdateDecisionBody = zod.object({
+  "status": zod.string().optional(),
+  "rationale": zod.string().nullish(),
+  "due_date": zod.string().nullish()
+})
+
+export const UpdateDecisionResponse = zod.object({
+  "data": zod.object({
+  "id": zod.string(),
+  "dealId": zod.string(),
+  "meetingSessionId": zod.string().nullish(),
+  "decisionText": zod.string(),
+  "rationale": zod.string().nullish(),
+  "owner": zod.string(),
+  "status": zod.string(),
+  "decidedAt": zod.string(),
+  "dueDate": zod.string().nullish(),
+  "completedAt": zod.string().nullish()
+})
+})
+
+
+export const ListMeetingSessionsResponse = zod.object({
+  "data": zod.array(zod.object({
+  "id": zod.string(),
+  "sessionType": zod.string(),
+  "title": zod.string().nullish(),
+  "occurredAt": zod.string(),
+  "durationMinutes": zod.number().nullish(),
+  "attendees": zod.array(zod.string()).nullish(),
+  "notes": zod.string().nullish()
+}))
+})
+
+
+export const CreateMeetingSessionBody = zod.object({
+  "session_type": zod.string(),
+  "title": zod.string().nullish(),
+  "occurred_at": zod.string(),
+  "duration_minutes": zod.number().nullish(),
+  "attendees": zod.array(zod.string()).optional(),
+  "notes": zod.string().nullish()
+})
+
+
+export const ListPlaybooksResponse = zod.object({
+  "data": zod.array(zod.object({
+  "id": zod.string(),
+  "playbookName": zod.string(),
+  "description": zod.string().nullish(),
+  "applicableStage": zod.string().nullish(),
+  "isActive": zod.boolean(),
+  "steps": zod.array(zod.object({
+  "id": zod.string(),
+  "stepOrder": zod.number(),
+  "stepName": zod.string(),
+  "description": zod.string().nullish(),
+  "triggerCondition": zod.string().nullish(),
+  "recommendedAction": zod.string(),
+  "expectedDurationDays": zod.number().nullish(),
+  "isCritical": zod.boolean()
+})).optional()
+}))
+})
+
+
+export const CreatePlaybookBody = zod.object({
+  "playbook_name": zod.string(),
+  "description": zod.string().nullish(),
+  "applicable_stage": zod.string().nullish(),
+  "is_active": zod.boolean().optional(),
+  "steps": zod.array(zod.object({
+  "step_order": zod.number(),
+  "step_name": zod.string(),
+  "description": zod.string().nullish(),
+  "trigger_condition": zod.string().nullish(),
+  "recommended_action": zod.string(),
+  "expected_duration_days": zod.number().nullish(),
+  "is_critical": zod.boolean().optional()
+})).optional()
+})
+
+
+export const UpdatePlaybookParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const UpdatePlaybookBody = zod.object({
+  "playbook_name": zod.string(),
+  "description": zod.string().nullish(),
+  "applicable_stage": zod.string().nullish(),
+  "is_active": zod.boolean().optional(),
+  "steps": zod.array(zod.object({
+  "step_order": zod.number(),
+  "step_name": zod.string(),
+  "description": zod.string().nullish(),
+  "trigger_condition": zod.string().nullish(),
+  "recommended_action": zod.string(),
+  "expected_duration_days": zod.number().nullish(),
+  "is_critical": zod.boolean().optional()
+})).optional()
+})
+
+export const UpdatePlaybookResponse = zod.object({
+  "data": zod.object({
+  "id": zod.string(),
+  "playbookName": zod.string(),
+  "description": zod.string().nullish(),
+  "applicableStage": zod.string().nullish(),
+  "isActive": zod.boolean(),
+  "steps": zod.array(zod.object({
+  "id": zod.string(),
+  "stepOrder": zod.number(),
+  "stepName": zod.string(),
+  "description": zod.string().nullish(),
+  "triggerCondition": zod.string().nullish(),
+  "recommendedAction": zod.string(),
+  "expectedDurationDays": zod.number().nullish(),
+  "isCritical": zod.boolean()
+})).optional()
+})
+})
+
+
+export const DeletePlaybookParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const DeletePlaybookResponse = zod.object({
+  "message": zod.string()
+})
+
+
+export const GetDealPlaybookParams = zod.object({
+  "dealId": zod.coerce.string()
+})
+
+export const GetDealPlaybookResponse = zod.object({
+  "data": zod.record(zod.string(), zod.unknown())
+})
+
+
+export const CompletePlaybookStepParams = zod.object({
+  "assignmentId": zod.coerce.string(),
+  "stepId": zod.coerce.string()
+})
+
+export const CompletePlaybookStepBody = zod.object({
+  "notes": zod.string().nullish(),
+  "skip_reason": zod.string().nullish()
+})
+
+export const CompletePlaybookStepResponse = zod.object({
+  "data": zod.record(zod.string(), zod.unknown())
+})
+
+
+export const SkipPlaybookStepParams = zod.object({
+  "assignmentId": zod.coerce.string(),
+  "stepId": zod.coerce.string()
+})
+
+export const SkipPlaybookStepBody = zod.object({
+  "notes": zod.string().nullish(),
+  "skip_reason": zod.string().nullish()
+})
+
+export const SkipPlaybookStepResponse = zod.object({
+  "data": zod.record(zod.string(), zod.unknown())
+})
+
+
+export const GetPricingScheduleParams = zod.object({
+  "dealId": zod.coerce.string()
+})
+
+export const GetPricingScheduleResponse = zod.object({
+  "data": zod.array(zod.object({
+  "yearNumber": zod.number(),
+  "productRevenue": zod.number(),
+  "servicesRevenue": zod.number(),
+  "discountPct": zod.number().optional(),
+  "notes": zod.string().nullish()
+})),
+  "rampTCV": zod.number()
+})
+
+
+export const UpdatePricingScheduleParams = zod.object({
+  "dealId": zod.coerce.string()
+})
+
+export const UpdatePricingScheduleBody = zod.object({
+  "years": zod.array(zod.object({
+  "year_number": zod.number(),
+  "product_revenue": zod.number(),
+  "services_revenue": zod.number().optional(),
+  "discount_pct": zod.number().optional(),
+  "notes": zod.string().nullish()
+}))
+})
+
+export const UpdatePricingScheduleResponse = zod.object({
+  "data": zod.array(zod.object({
+  "yearNumber": zod.number(),
+  "productRevenue": zod.number(),
+  "servicesRevenue": zod.number(),
+  "discountPct": zod.number().optional(),
+  "notes": zod.string().nullish()
+})),
+  "rampTCV": zod.number()
+})
+
+
+export const ListScenariosQueryParams = zod.object({
+  "deal_id": zod.coerce.string().optional()
+})
+
+export const ListScenariosResponse = zod.object({
+  "data": zod.array(zod.object({
+  "id": zod.string(),
+  "scenarioName": zod.string(),
+  "description": zod.string().nullish(),
+  "dealId": zod.string().nullish(),
+  "isGlobal": zod.boolean(),
+  "modifications": zod.array(zod.record(zod.string(), zod.unknown())),
+  "computedResults": zod.record(zod.string(), zod.unknown()).nullish()
+}))
+})
+
+
+export const CreateScenarioBody = zod.object({
+  "scenario_name": zod.string(),
+  "description": zod.string().nullish(),
+  "deal_id": zod.string().nullish(),
+  "is_global": zod.boolean().optional(),
+  "modifications": zod.array(zod.record(zod.string(), zod.unknown()))
+})
+
+
+export const DeleteScenarioParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const DeleteScenarioResponse = zod.object({
+  "message": zod.string()
+})
+
+
+export const ComputeScenarioBody = zod.object({
+  "deal_id": zod.string().nullish(),
+  "modifications": zod.array(zod.record(zod.string(), zod.unknown()))
+})
+
+export const ComputeScenarioResponse = zod.object({
+  "data": zod.record(zod.string(), zod.unknown())
+})
+
+
+export const ListWebhooksResponse = zod.object({
+  "data": zod.array(zod.object({
+  "id": zod.string(),
+  "webhookName": zod.string(),
+  "targetUrl": zod.string(),
+  "events": zod.array(zod.string()),
+  "isActive": zod.boolean(),
+  "failureCount": zod.number(),
+  "lastTriggeredAt": zod.string().nullish(),
+  "createdAt": zod.string().optional()
+}))
+})
+
+
+export const CreateWebhookBody = zod.object({
+  "webhook_name": zod.string(),
+  "target_url": zod.string(),
+  "secret_key": zod.string().optional(),
+  "events": zod.array(zod.string()),
+  "is_active": zod.boolean().optional()
+})
+
+
+export const UpdateWebhookParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const UpdateWebhookBody = zod.object({
+  "webhook_name": zod.string(),
+  "target_url": zod.string(),
+  "secret_key": zod.string().optional(),
+  "events": zod.array(zod.string()),
+  "is_active": zod.boolean().optional()
+})
+
+export const UpdateWebhookResponse = zod.object({
+  "data": zod.object({
+  "id": zod.string(),
+  "webhookName": zod.string(),
+  "targetUrl": zod.string(),
+  "events": zod.array(zod.string()),
+  "isActive": zod.boolean(),
+  "failureCount": zod.number(),
+  "lastTriggeredAt": zod.string().nullish(),
+  "createdAt": zod.string().optional()
+})
+})
+
+
+export const DeleteWebhookParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const DeleteWebhookResponse = zod.object({
+  "message": zod.string()
+})
+
+
+export const ListWebhookDeliveriesParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const ListWebhookDeliveriesResponse = zod.object({
+  "data": zod.array(zod.object({
+  "id": zod.string(),
+  "eventType": zod.string(),
+  "responseStatus": zod.number().nullish(),
+  "success": zod.boolean(),
+  "deliveredAt": zod.string()
+}))
+})
+
+
+export const ListCustomPatternsResponse = zod.object({
+  "data": zod.array(zod.object({
+  "id": zod.string(),
+  "patternName": zod.string(),
+  "description": zod.string().nullish(),
+  "severity": zod.string(),
+  "weight": zod.number(),
+  "alertMessageTemplate": zod.string(),
+  "isActive": zod.boolean(),
+  "triggerCount": zod.number().optional(),
+  "conditions": zod.array(zod.record(zod.string(), zod.unknown())).optional()
+}))
+})
+
+
+export const CreateCustomPatternBody = zod.object({
+  "pattern_name": zod.string(),
+  "description": zod.string().nullish(),
+  "severity": zod.string(),
+  "weight": zod.number(),
+  "alert_message_template": zod.string(),
+  "is_active": zod.boolean().optional(),
+  "conditions": zod.array(zod.object({
+  "field_path": zod.string(),
+  "operator": zod.string(),
+  "comparison_value": zod.string(),
+  "sort_order": zod.number()
+}))
+})
+
+
+export const UpdateCustomPatternParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const UpdateCustomPatternBody = zod.object({
+  "pattern_name": zod.string(),
+  "description": zod.string().nullish(),
+  "severity": zod.string(),
+  "weight": zod.number(),
+  "alert_message_template": zod.string(),
+  "is_active": zod.boolean().optional(),
+  "conditions": zod.array(zod.object({
+  "field_path": zod.string(),
+  "operator": zod.string(),
+  "comparison_value": zod.string(),
+  "sort_order": zod.number()
+}))
+})
+
+export const UpdateCustomPatternResponse = zod.object({
+  "data": zod.object({
+  "id": zod.string(),
+  "patternName": zod.string(),
+  "description": zod.string().nullish(),
+  "severity": zod.string(),
+  "weight": zod.number(),
+  "alertMessageTemplate": zod.string(),
+  "isActive": zod.boolean(),
+  "triggerCount": zod.number().optional(),
+  "conditions": zod.array(zod.record(zod.string(), zod.unknown())).optional()
+})
+})
+
+
+export const DeleteCustomPatternParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const DeleteCustomPatternResponse = zod.object({
+  "message": zod.string()
+})
+
+
+export const TestCustomPatternBody = zod.object({
+  "pattern_name": zod.string(),
+  "description": zod.string().nullish(),
+  "severity": zod.string(),
+  "weight": zod.number(),
+  "alert_message_template": zod.string(),
+  "is_active": zod.boolean().optional(),
+  "conditions": zod.array(zod.object({
+  "field_path": zod.string(),
+  "operator": zod.string(),
+  "comparison_value": zod.string(),
+  "sort_order": zod.number()
+}))
+})
+
+export const TestCustomPatternResponse = zod.object({
+  "data": zod.record(zod.string(), zod.unknown())
+})
+
+
+export const ListNotificationRulesResponse = zod.object({
+  "data": zod.array(zod.object({
+  "id": zod.string(),
+  "ruleName": zod.string(),
+  "triggerEvent": zod.string(),
+  "triggerConditions": zod.record(zod.string(), zod.unknown()).nullish(),
+  "channel": zod.string(),
+  "isActive": zod.boolean()
+}))
+})
+
+
+export const CreateNotificationRuleBody = zod.object({
+  "rule_name": zod.string(),
+  "trigger_event": zod.string(),
+  "trigger_conditions": zod.record(zod.string(), zod.unknown()).nullish(),
+  "channel": zod.string().optional(),
+  "is_active": zod.boolean().optional()
+})
+
+
+export const UpdateNotificationRuleParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const UpdateNotificationRuleBody = zod.object({
+  "rule_name": zod.string(),
+  "trigger_event": zod.string(),
+  "trigger_conditions": zod.record(zod.string(), zod.unknown()).nullish(),
+  "channel": zod.string().optional(),
+  "is_active": zod.boolean().optional()
+})
+
+export const UpdateNotificationRuleResponse = zod.object({
+  "data": zod.object({
+  "id": zod.string(),
+  "ruleName": zod.string(),
+  "triggerEvent": zod.string(),
+  "triggerConditions": zod.record(zod.string(), zod.unknown()).nullish(),
+  "channel": zod.string(),
+  "isActive": zod.boolean()
+})
+})
+
+
+export const DeleteNotificationRuleParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const DeleteNotificationRuleResponse = zod.object({
+  "message": zod.string()
+})
+
+
+export const ListNotificationsQueryParams = zod.object({
+  "unacknowledged": zod.coerce.boolean().optional()
+})
+
+export const ListNotificationsResponse = zod.object({
+  "data": zod.array(zod.object({
+  "id": zod.string(),
+  "dealId": zod.string().nullish(),
+  "channel": zod.string(),
+  "subject": zod.string().nullish(),
+  "message": zod.string(),
+  "sentAt": zod.string(),
+  "acknowledgedAt": zod.string().nullish()
+}))
+})
+
+
+export const AcknowledgeNotificationParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const AcknowledgeNotificationResponse = zod.object({
+  "message": zod.string()
+})
+
+
+export const ListCustomFieldsResponse = zod.object({
+  "data": zod.array(zod.object({
+  "id": zod.string(),
+  "fieldName": zod.string(),
+  "fieldKey": zod.string(),
+  "fieldType": zod.string(),
+  "options": zod.array(zod.string()).nullish(),
+  "isRequired": zod.boolean(),
+  "displayOrder": zod.number().optional()
+}))
+})
+
+
+export const CreateCustomFieldBody = zod.object({
+  "field_name": zod.string(),
+  "field_key": zod.string(),
+  "field_type": zod.string(),
+  "options": zod.array(zod.string()).optional(),
+  "is_required": zod.boolean().optional(),
+  "display_order": zod.number().optional()
+})
+
+
+export const GetDealCustomFieldsParams = zod.object({
+  "dealId": zod.coerce.string()
+})
+
+export const GetDealCustomFieldsResponse = zod.object({
+  "data": zod.record(zod.string(), zod.unknown())
+})
+
+
+export const SetDealCustomFieldParams = zod.object({
+  "dealId": zod.coerce.string(),
+  "fieldId": zod.coerce.string()
+})
+
+export const SetDealCustomFieldBody = zod.object({
+  "value_text": zod.string().nullish(),
+  "value_number": zod.number().nullish(),
+  "value_date": zod.string().nullish(),
+  "value_select": zod.string().nullish(),
+  "value_multi_select": zod.array(zod.string()).optional()
+})
+
+export const SetDealCustomFieldResponse = zod.object({
+  "message": zod.string()
+})
+
+
+export const ListTagsResponse = zod.object({
+  "data": zod.array(zod.object({
+  "id": zod.string(),
+  "tagName": zod.string(),
+  "color": zod.string()
+}))
+})
+
+
+export const CreateTagBody = zod.object({
+  "tag_name": zod.string(),
+  "color": zod.string()
+})
+
+
+export const GetDealTagsParams = zod.object({
+  "dealId": zod.coerce.string()
+})
+
+export const GetDealTagsResponse = zod.object({
+  "data": zod.array(zod.object({
+  "id": zod.string(),
+  "tagName": zod.string(),
+  "color": zod.string()
+}))
+})
+
+
+export const ApplyDealTagParams = zod.object({
+  "dealId": zod.coerce.string(),
+  "tagId": zod.coerce.string()
+})
+
+export const ApplyDealTagResponse = zod.object({
+  "message": zod.string()
+})
+
+
+export const RemoveDealTagParams = zod.object({
+  "dealId": zod.coerce.string(),
+  "tagId": zod.coerce.string()
+})
+
+export const RemoveDealTagResponse = zod.object({
+  "message": zod.string()
+})
+
+
+export const ParseNlcCommandBody = zod.object({
+  "query": zod.string()
+})
+
+export const ParseNlcCommandResponse = zod.object({
+  "data": zod.record(zod.string(), zod.unknown())
 })
 
 

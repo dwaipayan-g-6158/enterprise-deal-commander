@@ -23,6 +23,8 @@ import {
   blockerSeverities,
   lossArchetypes,
   interventionChecklists,
+  competitors,
+  complianceDrivers,
 } from "./lookups";
 
 export const enterpriseDeals = pgTable(
@@ -64,6 +66,15 @@ export const enterpriseDeals = pgTable(
     lossArchetypeId: integer("loss_archetype_id").references(
       () => lossArchetypes.id,
     ),
+    // IAM/SIEM sales context: the incumbent we're displacing and the compliance
+    // mandate driving the deal (+ its hard audit deadline). All optional.
+    competitorId: integer("competitor_id").references(() => competitors.id),
+    complianceDriverId: integer("compliance_driver_id").references(
+      () => complianceDrivers.id,
+    ),
+    complianceDeadline: date("compliance_deadline", { mode: "string" }),
+    // SIEM (Log360) sizing input — estimated log sources in the environment.
+    estimatedLogSources: integer("estimated_log_sources"),
     archivedAt: timestamp("archived_at", { withTimezone: true }),
     deletedAt: timestamp("deleted_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true })
@@ -123,6 +134,40 @@ export const dealCrossSells = pgTable(
       .notNull()
       .defaultNow(),
     notes: text("notes"),
+  },
+  (t) => [primaryKey({ columns: [t.dealId, t.productId] })],
+);
+
+// Additional compliance drivers beyond the deal's primary `complianceDriverId`.
+// Additive multi-driver support; the primary driver still owns the deadline.
+export const dealComplianceDrivers = pgTable(
+  "deal_compliance_drivers",
+  {
+    dealId: uuid("deal_id")
+      .notNull()
+      .references(() => enterpriseDeals.id, { onDelete: "cascade" }),
+    complianceDriverId: integer("compliance_driver_id")
+      .notNull()
+      .references(() => complianceDrivers.id),
+  },
+  (t) => [primaryKey({ columns: [t.dealId, t.complianceDriverId] })],
+);
+
+// "Products of Interest" — the anchor products the customer landed for / is
+// initially evaluating. Distinct from dealCrossSells (whitespace being pitched);
+// the engine reads both to reason about land-and-expand.
+export const dealProductInterests = pgTable(
+  "deal_product_interests",
+  {
+    dealId: uuid("deal_id")
+      .notNull()
+      .references(() => enterpriseDeals.id, { onDelete: "cascade" }),
+    productId: uuid("product_id")
+      .notNull()
+      .references(() => productCatalog.id),
+    notedAt: timestamp("noted_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
   },
   (t) => [primaryKey({ columns: [t.dealId, t.productId] })],
 );

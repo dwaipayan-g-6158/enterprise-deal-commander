@@ -2,6 +2,7 @@ import {
   pgTable,
   serial,
   smallint,
+  integer,
   varchar,
   text,
   boolean,
@@ -37,12 +38,43 @@ export const servicesTiers = pgTable("services_tiers", {
 
 export const productCatalog = pgTable("product_catalog", {
   id: uuid("id").primaryKey().defaultRandom(),
+  // Stable machine code (e.g. "ADAUDIT_PLUS") — the isomorphic engine keys its
+  // affinity / bundle / compliance maps off this, never the UUID or display name.
+  code: varchar("code", { length: 50 }).notNull().unique(),
   productName: varchar("product_name", { length: 255 }).notNull().unique(),
   productCategory: varchar("product_category", { length: 100 }),
+  // Product suite the component belongs to: "AD360" (IAM) or "Log360" (SIEM).
+  suite: varchar("suite", { length: 20 }),
   isActive: boolean("is_active").notNull().default(true),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
+});
+
+// Competitive landscape for IAM (AD360) and SIEM (Log360) displacement deals.
+export const competitors = pgTable("competitors", {
+  id: serial("id").primaryKey(),
+  name: varchar("name", { length: 80 }).notNull().unique(),
+  category: varchar("category", { length: 10 }).notNull().default("IAM"),
+  isActive: boolean("is_active").notNull().default(true),
+});
+
+// Compliance / regulatory drivers that motivate AD360 / Log360 purchases.
+export const complianceDrivers = pgTable("compliance_drivers", {
+  id: serial("id").primaryKey(),
+  name: varchar("name", { length: 60 }).notNull().unique(),
+  isActive: boolean("is_active").notNull().default(true),
+});
+
+// Editable per-competitor talking points surfaced in the Next-Best-Action panel.
+// Mirrors interventionChecklists: logic lives in the engine, content lives here.
+export const competitorBattlecards = pgTable("competitor_battlecards", {
+  id: serial("id").primaryKey(),
+  competitorId: integer("competitor_id")
+    .notNull()
+    .references(() => competitors.id),
+  talkingPoints: jsonb("talking_points").notNull().$type<string[]>(),
+  isActive: boolean("is_active").notNull().default(true),
 });
 
 export const blockerCategories = pgTable("blocker_categories", {

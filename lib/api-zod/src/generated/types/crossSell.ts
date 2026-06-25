@@ -11,5 +11,9 @@ export interface CrossSell {
   productName: string;
   /** @nullable */
   productCategory?: string | null;
+  /** @nullable */
+  code?: string | null;
+  /** @nullable */
+  suite?: string | null;
   isPitched: boolean;
 }

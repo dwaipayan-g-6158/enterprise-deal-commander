@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { AlertTriangle } from "lucide-react";
+import { ProductMixSection } from "@/components/cockpit/product-mix-section";
 
 export default function Portfolio() {
   const { data: response, isLoading } = useGetPortfolioAnalysis();
@@ -34,6 +35,8 @@ export default function Portfolio() {
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
+        <ProductMixSection />
+
         <Card>
           <CardHeader>
             <CardTitle>By Account Manager</CardTitle>

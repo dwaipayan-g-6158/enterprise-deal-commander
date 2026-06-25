@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   useListGates,
   useListGateDefinitions,
@@ -17,10 +17,12 @@ export function TechnicalGates({
   dealId,
   progressPercentage,
   integrityWarnings,
+  onSaveRef,
 }: {
   dealId: string;
   progressPercentage: number;
   integrityWarnings: IntegrityWarning[];
+  onSaveRef?: React.MutableRefObject<(() => Promise<void>) | null>;
 }) {
   const { toast } = useToast();
   const invalidate = useCockpitInvalidate(dealId);
@@ -29,6 +31,7 @@ export function TechnicalGates({
   const updateBatch = useUpdateGatesBatch();
 
   const [draft, setDraft] = useState<Record<string, boolean>>({});
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     if (gates?.data) {
@@ -38,14 +41,20 @@ export function TechnicalGates({
     }
   }, [gates?.data]);
 
+  useEffect(() => {
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  }, []);
+
   const defByCode = new Map((definitions?.data ?? []).map((d) => [d.gateCode, d]));
   const list = gates?.data ?? [];
   const dirty = list.some((g) => draft[g.gateCode] !== g.isCompleted);
 
-  const save = async () => {
+  const saveWithDraft = async (currentDraft: Record<string, boolean>) => {
     const updates = list
-      .filter((g) => draft[g.gateCode] !== g.isCompleted)
-      .map((g) => ({ gate_code: g.gateCode, is_completed: draft[g.gateCode] }));
+      .filter((g) => currentDraft[g.gateCode] !== g.isCompleted)
+      .map((g) => ({ gate_code: g.gateCode, is_completed: currentDraft[g.gateCode] }));
     if (updates.length === 0) return;
     try {
       const res = await updateBatch.mutateAsync({ dealId, data: { updates } });
@@ -57,14 +66,40 @@ export function TechnicalGates({
           description: warnings.map((w) => w.message).join(" "),
           variant: "destructive",
         });
-      } else {
-        toast({ title: "Gates updated", description: "Technical track progress saved." });
       }
     } catch (err: unknown) {
       const msg = (err as { data?: { error?: { message?: string } } })?.data?.error?.message;
       toast({ title: "Save failed", description: msg ?? "Could not update gates.", variant: "destructive" });
+      // Roll the draft back to the server's last-known state on failure.
+      if (gates?.data) {
+        const reset: Record<string, boolean> = {};
+        for (const g of gates.data) reset[g.gateCode] = g.isCompleted;
+        setDraft(reset);
+      }
     }
   };
+
+  const handleToggle = (gateCode: string, value: boolean) => {
+    const newDraft = { ...draft, [gateCode]: value };
+    setDraft(newDraft);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => void saveWithDraft(newDraft), 500);
+  };
+
+  const manualSave = async () => {
+    if (debounceRef.current) {
+      clearTimeout(debounceRef.current);
+      debounceRef.current = null;
+    }
+    if (!dirty) return;
+    await saveWithDraft(draft);
+    toast({ title: "Gates updated", description: "Technical track progress saved." });
+  };
+
+  // Expose the manual save so the cockpit's Ctrl+S can flush pending changes.
+  useEffect(() => {
+    if (onSaveRef) onSaveRef.current = manualSave;
+  });
 
   const groups = [...new Set(list.map((g) => g.gateGroup))].sort((a, b) => a - b);
 
@@ -106,9 +141,7 @@ export function TechnicalGates({
                   >
                     <Checkbox
                       checked={draft[gate.gateCode] ?? false}
-                      onCheckedChange={(c) =>
-                        setDraft((d) => ({ ...d, [gate.gateCode]: c === true }))
-                      }
+                      onCheckedChange={(c) => handleToggle(gate.gateCode, c === true)}
                       className="mt-0.5"
                     />
                     <div className="flex-1">
@@ -127,7 +160,7 @@ export function TechnicalGates({
           </div>
         ))}
 
-        <Button onClick={save} disabled={!dirty || updateBatch.isPending}>
+        <Button onClick={manualSave} disabled={!dirty || updateBatch.isPending}>
           {updateBatch.isPending ? "Saving..." : "Save Gate Progress"}
         </Button>
       </CardContent>

@@ -5,6 +5,8 @@
  * Enterprise Deal Commander (EDC) Phase 1 API
  * OpenAPI spec version: 1.0.0
  */
+import type { ComplianceDriver } from './complianceDriver';
+import type { CrossSell } from './crossSell';
 
 export interface Deal {
   id: string;
@@ -37,6 +39,20 @@ export interface Deal {
   lossReason?: string | null;
   /** @nullable */
   lossArchetypeId?: number | null;
+  /** @nullable */
+  competitorId?: number | null;
+  /** @nullable */
+  competitorName?: string | null;
+  /** @nullable */
+  complianceDriverId?: number | null;
+  /** @nullable */
+  complianceDriverName?: string | null;
+  /** @nullable */
+  complianceDeadline?: string | null;
+  /** @nullable */
+  estimatedLogSources?: number | null;
+  productsOfInterest?: CrossSell[];
+  complianceDrivers?: ComplianceDriver[];
   calculatedTCV: number;
   normalizedTCV: number;
   healthStatus: string;

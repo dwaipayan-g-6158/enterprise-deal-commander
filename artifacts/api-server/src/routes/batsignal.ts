@@ -41,7 +41,7 @@ router.post(
       changedBy: actor.displayName,
     });
 
-    const domain = (process.env.REPLIT_DOMAINS ?? "").split(",")[0]?.trim();
+    const domain = (process.env.APP_DOMAIN ?? "").split(",")[0]?.trim();
     const shareUrl = domain
       ? `https://${domain}/share/${token}`
       : `/share/${token}`;

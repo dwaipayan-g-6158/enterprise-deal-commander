@@ -1,6 +1,10 @@
-import { useState } from "react";
-import { useGetDeal, useGetDealIntelligence } from "@workspace/api-client-react";
-import { useParams } from "wouter";
+import { useState, useRef, useEffect } from "react";
+import {
+  useGetDeal,
+  useGetDealIntelligence,
+  useListDeals,
+} from "@workspace/api-client-react";
+import { useParams, useLocation } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
@@ -18,6 +22,12 @@ import {
   Presentation,
   Sparkles,
   AlertCircle,
+  Gauge,
+  Swords,
+  Users,
+  ScrollText,
+  Route,
+  DollarSign,
 } from "lucide-react";
 import { EditDealSheet } from "@/components/cockpit/edit-deal-sheet";
 import { BatSignalDialog } from "@/components/cockpit/bat-signal-dialog";
@@ -25,11 +35,20 @@ import { RiskGovernance } from "@/components/cockpit/risk-governance";
 import { TechnicalGates } from "@/components/cockpit/technical-gates";
 import { BlockersPanel } from "@/components/cockpit/blockers-panel";
 import { CrossSellPanel } from "@/components/cockpit/cross-sell-panel";
+import { NextBestAction } from "@/components/cockpit/next-best-action";
 import { ActivityFeed } from "@/components/cockpit/activity-feed";
 import { HistoryPanel } from "@/components/cockpit/history-panel";
 import { BriefingMode } from "@/components/cockpit/briefing-mode";
 import { RiskSimulator } from "@/components/cockpit/risk-simulator";
 import { SnapshotScrubber } from "@/components/cockpit/snapshot-scrubber";
+import { AccountNavigationArray } from "@/components/cockpit/account-navigation-array";
+import { ScorePanel } from "@/components/cockpit/v2/score-panel";
+import { CompetitivePanel } from "@/components/cockpit/v2/competitive-panel";
+import { StakeholdersPanel } from "@/components/cockpit/v2/stakeholders-panel";
+import { DecisionsPanel } from "@/components/cockpit/v2/decisions-panel";
+import { PlaybookPanel } from "@/components/cockpit/v2/playbook-panel";
+import { PricingPanel } from "@/components/cockpit/v2/pricing-panel";
+import { DealTagsBar } from "@/components/cockpit/v2/deal-tags-bar";
 import { formatCurrency } from "@/components/cockpit/use-invalidate";
 
 function CockpitSkeleton() {
@@ -72,6 +91,74 @@ export default function DealCockpit() {
   const [briefingOpen, setBriefingOpen] = useState(false);
   const [simOpen, setSimOpen] = useState(false);
 
+  const [, navigate] = useLocation();
+  const { data: allDeals } = useListDeals({ state: "active" });
+  const gatesSaveRef = useRef<(() => Promise<void>) | null>(null);
+  const formDirtyRef = useRef(false);
+
+  const sortedDeals = [...(allDeals?.data ?? [])].sort(
+    (a, b) => (b.calculatedTCV ?? 0) - (a.calculatedTCV ?? 0),
+  );
+
+  // Warn on full page unload while the edit form has unsaved changes.
+  useEffect(() => {
+    const handler = (e: BeforeUnloadEvent) => {
+      if (formDirtyRef.current) {
+        e.preventDefault();
+        e.returnValue = "";
+      }
+    };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, []);
+
+  // Keyboard shortcuts: Ctrl+B briefing, Ctrl+S save gates, Escape, arrow deal nav.
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement;
+      const isTyping =
+        target.tagName === "INPUT" ||
+        target.tagName === "TEXTAREA" ||
+        target.isContentEditable;
+
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "b") {
+        e.preventDefault();
+        setBriefingOpen((v) => !v);
+        return;
+      }
+
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "s") {
+        e.preventDefault();
+        void gatesSaveRef.current?.();
+        return;
+      }
+
+      if (e.key === "Escape" && briefingOpen) {
+        setBriefingOpen(false);
+        return;
+      }
+
+      if (isTyping) return;
+
+      if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
+        e.preventDefault();
+        const idx = sortedDeals.findIndex((d) => d.id === id);
+        if (idx === -1) return;
+        const nextIdx = e.key === "ArrowLeft" ? idx - 1 : idx + 1;
+        if (nextIdx < 0 || nextIdx >= sortedDeals.length) return;
+        if (
+          formDirtyRef.current &&
+          !window.confirm("You have unsaved changes. Leave anyway?")
+        )
+          return;
+        navigate(`/deals/${sortedDeals[nextIdx].id}`);
+      }
+    };
+
+    document.addEventListener("keydown", handler);
+    return () => document.removeEventListener("keydown", handler);
+  }, [briefingOpen, id, navigate, sortedDeals]);
+
   const deal = dealResponse?.data;
   const intel = intelligenceResponse?.data;
 
@@ -96,7 +183,9 @@ export default function DealCockpit() {
   if (!deal || !intel) return <div className="p-8 text-destructive">Deal not found</div>;
 
   return (
-    <div className="p-8 max-w-[1600px] mx-auto space-y-6">
+    <div className="flex flex-col h-full">
+      <AccountNavigationArray activeDealId={id} />
+      <div className="p-8 max-w-[1600px] mx-auto space-y-6 w-full">
       {/* Header */}
       <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
         <div>
@@ -118,6 +207,7 @@ export default function DealCockpit() {
             </Badge>
           </div>
           <p className="text-muted-foreground text-lg">{deal.accountName}</p>
+          <DealTagsBar dealId={id} />
         </div>
         <div className="flex items-center gap-4">
           <div className="text-right">
@@ -215,6 +305,13 @@ export default function DealCockpit() {
                 Risk
               </TabsTrigger>
               <TabsTrigger
+                value="coaching"
+                className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-6"
+              >
+                <Sparkles className="w-4 h-4 mr-2" />
+                Coaching
+              </TabsTrigger>
+              <TabsTrigger
                 value="technical"
                 className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-6"
               >
@@ -249,10 +346,56 @@ export default function DealCockpit() {
                 <History className="w-4 h-4 mr-2" />
                 History
               </TabsTrigger>
+              <TabsTrigger
+                value="score"
+                className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-6"
+              >
+                <Gauge className="w-4 h-4 mr-2" />
+                Score
+              </TabsTrigger>
+              <TabsTrigger
+                value="competitive"
+                className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-6"
+              >
+                <Swords className="w-4 h-4 mr-2" />
+                Competitive
+              </TabsTrigger>
+              <TabsTrigger
+                value="stakeholders"
+                className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-6"
+              >
+                <Users className="w-4 h-4 mr-2" />
+                Stakeholders
+              </TabsTrigger>
+              <TabsTrigger
+                value="decisions"
+                className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-6"
+              >
+                <ScrollText className="w-4 h-4 mr-2" />
+                Decisions
+              </TabsTrigger>
+              <TabsTrigger
+                value="playbook"
+                className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-6"
+              >
+                <Route className="w-4 h-4 mr-2" />
+                Playbook
+              </TabsTrigger>
+              <TabsTrigger
+                value="pricing"
+                className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-6"
+              >
+                <DollarSign className="w-4 h-4 mr-2" />
+                Pricing
+              </TabsTrigger>
             </TabsList>
 
             <TabsContent value="risk" className="pt-6">
               <RiskGovernance dealId={id} alerts={intel.governance.alerts} />
+            </TabsContent>
+
+            <TabsContent value="coaching" className="pt-6">
+              <NextBestAction dealId={id} />
             </TabsContent>
 
             <TabsContent value="technical" className="pt-6">
@@ -260,6 +403,7 @@ export default function DealCockpit() {
                 dealId={id}
                 progressPercentage={intel.technicalTrack.progressPercentage}
                 integrityWarnings={intel.technicalTrack.integrityWarnings}
+                onSaveRef={gatesSaveRef}
               />
             </TabsContent>
 
@@ -278,14 +422,39 @@ export default function DealCockpit() {
             <TabsContent value="history" className="pt-6">
               <HistoryPanel dealId={id} />
             </TabsContent>
+
+            <TabsContent value="score" className="pt-6">
+              <ScorePanel dealId={id} />
+            </TabsContent>
+            <TabsContent value="competitive" className="pt-6">
+              <CompetitivePanel dealId={id} />
+            </TabsContent>
+            <TabsContent value="stakeholders" className="pt-6">
+              <StakeholdersPanel dealId={id} />
+            </TabsContent>
+            <TabsContent value="decisions" className="pt-6">
+              <DecisionsPanel dealId={id} />
+            </TabsContent>
+            <TabsContent value="playbook" className="pt-6">
+              <PlaybookPanel dealId={id} />
+            </TabsContent>
+            <TabsContent value="pricing" className="pt-6">
+              <PricingPanel dealId={id} currency={deal.dealCurrency} />
+            </TabsContent>
           </Tabs>
         </div>
       </div>
 
-      <EditDealSheet deal={deal} open={editOpen} onOpenChange={setEditOpen} />
+      <EditDealSheet
+        deal={deal}
+        open={editOpen}
+        onOpenChange={setEditOpen}
+        dirtyRef={formDirtyRef}
+      />
       <BatSignalDialog dealId={id} open={batOpen} onOpenChange={setBatOpen} />
       <RiskSimulator deal={deal} intel={intel} open={simOpen} onOpenChange={setSimOpen} />
       {briefingOpen && <BriefingMode deal={deal} intel={intel} onClose={() => setBriefingOpen(false)} />}
+      </div>
     </div>
   );
 }

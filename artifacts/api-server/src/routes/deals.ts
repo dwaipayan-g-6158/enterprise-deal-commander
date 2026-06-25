@@ -4,6 +4,8 @@ import {
   db,
   enterpriseDeals,
   dealTechnicalGates,
+  dealProductInterests,
+  dealComplianceDrivers,
   gateDefinitions,
   pipelineStages,
   dealStageOverrides,
@@ -112,6 +114,33 @@ router.get("/deals", async (req: Request, res: Response) => {
   );
 });
 
+// Replace the deal's "products of interest" (anchor) set, mirroring the
+// cross-sell replace-set semantics in routes/crosssells.ts.
+async function replaceProductInterests(dealId: string, productIds: string[]) {
+  await db
+    .delete(dealProductInterests)
+    .where(eq(dealProductInterests.dealId, dealId));
+  if (productIds.length > 0) {
+    await db
+      .insert(dealProductInterests)
+      .values(productIds.map((productId) => ({ dealId, productId })))
+      .onConflictDoNothing();
+  }
+}
+
+// Replace the deal's additional compliance drivers (beyond the primary driver).
+async function replaceComplianceDrivers(dealId: string, driverIds: number[]) {
+  await db
+    .delete(dealComplianceDrivers)
+    .where(eq(dealComplianceDrivers.dealId, dealId));
+  if (driverIds.length > 0) {
+    await db
+      .insert(dealComplianceDrivers)
+      .values(driverIds.map((complianceDriverId) => ({ dealId, complianceDriverId })))
+      .onConflictDoNothing();
+  }
+}
+
 async function seedGatesForDeal(dealId: string) {
   const defs = await db
     .select({ gateCode: gateDefinitions.gateCode })
@@ -154,6 +183,10 @@ router.post("/deals", async (req: Request, res: Response) => {
         managerStrategicBlueprint: body.manager_strategic_blueprint ?? null,
         speakerNotes: body.speaker_notes ?? null,
         lossArchetypeId: body.loss_archetype_id ?? null,
+        competitorId: body.competitor_id ?? null,
+        complianceDriverId: body.compliance_driver_id ?? null,
+        complianceDeadline: body.compliance_deadline ?? null,
+        estimatedLogSources: body.estimated_log_sources ?? null,
       })
       .returning({ id: enterpriseDeals.id });
     created = inserted[0];
@@ -169,6 +202,12 @@ router.post("/deals", async (req: Request, res: Response) => {
   }
 
   await seedGatesForDeal(created.id);
+  if (body.product_interest_ids && body.product_interest_ids.length > 0) {
+    await replaceProductInterests(created.id, body.product_interest_ids);
+  }
+  if (body.compliance_driver_ids && body.compliance_driver_ids.length > 0) {
+    await replaceComplianceDrivers(created.id, body.compliance_driver_ids);
+  }
   await writeAudit({
     dealId: created.id,
     entityType: "deal",
@@ -297,6 +336,34 @@ const updateDealHandler = async (req: Request, res: Response) => {
   if (body.loss_archetype_id !== undefined) {
     updates.lossArchetypeId = body.loss_archetype_id ?? null;
   }
+  if (body.competitor_id !== undefined) {
+    track("competitor_id", existing.competitorId, body.competitor_id);
+    updates.competitorId = body.competitor_id ?? null;
+  }
+  if (body.compliance_driver_id !== undefined) {
+    track(
+      "compliance_driver_id",
+      existing.complianceDriverId,
+      body.compliance_driver_id,
+    );
+    updates.complianceDriverId = body.compliance_driver_id ?? null;
+  }
+  if (body.compliance_deadline !== undefined) {
+    track(
+      "compliance_deadline",
+      existing.complianceDeadline,
+      body.compliance_deadline,
+    );
+    updates.complianceDeadline = body.compliance_deadline ?? null;
+  }
+  if (body.estimated_log_sources !== undefined) {
+    track(
+      "estimated_log_sources",
+      existing.estimatedLogSources,
+      body.estimated_log_sources,
+    );
+    updates.estimatedLogSources = body.estimated_log_sources ?? null;
+  }
 
   // Stage guardrail: block advancing the sales stage past active unmanaged RED
   // risk patterns unless a valid override reason is supplied. Backward stage
@@ -373,6 +440,12 @@ const updateDealHandler = async (req: Request, res: Response) => {
       newValue: stageOverride.patternCodes.join(","),
       changedBy: actor.displayName,
     });
+  }
+  if (body.product_interest_ids !== undefined) {
+    await replaceProductInterests(id, body.product_interest_ids);
+  }
+  if (body.compliance_driver_ids !== undefined) {
+    await replaceComplianceDrivers(id, body.compliance_driver_ids);
   }
   if (audits.length > 0) await writeAudit(audits);
 

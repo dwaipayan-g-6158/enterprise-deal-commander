@@ -13,6 +13,9 @@ import {
   interventionChecklists,
   engineThresholds,
   fxRates,
+  competitors,
+  complianceDrivers,
+  competitorBattlecards,
 } from "@workspace/db";
 import {
   ListPipelineStagesResponse,
@@ -30,6 +33,9 @@ import {
   ListFxRatesResponse,
   UpdateFxRatesBody,
   UpdateFxRatesResponse,
+  ListCompetitorsResponse,
+  ListComplianceDriversResponse,
+  ListCompetitorBattlecardsResponse,
 } from "@workspace/api-zod";
 import { requireAuth } from "../lib/auth";
 import { badRequest } from "../lib/http";
@@ -81,11 +87,60 @@ router.get("/lookups/product-catalog", async (_req: Request, res: Response) => {
     .orderBy(asc(productCatalog.productName));
   const data = rows.map((r) => ({
     id: r.id,
+    code: r.code,
     productName: r.productName,
     productCategory: r.productCategory,
+    suite: r.suite,
   }));
   res.json(ListProductCatalogResponse.parse({ data }));
 });
+
+router.get("/lookups/competitors", async (_req: Request, res: Response) => {
+  const rows = await db
+    .select()
+    .from(competitors)
+    .where(eq(competitors.isActive, true))
+    .orderBy(asc(competitors.name));
+  const data = rows.map((r) => ({
+    id: r.id,
+    name: r.name,
+    category: r.category,
+  }));
+  res.json(ListCompetitorsResponse.parse({ data }));
+});
+
+router.get(
+  "/lookups/compliance-drivers",
+  async (_req: Request, res: Response) => {
+    const rows = await db
+      .select()
+      .from(complianceDrivers)
+      .where(eq(complianceDrivers.isActive, true))
+      .orderBy(asc(complianceDrivers.name));
+    const data = rows.map((r) => ({ id: r.id, name: r.name }));
+    res.json(ListComplianceDriversResponse.parse({ data }));
+  },
+);
+
+router.get(
+  "/lookups/competitor-battlecards",
+  async (_req: Request, res: Response) => {
+    const rows = await db
+      .select({
+        competitorId: competitorBattlecards.competitorId,
+        competitorName: competitors.name,
+        talkingPoints: competitorBattlecards.talkingPoints,
+      })
+      .from(competitorBattlecards)
+      .innerJoin(
+        competitors,
+        eq(competitorBattlecards.competitorId, competitors.id),
+      )
+      .where(eq(competitorBattlecards.isActive, true))
+      .orderBy(asc(competitors.name));
+    res.json(ListCompetitorBattlecardsResponse.parse({ data: rows }));
+  },
+);
 
 router.get("/lookups/gate-definitions", async (_req: Request, res: Response) => {
   const rows = await db

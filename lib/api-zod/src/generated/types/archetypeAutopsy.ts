@@ -6,6 +6,7 @@
  * OpenAPI spec version: 1.0.0
  */
 import type { PatternShare } from './patternShare';
+import type { ProductMixDeal } from './productMixDeal';
 
 export interface ArchetypeAutopsy {
   archetypeId: number;
@@ -15,4 +16,5 @@ export interface ArchetypeAutopsy {
   servicesAttachShare: number;
   patternsThatFired: PatternShare[];
   neverPassedGate2Share: number;
+  deals: ProductMixDeal[];
 }

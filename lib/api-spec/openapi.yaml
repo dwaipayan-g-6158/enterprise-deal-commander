@@ -445,6 +445,17 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/PortfolioAnalysisResponse"
+  /v1/intelligence/product-mix:
+    get:
+      operationId: getProductMix
+      tags: [intelligence]
+      responses:
+        "200":
+          description: Product mix and whitespace across the active portfolio
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProductMixResponse"
   /v1/analytics/autopsy:
     get:
       operationId: getAutopsy
@@ -727,6 +738,39 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ProductListResponse"
+  /v1/lookups/competitors:
+    get:
+      operationId: listCompetitors
+      tags: [lookups]
+      responses:
+        "200":
+          description: Competitors
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CompetitorListResponse"
+  /v1/lookups/compliance-drivers:
+    get:
+      operationId: listComplianceDrivers
+      tags: [lookups]
+      responses:
+        "200":
+          description: Compliance drivers
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ComplianceDriverListResponse"
+  /v1/lookups/competitor-battlecards:
+    get:
+      operationId: listCompetitorBattlecards
+      tags: [lookups]
+      responses:
+        "200":
+          description: Competitor battlecards
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CompetitorBattlecardListResponse"
   /v1/lookups/gate-definitions:
     get:
       operationId: listGateDefinitions
@@ -837,6 +881,521 @@ paths:
               schema:
                 $ref: "#/components/schemas/FxRateListResponse"
 
+  # ============ V2 SOVEREIGN INTELLIGENCE ============
+
+  # --- F3 Predictive Scoring ---
+  /v2/deals/{dealId}/score:
+    get:
+      operationId: getDealScore
+      tags: [v2intel]
+      parameters:
+        - { name: dealId, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: Predictive score, content: { application/json: { schema: { $ref: "#/components/schemas/DealScoreResponse" } } } }
+  /v2/scores/recalculate:
+    post:
+      operationId: recalculateScores
+      tags: [v2intel]
+      responses:
+        "200": { description: Rescored, content: { application/json: { schema: { $ref: "#/components/schemas/GenericDataResponse" } } } }
+
+  # --- F4 Velocity / Pipeline analytics + F20 Simulation ---
+  /v2/analytics/velocity:
+    get:
+      operationId: getVelocityAnalytics
+      tags: [v2intel]
+      responses:
+        "200": { description: Velocity, content: { application/json: { schema: { $ref: "#/components/schemas/GenericDataResponse" } } } }
+  /v2/analytics/velocity/benchmarks:
+    get:
+      operationId: getVelocityBenchmarks
+      tags: [v2intel]
+      responses:
+        "200": { description: Benchmarks, content: { application/json: { schema: { $ref: "#/components/schemas/GenericDataResponse" } } } }
+  /v2/analytics/pipeline:
+    get:
+      operationId: getPipelineAnalytics
+      tags: [v2intel]
+      responses:
+        "200": { description: Pipeline, content: { application/json: { schema: { $ref: "#/components/schemas/GenericDataResponse" } } } }
+  /v2/analytics/simulation:
+    get:
+      operationId: getPipelineSimulation
+      tags: [v2intel]
+      parameters:
+        - { name: iterations, in: query, required: false, schema: { type: integer } }
+      responses:
+        "200": { description: Simulation, content: { application/json: { schema: { $ref: "#/components/schemas/GenericDataResponse" } } } }
+  /v2/analytics/competitive:
+    get:
+      operationId: getCompetitiveAnalytics
+      tags: [v2intel]
+      responses:
+        "200": { description: Competitive win rates, content: { application/json: { schema: { $ref: "#/components/schemas/GenericDataResponse" } } } }
+  /v2/analytics/win-loss:
+    get:
+      operationId: getWinLossAnalytics
+      tags: [v2intel]
+      responses:
+        "200": { description: Win/loss analytics, content: { application/json: { schema: { $ref: "#/components/schemas/GenericDataResponse" } } } }
+
+  # --- F2 Competitive Intelligence (per deal) ---
+  /v2/deals/{dealId}/competitors:
+    get:
+      operationId: listDealCompetitors
+      tags: [v2intel]
+      parameters:
+        - { name: dealId, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: Competitors, content: { application/json: { schema: { $ref: "#/components/schemas/DealCompetitorListResponse" } } } }
+    post:
+      operationId: addDealCompetitor
+      tags: [v2intel]
+      parameters:
+        - { name: dealId, in: path, required: true, schema: { type: string } }
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/DealCompetitorInput" } } } }
+      responses:
+        "201": { description: Added, content: { application/json: { schema: { $ref: "#/components/schemas/DealCompetitorResponse" } } } }
+  /v2/deals/{dealId}/competitors/{id}:
+    put:
+      operationId: updateDealCompetitor
+      tags: [v2intel]
+      parameters:
+        - { name: dealId, in: path, required: true, schema: { type: string } }
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/DealCompetitorInput" } } } }
+      responses:
+        "200": { description: Updated, content: { application/json: { schema: { $ref: "#/components/schemas/DealCompetitorResponse" } } } }
+    delete:
+      operationId: deleteDealCompetitor
+      tags: [v2intel]
+      parameters:
+        - { name: dealId, in: path, required: true, schema: { type: string } }
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: Deleted, content: { application/json: { schema: { $ref: "#/components/schemas/MessageResponse" } } } }
+
+  # --- F5/F6 Deal Memory ---
+  /v2/memory:
+    get:
+      operationId: listDealMemory
+      tags: [v2intel]
+      responses:
+        "200": { description: Memory list, content: { application/json: { schema: { $ref: "#/components/schemas/DealMemoryListResponse" } } } }
+  /v2/memory/search:
+    get:
+      operationId: searchDealMemory
+      tags: [v2intel]
+      parameters:
+        - { name: q, in: query, required: false, schema: { type: string } }
+        - { name: outcome, in: query, required: false, schema: { type: string } }
+      responses:
+        "200": { description: Search results, content: { application/json: { schema: { $ref: "#/components/schemas/DealMemoryListResponse" } } } }
+  /v2/memory/similar/{dealId}:
+    get:
+      operationId: getSimilarDeals
+      tags: [v2intel]
+      parameters:
+        - { name: dealId, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: Similar deals, content: { application/json: { schema: { $ref: "#/components/schemas/DealMemoryListResponse" } } } }
+  /v2/memory/{id}:
+    get:
+      operationId: getDealMemory
+      tags: [v2intel]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: Memory entry, content: { application/json: { schema: { $ref: "#/components/schemas/DealMemoryResponse" } } } }
+    put:
+      operationId: updateDealMemory
+      tags: [v2intel]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/DealMemoryUpdate" } } } }
+      responses:
+        "200": { description: Updated, content: { application/json: { schema: { $ref: "#/components/schemas/DealMemoryResponse" } } } }
+
+  # --- F8 Stakeholders ---
+  /v2/deals/{dealId}/stakeholders:
+    get:
+      operationId: listStakeholders
+      tags: [v2intel]
+      parameters:
+        - { name: dealId, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: Stakeholders, content: { application/json: { schema: { $ref: "#/components/schemas/StakeholderListResponse" } } } }
+    post:
+      operationId: createStakeholder
+      tags: [v2intel]
+      parameters:
+        - { name: dealId, in: path, required: true, schema: { type: string } }
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/StakeholderInput" } } } }
+      responses:
+        "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/StakeholderResponse" } } } }
+  /v2/deals/{dealId}/stakeholders/{id}:
+    put:
+      operationId: updateStakeholder
+      tags: [v2intel]
+      parameters:
+        - { name: dealId, in: path, required: true, schema: { type: string } }
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/StakeholderInput" } } } }
+      responses:
+        "200": { description: Updated, content: { application/json: { schema: { $ref: "#/components/schemas/StakeholderResponse" } } } }
+    delete:
+      operationId: deleteStakeholder
+      tags: [v2intel]
+      parameters:
+        - { name: dealId, in: path, required: true, schema: { type: string } }
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: Deleted, content: { application/json: { schema: { $ref: "#/components/schemas/MessageResponse" } } } }
+
+  # --- F9 Decisions + Meeting sessions ---
+  /v2/deals/{dealId}/decisions:
+    get:
+      operationId: listDecisions
+      tags: [v2intel]
+      parameters:
+        - { name: dealId, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: Decisions, content: { application/json: { schema: { $ref: "#/components/schemas/DecisionListResponse" } } } }
+    post:
+      operationId: createDecision
+      tags: [v2intel]
+      parameters:
+        - { name: dealId, in: path, required: true, schema: { type: string } }
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/DecisionInput" } } } }
+      responses:
+        "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/DecisionResponse" } } } }
+  /v2/deals/{dealId}/decisions/{id}:
+    put:
+      operationId: updateDecision
+      tags: [v2intel]
+      parameters:
+        - { name: dealId, in: path, required: true, schema: { type: string } }
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/DecisionUpdate" } } } }
+      responses:
+        "200": { description: Updated, content: { application/json: { schema: { $ref: "#/components/schemas/DecisionResponse" } } } }
+  /v2/meeting-sessions:
+    get:
+      operationId: listMeetingSessions
+      tags: [v2intel]
+      responses:
+        "200": { description: Sessions, content: { application/json: { schema: { $ref: "#/components/schemas/MeetingSessionListResponse" } } } }
+    post:
+      operationId: createMeetingSession
+      tags: [v2intel]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/MeetingSessionInput" } } } }
+      responses:
+        "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/MeetingSessionResponse" } } } }
+
+  # --- F11 Playbooks ---
+  /v2/playbooks:
+    get:
+      operationId: listPlaybooks
+      tags: [v2intel]
+      responses:
+        "200": { description: Playbooks, content: { application/json: { schema: { $ref: "#/components/schemas/PlaybookListResponse" } } } }
+    post:
+      operationId: createPlaybook
+      tags: [v2intel]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/PlaybookInput" } } } }
+      responses:
+        "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/PlaybookResponse" } } } }
+  /v2/playbooks/{id}:
+    put:
+      operationId: updatePlaybook
+      tags: [v2intel]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/PlaybookInput" } } } }
+      responses:
+        "200": { description: Updated, content: { application/json: { schema: { $ref: "#/components/schemas/PlaybookResponse" } } } }
+    delete:
+      operationId: deletePlaybook
+      tags: [v2intel]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: Deleted, content: { application/json: { schema: { $ref: "#/components/schemas/MessageResponse" } } } }
+  /v2/deals/{dealId}/playbook:
+    get:
+      operationId: getDealPlaybook
+      tags: [v2intel]
+      parameters:
+        - { name: dealId, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: Active playbook, content: { application/json: { schema: { $ref: "#/components/schemas/GenericDataResponse" } } } }
+  /v2/playbook-assignments/{assignmentId}/steps/{stepId}/complete:
+    post:
+      operationId: completePlaybookStep
+      tags: [v2intel]
+      parameters:
+        - { name: assignmentId, in: path, required: true, schema: { type: string } }
+        - { name: stepId, in: path, required: true, schema: { type: string } }
+      requestBody: { required: false, content: { application/json: { schema: { $ref: "#/components/schemas/PlaybookStepActionInput" } } } }
+      responses:
+        "200": { description: Completed, content: { application/json: { schema: { $ref: "#/components/schemas/GenericDataResponse" } } } }
+  /v2/playbook-assignments/{assignmentId}/steps/{stepId}/skip:
+    post:
+      operationId: skipPlaybookStep
+      tags: [v2intel]
+      parameters:
+        - { name: assignmentId, in: path, required: true, schema: { type: string } }
+        - { name: stepId, in: path, required: true, schema: { type: string } }
+      requestBody: { required: false, content: { application/json: { schema: { $ref: "#/components/schemas/PlaybookStepActionInput" } } } }
+      responses:
+        "200": { description: Skipped, content: { application/json: { schema: { $ref: "#/components/schemas/GenericDataResponse" } } } }
+
+  # --- F13 Ramp pricing + scenarios ---
+  /v2/deals/{dealId}/pricing-schedule:
+    get:
+      operationId: getPricingSchedule
+      tags: [v2intel]
+      parameters:
+        - { name: dealId, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: Schedule, content: { application/json: { schema: { $ref: "#/components/schemas/PricingScheduleResponse" } } } }
+    put:
+      operationId: updatePricingSchedule
+      tags: [v2intel]
+      parameters:
+        - { name: dealId, in: path, required: true, schema: { type: string } }
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/PricingScheduleInput" } } } }
+      responses:
+        "200": { description: Updated, content: { application/json: { schema: { $ref: "#/components/schemas/PricingScheduleResponse" } } } }
+  /v2/scenarios:
+    get:
+      operationId: listScenarios
+      tags: [v2intel]
+      parameters:
+        - { name: deal_id, in: query, required: false, schema: { type: string } }
+      responses:
+        "200": { description: Scenarios, content: { application/json: { schema: { $ref: "#/components/schemas/ScenarioListResponse" } } } }
+    post:
+      operationId: createScenario
+      tags: [v2intel]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/ScenarioInput" } } } }
+      responses:
+        "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/ScenarioResponse" } } } }
+  /v2/scenarios/{id}:
+    delete:
+      operationId: deleteScenario
+      tags: [v2intel]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: Deleted, content: { application/json: { schema: { $ref: "#/components/schemas/MessageResponse" } } } }
+  /v2/scenarios/compute:
+    post:
+      operationId: computeScenario
+      tags: [v2intel]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/ScenarioComputeInput" } } } }
+      responses:
+        "200": { description: Computed, content: { application/json: { schema: { $ref: "#/components/schemas/GenericDataResponse" } } } }
+
+  # --- F1 Webhooks ---
+  /v2/webhooks:
+    get:
+      operationId: listWebhooks
+      tags: [v2intel]
+      responses:
+        "200": { description: Webhooks, content: { application/json: { schema: { $ref: "#/components/schemas/WebhookListResponse" } } } }
+    post:
+      operationId: createWebhook
+      tags: [v2intel]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/WebhookInput" } } } }
+      responses:
+        "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/WebhookResponse" } } } }
+  /v2/webhooks/{id}:
+    put:
+      operationId: updateWebhook
+      tags: [v2intel]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/WebhookInput" } } } }
+      responses:
+        "200": { description: Updated, content: { application/json: { schema: { $ref: "#/components/schemas/WebhookResponse" } } } }
+    delete:
+      operationId: deleteWebhook
+      tags: [v2intel]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: Deleted, content: { application/json: { schema: { $ref: "#/components/schemas/MessageResponse" } } } }
+  /v2/webhooks/{id}/deliveries:
+    get:
+      operationId: listWebhookDeliveries
+      tags: [v2intel]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: Deliveries, content: { application/json: { schema: { $ref: "#/components/schemas/WebhookDeliveryListResponse" } } } }
+
+  # --- F10 Custom risk patterns ---
+  /v2/custom-patterns:
+    get:
+      operationId: listCustomPatterns
+      tags: [v2intel]
+      responses:
+        "200": { description: Patterns, content: { application/json: { schema: { $ref: "#/components/schemas/CustomPatternListResponse" } } } }
+    post:
+      operationId: createCustomPattern
+      tags: [v2intel]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/CustomPatternInput" } } } }
+      responses:
+        "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/CustomPatternResponse" } } } }
+  /v2/custom-patterns/{id}:
+    put:
+      operationId: updateCustomPattern
+      tags: [v2intel]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/CustomPatternInput" } } } }
+      responses:
+        "200": { description: Updated, content: { application/json: { schema: { $ref: "#/components/schemas/CustomPatternResponse" } } } }
+    delete:
+      operationId: deleteCustomPattern
+      tags: [v2intel]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: Deleted, content: { application/json: { schema: { $ref: "#/components/schemas/MessageResponse" } } } }
+  /v2/custom-patterns/test:
+    post:
+      operationId: testCustomPattern
+      tags: [v2intel]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/CustomPatternInput" } } } }
+      responses:
+        "200": { description: Matches, content: { application/json: { schema: { $ref: "#/components/schemas/GenericDataResponse" } } } }
+
+  # --- F12 Smart alerts ---
+  /v2/notification-rules:
+    get:
+      operationId: listNotificationRules
+      tags: [v2intel]
+      responses:
+        "200": { description: Rules, content: { application/json: { schema: { $ref: "#/components/schemas/NotificationRuleListResponse" } } } }
+    post:
+      operationId: createNotificationRule
+      tags: [v2intel]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/NotificationRuleInput" } } } }
+      responses:
+        "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/NotificationRuleResponse" } } } }
+  /v2/notification-rules/{id}:
+    put:
+      operationId: updateNotificationRule
+      tags: [v2intel]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/NotificationRuleInput" } } } }
+      responses:
+        "200": { description: Updated, content: { application/json: { schema: { $ref: "#/components/schemas/NotificationRuleResponse" } } } }
+    delete:
+      operationId: deleteNotificationRule
+      tags: [v2intel]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: Deleted, content: { application/json: { schema: { $ref: "#/components/schemas/MessageResponse" } } } }
+  /v2/notifications:
+    get:
+      operationId: listNotifications
+      tags: [v2intel]
+      parameters:
+        - { name: unacknowledged, in: query, required: false, schema: { type: boolean } }
+      responses:
+        "200": { description: Notifications, content: { application/json: { schema: { $ref: "#/components/schemas/NotificationListResponse" } } } }
+  /v2/notifications/{id}/ack:
+    post:
+      operationId: acknowledgeNotification
+      tags: [v2intel]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: Acknowledged, content: { application/json: { schema: { $ref: "#/components/schemas/MessageResponse" } } } }
+
+  # --- F16 Custom fields + tags ---
+  /v2/custom-fields:
+    get:
+      operationId: listCustomFields
+      tags: [v2intel]
+      responses:
+        "200": { description: Field defs, content: { application/json: { schema: { $ref: "#/components/schemas/CustomFieldDefListResponse" } } } }
+    post:
+      operationId: createCustomField
+      tags: [v2intel]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/CustomFieldDefInput" } } } }
+      responses:
+        "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/CustomFieldDefResponse" } } } }
+  /v2/deals/{dealId}/custom-fields:
+    get:
+      operationId: getDealCustomFields
+      tags: [v2intel]
+      parameters:
+        - { name: dealId, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: Values, content: { application/json: { schema: { $ref: "#/components/schemas/GenericDataResponse" } } } }
+  /v2/deals/{dealId}/custom-fields/{fieldId}:
+    put:
+      operationId: setDealCustomField
+      tags: [v2intel]
+      parameters:
+        - { name: dealId, in: path, required: true, schema: { type: string } }
+        - { name: fieldId, in: path, required: true, schema: { type: string } }
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/CustomFieldValueInput" } } } }
+      responses:
+        "200": { description: Set, content: { application/json: { schema: { $ref: "#/components/schemas/MessageResponse" } } } }
+  /v2/tags:
+    get:
+      operationId: listTags
+      tags: [v2intel]
+      responses:
+        "200": { description: Tags, content: { application/json: { schema: { $ref: "#/components/schemas/TagListResponse" } } } }
+    post:
+      operationId: createTag
+      tags: [v2intel]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/TagInput" } } } }
+      responses:
+        "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/TagResponse" } } } }
+  /v2/deals/{dealId}/tags:
+    get:
+      operationId: getDealTags
+      tags: [v2intel]
+      parameters:
+        - { name: dealId, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: Deal tags, content: { application/json: { schema: { $ref: "#/components/schemas/TagListResponse" } } } }
+  /v2/deals/{dealId}/tags/{tagId}:
+    post:
+      operationId: applyDealTag
+      tags: [v2intel]
+      parameters:
+        - { name: dealId, in: path, required: true, schema: { type: string } }
+        - { name: tagId, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: Applied, content: { application/json: { schema: { $ref: "#/components/schemas/MessageResponse" } } } }
+    delete:
+      operationId: removeDealTag
+      tags: [v2intel]
+      parameters:
+        - { name: dealId, in: path, required: true, schema: { type: string } }
+        - { name: tagId, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: Removed, content: { application/json: { schema: { $ref: "#/components/schemas/MessageResponse" } } } }
+
+  # --- F19 NL command ---
+  /v2/nlc/parse:
+    post:
+      operationId: parseNlcCommand
+      tags: [v2intel]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/NlcParseInput" } } } }
+      responses:
+        "200": { description: Parsed query + results, content: { application/json: { schema: { $ref: "#/components/schemas/GenericDataResponse" } } } }
+
 components:
   schemas:
     HealthStatus:
@@ -919,6 +1478,18 @@ components:
         speakerNotes: { type: ["string", "null"] }
         lossReason: { type: ["string", "null"] }
         lossArchetypeId: { type: ["integer", "null"] }
+        competitorId: { type: ["integer", "null"] }
+        competitorName: { type: ["string", "null"] }
+        complianceDriverId: { type: ["integer", "null"] }
+        complianceDriverName: { type: ["string", "null"] }
+        complianceDeadline: { type: ["string", "null"] }
+        estimatedLogSources: { type: ["integer", "null"] }
+        productsOfInterest:
+          type: array
+          items: { $ref: "#/components/schemas/CrossSell" }
+        complianceDrivers:
+          type: array
+          items: { $ref: "#/components/schemas/ComplianceDriver" }
         calculatedTCV: { type: number }
         normalizedTCV: { type: number }
         healthStatus: { type: string }
@@ -960,6 +1531,16 @@ components:
         manager_strategic_blueprint: { type: ["string", "null"] }
         speaker_notes: { type: ["string", "null"] }
         loss_archetype_id: { type: ["integer", "null"] }
+        competitor_id: { type: ["integer", "null"] }
+        compliance_driver_id: { type: ["integer", "null"] }
+        compliance_deadline: { type: ["string", "null"] }
+        estimated_log_sources: { type: ["integer", "null"] }
+        product_interest_ids:
+          type: array
+          items: { type: string }
+        compliance_driver_ids:
+          type: array
+          items: { type: integer }
       required:
         - deal_name
         - account_name
@@ -991,6 +1572,16 @@ components:
         manager_strategic_blueprint: { type: ["string", "null"] }
         speaker_notes: { type: ["string", "null"] }
         loss_archetype_id: { type: ["integer", "null"] }
+        competitor_id: { type: ["integer", "null"] }
+        compliance_driver_id: { type: ["integer", "null"] }
+        compliance_deadline: { type: ["string", "null"] }
+        estimated_log_sources: { type: ["integer", "null"] }
+        product_interest_ids:
+          type: array
+          items: { type: string }
+        compliance_driver_ids:
+          type: array
+          items: { type: integer }
         override_reason: { type: string, minLength: 10, maxLength: 1000 }
     DealResponse:
       type: object
@@ -1128,6 +1719,8 @@ components:
         productId: { type: string }
         productName: { type: string }
         productCategory: { type: ["string", "null"] }
+        code: { type: ["string", "null"] }
+        suite: { type: ["string", "null"] }
         isPitched: { type: boolean }
       required: [productId, productName, isPitched]
     CrossSellUpdate:
@@ -1274,6 +1867,37 @@ components:
           type: array
           items: { $ref: "#/components/schemas/DataQualityNote" }
       required: [healthStatus, alerts, managedAlerts, unmanagedAlertCount, activeBlockerCount, highSeverityBlockerCount, dataQualityNotes]
+    Recommendation:
+      type: object
+      properties:
+        type: { type: string, enum: [NEXT_BEST_PRODUCT, SUITE_BUNDLE, RECOVERY_GAP] }
+        productCodes:
+          type: array
+          items: { type: string }
+        products:
+          type: array
+          items: { $ref: "#/components/schemas/CrossSell" }
+        suite: { type: ["string", "null"] }
+        rationale: { type: string }
+      required: [type, productCodes, rationale]
+    Battlecard:
+      type: object
+      properties:
+        competitor: { type: string }
+        talkingPoints:
+          type: array
+          items: { type: string }
+      required: [competitor, talkingPoints]
+    ComplianceGuidance:
+      type: object
+      properties:
+        driver: { type: string }
+        deadline: { type: ["string", "null"] }
+        daysToDeadline: { type: ["integer", "null"] }
+        recommendedProductCodes:
+          type: array
+          items: { type: string }
+      required: [driver, recommendedProductCodes]
     Intelligence:
       type: object
       properties:
@@ -1288,7 +1912,18 @@ components:
         financials: { $ref: "#/components/schemas/IntelligenceFinancials" }
         technicalTrack: { $ref: "#/components/schemas/IntelligenceTechnicalTrack" }
         governance: { $ref: "#/components/schemas/IntelligenceGovernance" }
-      required: [id, accountName, dealName, team, salesStage, daysInStage, financials, technicalTrack, governance]
+        recommendations:
+          type: array
+          items: { $ref: "#/components/schemas/Recommendation" }
+        battlecard:
+          oneOf:
+            - { $ref: "#/components/schemas/Battlecard" }
+            - { type: "null" }
+        complianceGuidance:
+          oneOf:
+            - { $ref: "#/components/schemas/ComplianceGuidance" }
+            - { type: "null" }
+      required: [id, accountName, dealName, team, salesStage, daysInStage, financials, technicalTrack, governance, recommendations]
     IntelligenceResponse:
       type: object
       properties:
@@ -1413,6 +2048,59 @@ components:
         data: { $ref: "#/components/schemas/PortfolioAnalysis" }
       required: [data]
 
+    ProductMixDeal:
+      type: object
+      properties:
+        id: { type: string }
+        dealName: { type: string }
+        accountName: { type: string }
+        salesStage: { type: string }
+        tcv: { type: number }
+      required: [id, dealName, accountName, salesStage, tcv]
+    SuitePipeline:
+      type: object
+      properties:
+        suite: { type: string }
+        dealCount: { type: integer }
+        totalTCV: { type: number }
+        deals:
+          type: array
+          items: { $ref: "#/components/schemas/ProductMixDeal" }
+      required: [suite, dealCount, totalTCV, deals]
+    ProductWhitespace:
+      type: object
+      properties:
+        code: { type: ["string", "null"] }
+        productName: { type: string }
+        suite: { type: ["string", "null"] }
+        pitchedDealCount: { type: integer }
+        interestedDealCount: { type: integer }
+        totalDeals: { type: integer }
+        attachPct: { type: number }
+        pitchedDeals:
+          type: array
+          items: { $ref: "#/components/schemas/ProductMixDeal" }
+        whitespaceDeals:
+          type: array
+          items: { $ref: "#/components/schemas/ProductMixDeal" }
+      required: [productName, pitchedDealCount, interestedDealCount, totalDeals, attachPct, pitchedDeals, whitespaceDeals]
+    ProductMix:
+      type: object
+      properties:
+        totalActiveDeals: { type: integer }
+        pipelineBySuite:
+          type: array
+          items: { $ref: "#/components/schemas/SuitePipeline" }
+        productWhitespace:
+          type: array
+          items: { $ref: "#/components/schemas/ProductWhitespace" }
+      required: [totalActiveDeals, pipelineBySuite, productWhitespace]
+    ProductMixResponse:
+      type: object
+      properties:
+        data: { $ref: "#/components/schemas/ProductMix" }
+      required: [data]
+
     PatternShare:
       type: object
       properties:
@@ -1431,7 +2119,10 @@ components:
           type: array
           items: { $ref: "#/components/schemas/PatternShare" }
         neverPassedGate2Share: { type: number }
-      required: [archetypeId, archetypeName, lossCount, avgGateCompletionPct, servicesAttachShare, patternsThatFired, neverPassedGate2Share]
+        deals:
+          type: array
+          items: { $ref: "#/components/schemas/ProductMixDeal" }
+      required: [archetypeId, archetypeName, lossCount, avgGateCompletionPct, servicesAttachShare, patternsThatFired, neverPassedGate2Share, deals]
     Autopsy:
       type: object
       properties:
@@ -1706,8 +2397,10 @@ components:
       type: object
       properties:
         id: { type: string }
+        code: { type: ["string", "null"] }
         productName: { type: string }
         productCategory: { type: ["string", "null"] }
+        suite: { type: ["string", "null"] }
       required: [id, productName]
     ProductListResponse:
       type: object
@@ -1715,6 +2408,49 @@ components:
         data:
           type: array
           items: { $ref: "#/components/schemas/Product" }
+      required: [data]
+    Competitor:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        category: { type: string }
+      required: [id, name]
+    CompetitorListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/Competitor" }
+      required: [data]
+    ComplianceDriver:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string }
+      required: [id, name]
+    ComplianceDriverListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/ComplianceDriver" }
+      required: [data]
+    CompetitorBattlecard:
+      type: object
+      properties:
+        competitorId: { type: integer }
+        competitorName: { type: string }
+        talkingPoints:
+          type: array
+          items: { type: string }
+      required: [competitorId, competitorName, talkingPoints]
+    CompetitorBattlecardListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/CompetitorBattlecard" }
       required: [data]
     GateDefinition:
       type: object
@@ -1850,3 +2586,546 @@ components:
           type: array
           items: { $ref: "#/components/schemas/FxRateUpdateItem" }
       required: [updates]
+
+    # ============ V2 SOVEREIGN INTELLIGENCE SCHEMAS ============
+    GenericDataResponse:
+      type: object
+      properties:
+        data: { type: object, additionalProperties: true }
+      required: [data]
+
+    # F3 Scoring
+    DealScore:
+      type: object
+      properties:
+        score: { type: integer }
+        confidence: { type: string }
+        breakdown: { type: array, items: { type: object, additionalProperties: true } }
+        computedAt: { type: ["string", "null"] }
+      required: [score, confidence, breakdown]
+    DealScoreResponse:
+      type: object
+      properties:
+        data: { $ref: "#/components/schemas/DealScore" }
+      required: [data]
+
+    # F2 Competitive
+    DealCompetitor:
+      type: object
+      properties:
+        id: { type: string }
+        dealId: { type: string }
+        competitorId: { type: integer }
+        competitorName: { type: ["string", "null"] }
+        status: { type: string }
+        displacementStrategy: { type: ["string", "null"] }
+        outcomeNotes: { type: ["string", "null"] }
+      required: [id, dealId, competitorId, status]
+    DealCompetitorInput:
+      type: object
+      properties:
+        competitor_id: { type: integer }
+        status: { type: string }
+        displacement_strategy: { type: ["string", "null"] }
+        outcome_notes: { type: ["string", "null"] }
+      required: [competitor_id]
+    DealCompetitorListResponse:
+      type: object
+      properties:
+        data: { type: array, items: { $ref: "#/components/schemas/DealCompetitor" } }
+      required: [data]
+    DealCompetitorResponse:
+      type: object
+      properties:
+        data: { $ref: "#/components/schemas/DealCompetitor" }
+      required: [data]
+
+    # F5/F6 Deal memory
+    DealMemory:
+      type: object
+      properties:
+        id: { type: string }
+        dealId: { type: string }
+        accountName: { type: string }
+        dealName: { type: string }
+        outcome: { type: string }
+        finalTcv: { type: ["string", "null"] }
+        pricingModel: { type: ["string", "null"] }
+        servicesTier: { type: ["string", "null"] }
+        totalGatesCompleted: { type: ["integer", "null"] }
+        totalBlockersEncountered: { type: ["integer", "null"] }
+        totalDaysActive: { type: ["integer", "null"] }
+        competitorsFaced: { type: ["array", "null"], items: { type: string } }
+        winLossNarrative: { type: ["string", "null"] }
+        keyLessons: { type: ["array", "null"], items: { type: string } }
+        tags: { type: ["array", "null"], items: { type: string } }
+        archivedAt: { type: string }
+      required: [id, dealId, accountName, dealName, outcome, archivedAt]
+    DealMemoryUpdate:
+      type: object
+      properties:
+        win_loss_narrative: { type: ["string", "null"] }
+        key_lessons: { type: array, items: { type: string } }
+        tags: { type: array, items: { type: string } }
+    DealMemoryListResponse:
+      type: object
+      properties:
+        data: { type: array, items: { $ref: "#/components/schemas/DealMemory" } }
+      required: [data]
+    DealMemoryResponse:
+      type: object
+      properties:
+        data: { $ref: "#/components/schemas/DealMemory" }
+      required: [data]
+
+    # F8 Stakeholders
+    Stakeholder:
+      type: object
+      properties:
+        id: { type: string }
+        dealId: { type: string }
+        name: { type: string }
+        title: { type: ["string", "null"] }
+        company: { type: ["string", "null"] }
+        roleType: { type: string }
+        influenceLevel: { type: string }
+        sentiment: { type: string }
+        email: { type: ["string", "null"] }
+        phone: { type: ["string", "null"] }
+        notes: { type: ["string", "null"] }
+        reportsToId: { type: ["string", "null"] }
+        isDecisionMaker: { type: boolean }
+      required: [id, dealId, name, roleType, influenceLevel, sentiment, isDecisionMaker]
+    StakeholderInput:
+      type: object
+      properties:
+        name: { type: string }
+        title: { type: ["string", "null"] }
+        company: { type: ["string", "null"] }
+        role_type: { type: string }
+        influence_level: { type: string }
+        sentiment: { type: string }
+        email: { type: ["string", "null"] }
+        phone: { type: ["string", "null"] }
+        notes: { type: ["string", "null"] }
+        reports_to_id: { type: ["string", "null"] }
+        is_decision_maker: { type: boolean }
+      required: [name, role_type, influence_level, sentiment]
+    StakeholderListResponse:
+      type: object
+      properties:
+        data: { type: array, items: { $ref: "#/components/schemas/Stakeholder" } }
+      required: [data]
+    StakeholderResponse:
+      type: object
+      properties:
+        data: { $ref: "#/components/schemas/Stakeholder" }
+      required: [data]
+
+    # F9 Decisions
+    Decision:
+      type: object
+      properties:
+        id: { type: string }
+        dealId: { type: string }
+        meetingSessionId: { type: ["string", "null"] }
+        decisionText: { type: string }
+        rationale: { type: ["string", "null"] }
+        owner: { type: string }
+        status: { type: string }
+        decidedAt: { type: string }
+        dueDate: { type: ["string", "null"] }
+        completedAt: { type: ["string", "null"] }
+      required: [id, dealId, decisionText, owner, status, decidedAt]
+    DecisionInput:
+      type: object
+      properties:
+        decision_text: { type: string }
+        rationale: { type: ["string", "null"] }
+        owner: { type: string }
+        decided_at: { type: ["string", "null"] }
+        due_date: { type: ["string", "null"] }
+        meeting_session_id: { type: ["string", "null"] }
+      required: [decision_text, owner]
+    DecisionUpdate:
+      type: object
+      properties:
+        status: { type: string }
+        rationale: { type: ["string", "null"] }
+        due_date: { type: ["string", "null"] }
+    DecisionListResponse:
+      type: object
+      properties:
+        data: { type: array, items: { $ref: "#/components/schemas/Decision" } }
+      required: [data]
+    DecisionResponse:
+      type: object
+      properties:
+        data: { $ref: "#/components/schemas/Decision" }
+      required: [data]
+    MeetingSession:
+      type: object
+      properties:
+        id: { type: string }
+        sessionType: { type: string }
+        title: { type: ["string", "null"] }
+        occurredAt: { type: string }
+        durationMinutes: { type: ["integer", "null"] }
+        attendees: { type: ["array", "null"], items: { type: string } }
+        notes: { type: ["string", "null"] }
+      required: [id, sessionType, occurredAt]
+    MeetingSessionInput:
+      type: object
+      properties:
+        session_type: { type: string }
+        title: { type: ["string", "null"] }
+        occurred_at: { type: string }
+        duration_minutes: { type: ["integer", "null"] }
+        attendees: { type: array, items: { type: string } }
+        notes: { type: ["string", "null"] }
+      required: [session_type, occurred_at]
+    MeetingSessionListResponse:
+      type: object
+      properties:
+        data: { type: array, items: { $ref: "#/components/schemas/MeetingSession" } }
+      required: [data]
+    MeetingSessionResponse:
+      type: object
+      properties:
+        data: { $ref: "#/components/schemas/MeetingSession" }
+      required: [data]
+
+    # F11 Playbooks
+    PlaybookStep:
+      type: object
+      properties:
+        id: { type: string }
+        stepOrder: { type: integer }
+        stepName: { type: string }
+        description: { type: ["string", "null"] }
+        triggerCondition: { type: ["string", "null"] }
+        recommendedAction: { type: string }
+        expectedDurationDays: { type: ["integer", "null"] }
+        isCritical: { type: boolean }
+      required: [id, stepOrder, stepName, recommendedAction, isCritical]
+    Playbook:
+      type: object
+      properties:
+        id: { type: string }
+        playbookName: { type: string }
+        description: { type: ["string", "null"] }
+        applicableStage: { type: ["string", "null"] }
+        isActive: { type: boolean }
+        steps: { type: array, items: { $ref: "#/components/schemas/PlaybookStep" } }
+      required: [id, playbookName, isActive]
+    PlaybookStepInput:
+      type: object
+      properties:
+        step_order: { type: integer }
+        step_name: { type: string }
+        description: { type: ["string", "null"] }
+        trigger_condition: { type: ["string", "null"] }
+        recommended_action: { type: string }
+        expected_duration_days: { type: ["integer", "null"] }
+        is_critical: { type: boolean }
+      required: [step_order, step_name, recommended_action]
+    PlaybookInput:
+      type: object
+      properties:
+        playbook_name: { type: string }
+        description: { type: ["string", "null"] }
+        applicable_stage: { type: ["string", "null"] }
+        is_active: { type: boolean }
+        steps: { type: array, items: { $ref: "#/components/schemas/PlaybookStepInput" } }
+      required: [playbook_name]
+    PlaybookStepActionInput:
+      type: object
+      properties:
+        notes: { type: ["string", "null"] }
+        skip_reason: { type: ["string", "null"] }
+    PlaybookListResponse:
+      type: object
+      properties:
+        data: { type: array, items: { $ref: "#/components/schemas/Playbook" } }
+      required: [data]
+    PlaybookResponse:
+      type: object
+      properties:
+        data: { $ref: "#/components/schemas/Playbook" }
+      required: [data]
+
+    # F13 Pricing + scenarios
+    PricingYear:
+      type: object
+      properties:
+        yearNumber: { type: integer }
+        productRevenue: { type: number }
+        servicesRevenue: { type: number }
+        discountPct: { type: number }
+        notes: { type: ["string", "null"] }
+      required: [yearNumber, productRevenue, servicesRevenue]
+    PricingYearInput:
+      type: object
+      properties:
+        year_number: { type: integer }
+        product_revenue: { type: number }
+        services_revenue: { type: number }
+        discount_pct: { type: number }
+        notes: { type: ["string", "null"] }
+      required: [year_number, product_revenue]
+    PricingScheduleInput:
+      type: object
+      properties:
+        years: { type: array, items: { $ref: "#/components/schemas/PricingYearInput" } }
+      required: [years]
+    PricingScheduleResponse:
+      type: object
+      properties:
+        data: { type: array, items: { $ref: "#/components/schemas/PricingYear" } }
+        rampTCV: { type: number }
+      required: [data, rampTCV]
+    Scenario:
+      type: object
+      properties:
+        id: { type: string }
+        scenarioName: { type: string }
+        description: { type: ["string", "null"] }
+        dealId: { type: ["string", "null"] }
+        isGlobal: { type: boolean }
+        modifications: { type: array, items: { type: object, additionalProperties: true } }
+        computedResults: { type: ["object", "null"], additionalProperties: true }
+      required: [id, scenarioName, isGlobal, modifications]
+    ScenarioInput:
+      type: object
+      properties:
+        scenario_name: { type: string }
+        description: { type: ["string", "null"] }
+        deal_id: { type: ["string", "null"] }
+        is_global: { type: boolean }
+        modifications: { type: array, items: { type: object, additionalProperties: true } }
+      required: [scenario_name, modifications]
+    ScenarioComputeInput:
+      type: object
+      properties:
+        deal_id: { type: ["string", "null"] }
+        modifications: { type: array, items: { type: object, additionalProperties: true } }
+      required: [modifications]
+    ScenarioListResponse:
+      type: object
+      properties:
+        data: { type: array, items: { $ref: "#/components/schemas/Scenario" } }
+      required: [data]
+    ScenarioResponse:
+      type: object
+      properties:
+        data: { $ref: "#/components/schemas/Scenario" }
+      required: [data]
+
+    # F1 Webhooks
+    Webhook:
+      type: object
+      properties:
+        id: { type: string }
+        webhookName: { type: string }
+        targetUrl: { type: string }
+        events: { type: array, items: { type: string } }
+        isActive: { type: boolean }
+        failureCount: { type: integer }
+        lastTriggeredAt: { type: ["string", "null"] }
+        createdAt: { type: string }
+      required: [id, webhookName, targetUrl, events, isActive, failureCount]
+    WebhookInput:
+      type: object
+      properties:
+        webhook_name: { type: string }
+        target_url: { type: string }
+        secret_key: { type: string }
+        events: { type: array, items: { type: string } }
+        is_active: { type: boolean }
+      required: [webhook_name, target_url, events]
+    WebhookListResponse:
+      type: object
+      properties:
+        data: { type: array, items: { $ref: "#/components/schemas/Webhook" } }
+      required: [data]
+    WebhookResponse:
+      type: object
+      properties:
+        data: { $ref: "#/components/schemas/Webhook" }
+      required: [data]
+    WebhookDelivery:
+      type: object
+      properties:
+        id: { type: string }
+        eventType: { type: string }
+        responseStatus: { type: ["integer", "null"] }
+        success: { type: boolean }
+        deliveredAt: { type: string }
+      required: [id, eventType, success, deliveredAt]
+    WebhookDeliveryListResponse:
+      type: object
+      properties:
+        data: { type: array, items: { $ref: "#/components/schemas/WebhookDelivery" } }
+      required: [data]
+
+    # F10 Custom patterns
+    CustomPatternConditionInput:
+      type: object
+      properties:
+        field_path: { type: string }
+        operator: { type: string }
+        comparison_value: { type: string }
+        sort_order: { type: integer }
+      required: [field_path, operator, comparison_value, sort_order]
+    CustomPattern:
+      type: object
+      properties:
+        id: { type: string }
+        patternName: { type: string }
+        description: { type: ["string", "null"] }
+        severity: { type: string }
+        weight: { type: integer }
+        alertMessageTemplate: { type: string }
+        isActive: { type: boolean }
+        triggerCount: { type: integer }
+        conditions: { type: array, items: { type: object, additionalProperties: true } }
+      required: [id, patternName, severity, weight, alertMessageTemplate, isActive]
+    CustomPatternInput:
+      type: object
+      properties:
+        pattern_name: { type: string }
+        description: { type: ["string", "null"] }
+        severity: { type: string }
+        weight: { type: integer }
+        alert_message_template: { type: string }
+        is_active: { type: boolean }
+        conditions: { type: array, items: { $ref: "#/components/schemas/CustomPatternConditionInput" } }
+      required: [pattern_name, severity, weight, alert_message_template, conditions]
+    CustomPatternListResponse:
+      type: object
+      properties:
+        data: { type: array, items: { $ref: "#/components/schemas/CustomPattern" } }
+      required: [data]
+    CustomPatternResponse:
+      type: object
+      properties:
+        data: { $ref: "#/components/schemas/CustomPattern" }
+      required: [data]
+
+    # F12 Notifications
+    NotificationRule:
+      type: object
+      properties:
+        id: { type: string }
+        ruleName: { type: string }
+        triggerEvent: { type: string }
+        triggerConditions: { type: ["object", "null"], additionalProperties: true }
+        channel: { type: string }
+        isActive: { type: boolean }
+      required: [id, ruleName, triggerEvent, channel, isActive]
+    NotificationRuleInput:
+      type: object
+      properties:
+        rule_name: { type: string }
+        trigger_event: { type: string }
+        trigger_conditions: { type: ["object", "null"], additionalProperties: true }
+        channel: { type: string }
+        is_active: { type: boolean }
+      required: [rule_name, trigger_event]
+    NotificationRuleListResponse:
+      type: object
+      properties:
+        data: { type: array, items: { $ref: "#/components/schemas/NotificationRule" } }
+      required: [data]
+    NotificationRuleResponse:
+      type: object
+      properties:
+        data: { $ref: "#/components/schemas/NotificationRule" }
+      required: [data]
+    Notification:
+      type: object
+      properties:
+        id: { type: string }
+        dealId: { type: ["string", "null"] }
+        channel: { type: string }
+        subject: { type: ["string", "null"] }
+        message: { type: string }
+        sentAt: { type: string }
+        acknowledgedAt: { type: ["string", "null"] }
+      required: [id, channel, message, sentAt]
+    NotificationListResponse:
+      type: object
+      properties:
+        data: { type: array, items: { $ref: "#/components/schemas/Notification" } }
+      required: [data]
+
+    # F16 Custom fields + tags
+    CustomFieldDef:
+      type: object
+      properties:
+        id: { type: string }
+        fieldName: { type: string }
+        fieldKey: { type: string }
+        fieldType: { type: string }
+        options: { type: ["array", "null"], items: { type: string } }
+        isRequired: { type: boolean }
+        displayOrder: { type: integer }
+      required: [id, fieldName, fieldKey, fieldType, isRequired]
+    CustomFieldDefInput:
+      type: object
+      properties:
+        field_name: { type: string }
+        field_key: { type: string }
+        field_type: { type: string }
+        options: { type: array, items: { type: string } }
+        is_required: { type: boolean }
+        display_order: { type: integer }
+      required: [field_name, field_key, field_type]
+    CustomFieldDefListResponse:
+      type: object
+      properties:
+        data: { type: array, items: { $ref: "#/components/schemas/CustomFieldDef" } }
+      required: [data]
+    CustomFieldDefResponse:
+      type: object
+      properties:
+        data: { $ref: "#/components/schemas/CustomFieldDef" }
+      required: [data]
+    CustomFieldValueInput:
+      type: object
+      properties:
+        value_text: { type: ["string", "null"] }
+        value_number: { type: ["number", "null"] }
+        value_date: { type: ["string", "null"] }
+        value_select: { type: ["string", "null"] }
+        value_multi_select: { type: array, items: { type: string } }
+    Tag:
+      type: object
+      properties:
+        id: { type: string }
+        tagName: { type: string }
+        color: { type: string }
+      required: [id, tagName, color]
+    TagInput:
+      type: object
+      properties:
+        tag_name: { type: string }
+        color: { type: string }
+      required: [tag_name, color]
+    TagListResponse:
+      type: object
+      properties:
+        data: { type: array, items: { $ref: "#/components/schemas/Tag" } }
+      required: [data]
+    TagResponse:
+      type: object
+      properties:
+        data: { $ref: "#/components/schemas/Tag" }
+      required: [data]
+
+    # F19 NLC
+    NlcParseInput:
+      type: object
+      properties:
+        query: { type: string }
+      required: [query]
