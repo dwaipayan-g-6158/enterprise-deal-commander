@@ -18,7 +18,8 @@ import {
 } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
-import { Trash2, Plus, ShieldAlert } from "lucide-react";
+import { Trash2, Plus, ShieldAlert, Users } from "lucide-react";
+import { Empty, EmptyHeader, EmptyMedia, EmptyTitle, EmptyDescription } from "@/components/ui/empty";
 
 const ROLES = ["Economic Buyer", "Technical Evaluator", "Champion", "End User", "Blocker", "Influencer", "Legal", "Procurement"];
 const SENTIMENTS = ["Champion", "Supportive", "Neutral", "Skeptical", "Hostile"];
@@ -83,7 +84,13 @@ export function StakeholdersPanel({ dealId }: { dealId: string }) {
       </CardHeader>
       <CardContent className="space-y-4">
         {stakeholders.length === 0 && (
-          <p className="text-sm text-muted-foreground">No stakeholders mapped yet.</p>
+          <Empty>
+            <EmptyHeader>
+              <EmptyMedia variant="icon"><Users className="h-5 w-5" /></EmptyMedia>
+              <EmptyTitle>No stakeholders mapped yet</EmptyTitle>
+              <EmptyDescription>Add a stakeholder below to start building the influence map for this deal.</EmptyDescription>
+            </EmptyHeader>
+          </Empty>
         )}
         {stakeholders.map((s) => (
           <div key={s.id} className="flex items-center gap-3 rounded-md border p-3">

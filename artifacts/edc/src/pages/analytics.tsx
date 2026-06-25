@@ -8,7 +8,8 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { FileText, Download, TrendingUp } from "lucide-react";
+import { FileText, Download, TrendingUp, Swords } from "lucide-react";
+import { Empty, EmptyHeader, EmptyMedia, EmptyTitle, EmptyDescription } from "@/components/ui/empty";
 import { ForecastFan } from "@/components/cockpit/charts/forecast-fan";
 import { VelocityBars } from "@/components/cockpit/charts/velocity-bars";
 import { WinLossDonut } from "@/components/cockpit/charts/winloss-donut";
@@ -146,7 +147,13 @@ export default function Analytics() {
                 </table>
               </div>
             ) : (
-              <p className="text-muted-foreground text-sm">No closed deals yet — win/loss populates as deals close.</p>
+              <Empty>
+                <EmptyHeader>
+                  <EmptyMedia variant="icon"><TrendingUp className="h-5 w-5" /></EmptyMedia>
+                  <EmptyTitle>No closed deals yet</EmptyTitle>
+                  <EmptyDescription>Win/loss populates automatically as deals reach Closed-Won or Closed-Lost.</EmptyDescription>
+                </EmptyHeader>
+              </Empty>
             )}
           </CardContent>
         </Card>
@@ -208,7 +215,13 @@ export default function Analytics() {
         </CardHeader>
         <CardContent>
           {comps.length === 0 ? (
-            <p className="text-muted-foreground text-sm">No competitor encounters logged.</p>
+            <Empty>
+              <EmptyHeader>
+                <EmptyMedia variant="icon"><Swords className="h-5 w-5" /></EmptyMedia>
+                <EmptyTitle>No competitor encounters yet</EmptyTitle>
+                <EmptyDescription>Log competitors on a deal's Competitive tab to see win rates here.</EmptyDescription>
+              </EmptyHeader>
+            </Empty>
           ) : (
             <table className="w-full text-sm">
               <thead>
