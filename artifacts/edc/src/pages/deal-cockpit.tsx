@@ -16,7 +16,14 @@ import {
   Presentation,
   Sparkles,
   AlertCircle,
+  MoreHorizontal,
 } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { COCKPIT_GROUPS, alertCount } from "@/components/cockpit/cockpit-tabs";
 import { EditDealSheet } from "@/components/cockpit/edit-deal-sheet";
 import { BatSignalDialog } from "@/components/cockpit/bat-signal-dialog";
@@ -244,19 +251,28 @@ export default function DealCockpit() {
               {formatCurrency(deal.calculatedTCV, deal.dealCurrency)}
             </p>
           </div>
-          <div className="grid grid-cols-2 gap-2">
+          <div className="flex items-center gap-2">
             <Button size="sm" onClick={() => setEditOpen(true)}>
               <Pencil className="h-4 w-4 mr-2" /> Edit
-            </Button>
-            <Button size="sm" variant="outline" onClick={() => setSimOpen(true)}>
-              <Sparkles className="h-4 w-4 mr-2" /> Simulate
-            </Button>
-            <Button size="sm" variant="outline" onClick={() => setBatOpen(true)}>
-              <Radio className="h-4 w-4 mr-2" /> Bat-Signal
             </Button>
             <Button size="sm" variant="secondary" onClick={() => setBriefingOpen(true)}>
               <Presentation className="h-4 w-4 mr-2" /> Briefing
             </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button size="sm" variant="outline" aria-label="More actions">
+                  <MoreHorizontal className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={() => setSimOpen(true)}>
+                  <Sparkles className="h-4 w-4 mr-2" /> Simulate risk
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setBatOpen(true)}>
+                  <Radio className="h-4 w-4 mr-2" /> Bat-Signal
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </div>
       </div>
