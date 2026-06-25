@@ -130,7 +130,7 @@ export function Layout({ children }: { children: ReactNode }) {
           </header>
         )}
         <main className="flex-1 overflow-auto bg-background">
-          <div className="h-full">{children}</div>
+          <div className="h-full @container">{children}</div>
         </main>
       </div>
     </div>

@@ -89,7 +89,7 @@ export default function Autopsy() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-8">
+                <div className="grid grid-cols-1 @2xl:grid-cols-3 gap-8 mb-8">
                   <div>
                     <p className="text-sm text-muted-foreground mb-2">Avg Gate Completion</p>
                     <div className="flex items-center gap-3">

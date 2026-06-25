@@ -57,7 +57,7 @@ function CockpitSkeleton() {
         </div>
         <Skeleton className="h-20 w-64" />
       </div>
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 @3xl:grid-cols-3 gap-6">
         <Skeleton className="h-64 w-full" />
         <Skeleton className="h-96 w-full lg:col-span-2" />
       </div>
@@ -279,7 +279,7 @@ export default function DealCockpit() {
 
       <SnapshotScrubber dealId={id} intel={intel} />
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 @3xl:grid-cols-3 gap-6">
         {/* Left Column - Financials & Team */}
         <div className="space-y-6">
           <Card>

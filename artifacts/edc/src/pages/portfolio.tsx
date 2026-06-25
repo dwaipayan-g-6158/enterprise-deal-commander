@@ -34,7 +34,7 @@ export default function Portfolio() {
         <p className="text-muted-foreground mt-2">Correlation of risk patterns across team members and products</p>
       </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
+      <div className="grid grid-cols-1 @4xl:grid-cols-2 gap-8">
         <ProductMixSection />
 
         <Card>
