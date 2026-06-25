@@ -5,6 +5,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { PwaUpdatePrompt } from "@/components/pwa-update-prompt";
 import { OfflineBanner } from "@/components/offline-banner";
+import { OfflineSaveNotice } from "@/components/offline-save-notice";
 import { ThemeProvider } from "@/components/theme-provider";
 import { CommandPalette } from "@/components/command-palette";
 import NotFound from "@/pages/not-found";
@@ -94,6 +95,7 @@ function App() {
           <Toaster />
           <PwaUpdatePrompt />
           <OfflineBanner />
+          <OfflineSaveNotice />
         </TooltipProvider>
       </QueryClientProvider>
     </ThemeProvider>
