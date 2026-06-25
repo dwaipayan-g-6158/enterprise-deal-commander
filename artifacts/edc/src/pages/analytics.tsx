@@ -9,6 +9,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { FileText, Download, TrendingUp } from "lucide-react";
+import { ForecastFan } from "@/components/cockpit/charts/forecast-fan";
+import { VelocityBars } from "@/components/cockpit/charts/velocity-bars";
+import { WinLossDonut } from "@/components/cockpit/charts/winloss-donut";
 
 function money(n: number): string {
   return "$" + Math.round(Number(n) || 0).toLocaleString("en-US");
@@ -89,6 +92,15 @@ export default function Analytics() {
           <CardContent>
             {simData ? (
               <div className="space-y-3">
+                <ForecastFan
+                  forecast={{
+                    p10: simData.percentiles["p10"],
+                    p25: simData.percentiles["p25"],
+                    p50: simData.percentiles["p50"],
+                    p75: simData.percentiles["p75"],
+                    p90: simData.percentiles["p90"],
+                  }}
+                />
                 <div className="grid grid-cols-5 gap-2 text-center">
                   {(["p10", "p25", "p50", "p75", "p90"] as const).map((p) => (
                     <div key={p} className="rounded-md border p-2">
@@ -116,6 +128,7 @@ export default function Analytics() {
           <CardContent>
             {wl && wl.won + wl.lost > 0 ? (
               <div className="space-y-3">
+                <WinLossDonut won={wl.won} lost={wl.lost} />
                 <div className="flex items-baseline gap-3">
                   <span className="text-4xl font-bold">{wl.winRatePct}%</span>
                   <span className="text-sm text-muted-foreground">{wl.won} won · {wl.lost} lost</span>
@@ -145,6 +158,18 @@ export default function Analytics() {
           <CardTitle className="text-lg">Velocity — Most Overdue First</CardTitle>
         </CardHeader>
         <CardContent>
+          {vDeals.length > 0 && (
+            <div className="mb-6">
+              <VelocityBars
+                deals={vDeals.map((d) => ({
+                  dealName: d.dealName,
+                  daysInStage: d.daysInStage,
+                  benchmarkDays: d.benchmarkDays,
+                  deltaDays: d.deltaDays,
+                }))}
+              />
+            </div>
+          )}
           <table className="w-full text-sm">
             <thead>
               <tr className="text-xs uppercase text-muted-foreground border-b">
