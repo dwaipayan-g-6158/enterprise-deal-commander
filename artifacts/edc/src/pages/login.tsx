@@ -8,7 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Activity } from "lucide-react";
+import { EdcLogoMark } from "@/components/edc-logo-mark";
 
 const loginSchema = z.object({
   email: z.string().min(1, "Identification is required"),
@@ -45,8 +45,8 @@ export default function Login() {
 
       <Card className="w-full max-w-md border-border/50 bg-card/50 backdrop-blur-xl shadow-2xl relative z-10">
         <CardHeader className="space-y-3 pb-6">
-          <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center mb-2 text-primary">
-            <Activity className="h-6 w-6" />
+          <div className="flex items-center justify-center mb-2">
+            <EdcLogoMark size={56} animated={false} />
           </div>
           <CardTitle className="text-2xl font-bold tracking-tight text-foreground">Commander Authentication</CardTitle>
           <CardDescription className="text-muted-foreground">Access the Enterprise Deal Commander console</CardDescription>
