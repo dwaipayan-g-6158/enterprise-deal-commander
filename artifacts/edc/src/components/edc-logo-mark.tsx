@@ -219,7 +219,8 @@ export function EdcLogoMark({
             clipRule="evenodd"
             fill={`url(#${gradientId})`}
             style={{
-              stroke: "hsl(var(--primary) / 0.4)",
+              stroke: "hsl(var(--primary))",
+              strokeOpacity: 0.4,
               ...(animated
                 ? {}
                 : { fillOpacity: 1, strokeOpacity: 0 }),
