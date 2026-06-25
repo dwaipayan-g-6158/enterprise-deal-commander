@@ -244,14 +244,14 @@ export default function DealCockpit() {
           <p className="text-muted-foreground text-lg">{deal.accountName}</p>
           <DealTagsBar dealId={id} />
         </div>
-        <div className="flex items-center gap-4">
+        <div className="flex flex-wrap items-center gap-4">
           <div className="text-right">
             <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Total Contract Value</p>
             <p className="text-3xl font-bold font-mono">
               {formatCurrency(deal.calculatedTCV, deal.dealCurrency)}
             </p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Button size="sm" onClick={() => setEditOpen(true)}>
               <Pencil className="h-4 w-4 mr-2" /> Edit
             </Button>
@@ -342,12 +342,12 @@ export default function DealCockpit() {
           <div className="w-full">
             {/* Primary group tabs */}
             <Tabs value={group} onValueChange={selectGroup} className="w-full">
-              <TabsList className="w-full justify-start border-b rounded-none h-12 bg-transparent p-0">
+              <TabsList className="w-full justify-start border-b rounded-none h-12 bg-transparent p-0 overflow-x-auto">
                 {COCKPIT_GROUPS.map((g) => (
                   <TabsTrigger
                     key={g.id}
                     value={g.id}
-                    className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-6"
+                    className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-4 shrink-0"
                   >
                     <g.icon className="w-4 h-4 mr-2" />
                     {g.label}
