@@ -128,9 +128,9 @@ export default function Dashboard() {
           <CardContent>
              {summary?.criticalAlerts && summary.criticalAlerts.length > 0 ? (
                <div className="space-y-4">
-                 {summary.criticalAlerts.slice(0, 5).map((alert) => (
+                 {summary.criticalAlerts.slice(0, 5).map((alert, i) => (
                    <button
-                     key={alert.dealId}
+                     key={`${alert.dealId}-${i}`}
                      type="button"
                      onClick={() => alert.dealId && navigate(`/deals/${alert.dealId}`)}
                      aria-label={`View deal: ${alert.dealName}`}
