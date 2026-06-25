@@ -94,7 +94,10 @@ export function Layout({ children }: { children: ReactNode }) {
       )}
       <div className="flex-1 flex flex-col min-w-0">
         {isMobile && (
-          <header className="flex items-center gap-3 border-b border-border bg-card px-4 h-14">
+          <header
+            className="flex items-center gap-3 border-b border-border bg-card px-4 h-14"
+            style={{ paddingTop: "env(safe-area-inset-top)", paddingLeft: "max(1rem, env(safe-area-inset-left))" }}
+          >
             <Sheet open={navOpen} onOpenChange={setNavOpen}>
               <SheetTrigger asChild>
                 <Button variant="outline" size="icon" aria-label="Open navigation">
