@@ -1,7 +1,7 @@
 import { useState, ReactNode } from "react";
 import { Link, useLocation } from "wouter";
 import { LogOut, LayoutDashboard, Briefcase, BarChart, Settings, Activity, TrendingUp, BookMarked, Menu } from "lucide-react";
-import { useLogout, useGetMe } from "@workspace/api-client-react";
+import { useLogout, useGetMe, getGetMeQueryKey } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "./ui/button";
 import { ThemeToggle } from "./theme-toggle";
@@ -66,7 +66,14 @@ function SidebarBody({ location, user, onNavigate, onLogout }: {
 export function Layout({ children }: { children: ReactNode }) {
   const [location, setLocation] = useLocation();
   const logout = useLogout();
-  const { data: user } = useGetMe();
+  // Skip the (uncacheable) /auth/me request when offline so it doesn't fail in a
+  // loop; the cockpit still renders from cached reads.
+  const { data: user } = useGetMe({
+    query: {
+      enabled: typeof navigator === "undefined" ? true : navigator.onLine,
+      queryKey: getGetMeQueryKey(),
+    },
+  });
   const isMobile = useIsMobile();
   const [navOpen, setNavOpen] = useState(false);
   const queryClient = useQueryClient();

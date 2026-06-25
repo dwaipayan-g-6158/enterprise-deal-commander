@@ -9,7 +9,7 @@ import { ThemeProvider } from "@/components/theme-provider";
 import { CommandPalette } from "@/components/command-palette";
 import NotFound from "@/pages/not-found";
 import { Layout } from "@/components/layout";
-import { useGetMe } from "@workspace/api-client-react";
+import { useGetMe, getGetMeQueryKey } from "@workspace/api-client-react";
 
 // Pages
 import Login from "@/pages/login";
@@ -34,18 +34,26 @@ const queryClient = new QueryClient({
 
 function ProtectedRoute({ component: Component, ...rest }: any) {
   const [, setLocation] = useLocation();
-  const { data: user, isLoading, isError } = useGetMe();
+  // /auth/me is deliberately never cached (auth must hit the network), so when
+  // offline the session check can't succeed. Disable it while offline — that
+  // avoids a request storm AND lets us keep showing the app shell + cached
+  // reads instead of bouncing to /login. When connectivity returns the query
+  // re-enables, re-validates, and redirects if the session is actually gone.
+  // (Logout purges the read cache, so a logged-out user still sees nothing.)
+  const offline = typeof navigator !== "undefined" && !navigator.onLine;
+  const { data: user, isLoading, isError } = useGetMe({
+    query: { enabled: !offline, queryKey: getGetMeQueryKey() },
+  });
 
   useEffect(() => {
-    if (!isLoading && (isError || !user)) {
+    if (!offline && !isLoading && (isError || !user)) {
       setLocation("/login");
     }
-  }, [isLoading, isError, user, setLocation]);
+  }, [offline, isLoading, isError, user, setLocation]);
 
-  if (isLoading) return <div className="min-h-screen flex items-center justify-center bg-background">Loading...</div>;
-
-  if (isError || !user) {
-    return null;
+  if (!offline) {
+    if (isLoading) return <div className="min-h-screen flex items-center justify-center bg-background">Loading...</div>;
+    if (isError || !user) return null;
   }
 
   return (
