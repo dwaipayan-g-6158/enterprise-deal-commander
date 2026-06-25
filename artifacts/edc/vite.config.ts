@@ -72,6 +72,20 @@ export default defineConfig({
       workbox: {
         navigateFallback: "index.html",
         navigateFallbackDenylist: [/^\/api\//],
+        runtimeCaching: [
+          {
+            urlPattern: ({ url, request }: { url: URL; request: Request }) =>
+              request.method === "GET" &&
+              /\/api\/v[12]\//.test(url.pathname) &&
+              !/\/api\/v1\/auth\//.test(url.pathname),
+            handler: "StaleWhileRevalidate" as const,
+            options: {
+              cacheName: "edc-api-reads",
+              expiration: { maxEntries: 60, maxAgeSeconds: 86400 },
+              cacheableResponse: { statuses: [0, 200] },
+            },
+          },
+        ],
       },
     }),
   ],
