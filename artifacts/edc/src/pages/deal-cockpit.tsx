@@ -6,29 +6,25 @@ import {
 } from "@workspace/api-client-react";
 import { useParams, useLocation } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
-  Activity,
-  ShieldAlert,
-  ShieldX,
-  Layers,
-  ClipboardList,
-  History,
   Pencil,
   Radio,
   Presentation,
   Sparkles,
   AlertCircle,
-  Gauge,
-  Swords,
-  Users,
-  ScrollText,
-  Route,
-  DollarSign,
+  MoreHorizontal,
 } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { COCKPIT_GROUPS, alertCount } from "@/components/cockpit/cockpit-tabs";
 import { EditDealSheet } from "@/components/cockpit/edit-deal-sheet";
 import { BatSignalDialog } from "@/components/cockpit/bat-signal-dialog";
 import { RiskGovernance } from "@/components/cockpit/risk-governance";
@@ -90,6 +86,17 @@ export default function DealCockpit() {
   const [batOpen, setBatOpen] = useState(false);
   const [briefingOpen, setBriefingOpen] = useState(false);
   const [simOpen, setSimOpen] = useState(false);
+
+  const [group, setGroup] = useState("risk");
+  const [sub, setSub] = useState("risk");
+
+  const activeGroup = COCKPIT_GROUPS.find((g) => g.id === group) ?? COCKPIT_GROUPS[0];
+  const selectGroup = (id: string) => {
+    const g = COCKPIT_GROUPS.find((x) => x.id === id);
+    if (!g) return;
+    setGroup(id);
+    setSub(g.subs[0].id);
+  };
 
   const [, navigate] = useLocation();
   const { data: allDeals } = useListDeals({ state: "active" });
@@ -182,6 +189,34 @@ export default function DealCockpit() {
   }
   if (!deal || !intel) return <div className="p-8 text-destructive">Deal not found</div>;
 
+  const redAlerts = alertCount(intel.governance.alerts);
+
+  const renderPanel = (subId: string) => {
+    switch (subId) {
+      case "risk": return <RiskGovernance dealId={id} alerts={intel.governance.alerts} />;
+      case "coaching": return <NextBestAction dealId={id} />;
+      case "technical": return (
+        <TechnicalGates
+          dealId={id}
+          progressPercentage={intel.technicalTrack.progressPercentage}
+          integrityWarnings={intel.technicalTrack.integrityWarnings}
+          onSaveRef={gatesSaveRef}
+        />
+      );
+      case "blockers": return <BlockersPanel dealId={id} />;
+      case "playbook": return <PlaybookPanel dealId={id} />;
+      case "score": return <ScorePanel dealId={id} />;
+      case "competitive": return <CompetitivePanel dealId={id} />;
+      case "stakeholders": return <StakeholdersPanel dealId={id} />;
+      case "pricing": return <PricingPanel dealId={id} currency={deal.dealCurrency} />;
+      case "crosssell": return <CrossSellPanel dealId={id} />;
+      case "activity": return <ActivityFeed dealId={id} />;
+      case "decisions": return <DecisionsPanel dealId={id} />;
+      case "history": return <HistoryPanel dealId={id} />;
+      default: return null;
+    }
+  };
+
   return (
     <div className="flex flex-col h-full">
       <AccountNavigationArray activeDealId={id} />
@@ -209,26 +244,35 @@ export default function DealCockpit() {
           <p className="text-muted-foreground text-lg">{deal.accountName}</p>
           <DealTagsBar dealId={id} />
         </div>
-        <div className="flex items-center gap-4">
+        <div className="flex flex-wrap items-center gap-4">
           <div className="text-right">
             <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Total Contract Value</p>
             <p className="text-3xl font-bold font-mono">
               {formatCurrency(deal.calculatedTCV, deal.dealCurrency)}
             </p>
           </div>
-          <div className="grid grid-cols-2 gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Button size="sm" onClick={() => setEditOpen(true)}>
               <Pencil className="h-4 w-4 mr-2" /> Edit
-            </Button>
-            <Button size="sm" variant="outline" onClick={() => setSimOpen(true)}>
-              <Sparkles className="h-4 w-4 mr-2" /> Simulate
-            </Button>
-            <Button size="sm" variant="outline" onClick={() => setBatOpen(true)}>
-              <Radio className="h-4 w-4 mr-2" /> Bat-Signal
             </Button>
             <Button size="sm" variant="secondary" onClick={() => setBriefingOpen(true)}>
               <Presentation className="h-4 w-4 mr-2" /> Briefing
             </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button size="sm" variant="outline" aria-label="More actions">
+                  <MoreHorizontal className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={() => setSimOpen(true)}>
+                  <Sparkles className="h-4 w-4 mr-2" /> Simulate risk
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setBatOpen(true)}>
+                  <Radio className="h-4 w-4 mr-2" /> Bat-Signal
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </div>
       </div>
@@ -295,153 +339,45 @@ export default function DealCockpit() {
 
         {/* Center & Right Columns */}
         <div className="lg:col-span-2 space-y-6">
-          <Tabs defaultValue="risk" className="w-full">
-            <TabsList className="w-full justify-start border-b rounded-none h-12 bg-transparent p-0 flex-wrap">
-              <TabsTrigger
-                value="risk"
-                className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-6"
-              >
-                <ShieldAlert className="w-4 h-4 mr-2" />
-                Risk
-              </TabsTrigger>
-              <TabsTrigger
-                value="coaching"
-                className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-6"
-              >
-                <Sparkles className="w-4 h-4 mr-2" />
-                Coaching
-              </TabsTrigger>
-              <TabsTrigger
-                value="technical"
-                className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-6"
-              >
-                <Activity className="w-4 h-4 mr-2" />
-                Technical
-              </TabsTrigger>
-              <TabsTrigger
-                value="blockers"
-                className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-6"
-              >
-                <ShieldX className="w-4 h-4 mr-2" />
-                Blockers
-              </TabsTrigger>
-              <TabsTrigger
-                value="crosssell"
-                className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-6"
-              >
-                <Layers className="w-4 h-4 mr-2" />
-                Cross-Sell
-              </TabsTrigger>
-              <TabsTrigger
-                value="activity"
-                className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-6"
-              >
-                <ClipboardList className="w-4 h-4 mr-2" />
-                Activity
-              </TabsTrigger>
-              <TabsTrigger
-                value="history"
-                className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-6"
-              >
-                <History className="w-4 h-4 mr-2" />
-                History
-              </TabsTrigger>
-              <TabsTrigger
-                value="score"
-                className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-6"
-              >
-                <Gauge className="w-4 h-4 mr-2" />
-                Score
-              </TabsTrigger>
-              <TabsTrigger
-                value="competitive"
-                className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-6"
-              >
-                <Swords className="w-4 h-4 mr-2" />
-                Competitive
-              </TabsTrigger>
-              <TabsTrigger
-                value="stakeholders"
-                className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-6"
-              >
-                <Users className="w-4 h-4 mr-2" />
-                Stakeholders
-              </TabsTrigger>
-              <TabsTrigger
-                value="decisions"
-                className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-6"
-              >
-                <ScrollText className="w-4 h-4 mr-2" />
-                Decisions
-              </TabsTrigger>
-              <TabsTrigger
-                value="playbook"
-                className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-6"
-              >
-                <Route className="w-4 h-4 mr-2" />
-                Playbook
-              </TabsTrigger>
-              <TabsTrigger
-                value="pricing"
-                className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-6"
-              >
-                <DollarSign className="w-4 h-4 mr-2" />
-                Pricing
-              </TabsTrigger>
-            </TabsList>
+          <div className="w-full">
+            {/* Primary group tabs */}
+            <Tabs value={group} onValueChange={selectGroup} className="w-full">
+              <TabsList className="w-full justify-start border-b rounded-none h-12 bg-transparent p-0 overflow-x-auto">
+                {COCKPIT_GROUPS.map((g) => (
+                  <TabsTrigger
+                    key={g.id}
+                    value={g.id}
+                    className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-4 shrink-0"
+                  >
+                    <g.icon className="w-4 h-4 mr-2" />
+                    {g.label}
+                    {g.id === "risk" && redAlerts > 0 && (
+                      <span className="ml-2 inline-flex items-center justify-center rounded-full bg-destructive/15 text-destructive text-[10px] font-bold min-w-[18px] h-[18px] px-1.5 tabular-nums">
+                        {redAlerts}
+                      </span>
+                    )}
+                  </TabsTrigger>
+                ))}
+              </TabsList>
+            </Tabs>
 
-            <TabsContent value="risk" className="pt-6">
-              <RiskGovernance dealId={id} alerts={intel.governance.alerts} />
-            </TabsContent>
+            {/* Sub-tabs (segmented) for the active group */}
+            <Tabs value={sub} onValueChange={setSub} className="w-full">
+              <TabsList className="mt-4 inline-flex h-auto w-fit flex-wrap gap-1 rounded-md bg-muted/40 p-1">
+                {activeGroup.subs.map((s) => (
+                  <TabsTrigger
+                    key={s.id}
+                    value={s.id}
+                    className="rounded px-4 py-1.5 text-sm data-[state=active]:bg-background data-[state=active]:shadow-sm"
+                  >
+                    {s.label}
+                  </TabsTrigger>
+                ))}
+              </TabsList>
+            </Tabs>
 
-            <TabsContent value="coaching" className="pt-6">
-              <NextBestAction dealId={id} />
-            </TabsContent>
-
-            <TabsContent value="technical" className="pt-6">
-              <TechnicalGates
-                dealId={id}
-                progressPercentage={intel.technicalTrack.progressPercentage}
-                integrityWarnings={intel.technicalTrack.integrityWarnings}
-                onSaveRef={gatesSaveRef}
-              />
-            </TabsContent>
-
-            <TabsContent value="blockers" className="pt-6">
-              <BlockersPanel dealId={id} />
-            </TabsContent>
-
-            <TabsContent value="crosssell" className="pt-6">
-              <CrossSellPanel dealId={id} />
-            </TabsContent>
-
-            <TabsContent value="activity" className="pt-6">
-              <ActivityFeed dealId={id} />
-            </TabsContent>
-
-            <TabsContent value="history" className="pt-6">
-              <HistoryPanel dealId={id} />
-            </TabsContent>
-
-            <TabsContent value="score" className="pt-6">
-              <ScorePanel dealId={id} />
-            </TabsContent>
-            <TabsContent value="competitive" className="pt-6">
-              <CompetitivePanel dealId={id} />
-            </TabsContent>
-            <TabsContent value="stakeholders" className="pt-6">
-              <StakeholdersPanel dealId={id} />
-            </TabsContent>
-            <TabsContent value="decisions" className="pt-6">
-              <DecisionsPanel dealId={id} />
-            </TabsContent>
-            <TabsContent value="playbook" className="pt-6">
-              <PlaybookPanel dealId={id} />
-            </TabsContent>
-            <TabsContent value="pricing" className="pt-6">
-              <PricingPanel dealId={id} currency={deal.dealCurrency} />
-            </TabsContent>
-          </Tabs>
+            <div className="pt-6">{renderPanel(sub)}</div>
+          </div>
         </div>
       </div>
 

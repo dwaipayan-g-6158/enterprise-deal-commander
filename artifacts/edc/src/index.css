@@ -83,7 +83,7 @@
   --border: 210 20% 88%;
   --input: 210 20% 88%;
 
-  --primary: 220 20% 25%;
+  --primary: 222 90% 67%;
   --primary-foreground: 0 0% 100%;
 
   --secondary: 210 20% 92%;
@@ -95,16 +95,22 @@
   --destructive: 0 80% 50%;
   --destructive-foreground: 0 0% 100%;
 
-  --ring: 220 20% 25%;
+  --ring: 222 90% 67%;
 
   --sidebar: 0 0% 100%;
   --sidebar-foreground: 220 10% 10%;
   --sidebar-border: 210 20% 88%;
-  --sidebar-primary: 220 20% 25%;
+  --sidebar-primary: 222 90% 67%;
   --sidebar-primary-foreground: 0 0% 100%;
   --sidebar-accent: 210 20% 92%;
   --sidebar-accent-foreground: 220 10% 10%;
-  --sidebar-ring: 220 20% 25%;
+  --sidebar-ring: 222 90% 67%;
+
+  --chart-1: 222 90% 67%;   /* indigo accent — primary series */
+  --chart-2: 158 64% 52%;   /* emerald */
+  --chart-3: 38 92% 50%;    /* amber */
+  --chart-4: 280 65% 65%;   /* violet */
+  --chart-5: 199 89% 55%;   /* sky */
 
   --radius: 0.25rem;
   --app-font-sans: 'Geist', sans-serif;
@@ -129,7 +135,7 @@
   --border: 220 10% 20%;
   --input: 220 10% 20%;
 
-  --primary: 210 20% 98%;
+  --primary: 222 90% 67%;
   --primary-foreground: 220 10% 10%;
 
   --secondary: 220 10% 18%;
@@ -141,16 +147,22 @@
   --destructive: 0 60% 50%;
   --destructive-foreground: 210 20% 98%;
 
-  --ring: 210 20% 98%;
+  --ring: 222 90% 67%;
 
   --sidebar: 220 10% 12%;
   --sidebar-foreground: 210 20% 98%;
   --sidebar-border: 220 10% 20%;
-  --sidebar-primary: 210 20% 98%;
+  --sidebar-primary: 222 90% 67%;
   --sidebar-primary-foreground: 220 10% 10%;
   --sidebar-accent: 220 10% 18%;
   --sidebar-accent-foreground: 210 20% 98%;
-  --sidebar-ring: 210 20% 98%;
+  --sidebar-ring: 222 90% 67%;
+
+  --chart-1: 222 90% 67%;   /* indigo accent — primary series */
+  --chart-2: 158 64% 52%;   /* emerald */
+  --chart-3: 38 92% 50%;    /* amber */
+  --chart-4: 280 65% 65%;   /* violet */
+  --chart-5: 199 89% 55%;   /* sky */
 }
 
 @layer base {
@@ -159,5 +171,28 @@
   }
   body {
     @apply bg-background text-foreground font-sans antialiased;
+  }
+  button, a, [role="button"] { touch-action: manipulation; }
+
+  /* Interactive elements show a pointer cursor; disabled ones show not-allowed. */
+  button:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]),
+  [role="tab"]:not([aria-disabled="true"]),
+  [role="menuitem"], [role="menuitemcheckbox"], [role="menuitemradio"],
+  [role="option"], [role="switch"], [role="checkbox"], [role="radio"],
+  a[href], label[for], summary, select:not(:disabled) {
+    cursor: pointer;
+  }
+  button:disabled, [aria-disabled="true"], [data-disabled] {
+    cursor: not-allowed;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }

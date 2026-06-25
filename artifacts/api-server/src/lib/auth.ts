@@ -7,10 +7,14 @@ const TOKEN_TTL = "7d";
 
 function getSecret(): string {
   const secret = process.env.SESSION_SECRET;
-  if (!secret) {
+  if (secret) return secret;
+  if (process.env.NODE_ENV === "production") {
     throw new Error("SESSION_SECRET environment variable is required.");
   }
-  return secret;
+  // Dev-only: a stable fallback so sessions survive server restarts when no
+  // SESSION_SECRET is exported in the shell. Production still requires the
+  // env var (throws above), so this weak key can never be used in prod.
+  return "edc-dev-insecure-stable-secret";
 }
 
 export interface Actor {

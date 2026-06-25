@@ -253,7 +253,7 @@ export default function Deals() {
         </div>
       )}
 
-      <Card>
+      <Card className="hidden sm:block">
         <Table>
           <TableHeader>
             <TableRow>
@@ -369,6 +369,75 @@ export default function Deals() {
           </TableBody>
         </Table>
       </Card>
+
+      {/* Mobile card list — shown below sm, hidden at sm+ */}
+      <div className="sm:hidden space-y-3">
+        {isLoading ? (
+          Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="rounded-lg border p-4 space-y-2">
+              <Skeleton className="h-5 w-3/4" />
+              <Skeleton className="h-4 w-1/2" />
+              <Skeleton className="h-6 w-1/3" />
+            </div>
+          ))
+        ) : isError ? (
+          <div className="flex flex-col items-center gap-3 text-center py-8">
+            <AlertCircle className="h-8 w-8 text-destructive" />
+            <p className="text-sm text-muted-foreground">Could not load deals.</p>
+            <Button size="sm" variant="outline" onClick={() => refetch()}>Retry</Button>
+          </div>
+        ) : deals.length === 0 ? (
+          <div className="flex flex-col items-center gap-3 text-center text-muted-foreground py-8">
+            <Inbox className="h-8 w-8" />
+            <p className="text-sm">
+              {search.trim() || health !== "all"
+                ? "No deals match your filters."
+                : state === "active"
+                  ? "No active deals yet."
+                  : `No ${state} deals.`}
+            </p>
+            {state === "active" && !search.trim() && health === "all" && (
+              <Button size="sm" onClick={() => setCreateOpen(true)}>
+                <Plus className="h-4 w-4 mr-2" /> Create your first deal
+              </Button>
+            )}
+          </div>
+        ) : (
+          deals.map((deal) => (
+            <Link
+              key={deal.id}
+              href={`/deals/${deal.id}`}
+              className="block rounded-lg border p-4 transition-colors hover:border-primary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              <div className="flex items-center justify-between">
+                <span className="font-semibold">{deal.accountName}</span>
+                <Badge
+                  variant={
+                    deal.healthStatus === "RED"
+                      ? "destructive"
+                      : deal.healthStatus === "YELLOW"
+                        ? "default"
+                        : "secondary"
+                  }
+                  className={
+                    deal.healthStatus === "YELLOW"
+                      ? "bg-amber-500 hover:bg-amber-600 text-white"
+                      : deal.healthStatus === "GREEN"
+                        ? "bg-emerald-500 hover:bg-emerald-600 text-white"
+                        : ""
+                  }
+                >
+                  {deal.healthStatus}
+                </Badge>
+              </div>
+              <p className="text-sm text-muted-foreground mt-1">{deal.dealName}</p>
+              <p className="text-xl font-bold font-mono mt-1">
+                {formatCurrency(deal.calculatedTCV, deal.dealCurrency)}
+              </p>
+            </Link>
+          ))
+        )}
+      </div>
 
       {!isLoading && !isError && deals.length > 0 && (
         <p className="text-xs text-muted-foreground">

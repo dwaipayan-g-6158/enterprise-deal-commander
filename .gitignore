@@ -47,3 +47,6 @@ Thumbs.db
 # Local tooling / caches
 .cache/
 .local/
+
+# subagent-driven-development scratch
+.superpowers/

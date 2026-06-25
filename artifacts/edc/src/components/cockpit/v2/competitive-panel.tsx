@@ -18,7 +18,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Trash2, Plus } from "lucide-react";
+import { Trash2, Plus, Swords } from "lucide-react";
+import { Empty, EmptyHeader, EmptyMedia, EmptyTitle, EmptyDescription } from "@/components/ui/empty";
 
 const STATUSES = ["Active", "Displaced", "Lost To", "Won Against"];
 const statusColor: Record<string, string> = {
@@ -66,7 +67,13 @@ export function CompetitivePanel({ dealId }: { dealId: string }) {
       </CardHeader>
       <CardContent className="space-y-4">
         {competitors.length === 0 && (
-          <p className="text-sm text-muted-foreground">No competitors tracked.</p>
+          <Empty>
+            <EmptyHeader>
+              <EmptyMedia variant="icon"><Swords className="h-5 w-5" /></EmptyMedia>
+              <EmptyTitle>No competitors tracked</EmptyTitle>
+              <EmptyDescription>Add a competitor below to track win/loss outcomes for this deal.</EmptyDescription>
+            </EmptyHeader>
+          </Empty>
         )}
         {competitors.map((c) => (
           <div key={c.id} className="flex items-center gap-3 rounded-md border p-3">
