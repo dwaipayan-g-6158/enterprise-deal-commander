@@ -129,7 +129,7 @@ export function Layout({ children }: { children: ReactNode }) {
             <span className="font-bold tracking-tight text-foreground text-sm">Enterprise Deal Commander</span>
           </header>
         )}
-        <main className="flex-1 overflow-auto bg-background">
+        <main className="flex-1 overflow-auto bg-background [scrollbar-gutter:stable]">
           <div className="h-full @container">{children}</div>
         </main>
       </div>
