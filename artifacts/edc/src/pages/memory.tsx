@@ -27,7 +27,7 @@ export default function Memory() {
   const results = data?.data ?? [];
 
   return (
-    <div className="p-8 max-w-[1600px] mx-auto space-y-6">
+    <div className="p-8 max-w-[1600px] mx-auto space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
       <div>
         <h1 className="text-3xl font-bold">Deal Memory</h1>
         <p className="text-muted-foreground">Institutional knowledge base — searchable archive of closed deals.</p>
