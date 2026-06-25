@@ -45,10 +45,13 @@ export default function Login() {
 
       <div className="relative z-10 w-full max-w-md flex flex-col items-center">
         {/* Brand above the card */}
-        <div className="flex flex-col items-center mb-7">
-          <EdcLogoMark size={60} animated={false} />
-          <p className="mt-3 text-[11px] font-semibold uppercase tracking-[0.25em] text-muted-foreground text-center">
+        <div className="flex flex-col items-center text-center mb-8">
+          <EdcLogoMark size={72} animated={false} />
+          <h2 className="mt-4 text-base sm:text-lg font-bold uppercase tracking-[0.15em] sm:tracking-[0.18em] text-foreground leading-snug">
             Enterprise Deal Commander
+          </h2>
+          <p className="mt-1.5 text-[10px] font-medium uppercase tracking-[0.35em] text-muted-foreground">
+            Commander Console
           </p>
         </div>
 
