@@ -3,6 +3,8 @@ import { Switch, Route, Router as WouterRouter, useLocation } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { PwaUpdatePrompt } from "@/components/pwa-update-prompt";
+import { OfflineBanner } from "@/components/offline-banner";
 import { ThemeProvider } from "@/components/theme-provider";
 import { CommandPalette } from "@/components/command-palette";
 import NotFound from "@/pages/not-found";
@@ -83,6 +85,8 @@ function App() {
             <Router />
           </WouterRouter>
           <Toaster />
+          <PwaUpdatePrompt />
+          <OfflineBanner />
         </TooltipProvider>
       </QueryClientProvider>
     </ThemeProvider>
