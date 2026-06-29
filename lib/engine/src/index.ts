@@ -30,6 +30,24 @@ import type {
 export type Severity = "RED" | "YELLOW" | "GREEN";
 export type DispositionState = "acknowledge" | "accept" | "snooze";
 
+/**
+ * Maps the composite risk level (Risk Engine v2) to the 3-state governance
+ * health badge. ELEVATED deliberately collapses to YELLOW ("heading toward red,
+ * not red yet") — the ELEVATED level stays fully visible via
+ * `risk.riskLevel`/`risk.compositeScore`. The health enum is NOT widened.
+ */
+export function riskLevelToHealth(level: RiskLevel): Severity {
+  switch (level) {
+    case "HIGH":
+      return "RED";
+    case "ELEVATED":
+    case "MODERATE":
+      return "YELLOW";
+    case "LOW":
+      return "GREEN";
+  }
+}
+
 export interface EngineThresholds {
   elephant_tcv_threshold: number;
   mega_deal_tcv_threshold: number;
@@ -1274,14 +1292,6 @@ export function processDealIntelligence(
   const managedAlerts = allAlerts.filter((a) => a.disposition !== null);
   const unmanagedAlerts = allAlerts.filter((a) => a.disposition === null);
 
-  const healthStatus: Severity = unmanagedAlerts.some(
-    (a) => a.severity === "RED",
-  )
-    ? "RED"
-    : unmanagedAlerts.length > 0
-      ? "YELLOW"
-      : "GREEN";
-
   // Opportunity recommendations from the anchor + pitched product mix.
   const anchorCodes = (deal.anchor_products || [])
     .map((a) => a.code)
@@ -1382,6 +1392,11 @@ export function processDealIntelligence(
       progressPct: technicalProgressPct,
     },
   });
+
+  // Governance health is now sourced from the composite risk level (Risk Engine
+  // v2), NOT the old pattern-weight roll-up. RED alerts still gate stage
+  // advancement independently via governance.alerts (see routes/deals.ts).
+  const healthStatus: Severity = riskLevelToHealth(risk.riskLevel);
 
   return {
     id: deal.id,
