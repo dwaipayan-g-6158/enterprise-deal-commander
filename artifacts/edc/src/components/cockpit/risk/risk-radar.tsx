@@ -19,7 +19,7 @@ import { radarData } from "./risk-presentation";
 // recharts sets fill/stroke as SVG attributes and needs concrete values (not Tailwind classes).
 const LEVEL_COLOR: Record<RiskLevel, string> = {
   HIGH:     "hsl(var(--destructive))",
-  ELEVATED: "hsl(38 92% 50%)",
+  ELEVATED: "hsl(25 95% 53%)",  // orange-500 — matches RISK_LEVEL_CLASS ELEVATED (distinct from MODERATE)
   MODERATE: "hsl(38 92% 50%)",  // amber — same token as health-donut YELLOW
   LOW:      "hsl(142 71% 45%)", // emerald-500 equivalent
 };
