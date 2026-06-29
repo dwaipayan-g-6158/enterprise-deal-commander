@@ -23,8 +23,10 @@ import {
   competitors,
   complianceDrivers,
   competitorBattlecards,
+  tagDefinitions,
 } from "@workspace/db";
 import { logger } from "./lib/logger";
+import { rescoreActiveDeals } from "./lib/scoring";
 
 async function seedLookups() {
   await db
@@ -58,6 +60,30 @@ async function seedLookups() {
       { tierName: "Premium Support Pitched" },
       { tierName: "Combined SOW Shared" },
       { tierName: "Managed Services Contract" },
+    ])
+    .onConflictDoNothing();
+
+  // Default deal-tag palette: the PRD §22.3 set plus a few extra commander tags,
+  // each with a distinct hue. Tag definitions are otherwise minted from the
+  // cockpit's "+ Tag" popover.
+  await db
+    .insert(tagDefinitions)
+    .values([
+      // PRD §22.3
+      { tagName: "Net-New", color: "#3B82F6" },
+      { tagName: "Renewal", color: "#10B981" },
+      { tagName: "Expansion", color: "#8B5CF6" },
+      { tagName: "At-Risk", color: "#EF4444" },
+      { tagName: "Strategic", color: "#F59E0B" },
+      { tagName: "Compliance-Heavy", color: "#6366F1" },
+      { tagName: "Multi-Region", color: "#EC4899" },
+      { tagName: "First-Deal", color: "#14B8A6" },
+      // Extras
+      { tagName: "Land & Expand", color: "#06B6D4" },
+      { tagName: "Fast Track", color: "#84CC16" },
+      { tagName: "Executive Sponsor", color: "#A855F7" },
+      { tagName: "Competitive", color: "#F97316" },
+      { tagName: "POC", color: "#0EA5E9" },
     ])
     .onConflictDoNothing();
 
@@ -446,6 +472,8 @@ async function main() {
   await seedLookups();
   await seedCommander();
   await seedDeals();
+  const scored = await rescoreActiveDeals();
+  logger.info({ scored }, "Predictive scores computed");
   logger.info("Seed complete.");
   process.exit(0);
 }

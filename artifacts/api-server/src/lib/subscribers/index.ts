@@ -14,6 +14,7 @@ import { registerWebhookDispatcher } from "./webhook-dispatcher";
 import { registerNotificationService } from "./notification-service";
 import { registerPlaybookEngine } from "./playbook-engine";
 import { registerPostMortem } from "./post-mortem";
+import { registerScoring } from "./scoring";
 
 export { captureSnapshot } from "./snapshot-service";
 export { reconcileHealth } from "./health-tracker";
@@ -53,6 +54,7 @@ export function registerSubscribers(): void {
   disposers.push(registerNotificationService());
   disposers.push(registerPlaybookEngine());
   disposers.push(registerPostMortem());
+  disposers.push(registerScoring());
 
   // Register portfolio rollups with the MV refresh registry and warm them once
   // at startup so the first portfolio/summary read is already precomputed.

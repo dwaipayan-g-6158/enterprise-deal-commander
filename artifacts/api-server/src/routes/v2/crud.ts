@@ -52,6 +52,7 @@ import {
   SetDealCustomFieldParams,
   SetDealCustomFieldBody,
   CreateTagBody,
+  DeleteTagParams,
   GetDealTagsParams,
   ApplyDealTagParams,
   RemoveDealTagParams,
@@ -577,6 +578,18 @@ router.post("/tags", async (req: Request, res: Response) => {
     .values({ tagName: b.tag_name, color: b.color })
     .returning();
   res.status(201).json({ data: { id: row.id, tagName: row.tagName, color: row.color } });
+});
+
+// Delete a tag definition outright. The deal_tags FK cascades, but we also clear
+// associations explicitly inside the transaction so the behaviour is the same
+// even if a given DB lacks the ON DELETE CASCADE constraint.
+router.delete("/tags/:tagId", async (req: Request, res: Response) => {
+  const { tagId } = DeleteTagParams.parse(req.params);
+  await db.transaction(async (tx) => {
+    await tx.delete(dealTags).where(eq(dealTags.tagId, tagId));
+    await tx.delete(tagDefinitions).where(eq(tagDefinitions.id, tagId));
+  });
+  res.json({ message: "Tag deleted" });
 });
 
 router.get("/deals/:dealId/tags", async (req: Request, res: Response) => {

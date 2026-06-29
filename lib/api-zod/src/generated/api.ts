@@ -109,7 +109,13 @@ export const ListDealsResponse = zod.object({
   "archivedAt": zod.string().nullish(),
   "deletedAt": zod.string().nullish(),
   "createdAt": zod.string().optional(),
-  "updatedAt": zod.string().optional()
+  "updatedAt": zod.string().optional(),
+  "matchedIn": zod.array(zod.string()).optional().describe('When a search query is supplied, the sources in which the term matched (e.g. name, notes, stakeholder, decision, blocker). Absent when not searching.'),
+  "tags": zod.array(zod.object({
+  "id": zod.string(),
+  "tagName": zod.string(),
+  "color": zod.string()
+})).optional().describe('Tags applied to this deal (for roster display and filtering).')
 })),
   "meta": zod.object({
   "total": zod.number(),
@@ -221,7 +227,13 @@ export const GetDealResponse = zod.object({
   "archivedAt": zod.string().nullish(),
   "deletedAt": zod.string().nullish(),
   "createdAt": zod.string().optional(),
-  "updatedAt": zod.string().optional()
+  "updatedAt": zod.string().optional(),
+  "matchedIn": zod.array(zod.string()).optional().describe('When a search query is supplied, the sources in which the term matched (e.g. name, notes, stakeholder, decision, blocker). Absent when not searching.'),
+  "tags": zod.array(zod.object({
+  "id": zod.string(),
+  "tagName": zod.string(),
+  "color": zod.string()
+})).optional().describe('Tags applied to this deal (for roster display and filtering).')
 })
 })
 
@@ -328,7 +340,13 @@ export const UpdateDealResponse = zod.object({
   "archivedAt": zod.string().nullish(),
   "deletedAt": zod.string().nullish(),
   "createdAt": zod.string().optional(),
-  "updatedAt": zod.string().optional()
+  "updatedAt": zod.string().optional(),
+  "matchedIn": zod.array(zod.string()).optional().describe('When a search query is supplied, the sources in which the term matched (e.g. name, notes, stakeholder, decision, blocker). Absent when not searching.'),
+  "tags": zod.array(zod.object({
+  "id": zod.string(),
+  "tagName": zod.string(),
+  "color": zod.string()
+})).optional().describe('Tags applied to this deal (for roster display and filtering).')
 })
 })
 
@@ -391,7 +409,13 @@ export const RestoreDealResponse = zod.object({
   "archivedAt": zod.string().nullish(),
   "deletedAt": zod.string().nullish(),
   "createdAt": zod.string().optional(),
-  "updatedAt": zod.string().optional()
+  "updatedAt": zod.string().optional(),
+  "matchedIn": zod.array(zod.string()).optional().describe('When a search query is supplied, the sources in which the term matched (e.g. name, notes, stakeholder, decision, blocker). Absent when not searching.'),
+  "tags": zod.array(zod.object({
+  "id": zod.string(),
+  "tagName": zod.string(),
+  "color": zod.string()
+})).optional().describe('Tags applied to this deal (for roster display and filtering).')
 })
 })
 
@@ -449,7 +473,13 @@ export const ArchiveDealResponse = zod.object({
   "archivedAt": zod.string().nullish(),
   "deletedAt": zod.string().nullish(),
   "createdAt": zod.string().optional(),
-  "updatedAt": zod.string().optional()
+  "updatedAt": zod.string().optional(),
+  "matchedIn": zod.array(zod.string()).optional().describe('When a search query is supplied, the sources in which the term matched (e.g. name, notes, stakeholder, decision, blocker). Absent when not searching.'),
+  "tags": zod.array(zod.object({
+  "id": zod.string(),
+  "tagName": zod.string(),
+  "color": zod.string()
+})).optional().describe('Tags applied to this deal (for roster display and filtering).')
 })
 })
 
@@ -1086,6 +1116,34 @@ export const GetSnapshotResponse = zod.object({
 })
 
 
+export const ListPortfolioActivityQueryParams = zod.object({
+  "since": zod.coerce.string().optional(),
+  "until": zod.coerce.string().optional(),
+  "limit": zod.coerce.number().optional(),
+  "offset": zod.coerce.number().optional()
+})
+
+export const ListPortfolioActivityResponse = zod.object({
+  "data": zod.array(zod.object({
+  "id": zod.string(),
+  "dealId": zod.string(),
+  "dealName": zod.string().nullish(),
+  "eventType": zod.string(),
+  "entityType": zod.string(),
+  "entityId": zod.string().nullish(),
+  "summary": zod.string(),
+  "metadata": zod.record(zod.string(), zod.unknown()).nullish(),
+  "actor": zod.string(),
+  "occurredAt": zod.string()
+})),
+  "meta": zod.object({
+  "total": zod.number(),
+  "limit": zod.number(),
+  "offset": zod.number()
+})
+})
+
+
 export const ListDealActivityParams = zod.object({
   "dealId": zod.coerce.string()
 })
@@ -1102,6 +1160,7 @@ export const ListDealActivityResponse = zod.object({
   "data": zod.array(zod.object({
   "id": zod.string(),
   "dealId": zod.string(),
+  "dealName": zod.string().nullish(),
   "eventType": zod.string(),
   "entityType": zod.string(),
   "entityId": zod.string().nullish(),
@@ -1521,6 +1580,31 @@ export const GetCompetitiveAnalyticsResponse = zod.object({
 
 
 export const GetWinLossAnalyticsResponse = zod.object({
+  "data": zod.record(zod.string(), zod.unknown())
+})
+
+
+export const GetGateFunnelResponse = zod.object({
+  "data": zod.record(zod.string(), zod.unknown())
+})
+
+
+export const GetNextActionsResponse = zod.object({
+  "data": zod.record(zod.string(), zod.unknown())
+})
+
+
+export const GetVitalSignsResponse = zod.object({
+  "data": zod.record(zod.string(), zod.unknown())
+})
+
+
+export const GetRosterEnrichmentResponse = zod.object({
+  "data": zod.record(zod.string(), zod.unknown())
+})
+
+
+export const GetMemoryInsightsResponse = zod.object({
   "data": zod.record(zod.string(), zod.unknown())
 })
 
@@ -2419,6 +2503,15 @@ export const ListTagsResponse = zod.object({
 export const CreateTagBody = zod.object({
   "tag_name": zod.string(),
   "color": zod.string()
+})
+
+
+export const DeleteTagParams = zod.object({
+  "tagId": zod.coerce.string()
+})
+
+export const DeleteTagResponse = zod.object({
+  "message": zod.string()
 })
 
 

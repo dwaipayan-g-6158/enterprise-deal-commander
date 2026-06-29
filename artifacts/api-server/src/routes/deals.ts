@@ -1,5 +1,5 @@
 import { Router, type IRouter, type Request, type Response } from "express";
-import { and, desc, eq, isNull, isNotNull } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, isNotNull, or, sql, type SQL } from "drizzle-orm";
 import {
   db,
   enterpriseDeals,
@@ -9,6 +9,11 @@ import {
   gateDefinitions,
   pipelineStages,
   dealStageOverrides,
+  stakeholders,
+  dealDecisions,
+  dealBlockers,
+  dealTags,
+  tagDefinitions,
 } from "@workspace/db";
 import {
   ListDealsQueryParams,
@@ -53,33 +58,96 @@ router.get("/deals", async (req: Request, res: Response) => {
     conditions.push(eq(pipelineStages.stageName, q.stage));
   }
 
-  const whereClause = conditions.length ? and(...conditions) : undefined;
+  // Full-text-ish search now also spans strategic notes, stakeholders,
+  // decisions and blockers — and reports WHERE each deal matched via `matchedIn`.
+  // We resolve matching ids in ONE SQL pass (ILIKE + EXISTS subqueries) so the
+  // serialize loop only runs for matched deals (also fixes the old search N+1).
+  const searchTerm = q.search?.trim() ?? "";
+  const doSearch = searchTerm.length >= 2;
 
-  const rows = await db
-    .select({ id: enterpriseDeals.id })
-    .from(enterpriseDeals)
-    .innerJoin(
-      pipelineStages,
-      eq(enterpriseDeals.salesStageId, pipelineStages.id),
-    )
-    .where(whereClause)
-    .orderBy(desc(enterpriseDeals.updatedAt));
+  let matchedInById: Map<string, string[]> | null = null;
+  let rows: { id: string }[];
+
+  if (doSearch) {
+    // Escape LIKE metacharacters so a literal % / _ / \ in the query stays literal.
+    const esc = searchTerm.replace(/[\\%_]/g, (c) => `\\${c}`);
+    const pat = `%${esc}%`;
+
+    const nameExpr = sql`(${enterpriseDeals.dealName} ILIKE ${pat} OR ${enterpriseDeals.accountName} ILIKE ${pat} OR ${enterpriseDeals.accountManager} ILIKE ${pat} OR ${enterpriseDeals.technicalLead} ILIKE ${pat})`;
+    const notesExpr = sql`(${enterpriseDeals.managerStrategicBlueprint} ILIKE ${pat} OR ${enterpriseDeals.speakerNotes} ILIKE ${pat})`;
+    const stakeExpr = sql`EXISTS (SELECT 1 FROM ${stakeholders} s WHERE s.deal_id = ${enterpriseDeals.id} AND (s.name ILIKE ${pat} OR s.notes ILIKE ${pat}))`;
+    const decisionExpr = sql`EXISTS (SELECT 1 FROM ${dealDecisions} dd WHERE dd.deal_id = ${enterpriseDeals.id} AND (dd.decision_text ILIKE ${pat} OR dd.rationale ILIKE ${pat}))`;
+    const blockerExpr = sql`EXISTS (SELECT 1 FROM ${dealBlockers} b WHERE b.deal_id = ${enterpriseDeals.id} AND b.description ILIKE ${pat})`;
+
+    const searchWhere = and(...conditions, or(nameExpr, notesExpr, stakeExpr, decisionExpr, blockerExpr));
+
+    const flagRows = await db
+      .select({
+        id: enterpriseDeals.id,
+        mName: sql<boolean>`${nameExpr}`,
+        mNotes: sql<boolean>`${notesExpr}`,
+        mStakeholder: sql<boolean>`${stakeExpr}`,
+        mDecision: sql<boolean>`${decisionExpr}`,
+        mBlocker: sql<boolean>`${blockerExpr}`,
+      })
+      .from(enterpriseDeals)
+      .innerJoin(pipelineStages, eq(enterpriseDeals.salesStageId, pipelineStages.id))
+      .where(searchWhere)
+      .orderBy(desc(enterpriseDeals.updatedAt));
+
+    matchedInById = new Map();
+    rows = [];
+    for (const r of flagRows) {
+      const sources: string[] = [];
+      if (r.mName) sources.push("name");
+      if (r.mNotes) sources.push("notes");
+      if (r.mStakeholder) sources.push("stakeholder");
+      if (r.mDecision) sources.push("decision");
+      if (r.mBlocker) sources.push("blocker");
+      if (sources.length) {
+        rows.push({ id: r.id });
+        matchedInById.set(r.id, sources);
+      }
+    }
+  } else {
+    const whereClause: SQL | undefined = conditions.length ? and(...conditions) : undefined;
+    rows = await db
+      .select({ id: enterpriseDeals.id })
+      .from(enterpriseDeals)
+      .innerJoin(pipelineStages, eq(enterpriseDeals.salesStageId, pipelineStages.id))
+      .where(whereClause)
+      .orderBy(desc(enterpriseDeals.updatedAt));
+  }
 
   let items = (
     await Promise.all(rows.map((r) => serializeDeal(r.id)))
   ).filter((d): d is NonNullable<typeof d> => d !== null);
 
-  if (q.search) {
-    const needle = q.search.trim().toLowerCase();
-    if (needle) {
-      items = items.filter(
-        (d) =>
-          d.dealName.toLowerCase().includes(needle) ||
-          d.accountName.toLowerCase().includes(needle) ||
-          d.accountManager.toLowerCase().includes(needle) ||
-          d.technicalLead.toLowerCase().includes(needle),
-      );
+  // Attach the per-deal match provenance for the search dropdown.
+  if (matchedInById) {
+    items = items.map((d) => ({ ...d, matchedIn: matchedInById!.get(d.id) ?? [] }));
+  }
+
+  // Attach applied tags so the roster can filter/display by tag (one batched
+  // query over the result set — no per-deal N+1).
+  if (items.length) {
+    const tagRows = await db
+      .select({
+        dealId: dealTags.dealId,
+        id: tagDefinitions.id,
+        tagName: tagDefinitions.tagName,
+        color: tagDefinitions.color,
+      })
+      .from(dealTags)
+      .innerJoin(tagDefinitions, eq(dealTags.tagId, tagDefinitions.id))
+      .where(inArray(dealTags.dealId, items.map((d) => d.id)));
+    const tagsByDeal = new Map<string, { id: string; tagName: string; color: string }[]>();
+    for (const t of tagRows) {
+      const list = tagsByDeal.get(t.dealId) ?? [];
+      list.push({ id: t.id, tagName: t.tagName, color: t.color });
+      tagsByDeal.set(t.dealId, list);
     }
+    items = items.map((d) => ({ ...d, tags: tagsByDeal.get(d.id) ?? [] }));
   }
 
   if (q.health) {

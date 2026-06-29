@@ -89,6 +89,7 @@ import type {
   ListDealSnapshotsParams,
   ListDealsParams,
   ListNotificationsParams,
+  ListPortfolioActivityParams,
   ListScenariosParams,
   LoginInput,
   LossArchetypeListResponse,
@@ -2217,6 +2218,84 @@ export function useGetSnapshot<TData = Awaited<ReturnType<typeof getSnapshot>>, 
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getGetSnapshotQueryOptions(dealId,params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getListPortfolioActivityUrl = (params?: ListPortfolioActivityParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/v2/activity?${stringifiedParams}` : `/api/v2/activity`
+}
+
+export const listPortfolioActivity = async (params?: ListPortfolioActivityParams, options?: RequestInit): Promise<ActivityListResponse> => {
+
+  return customFetch<ActivityListResponse>(getListPortfolioActivityUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListPortfolioActivityQueryKey = (params?: ListPortfolioActivityParams,) => {
+    return [
+    `/api/v2/activity`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListPortfolioActivityQueryOptions = <TData = Awaited<ReturnType<typeof listPortfolioActivity>>, TError = ErrorType<unknown>>(params?: ListPortfolioActivityParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listPortfolioActivity>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListPortfolioActivityQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listPortfolioActivity>>> = ({ signal }) => listPortfolioActivity(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listPortfolioActivity>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListPortfolioActivityQueryResult = NonNullable<Awaited<ReturnType<typeof listPortfolioActivity>>>
+export type ListPortfolioActivityQueryError = ErrorType<unknown>
+
+
+
+export function useListPortfolioActivity<TData = Awaited<ReturnType<typeof listPortfolioActivity>>, TError = ErrorType<unknown>>(
+ params?: ListPortfolioActivityParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listPortfolioActivity>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListPortfolioActivityQueryOptions(params,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 
@@ -4564,6 +4643,361 @@ export function useGetWinLossAnalytics<TData = Awaited<ReturnType<typeof getWinL
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getGetWinLossAnalyticsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getGetGateFunnelUrl = () => {
+
+
+
+
+  return `/api/v2/analytics/gates`
+}
+
+export const getGateFunnel = async ( options?: RequestInit): Promise<GenericDataResponse> => {
+
+  return customFetch<GenericDataResponse>(getGetGateFunnelUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetGateFunnelQueryKey = () => {
+    return [
+    `/api/v2/analytics/gates`
+    ] as const;
+    }
+
+
+export const getGetGateFunnelQueryOptions = <TData = Awaited<ReturnType<typeof getGateFunnel>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getGateFunnel>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetGateFunnelQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getGateFunnel>>> = ({ signal }) => getGateFunnel({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getGateFunnel>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetGateFunnelQueryResult = NonNullable<Awaited<ReturnType<typeof getGateFunnel>>>
+export type GetGateFunnelQueryError = ErrorType<unknown>
+
+
+
+export function useGetGateFunnel<TData = Awaited<ReturnType<typeof getGateFunnel>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getGateFunnel>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetGateFunnelQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getGetNextActionsUrl = () => {
+
+
+
+
+  return `/api/v2/analytics/next-actions`
+}
+
+export const getNextActions = async ( options?: RequestInit): Promise<GenericDataResponse> => {
+
+  return customFetch<GenericDataResponse>(getGetNextActionsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetNextActionsQueryKey = () => {
+    return [
+    `/api/v2/analytics/next-actions`
+    ] as const;
+    }
+
+
+export const getGetNextActionsQueryOptions = <TData = Awaited<ReturnType<typeof getNextActions>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getNextActions>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetNextActionsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getNextActions>>> = ({ signal }) => getNextActions({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getNextActions>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetNextActionsQueryResult = NonNullable<Awaited<ReturnType<typeof getNextActions>>>
+export type GetNextActionsQueryError = ErrorType<unknown>
+
+
+
+export function useGetNextActions<TData = Awaited<ReturnType<typeof getNextActions>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getNextActions>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetNextActionsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getGetVitalSignsUrl = () => {
+
+
+
+
+  return `/api/v2/analytics/vital-signs`
+}
+
+export const getVitalSigns = async ( options?: RequestInit): Promise<GenericDataResponse> => {
+
+  return customFetch<GenericDataResponse>(getGetVitalSignsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetVitalSignsQueryKey = () => {
+    return [
+    `/api/v2/analytics/vital-signs`
+    ] as const;
+    }
+
+
+export const getGetVitalSignsQueryOptions = <TData = Awaited<ReturnType<typeof getVitalSigns>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getVitalSigns>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetVitalSignsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getVitalSigns>>> = ({ signal }) => getVitalSigns({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getVitalSigns>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetVitalSignsQueryResult = NonNullable<Awaited<ReturnType<typeof getVitalSigns>>>
+export type GetVitalSignsQueryError = ErrorType<unknown>
+
+
+
+export function useGetVitalSigns<TData = Awaited<ReturnType<typeof getVitalSigns>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getVitalSigns>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetVitalSignsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getGetRosterEnrichmentUrl = () => {
+
+
+
+
+  return `/api/v2/analytics/roster`
+}
+
+export const getRosterEnrichment = async ( options?: RequestInit): Promise<GenericDataResponse> => {
+
+  return customFetch<GenericDataResponse>(getGetRosterEnrichmentUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetRosterEnrichmentQueryKey = () => {
+    return [
+    `/api/v2/analytics/roster`
+    ] as const;
+    }
+
+
+export const getGetRosterEnrichmentQueryOptions = <TData = Awaited<ReturnType<typeof getRosterEnrichment>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getRosterEnrichment>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetRosterEnrichmentQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getRosterEnrichment>>> = ({ signal }) => getRosterEnrichment({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getRosterEnrichment>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetRosterEnrichmentQueryResult = NonNullable<Awaited<ReturnType<typeof getRosterEnrichment>>>
+export type GetRosterEnrichmentQueryError = ErrorType<unknown>
+
+
+
+export function useGetRosterEnrichment<TData = Awaited<ReturnType<typeof getRosterEnrichment>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getRosterEnrichment>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetRosterEnrichmentQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getGetMemoryInsightsUrl = () => {
+
+
+
+
+  return `/api/v2/analytics/memory-insights`
+}
+
+export const getMemoryInsights = async ( options?: RequestInit): Promise<GenericDataResponse> => {
+
+  return customFetch<GenericDataResponse>(getGetMemoryInsightsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetMemoryInsightsQueryKey = () => {
+    return [
+    `/api/v2/analytics/memory-insights`
+    ] as const;
+    }
+
+
+export const getGetMemoryInsightsQueryOptions = <TData = Awaited<ReturnType<typeof getMemoryInsights>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getMemoryInsights>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetMemoryInsightsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getMemoryInsights>>> = ({ signal }) => getMemoryInsights({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getMemoryInsights>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetMemoryInsightsQueryResult = NonNullable<Awaited<ReturnType<typeof getMemoryInsights>>>
+export type GetMemoryInsightsQueryError = ErrorType<unknown>
+
+
+
+export function useGetMemoryInsights<TData = Awaited<ReturnType<typeof getMemoryInsights>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getMemoryInsights>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetMemoryInsightsQueryOptions(options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 
@@ -8183,6 +8617,70 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
         TContext
       > => {
       return useMutation(getCreateTagMutationOptions(options));
+    }
+
+export const getDeleteTagUrl = (tagId: string,) => {
+
+
+
+
+  return `/api/v2/tags/${tagId}`
+}
+
+export const deleteTag = async (tagId: string, options?: RequestInit): Promise<MessageResponse> => {
+
+  return customFetch<MessageResponse>(getDeleteTagUrl(tagId),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+export const getDeleteTagMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteTag>>, TError,{tagId: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteTag>>, TError,{tagId: string}, TContext> => {
+
+const mutationKey = ['deleteTag'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteTag>>, {tagId: string}> = (props) => {
+          const {tagId} = props ?? {};
+
+          return  deleteTag(tagId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteTagMutationResult = NonNullable<Awaited<ReturnType<typeof deleteTag>>>
+
+    export type DeleteTagMutationError = ErrorType<unknown>
+
+    export const useDeleteTag = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteTag>>, TError,{tagId: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteTag>>,
+        TError,
+        {tagId: string},
+        TContext
+      > => {
+      return useMutation(getDeleteTagMutationOptions(options));
     }
 
 export const getGetDealTagsUrl = (dealId: string,) => {

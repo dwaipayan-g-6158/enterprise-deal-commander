@@ -1,34 +1,17 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link } from "wouter";
+import { useLocation } from "wouter";
 import {
-  useListDeals,
   useArchiveDeal,
   useDeleteDeal,
   useRestoreDeal,
+  useListPipelineStages,
+  useListTags,
   getListDealsQueryKey,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -39,23 +22,25 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import {
-  Search,
-  Plus,
-  ArrowUp,
-  ArrowDown,
-  ArrowUpDown,
-  Archive,
-  Trash2,
-  RotateCcw,
-  AlertCircle,
-  Inbox,
-} from "lucide-react";
+import { Plus, Archive, Trash2, RotateCcw, AlertCircle, Inbox } from "lucide-react";
 import { CreateDealSheet } from "@/components/cockpit/create-deal-sheet";
 import { useToast } from "@/hooks/use-toast";
-import { formatCurrency } from "@/components/cockpit/use-invalidate";
-
-type SortKey = "dealName" | "accountName" | "salesStage" | "calculatedTCV" | "healthStatus" | "technicalLead";
+import { useRosterState } from "@/components/roster/hooks/use-roster-state";
+import { useRosterData } from "@/components/roster/hooks/use-roster-data";
+import { useDerivedRows } from "@/components/roster/hooks/use-derived-rows";
+import { useSavedViews } from "@/components/roster/hooks/use-saved-views";
+import { RosterToolbar } from "@/components/roster/roster-toolbar";
+import { SavedViewTabs } from "@/components/roster/saved-view-tabs";
+import { SaveViewDialog } from "@/components/roster/save-view-dialog";
+import { ManageViewsDialog } from "@/components/roster/manage-views-dialog";
+import { FilterChips } from "@/components/roster/filter-chips";
+import { RosterTable } from "@/components/roster/roster-table";
+import { RosterCardList } from "@/components/roster/roster-card-list";
+import { PreviewPanel } from "@/components/roster/preview-panel";
+import type { RowActions } from "@/components/roster/row-context-menu";
+import type { FilterOption } from "@/components/roster/multi-select-filter";
+import { COLUMNS } from "@/components/roster/model/roster-columns";
+import type { ColumnId, RosterRow } from "@/components/roster/model/roster-types";
 
 function useDebounced<T>(value: T, delay = 300): T {
   const [debounced, setDebounced] = useState(value);
@@ -66,182 +51,248 @@ function useDebounced<T>(value: T, delay = 300): T {
   return debounced;
 }
 
+function distinctOptions(values: string[]): FilterOption[] {
+  return [...new Set(values.filter(Boolean))].sort((a, b) => a.localeCompare(b)).map((v) => ({ value: v, label: v }));
+}
+
 export default function Deals() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  const [searchInput, setSearchInput] = useState("");
-  const search = useDebounced(searchInput, 300);
-  const [health, setHealth] = useState("all");
-  const [state, setState] = useState<"active" | "archived" | "deleted">("active");
-  const [sortKey, setSortKey] = useState<SortKey>("dealName");
-  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+  const {
+    view,
+    viewId,
+    setFilters,
+    setGroup,
+    toggleSort,
+    selectSavedView,
+    density,
+    setDensity,
+    columnLayout,
+    setColumnLayout,
+    customViews,
+    setCustomViews,
+  } = useRosterState();
+  const filters = view.filters;
+
+  const savedViews = useSavedViews({ view, viewId, customViews, setCustomViews, selectSavedView });
+  const [saveOpen, setSaveOpen] = useState(false);
+  const [manageOpen, setManageOpen] = useState(false);
+
+  // Search box is debounced before it touches the URL (which is the source of
+  // truth). Keep a local mirror so typing feels instant; sync the other way
+  // when the URL search changes externally (e.g. a saved view is selected).
+  const [searchInput, setSearchInput] = useState(filters.search);
+  const debouncedSearch = useDebounced(searchInput, 300);
+  useEffect(() => {
+    if (debouncedSearch !== filters.search) setFilters({ search: debouncedSearch });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [debouncedSearch]);
+  useEffect(() => {
+    setSearchInput(filters.search);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filters.search]);
+
+  const { rows, total, isLoading, isError, isFetching, refetch } = useRosterData({
+    state: filters.state,
+    search: filters.search,
+  });
+  const derived = useDerivedRows(rows, view);
+
+  // Visible columns in their configured order; guard against any stale ids.
+  const visibleColumns = useMemo<ColumnId[]>(
+    () => columnLayout.order.filter((id) => columnLayout.visible.includes(id) && COLUMNS[id]),
+    [columnLayout],
+  );
+
+  // Filter options: stages from the canonical lookup (ordered); AM/TL derived
+  // from the loaded rows so only owners actually present are offered.
+  const { data: stagesData } = useListPipelineStages();
+  const stageOptions = useMemo<FilterOption[]>(
+    () =>
+      [...(stagesData?.data ?? [])]
+        .sort((a, b) => a.sortOrder - b.sortOrder)
+        .map((s) => ({ value: s.stageName, label: s.stageName })),
+    [stagesData],
+  );
+  const amOptions = useMemo<FilterOption[]>(() => distinctOptions(rows.map((r) => r.accountManager)), [rows]);
+  const tlOptions = useMemo<FilterOption[]>(() => distinctOptions(rows.map((r) => r.technicalLead)), [rows]);
+  const { data: tagsData } = useListTags();
+  const tagOptions = useMemo<FilterOption[]>(
+    () => (tagsData?.data ?? []).map((t) => ({ value: t.id, label: t.tagName })),
+    [tagsData],
+  );
+
+  // Selection / group-collapse / preview live in component memory.
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
+  const [previewDealId, setPreviewDealId] = useState<string | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [confirm, setConfirm] = useState<null | "archive" | "delete">(null);
 
-  const sortParam = `${sortDir === "desc" ? "-" : ""}${sortKey}`;
-  const queryParams = useMemo(
-    () => ({
-      ...(search.trim() ? { search: search.trim() } : {}),
-      ...(health !== "all" ? { health: health as "GREEN" | "YELLOW" | "RED" } : {}),
-      state,
-      sort: sortParam,
-    }),
-    [search, health, state, sortParam],
-  );
-
-  const { data, isLoading, isError, refetch, isFetching } = useListDeals(queryParams);
+  const [, navigate] = useLocation();
   const archiveDeal = useArchiveDeal();
   const deleteDeal = useDeleteDeal();
   const restoreDeal = useRestoreDeal();
 
-  const deals = data?.data ?? [];
-
-  // Clear selection whenever the dataset/filter changes.
-  useEffect(() => {
-    setSelected(new Set());
-  }, [state, search, health]);
-
-  const toggleSort = (key: SortKey) => {
-    if (sortKey === key) {
-      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
-    } else {
-      setSortKey(key);
-      setSortDir("asc");
-    }
-  };
-
-  const SortHeader = ({ k, label, className }: { k: SortKey; label: string; className?: string }) => (
-    <TableHead className={className}>
-      <button
-        type="button"
-        onClick={() => toggleSort(k)}
-        className="inline-flex items-center gap-1 hover:text-foreground transition-colors"
-      >
-        {label}
-        {sortKey === k ? (
-          sortDir === "asc" ? (
-            <ArrowUp className="h-3.5 w-3.5" />
-          ) : (
-            <ArrowDown className="h-3.5 w-3.5" />
-          )
-        ) : (
-          <ArrowUpDown className="h-3.5 w-3.5 opacity-40" />
-        )}
-      </button>
-    </TableHead>
+  const previewRow = useMemo(
+    () => derived.flat.find((r) => r.id === previewDealId),
+    [derived.flat, previewDealId],
   );
 
-  const allSelected = deals.length > 0 && deals.every((d) => selected.has(d.id));
-  const someSelected = selected.size > 0;
+  // Clear selection whenever the result set's identity changes.
+  useEffect(() => {
+    setSelected(new Set());
+  }, [filters.state, filters.search, filters.health.join(","), filters.velocity.join(",")]);
 
-  const toggleAll = () => {
-    setSelected(allSelected ? new Set() : new Set(deals.map((d) => d.id)));
-  };
-  const toggleOne = (id: string) => {
+  const flatIds = derived.flat.map((r) => r.id);
+  const allSelected = flatIds.length > 0 && flatIds.every((id) => selected.has(id));
+
+  const toggleAll = () =>
+    setSelected(allSelected ? new Set() : new Set(flatIds));
+  const toggleOne = (id: string) =>
     setSelected((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
       else next.add(id);
       return next;
     });
-  };
+
+  const toggleGroup = (key: string) =>
+    setCollapsedGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+
+  // Persisted once per drag (on mouse-up), not per pixel.
+  const onColumnResize = (id: ColumnId, width: number) =>
+    setColumnLayout({ ...columnLayout, width: { ...columnLayout.width, [id]: width } });
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: getListDealsQueryKey() });
 
   const runBulk = async (action: "archive" | "delete" | "restore") => {
     const ids = Array.from(selected);
     if (ids.length === 0) return;
-    const mut =
-      action === "archive" ? archiveDeal : action === "delete" ? deleteDeal : restoreDeal;
+    const mut = action === "archive" ? archiveDeal : action === "delete" ? deleteDeal : restoreDeal;
     const results = await Promise.allSettled(ids.map((id) => mut.mutateAsync({ id })));
     const failed = results.filter((r) => r.status === "rejected").length;
     await invalidate();
     setSelected(new Set());
     setConfirm(null);
-    if (failed === 0) {
-      toast({
-        title: `${ids.length} deal${ids.length > 1 ? "s" : ""} ${action}d`,
-      });
-    } else {
-      toast({
-        title: `${ids.length - failed} ${action}d, ${failed} failed`,
-        variant: "destructive",
-      });
+    toast(
+      failed === 0
+        ? { title: `${ids.length} deal${ids.length > 1 ? "s" : ""} ${action}d` }
+        : { title: `${ids.length - failed} ${action}d, ${failed} failed`, variant: "destructive" },
+    );
+  };
+
+  const runSingle = async (action: "archive" | "delete" | "restore", id: string) => {
+    const mut = action === "archive" ? archiveDeal : action === "delete" ? deleteDeal : restoreDeal;
+    try {
+      await mut.mutateAsync({ id });
+      await invalidate();
+      if (previewDealId === id) setPreviewDealId(null);
+      toast({ title: `Deal ${action}d` });
+    } catch {
+      toast({ title: `Could not ${action} deal`, variant: "destructive" });
     }
   };
 
-  const colCount = 7;
+  const copyLink = (row: RosterRow) => {
+    const base = import.meta.env.BASE_URL.replace(/\/$/, "");
+    const url = `${window.location.origin}${base}/deals/${row.id}`;
+    void navigator.clipboard?.writeText(url);
+    toast({ title: "Link copied" });
+  };
+
+  const rowActions: RowActions = {
+    state: filters.state,
+    onOpen: (row) => navigate(`/deals/${row.id}`),
+    onPreview: (row) => setPreviewDealId(row.id),
+    onArchive: (row) => runSingle("archive", row.id),
+    onDelete: (row) => runSingle("delete", row.id),
+    onRestore: (row) => runSingle("restore", row.id),
+    onCopyLink: copyLink,
+  };
+
+  const someSelected = selected.size > 0;
+  const grouped = view.group !== "none";
+  const hasActiveFilters =
+    filters.search.trim() !== "" || filters.health.length > 0 || filters.velocity.length > 0;
+
+  const emptyMessage = hasActiveFilters
+    ? "No deals match your filters."
+    : filters.state === "active"
+      ? "No active deals yet."
+      : `No ${filters.state} deals.`;
 
   return (
-    <div className="p-8 space-y-6 max-w-[1600px] mx-auto animate-in fade-in slide-in-from-bottom-4 duration-500">
-      <div className="flex items-center justify-between">
+    <div className="p-4 sm:p-8 space-y-6 max-w-[1600px] mx-auto animate-in fade-in slide-in-from-bottom-4 duration-500">
+      <div className="flex items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Deal Roster</h1>
-          <p className="text-muted-foreground mt-2">
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Deal Roster</h1>
+          <p className="text-muted-foreground mt-1 sm:mt-2 text-sm sm:text-base">
             Active pipeline and technical validation states
           </p>
         </div>
-        <Button className="gap-2" onClick={() => setCreateOpen(true)}>
-          <Plus className="h-4 w-4" /> New Deal
+        <Button className="gap-2 shrink-0" onClick={() => setCreateOpen(true)}>
+          <Plus className="h-4 w-4" /> <span className="hidden sm:inline">New Deal</span>
         </Button>
       </div>
 
-      <div className="flex gap-4 items-center flex-wrap">
-        <div className="relative flex-1 min-w-[240px] max-w-sm">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Search deals, accounts, or owners..."
-            className="pl-9"
-            value={searchInput}
-            onChange={(e) => setSearchInput(e.target.value)}
-          />
-        </div>
-        <Select value={health} onValueChange={setHealth}>
-          <SelectTrigger className="w-[170px]">
-            <SelectValue placeholder="All Health States" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Health</SelectItem>
-            <SelectItem value="GREEN">Green</SelectItem>
-            <SelectItem value="YELLOW">Yellow</SelectItem>
-            <SelectItem value="RED">Red</SelectItem>
-          </SelectContent>
-        </Select>
-        <Select value={state} onValueChange={(v) => setState(v as typeof state)}>
-          <SelectTrigger className="w-[150px]">
-            <SelectValue placeholder="State" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="active">Active</SelectItem>
-            <SelectItem value="archived">Archived</SelectItem>
-            <SelectItem value="deleted">Deleted</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
+      <SavedViewTabs
+        allViews={savedViews.allViews}
+        activeId={viewId}
+        dirty={savedViews.dirty}
+        canSaveToActive={savedViews.canSaveToActive}
+        onSelect={selectSavedView}
+        onSaveToActive={() => savedViews.activeView && savedViews.saveToView(savedViews.activeView.id)}
+        onSaveAs={() => setSaveOpen(true)}
+        onManage={() => setManageOpen(true)}
+      />
 
-      {/* Bulk action bar */}
+      <RosterToolbar
+        filters={filters}
+        setFilters={setFilters}
+        density={density}
+        setDensity={setDensity}
+        searchInput={searchInput}
+        onSearchInput={setSearchInput}
+        stageOptions={stageOptions}
+        amOptions={amOptions}
+        tlOptions={tlOptions}
+        tagOptions={tagOptions}
+        group={view.group}
+        setGroup={setGroup}
+        columnLayout={columnLayout}
+        setColumnLayout={setColumnLayout}
+      />
+
+      <FilterChips
+        filters={filters}
+        setFilters={setFilters}
+        matchedCount={derived.matchedCount}
+        totalCount={total}
+        tagOptions={tagOptions}
+      />
+
       {someSelected && (
-        <div className="flex items-center gap-3 rounded-md border bg-muted/40 px-4 py-2">
+        <div className="flex items-center gap-3 rounded-md border bg-muted/40 px-4 py-2 flex-wrap">
           <span className="text-sm font-medium">{selected.size} selected</span>
-          <div className="flex gap-2 ml-auto">
-            {state === "active" && (
+          <div className="flex gap-2 ml-auto flex-wrap">
+            {filters.state === "active" && (
               <Button size="sm" variant="outline" onClick={() => setConfirm("archive")}>
                 <Archive className="h-4 w-4 mr-2" /> Archive
               </Button>
             )}
-            {(state === "archived" || state === "deleted") && (
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => runBulk("restore")}
-                disabled={restoreDeal.isPending}
-              >
+            {(filters.state === "archived" || filters.state === "deleted") && (
+              <Button size="sm" variant="outline" onClick={() => runBulk("restore")} disabled={restoreDeal.isPending}>
                 <RotateCcw className="h-4 w-4 mr-2" /> Restore
               </Button>
             )}
-            {state !== "deleted" && (
+            {filters.state !== "deleted" && (
               <Button size="sm" variant="destructive" onClick={() => setConfirm("delete")}>
                 <Trash2 className="h-4 w-4 mr-2" /> Delete
               </Button>
@@ -253,208 +304,96 @@ export default function Deals() {
         </div>
       )}
 
-      <Card className="hidden sm:block">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead className="w-[40px]">
-                <Checkbox
-                  checked={allSelected}
-                  onCheckedChange={toggleAll}
-                  aria-label="Select all"
-                  disabled={deals.length === 0}
-                />
-              </TableHead>
-              <SortHeader k="dealName" label="Deal" />
-              <SortHeader k="accountName" label="Account" />
-              <SortHeader k="salesStage" label="Stage" />
-              <SortHeader k="calculatedTCV" label="TCV" className="text-right" />
-              <SortHeader k="healthStatus" label="Health" />
-              <SortHeader k="technicalLead" label="Lead" />
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {isLoading ? (
-              Array.from({ length: 5 }).map((_, i) => (
-                <TableRow key={i}>
-                  {Array.from({ length: colCount }).map((__, j) => (
-                    <TableCell key={j}>
-                      <Skeleton className="h-5 w-full" />
-                    </TableCell>
-                  ))}
-                </TableRow>
-              ))
-            ) : isError ? (
-              <TableRow>
-                <TableCell colSpan={colCount} className="py-12">
-                  <div className="flex flex-col items-center gap-3 text-center">
-                    <AlertCircle className="h-8 w-8 text-destructive" />
-                    <p className="text-sm text-muted-foreground">
-                      Could not load deals.
-                    </p>
-                    <Button size="sm" variant="outline" onClick={() => refetch()}>
-                      Retry
-                    </Button>
-                  </div>
-                </TableCell>
-              </TableRow>
-            ) : deals.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={colCount} className="py-12">
-                  <div className="flex flex-col items-center gap-3 text-center text-muted-foreground">
-                    <Inbox className="h-8 w-8" />
-                    <p className="text-sm">
-                      {search.trim() || health !== "all"
-                        ? "No deals match your filters."
-                        : state === "active"
-                          ? "No active deals yet."
-                          : `No ${state} deals.`}
-                    </p>
-                    {state === "active" && !search.trim() && health === "all" && (
-                      <Button size="sm" onClick={() => setCreateOpen(true)}>
-                        <Plus className="h-4 w-4 mr-2" /> Create your first deal
-                      </Button>
-                    )}
-                  </div>
-                </TableCell>
-              </TableRow>
-            ) : (
-              deals.map((deal) => (
-                <TableRow
-                  key={deal.id}
-                  data-state={selected.has(deal.id) ? "selected" : undefined}
-                  className="group"
-                >
-                  <TableCell>
-                    <Checkbox
-                      checked={selected.has(deal.id)}
-                      onCheckedChange={() => toggleOne(deal.id)}
-                      aria-label={`Select ${deal.dealName}`}
-                    />
-                  </TableCell>
-                  <TableCell className="font-medium">
-                    <Link href={`/deals/${deal.id}`} className="hover:underline">
-                      {deal.dealName}
-                    </Link>
-                  </TableCell>
-                  <TableCell>{deal.accountName}</TableCell>
-                  <TableCell>{deal.salesStage}</TableCell>
-                  <TableCell className="text-right font-mono">
-                    {formatCurrency(deal.calculatedTCV, deal.dealCurrency)}
-                  </TableCell>
-                  <TableCell>
-                    <Badge
-                      variant={
-                        deal.healthStatus === "RED"
-                          ? "destructive"
-                          : deal.healthStatus === "YELLOW"
-                            ? "default"
-                            : "secondary"
-                      }
-                      className={
-                        deal.healthStatus === "YELLOW"
-                          ? "bg-amber-500 hover:bg-amber-600 text-white"
-                          : deal.healthStatus === "GREEN"
-                            ? "bg-emerald-500 hover:bg-emerald-600 text-white"
-                            : ""
-                      }
-                    >
-                      {deal.healthStatus}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>{deal.technicalLead}</TableCell>
-                </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
-      </Card>
-
-      {/* Mobile card list — shown below sm, hidden at sm+ */}
-      <div className="sm:hidden space-y-3">
-        {isLoading ? (
-          Array.from({ length: 4 }).map((_, i) => (
-            <div key={i} className="rounded-lg border p-4 space-y-2">
-              <Skeleton className="h-5 w-3/4" />
-              <Skeleton className="h-4 w-1/2" />
-              <Skeleton className="h-6 w-1/3" />
-            </div>
-          ))
-        ) : isError ? (
-          <div className="flex flex-col items-center gap-3 text-center py-8">
+      {/* States: loading / error / empty */}
+      {isLoading ? (
+        <Card className="p-4 space-y-3">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <Skeleton key={i} className="h-9 w-full" />
+          ))}
+        </Card>
+      ) : isError ? (
+        <Card className="py-12">
+          <div className="flex flex-col items-center gap-3 text-center">
             <AlertCircle className="h-8 w-8 text-destructive" />
             <p className="text-sm text-muted-foreground">Could not load deals.</p>
-            <Button size="sm" variant="outline" onClick={() => refetch()}>Retry</Button>
+            <Button size="sm" variant="outline" onClick={() => refetch()}>
+              Retry
+            </Button>
           </div>
-        ) : deals.length === 0 ? (
-          <div className="flex flex-col items-center gap-3 text-center text-muted-foreground py-8">
+        </Card>
+      ) : derived.flat.length === 0 ? (
+        <Card className="py-12">
+          <div className="flex flex-col items-center gap-3 text-center text-muted-foreground">
             <Inbox className="h-8 w-8" />
-            <p className="text-sm">
-              {search.trim() || health !== "all"
-                ? "No deals match your filters."
-                : state === "active"
-                  ? "No active deals yet."
-                  : `No ${state} deals.`}
-            </p>
-            {state === "active" && !search.trim() && health === "all" && (
+            <p className="text-sm">{emptyMessage}</p>
+            {filters.state === "active" && !hasActiveFilters && (
               <Button size="sm" onClick={() => setCreateOpen(true)}>
                 <Plus className="h-4 w-4 mr-2" /> Create your first deal
               </Button>
             )}
           </div>
-        ) : (
-          deals.map((deal) => (
-            <Link
-              key={deal.id}
-              href={`/deals/${deal.id}`}
-              className="block rounded-lg border p-4 transition-colors hover:border-primary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            >
-              <div className="flex items-center justify-between">
-                <span className="font-semibold">{deal.accountName}</span>
-                <Badge
-                  variant={
-                    deal.healthStatus === "RED"
-                      ? "destructive"
-                      : deal.healthStatus === "YELLOW"
-                        ? "default"
-                        : "secondary"
-                  }
-                  className={
-                    deal.healthStatus === "YELLOW"
-                      ? "bg-amber-500 hover:bg-amber-600 text-white"
-                      : deal.healthStatus === "GREEN"
-                        ? "bg-emerald-500 hover:bg-emerald-600 text-white"
-                        : ""
-                  }
-                >
-                  {deal.healthStatus}
-                </Badge>
-              </div>
-              <p className="text-sm text-muted-foreground mt-1">{deal.dealName}</p>
-              <p className="text-xl font-bold font-mono mt-1">
-                {formatCurrency(deal.calculatedTCV, deal.dealCurrency)}
-              </p>
-            </Link>
-          ))
-        )}
-      </div>
+        </Card>
+      ) : (
+        <>
+          {/* Table at lg+ ; cards below (mobile + tablet). The preview always
+              opens as a right-side Sheet overlay so the table never reflows. */}
+          <div className="hidden lg:block">
+            <Card className="min-w-0 overflow-hidden">
+              <RosterTable
+                derived={derived}
+                visibleColumns={visibleColumns}
+                columnWidths={columnLayout.width}
+                onColumnResize={onColumnResize}
+                density={density}
+                sort={view.sort}
+                onToggleSort={toggleSort}
+                selection={selected}
+                onToggleRow={toggleOne}
+                onToggleAll={toggleAll}
+                allSelected={allSelected}
+                grouped={grouped}
+                collapsedGroups={collapsedGroups}
+                onToggleGroup={toggleGroup}
+                onRowClick={(row) => setPreviewDealId(row.id)}
+                previewId={previewDealId}
+                rowActions={rowActions}
+              />
+            </Card>
+          </div>
+          <div className="lg:hidden">
+            <RosterCardList rows={derived.flat} />
+          </div>
+        </>
+      )}
 
-      {!isLoading && !isError && deals.length > 0 && (
+      {/* Preview always opens as a right-side Sheet overlay (handles its own Esc
+          / outside-click), so opening it never resizes or reflows the table. */}
+      <PreviewPanel row={previewRow} onClose={() => setPreviewDealId(null)} />
+
+      {!isLoading && !isError && derived.flat.length > 0 && (
         <p className="text-xs text-muted-foreground">
-          {data?.meta?.total ?? deals.length} deal
-          {(data?.meta?.total ?? deals.length) === 1 ? "" : "s"}
-          {isFetching ? " · updating..." : ""}
+          {derived.matchedCount === total
+            ? `${total} deal${total === 1 ? "" : "s"}`
+            : `${derived.matchedCount} of ${total} deals`}
+          {isFetching ? " · updating…" : ""}
         </p>
       )}
+
+      <SaveViewDialog open={saveOpen} onOpenChange={setSaveOpen} onSave={savedViews.createView} />
+      <ManageViewsDialog
+        open={manageOpen}
+        onOpenChange={setManageOpen}
+        views={savedViews.customViews}
+        onRename={savedViews.renameView}
+        onDelete={savedViews.deleteView}
+      />
 
       <CreateDealSheet open={createOpen} onOpenChange={setCreateOpen} />
 
       <AlertDialog open={confirm !== null} onOpenChange={(v) => !v && setConfirm(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>
-              {confirm === "delete" ? "Delete deals?" : "Archive deals?"}
-            </AlertDialogTitle>
+            <AlertDialogTitle>{confirm === "delete" ? "Delete deals?" : "Archive deals?"}</AlertDialogTitle>
             <AlertDialogDescription>
               {confirm === "delete"
                 ? `This will move ${selected.size} deal${selected.size > 1 ? "s" : ""} to the deleted state. You can restore them later.`
@@ -465,11 +404,7 @@ export default function Deals() {
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
               onClick={() => runBulk(confirm === "delete" ? "delete" : "archive")}
-              className={
-                confirm === "delete"
-                  ? "bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                  : ""
-              }
+              className={confirm === "delete" ? "bg-destructive text-destructive-foreground hover:bg-destructive/90" : ""}
             >
               {confirm === "delete" ? "Delete" : "Archive"}
             </AlertDialogAction>

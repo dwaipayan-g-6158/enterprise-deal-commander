@@ -1,5 +1,5 @@
 import { Router, type IRouter, type Request, type Response } from "express";
-import { and, desc, eq, gte, lte } from "drizzle-orm";
+import { and, desc, eq, gte, isNull, lte } from "drizzle-orm";
 import {
   db,
   enterpriseDeals,
@@ -8,6 +8,8 @@ import {
   dealSnapshots,
 } from "@workspace/db";
 import {
+  ListPortfolioActivityQueryParams,
+  ListPortfolioActivityResponse,
   ListDealActivityParams,
   ListDealActivityQueryParams,
   ListDealActivityResponse,
@@ -50,6 +52,69 @@ async function ensureDeal(dealId: string) {
 function clampLimit(limit: number | undefined, fallback: number) {
   return Math.min(Math.max(limit ?? fallback, 1), 200);
 }
+
+// Portfolio-wide activity stream across all active (non-deleted) deals. The
+// per-deal feed lives at /deals/:dealId/activity below; this literal path is
+// registered first so it never collides with the param route.
+router.get("/activity", async (req: Request, res: Response) => {
+  const q = ListPortfolioActivityQueryParams.parse(req.query);
+
+  const limit = clampLimit(q.limit, 50);
+  const offset = Math.max(q.offset ?? 0, 0);
+
+  const conditions = [isNull(enterpriseDeals.deletedAt)];
+  if (q.since)
+    conditions.push(gte(dealActivityLog.occurredAt, new Date(q.since)));
+  if (q.until)
+    conditions.push(lte(dealActivityLog.occurredAt, new Date(q.until)));
+  const where = and(...conditions);
+
+  const rows = await db
+    .select({
+      id: dealActivityLog.id,
+      dealId: dealActivityLog.dealId,
+      dealName: enterpriseDeals.dealName,
+      eventType: dealActivityLog.eventType,
+      entityType: dealActivityLog.entityType,
+      entityId: dealActivityLog.entityId,
+      summary: dealActivityLog.summary,
+      metadata: dealActivityLog.metadata,
+      actor: dealActivityLog.actor,
+      occurredAt: dealActivityLog.occurredAt,
+    })
+    .from(dealActivityLog)
+    .innerJoin(enterpriseDeals, eq(dealActivityLog.dealId, enterpriseDeals.id))
+    .where(where)
+    .orderBy(desc(dealActivityLog.occurredAt))
+    .limit(limit)
+    .offset(offset);
+
+  const totalRows = await db
+    .select({ id: dealActivityLog.id })
+    .from(dealActivityLog)
+    .innerJoin(enterpriseDeals, eq(dealActivityLog.dealId, enterpriseDeals.id))
+    .where(where);
+
+  const data = rows.map((r) => ({
+    id: r.id,
+    dealId: r.dealId,
+    dealName: r.dealName,
+    eventType: r.eventType,
+    entityType: r.entityType,
+    entityId: r.entityId,
+    summary: r.summary,
+    metadata: r.metadata,
+    actor: r.actor,
+    occurredAt: toISO(r.occurredAt) ?? new Date().toISOString(),
+  }));
+
+  res.json(
+    ListPortfolioActivityResponse.parse({
+      data,
+      meta: { total: totalRows.length, limit, offset },
+    }),
+  );
+});
 
 router.get(
   "/deals/:dealId/activity",

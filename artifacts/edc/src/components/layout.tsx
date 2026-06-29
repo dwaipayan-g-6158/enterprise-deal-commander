@@ -25,6 +25,13 @@ function SidebarBody({ location, user, onNavigate, onLogout }: {
   onNavigate?: () => void;
   onLogout: () => void;
 }) {
+  // The command palette binds both ⌘K and Ctrl+K; show the key that matches the
+  // user's OS so the hint isn't Mac-only.
+  const isMac =
+    typeof navigator !== "undefined" &&
+    /Mac|iPhone|iPad|iPod/i.test(
+      navigator.platform || navigator.userAgent || "",
+    );
   return (
     <>
       <div className="p-6 border-b border-border flex items-center gap-3">
@@ -50,8 +57,15 @@ function SidebarBody({ location, user, onNavigate, onLogout }: {
       </nav>
 
       <div className="p-4 border-t border-border space-y-2">
-        <p className="text-[10px] text-muted-foreground uppercase tracking-wider px-1 pb-1">
-          Press <kbd className="font-mono">Cmd K</kbd> for quick search
+        <p className="flex items-center gap-1 text-[10px] text-muted-foreground uppercase tracking-wider px-1 pb-1">
+          <span>Press</span>
+          <kbd className="rounded border border-border bg-muted px-1.5 py-0.5 font-mono text-[10px] leading-none text-foreground">
+            {isMac ? "⌘" : "Ctrl"}
+          </kbd>
+          <kbd className="rounded border border-border bg-muted px-1.5 py-0.5 font-mono text-[10px] leading-none text-foreground">
+            K
+          </kbd>
+          <span>for quick search</span>
         </p>
         <div className="mb-2">
           <p className="text-sm font-medium">{user?.email}</p>

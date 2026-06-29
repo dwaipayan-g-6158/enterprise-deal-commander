@@ -10,6 +10,8 @@ import type { ActivityEventMetadata } from './activityEventMetadata';
 export interface ActivityEvent {
   id: string;
   dealId: string;
+  /** @nullable */
+  dealName?: string | null;
   eventType: string;
   entityType: string;
   /** @nullable */

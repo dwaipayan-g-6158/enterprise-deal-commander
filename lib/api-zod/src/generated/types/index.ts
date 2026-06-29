@@ -142,6 +142,7 @@ export * from './listDealsParams';
 export * from './listDealsState';
 export * from './listMeta';
 export * from './listNotificationsParams';
+export * from './listPortfolioActivityParams';
 export * from './listScenariosParams';
 export * from './loginInput';
 export * from './lossArchetype';

@@ -7,6 +7,7 @@
  */
 import type { ComplianceDriver } from './complianceDriver';
 import type { CrossSell } from './crossSell';
+import type { Tag } from './tag';
 
 export interface Deal {
   id: string;
@@ -62,4 +63,8 @@ export interface Deal {
   deletedAt?: string | null;
   createdAt?: string;
   updatedAt?: string;
+  /** When a search query is supplied, the sources in which the term matched (e.g. name, notes, stakeholder, decision, blocker). Absent when not searching. */
+  matchedIn?: string[];
+  /** Tags applied to this deal (for roster display and filtering). */
+  tags?: Tag[];
 }

@@ -63,6 +63,12 @@ export interface ComplianceDriver {
   name: string;
 }
 
+export interface Tag {
+  id: string;
+  tagName: string;
+  color: string;
+}
+
 export interface Deal {
   id: string;
   dealName: string;
@@ -117,6 +123,10 @@ export interface Deal {
   deletedAt?: string | null;
   createdAt?: string;
   updatedAt?: string;
+  /** When a search query is supplied, the sources in which the term matched (e.g. name, notes, stakeholder, decision, blocker). Absent when not searching. */
+  matchedIn?: string[];
+  /** Tags applied to this deal (for roster display and filtering). */
+  tags?: Tag[];
 }
 
 export interface DealInput {
@@ -736,6 +746,8 @@ export type ActivityEventMetadata = { [key: string]: unknown } | null;
 export interface ActivityEvent {
   id: string;
   dealId: string;
+  /** @nullable */
+  dealName?: string | null;
   eventType: string;
   entityType: string;
   /** @nullable */
@@ -1628,12 +1640,6 @@ export interface CustomFieldValueInput {
   value_multi_select?: string[];
 }
 
-export interface Tag {
-  id: string;
-  tagName: string;
-  color: string;
-}
-
 export interface TagInput {
   tag_name: string;
   color: string;
@@ -1702,6 +1708,13 @@ since?: string;
 
 export type GetSnapshotParams = {
 date: string;
+};
+
+export type ListPortfolioActivityParams = {
+since?: string;
+until?: string;
+limit?: number;
+offset?: number;
 };
 
 export type ListDealActivityParams = {

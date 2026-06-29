@@ -533,6 +533,22 @@ paths:
                 $ref: "#/components/schemas/SnapshotResponse"
 
   # ============ V2 DURABLE HISTORY ============
+  /v2/activity:
+    get:
+      operationId: listPortfolioActivity
+      tags: [history]
+      parameters:
+        - { name: since, in: query, required: false, schema: { type: string } }
+        - { name: until, in: query, required: false, schema: { type: string } }
+        - { name: limit, in: query, required: false, schema: { type: integer } }
+        - { name: offset, in: query, required: false, schema: { type: integer } }
+      responses:
+        "200":
+          description: Portfolio-wide activity stream (all active deals, newest first)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ActivityListResponse"
   /v2/deals/{dealId}/activity:
     get:
       operationId: listDealActivity
@@ -938,6 +954,38 @@ paths:
       tags: [v2intel]
       responses:
         "200": { description: Win/loss analytics, content: { application/json: { schema: { $ref: "#/components/schemas/GenericDataResponse" } } } }
+
+  # --- Dashboard command-center aggregations ---
+  /v2/analytics/gates:
+    get:
+      operationId: getGateFunnel
+      tags: [v2intel]
+      responses:
+        "200": { description: Gate completion funnel across active deals, content: { application/json: { schema: { $ref: "#/components/schemas/GenericDataResponse" } } } }
+  /v2/analytics/next-actions:
+    get:
+      operationId: getNextActions
+      tags: [v2intel]
+      responses:
+        "200": { description: Next-action queue for the dashboard, content: { application/json: { schema: { $ref: "#/components/schemas/GenericDataResponse" } } } }
+  /v2/analytics/vital-signs:
+    get:
+      operationId: getVitalSigns
+      tags: [v2intel]
+      responses:
+        "200": { description: Weighted pipeline plus week-over-week baseline, content: { application/json: { schema: { $ref: "#/components/schemas/GenericDataResponse" } } } }
+  /v2/analytics/roster:
+    get:
+      operationId: getRosterEnrichment
+      tags: [v2intel]
+      responses:
+        "200": { description: Per-deal score/gates/velocity enrichment, content: { application/json: { schema: { $ref: "#/components/schemas/GenericDataResponse" } } } }
+  /v2/analytics/memory-insights:
+    get:
+      operationId: getMemoryInsights
+      tags: [v2intel]
+      responses:
+        "200": { description: Deterministic deal-memory insights vs current pipeline, content: { application/json: { schema: { $ref: "#/components/schemas/GenericDataResponse" } } } }
 
   # --- F2 Competitive Intelligence (per deal) ---
   /v2/deals/{dealId}/competitors:
@@ -1361,6 +1409,14 @@ paths:
       requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/TagInput" } } } }
       responses:
         "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/TagResponse" } } } }
+  /v2/tags/{tagId}:
+    delete:
+      operationId: deleteTag
+      tags: [v2intel]
+      parameters:
+        - { name: tagId, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: Deleted, content: { application/json: { schema: { $ref: "#/components/schemas/MessageResponse" } } } }
   /v2/deals/{dealId}/tags:
     get:
       operationId: getDealTags
@@ -1497,6 +1553,17 @@ components:
         deletedAt: { type: ["string", "null"] }
         createdAt: { type: string }
         updatedAt: { type: string }
+        matchedIn:
+          type: array
+          description: >-
+            When a search query is supplied, the sources in which the term
+            matched (e.g. name, notes, stakeholder, decision, blocker). Absent
+            when not searching.
+          items: { type: string }
+        tags:
+          type: array
+          description: Tags applied to this deal (for roster display and filtering).
+          items: { $ref: "#/components/schemas/Tag" }
       required:
         - id
         - dealName
@@ -2160,6 +2227,7 @@ components:
       properties:
         id: { type: string }
         dealId: { type: string }
+        dealName: { type: ["string", "null"] }
         eventType: { type: string }
         entityType: { type: string }
         entityId: { type: ["string", "null"] }
