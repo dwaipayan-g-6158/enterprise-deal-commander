@@ -46,7 +46,14 @@ import { PlaybookPanel } from "@/components/cockpit/v2/playbook-panel";
 import { PricingPanel } from "@/components/cockpit/v2/pricing-panel";
 import { DealTagsBar } from "@/components/cockpit/v2/deal-tags-bar";
 import { formatCurrency } from "@/components/cockpit/use-invalidate";
-import { extractDealRisk } from "@/components/cockpit/risk/risk-model";
+import {
+  extractDealRisk,
+  healthToRiskLevel,
+  RISK_LEVEL_CLASS,
+  RISK_LEVEL_LABEL,
+  type RiskLevel,
+} from "@/components/cockpit/risk/risk-model";
+import { cn } from "@/lib/utils";
 
 function CockpitSkeleton() {
   return (
@@ -193,6 +200,12 @@ export default function DealCockpit() {
   const redAlerts = alertCount(intel.governance.alerts);
   const managedCount = managedAlertCount(intel.governance.managedAlerts);
 
+  const risk = extractDealRisk(intel);
+  const healthStatus = (deal.healthStatus === "RED" || deal.healthStatus === "YELLOW" || deal.healthStatus === "GREEN")
+    ? deal.healthStatus
+    : "GREEN" as const;
+  const level: RiskLevel = risk ? risk.riskLevel : healthToRiskLevel(healthStatus);
+
   const renderPanel = (subId: string) => {
     switch (subId) {
       case "risk": return (
@@ -200,7 +213,7 @@ export default function DealCockpit() {
           dealId={id}
           alerts={intel.governance.alerts}
           managedAlerts={intel.governance.managedAlerts ?? []}
-          risk={extractDealRisk(intel)}
+          risk={risk}
         />
       );
       case "coaching": return <NextBestAction dealId={id} />;
@@ -236,18 +249,16 @@ export default function DealCockpit() {
           <div className="flex items-center gap-3 mb-2">
             <h1 className="text-3xl font-bold">{deal.dealName}</h1>
             <Badge
-              variant={
-                deal.healthStatus === "RED" ? "destructive" : deal.healthStatus === "YELLOW" ? "default" : "secondary"
-              }
-              className={
-                deal.healthStatus === "YELLOW"
-                  ? "bg-amber-500 hover:bg-amber-600 text-white"
-                  : deal.healthStatus === "GREEN"
-                  ? "bg-emerald-500 hover:bg-emerald-600 text-white"
-                  : ""
-              }
+              variant="outline"
+              className={cn(
+                RISK_LEVEL_CLASS[level].bg,
+                RISK_LEVEL_CLASS[level].text,
+                RISK_LEVEL_CLASS[level].border,
+                "font-medium",
+              )}
             >
-              {deal.healthStatus}
+              {risk ? <span className="font-mono tabular-nums mr-1.5">{risk.compositeScore}</span> : null}
+              {RISK_LEVEL_LABEL[level]}
             </Badge>
           </div>
           <p className="text-muted-foreground text-lg">{deal.accountName}</p>
