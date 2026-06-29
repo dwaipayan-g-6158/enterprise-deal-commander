@@ -46,6 +46,7 @@ import { PlaybookPanel } from "@/components/cockpit/v2/playbook-panel";
 import { PricingPanel } from "@/components/cockpit/v2/pricing-panel";
 import { DealTagsBar } from "@/components/cockpit/v2/deal-tags-bar";
 import { formatCurrency } from "@/components/cockpit/use-invalidate";
+import { extractDealRisk } from "@/components/cockpit/risk/risk-model";
 
 function CockpitSkeleton() {
   return (
@@ -199,6 +200,7 @@ export default function DealCockpit() {
           dealId={id}
           alerts={intel.governance.alerts}
           managedAlerts={intel.governance.managedAlerts ?? []}
+          risk={extractDealRisk(intel)}
         />
       );
       case "coaching": return <NextBestAction dealId={id} />;
