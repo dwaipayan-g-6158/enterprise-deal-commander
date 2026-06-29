@@ -24,6 +24,7 @@ import {
 import { GetDealScoreParams, ParseNlcCommandBody } from "@workspace/api-zod";
 import { notFound } from "../../lib/http";
 import { scoreDeal, rescoreActiveDeals } from "../../lib/scoring";
+import { cachedIntel } from "../../lib/portfolio";
 
 const router: IRouter = Router();
 
@@ -547,10 +548,31 @@ router.get("/analytics/roster", async (_req: Request, res: Response) => {
     return s.length ? s[Math.floor(s.length / 2)] : 0;
   };
 
+  // Fetch per-deal risk from the cached intelligence tier (intel: prefix,
+  // 30 s TTL, event-bus-invalidated on mutation). cachedIntel() wraps
+  // assembleDealIntelligence() in cache.wrap(CacheKeys.intelligence(dealId),
+  // CacheTtl.intelligence, ...) so this is the same cached path used by the
+  // portfolio summary and the single-deal intelligence route — not an uncached
+  // O(N) loop.
+  const intelResults = await Promise.all(deals.map((d) => cachedIntel(d.id)));
+  const riskByDeal = new Map(
+    deals.map((d, i) => {
+      const intel = intelResults[i];
+      return [
+        d.id,
+        {
+          riskScore: intel?.risk?.compositeScore ?? null,
+          riskLevel: intel?.risk?.riskLevel ?? null,
+        },
+      ];
+    }),
+  );
+
   const rows = deals.map((d) => {
     const g = gateAgg.get(d.id) ?? { c: 0, t: 0 };
     const days = daysBetween(d.stageEnteredAt);
     const bench = median(byStage.get(d.stageName ?? "?") ?? [days]);
+    const risk = riskByDeal.get(d.id);
     return {
       id: d.id,
       dealName: d.dealName,
@@ -560,6 +582,8 @@ router.get("/analytics/roster", async (_req: Request, res: Response) => {
       benchmarkDays: bench,
       deltaDays: days - bench,
       velocityStatus: days > bench * 1.5 ? "SLOW" : days < bench * 0.5 ? "FAST" : "NORMAL",
+      riskScore: risk?.riskScore ?? null,
+      riskLevel: risk?.riskLevel ?? null,
     };
   });
 

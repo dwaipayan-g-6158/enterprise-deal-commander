@@ -830,6 +830,36 @@ export const GetDealIntelligenceResponse = zod.object({
   "message": zod.string()
 }))
 }),
+  "risk": zod.object({
+  "compositeScore": zod.number(),
+  "riskLevel": zod.enum(['LOW', 'MODERATE', 'ELEVATED', 'HIGH']),
+  "dimensions": zod.array(zod.object({
+  "name": zod.string(),
+  "score": zod.number(),
+  "baseScore": zod.number(),
+  "amplification": zod.number(),
+  "weight": zod.number(),
+  "assessable": zod.boolean(),
+  "signals": zod.array(zod.object({
+  "factor": zod.string(),
+  "rawScore": zod.number(),
+  "weight": zod.number()
+})),
+  "contributingPatterns": zod.array(zod.string())
+})),
+  "topDrivers": zod.array(zod.object({
+  "dimension": zod.string(),
+  "factor": zod.string(),
+  "impact": zod.number()
+})),
+  "recommendedActions": zod.array(zod.object({
+  "source": zod.enum(['STAGE_GUARDRAIL', 'PATTERN', 'DIMENSION']),
+  "priority": zod.enum(['BLOCKER', 'CRITICAL', 'HIGH', 'MEDIUM', 'LOW']),
+  "action": zod.string(),
+  "patternCode": zod.string().nullish(),
+  "dimension": zod.string().nullish()
+}))
+}),
   "recommendations": zod.array(zod.object({
   "type": zod.enum(['NEXT_BEST_PRODUCT', 'SUITE_BUNDLE', 'RECOVERY_GAP']),
   "productCodes": zod.array(zod.string()),

@@ -15,7 +15,7 @@ import { COLUMNS } from "./model/roster-columns";
 import type { ColumnId, Density, Health, RosterRow, SortSpec } from "./model/roster-types";
 import type { DerivedRows, RosterGroup } from "./model/derive-rows";
 import { DENSITY_PAD, DENSITY_TEXT } from "./density";
-import { HEALTH_BORDER, RosterCellContent } from "./cells";
+import { HEALTH_BORDER, RISK_BORDER, RosterCellContent } from "./cells";
 import { RowContextMenu, type RowActions } from "./row-context-menu";
 
 interface RosterTableProps {
@@ -196,7 +196,7 @@ export function RosterTable(props: RosterTableProps) {
                       onClick={() => onRowClick(row)}
                       className={cn(
                         "group cursor-pointer",
-                        HEALTH_BORDER[row.healthStatus as Health],
+                        row.riskLevel ? RISK_BORDER[row.riskLevel] : HEALTH_BORDER[row.healthStatus as Health],
                         isPreview && "bg-primary/5 ring-1 ring-inset ring-primary/30",
                       )}
                     >

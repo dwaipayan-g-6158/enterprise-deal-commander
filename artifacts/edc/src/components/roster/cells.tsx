@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { shortDate, daysUntil } from "@/components/dashboard/widgets/_shared";
 import { formatCurrency } from "@/components/cockpit/use-invalidate";
+import { RISK_LEVEL_CLASS, RISK_LEVEL_LABEL, type RiskLevel } from "@/components/cockpit/risk/risk-model";
 import { VELOCITY_LABEL } from "./model/velocity";
 import type { ColumnId, Health, RosterRow, VelocityBucket } from "./model/roster-types";
 
@@ -28,6 +29,18 @@ export function ScoreCell({ score }: { score: number | null }) {
   const tone =
     score >= 70 ? "text-emerald-600 dark:text-emerald-400" : score >= 40 ? "text-amber-600 dark:text-amber-400" : "text-red-600 dark:text-red-400";
   return <span className={cn("font-mono", tone)}>{score}</span>;
+}
+
+export function RiskCell({ score, level }: { score: number | null; level: RiskLevel | null }) {
+  if (score == null || !level) return <span className="text-muted-foreground">—</span>;
+  const c = RISK_LEVEL_CLASS[level];
+  return (
+    <span className="inline-flex items-center gap-1.5" aria-label={`Risk ${score}, ${RISK_LEVEL_LABEL[level]}`}>
+      <span className={cn("font-mono font-semibold tabular-nums", c.text)}>{score}</span>
+      <span className={cn("h-1.5 w-1.5 rounded-full", c.dot)} aria-hidden />
+      <span className="text-[10px] uppercase tracking-wide text-muted-foreground">{level}</span>
+    </span>
+  );
 }
 
 export function GatesCell({ pct }: { pct: number }) {
@@ -148,6 +161,8 @@ export function RosterCellContent({ columnId, row }: { columnId: ColumnId; row: 
       return <TcvCell row={row} />;
     case "healthStatus":
       return <HealthBadge health={row.healthStatus} />;
+    case "riskLevel":
+      return <RiskCell score={row.riskScore} level={row.riskLevel} />;
     case "score":
       return <ScoreCell score={row.score} />;
     case "gatesPct":
@@ -169,4 +184,11 @@ export const HEALTH_BORDER: Record<Health, string> = {
   RED: "border-l-2 border-l-red-500",
   YELLOW: "border-l-2 border-l-amber-500",
   GREEN: "",
+};
+
+export const RISK_BORDER: Record<RiskLevel, string> = {
+  HIGH: "border-l-2 border-l-red-500",
+  ELEVATED: "border-l-2 border-l-orange-500",
+  MODERATE: "border-l-2 border-l-amber-500",
+  LOW: "",
 };

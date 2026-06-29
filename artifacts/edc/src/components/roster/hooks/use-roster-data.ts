@@ -37,6 +37,8 @@ export function useRosterData(params: { state: DealState; search: string }) {
         daysInStage: e?.daysInStage ?? null,
         benchmarkDays: e?.benchmarkDays ?? null,
         deltaDays: e?.deltaDays ?? null,
+        riskScore: e?.riskScore ?? null,
+        riskLevel: e?.riskLevel ?? null,
         velocity: deriveVelocityBucket(e),
         matchedIn: withMatch.matchedIn,
       } satisfies RosterRow;

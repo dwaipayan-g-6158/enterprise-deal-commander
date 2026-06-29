@@ -1,6 +1,7 @@
 // Deal Roster — shared type model. Pure types only (no React/JSX) so the
 // headless layer (url codec, velocity, derived-rows) stays node-testable.
 import type { Deal } from "@workspace/api-client-react";
+import type { RiskLevel } from "@/components/cockpit/risk/risk-model";
 
 export type { Deal };
 
@@ -25,6 +26,8 @@ export interface RosterEnrichment {
   benchmarkDays: number;
   deltaDays: number;
   velocityStatus: "FAST" | "NORMAL" | "SLOW";
+  riskScore?: number | null;
+  riskLevel?: RiskLevel | null;
 }
 
 /** A deal merged with its enrichment + the client-derived velocity bucket. */
@@ -34,6 +37,8 @@ export interface RosterRow extends Deal {
   daysInStage: number | null;
   benchmarkDays: number | null;
   deltaDays: number | null;
+  riskScore: number | null;
+  riskLevel: RiskLevel | null;
   velocity: VelocityBucket;
   /** From the Phase 6 backend search extension: where the term matched. */
   matchedIn?: string[];
@@ -46,6 +51,7 @@ export type ColumnId =
   | "salesStage"
   | "calculatedTCV"
   | "healthStatus"
+  | "riskLevel"
   | "score"
   | "gatesPct"
   | "velocity"

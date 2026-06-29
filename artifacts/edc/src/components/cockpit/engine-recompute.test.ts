@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeAll, afterAll } from "vitest";
 import {
   processDealIntelligence,
   calculateOwnMomentum,
@@ -447,6 +447,14 @@ function cleanDeal(): GroundTruth {
 }
 
 describe("Risk Simulator vs server intelligence parity", () => {
+  beforeAll(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-30T12:00:00Z"));
+  });
+  afterAll(() => {
+    vi.useRealTimers();
+  });
+
   it("matches alerts, health and financials for a rich decelerating deal", () => {
     const gt = richDeal();
     const server = runServer(gt);
@@ -578,5 +586,100 @@ describe("Risk Simulator vs server intelligence parity", () => {
     };
     const serverOverridden = runServer(overridden);
     assertParity(client, serverOverridden);
+  });
+});
+
+/**
+ * B7 — Risk Simulator produces output.risk
+ *
+ * Confirms that recomputeIntelligence (the browser Risk Simulator) returns a
+ * fully-populated `risk` block every time it runs, using the same pure
+ * `processDealIntelligence` as the server. No stakeholders or competitors are
+ * passed (they're optional — the engine degrades gracefully), which is exactly
+ * the browser simulator's call-site: it omits those optional ProcessContext
+ * fields, so Stakeholder Coverage and Competitive Exposure score with
+ * assessable:false, but the composite is still a finite numeric.
+ */
+describe("Risk Simulator — output.risk flows through recomputeIntelligence (B7)", () => {
+  it("produces a finite compositeScore (0–100) and a valid riskLevel for a representative deal", () => {
+    const gt = richDeal();
+    const server = runServer(gt);
+    const { deal, intel } = serialize(gt, server);
+    const client = runClient(gt, deal, intel);
+
+    // result.risk must be present and fully populated.
+    expect(client.risk).toBeDefined();
+
+    const { compositeScore, riskLevel, dimensions } = client.risk;
+
+    // compositeScore must be a finite number in [0, 100].
+    expect(Number.isFinite(compositeScore)).toBe(true);
+    expect(compositeScore).toBeGreaterThanOrEqual(0);
+    expect(compositeScore).toBeLessThanOrEqual(100);
+
+    // riskLevel must be one of the four valid levels.
+    expect(["LOW", "MODERATE", "ELEVATED", "HIGH"]).toContain(riskLevel);
+
+    // All seven dimensions must be present.
+    expect(dimensions).toHaveLength(7);
+
+    // The rich deal fires multiple RED/YELLOW patterns — composite must be
+    // meaningfully elevated (not stuck at 0 or maxed at 100 due to a bug).
+    expect(compositeScore).toBeGreaterThan(0);
+  });
+
+  it("degraded path: no stakeholders/competitors → Stakeholder Coverage & Competitive Exposure assessable:false, composite still numeric", () => {
+    // recomputeIntelligence never passes stakeholders or competitors (they live
+    // in ProcessContext fields the browser simulator does not supply). This is
+    // the real call-site. The engine must handle it without throwing and still
+    // produce a finite composite.
+    const gt = richDeal();
+    const server = runServer(gt);
+    const { deal, intel } = serialize(gt, server);
+    const client = runClient(gt, deal, intel);
+
+    const { compositeScore, dimensions } = client.risk;
+
+    // Composite is still a real number despite two dims being non-assessable.
+    expect(Number.isFinite(compositeScore)).toBe(true);
+
+    const stakeholderDim = dimensions.find((d) => d.name === "Stakeholder Coverage");
+    const competitiveDim = dimensions.find((d) => d.name === "Competitive Exposure");
+
+    expect(stakeholderDim).toBeDefined();
+    expect(competitiveDim).toBeDefined();
+
+    // Both degrade gracefully: assessable:false but score is still a number.
+    expect(stakeholderDim!.assessable).toBe(false);
+    expect(competitiveDim!.assessable).toBe(false);
+    expect(Number.isFinite(stakeholderDim!.score)).toBe(true);
+    expect(Number.isFinite(competitiveDim!.score)).toBe(true);
+  });
+
+  it("risk block is consistent between server and client (no drift)", () => {
+    // The server computes risk via the same processDealIntelligence, so the
+    // client result must match it exactly when no overrides are applied and no
+    // optional context fields (stakeholders/competitors) are supplied on either
+    // side.
+    const gt = richDeal();
+    const server = runServer(gt);
+    const { deal, intel } = serialize(gt, server);
+    const client = runClient(gt, deal, intel);
+
+    // compositeScore and riskLevel must be identical — same engine, same input.
+    expect(client.risk.compositeScore).toBe(server.risk.compositeScore);
+    expect(client.risk.riskLevel).toBe(server.risk.riskLevel);
+
+    // All dimension names and their assessable flag must match.
+    const clientDimNames = client.risk.dimensions.map((d) => d.name).sort();
+    const serverDimNames = server.risk.dimensions.map((d) => d.name).sort();
+    expect(clientDimNames).toEqual(serverDimNames);
+
+    for (const dim of client.risk.dimensions) {
+      const serverDim = server.risk.dimensions.find((d) => d.name === dim.name);
+      expect(serverDim).toBeDefined();
+      expect(dim.score).toBe(serverDim!.score);
+      expect(dim.assessable).toBe(serverDim!.assessable);
+    }
   });
 });

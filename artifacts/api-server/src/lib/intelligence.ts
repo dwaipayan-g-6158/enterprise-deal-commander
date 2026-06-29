@@ -22,6 +22,9 @@ import {
   competitors,
   complianceDrivers,
   competitorBattlecards,
+  dealCompetitors,
+  stakeholders,
+  velocityBenchmarks,
 } from "@workspace/db";
 import {
   processDealIntelligence,
@@ -32,8 +35,13 @@ import {
   type RawDeal,
   type RawGate,
   type IntelligenceOutput,
+  type StakeholderInput,
+  type CompetitorInput,
+  type RiskV2Weights,
+  type RiskLevelBoundaries,
 } from "@workspace/engine";
 import { cache, CacheKeys, CacheTtl } from "./cache";
+import { competitorWinRates } from "./competitive";
 
 export const DEFAULT_THRESHOLDS: EngineThresholds = {
   elephant_tcv_threshold: 250000,
@@ -64,6 +72,56 @@ export function toISO(value: Date | string | null | undefined): string | null {
   if (value == null) return null;
   if (typeof value === "string") return value;
   return value.toISOString();
+}
+
+/** Read a numeric tunable from the merged thresholds, falling back when absent/non-numeric. */
+function num(
+  thresholds: EngineThresholds,
+  key: string,
+  fallback: number,
+): number {
+  const v = thresholds[key];
+  const n = typeof v === "number" ? v : Number(v);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+/** Derive the v2 risk dimension weights from the merged thresholds (Task B4 rows). */
+function deriveRiskWeights(thresholds: EngineThresholds): RiskV2Weights {
+  return {
+    technical: num(thresholds, "risk_weight_technical", 0.2),
+    commercial: num(thresholds, "risk_weight_commercial", 0.15),
+    stakeholder: 0.15,
+    temporal: 0.15,
+    financial: 0.1,
+    competitive: 0.1,
+    engagement: 0.15,
+  };
+}
+
+/**
+ * Map a stored stakeholder sentiment to the engine literal. The stored values
+ * (per the stakeholders-panel SENTIMENTS list and the schema's "Neutral"
+ * default) already equal the engine literals, so the canonical five pass
+ * through unchanged; anything unexpected degrades to "Neutral".
+ */
+const SENTIMENT_LITERALS = new Set([
+  "Champion",
+  "Supportive",
+  "Neutral",
+  "Skeptical",
+  "Hostile",
+]);
+function mapSentiment(stored: string): string {
+  return SENTIMENT_LITERALS.has(stored) ? stored : "Neutral";
+}
+
+/** Derive the v2 risk-level boundaries from the merged thresholds (Task B4 rows). */
+function deriveRiskBoundaries(thresholds: EngineThresholds): RiskLevelBoundaries {
+  return {
+    lowMax: num(thresholds, "risk_level_low_max", 25),
+    moderateMax: num(thresholds, "risk_level_moderate_max", 50),
+    elevatedMax: num(thresholds, "risk_level_elevated_max", 75),
+  };
 }
 
 /**
@@ -274,6 +332,9 @@ function shapeIntelligence(
 ) {
   return {
     ...output,
+    // Risk Engine v2 composite — pass straight through, no transform (route zod
+    // surfacing is handled in Task B6, but the value must already flow now).
+    risk: output.risk,
     stageEnteredAt: toISO(output.stageEnteredAt),
     financials: {
       ...output.financials,
@@ -422,6 +483,58 @@ export async function assembleDealIntelligence(dealId: string) {
     thresholds,
   );
 
+  // ── Risk Engine v2 inputs ──────────────────────────────────────────────
+  // Stakeholders for this deal. Stored `sentiment` values already match the
+  // engine literals (Champion/Supportive/Neutral/Skeptical/Hostile — see the
+  // stakeholders-panel SENTIMENTS list + schema default "Neutral"); we still
+  // map through an allowlist so any stray value degrades to "Neutral".
+  const stakeholderRows = await db
+    .select({
+      name: stakeholders.name,
+      sentiment: stakeholders.sentiment,
+      isDecisionMaker: stakeholders.isDecisionMaker,
+    })
+    .from(stakeholders)
+    .where(eq(stakeholders.dealId, dealId));
+  const engineStakeholders: StakeholderInput[] = stakeholderRows.map((s) => ({
+    name: s.name,
+    sentiment: mapSentiment(s.sentiment),
+    isDecisionMaker: s.isDecisionMaker,
+  }));
+
+  // Competitors linked to this deal. Stored `status` already matches the engine
+  // (it only checks === "Active"); winRate (0–1) comes from the shared cached
+  // global tally, null when this competitor has no Won/Lost history.
+  const winRates = await competitorWinRates();
+  const competitorRows = await db
+    .select({
+      competitorId: dealCompetitors.competitorId,
+      name: competitors.name,
+      status: dealCompetitors.status,
+    })
+    .from(dealCompetitors)
+    .leftJoin(competitors, eq(dealCompetitors.competitorId, competitors.id))
+    .where(eq(dealCompetitors.dealId, dealId));
+  const engineCompetitors: CompetitorInput[] = competitorRows.map((c) => ({
+    name: c.name ?? "Unknown",
+    status: c.status,
+    winRate: winRates.get(c.competitorId)?.winRate ?? null,
+  }));
+
+  // Median days for this deal's current stage from the velocity benchmark rollup.
+  const benchmarkRows = await db
+    .select({ medianDays: velocityBenchmarks.medianDays })
+    .from(velocityBenchmarks)
+    .where(eq(velocityBenchmarks.stageName, salesStage))
+    .limit(1);
+  const velocityBenchmarkDays =
+    benchmarkRows[0]?.medianDays != null
+      ? Number(benchmarkRows[0].medianDays)
+      : null;
+
+  const riskWeights = deriveRiskWeights(thresholds);
+  const riskBoundaries = deriveRiskBoundaries(thresholds);
+
   const rawDeal: RawDeal = {
     id: deal.id,
     deal_name: deal.dealName,
@@ -476,6 +589,11 @@ export async function assembleDealIntelligence(dealId: string) {
       ownMomentum,
       dispositions,
       seededDefaults: seededDefaults as Record<string, string | number>,
+      stakeholders: engineStakeholders,
+      competitors: engineCompetitors,
+      velocityBenchmarkDays,
+      riskWeights,
+      riskBoundaries,
     },
   );
 

@@ -33,6 +33,8 @@ import {
   Info,
   Shield,
 } from "lucide-react";
+import { type DealRisk } from "./risk/risk-model";
+import { RiskScoreCard } from "./risk/risk-score-card";
 
 function AlertCard({ dealId, alert, isManaged = false }: { dealId: string; alert: Alert; isManaged?: boolean }) {
   const { toast } = useToast();
@@ -230,10 +232,10 @@ function AlertCard({ dealId, alert, isManaged = false }: { dealId: string; alert
   );
 }
 
-export function RiskGovernance({ dealId, alerts, managedAlerts = [] }: { dealId: string; alerts: Alert[]; managedAlerts?: Alert[] }) {
+export function RiskGovernance({ dealId, alerts, managedAlerts = [], risk }: { dealId: string; alerts: Alert[]; managedAlerts?: Alert[]; risk?: DealRisk | null }) {
   const [managedOpen, setManagedOpen] = useState(false);
 
-  if (alerts.length === 0 && managedAlerts.length === 0) {
+  if (!risk && alerts.length === 0 && managedAlerts.length === 0) {
     return (
       <Card>
         <CardContent className="p-8 text-center text-muted-foreground flex flex-col items-center">
@@ -245,9 +247,14 @@ export function RiskGovernance({ dealId, alerts, managedAlerts = [] }: { dealId:
   }
   return (
     <div className="space-y-4">
-      {alerts.map((alert) => (
-        <AlertCard key={alert.code} dealId={dealId} alert={alert} />
-      ))}
+      {risk ? <RiskScoreCard risk={risk} /> : null}
+      {alerts.length === 0 ? (
+        <p className="text-sm text-muted-foreground">No active risk patterns.</p>
+      ) : (
+        alerts.map((alert) => (
+          <AlertCard key={alert.code} dealId={dealId} alert={alert} />
+        ))
+      )}
 
       {managedAlerts.length > 0 && (
         <Collapsible open={managedOpen} onOpenChange={setManagedOpen}>

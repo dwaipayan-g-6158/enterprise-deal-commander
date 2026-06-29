@@ -72,4 +72,9 @@ describe("sort codec", () => {
       { key: "score", dir: "asc" },
     ]);
   });
+
+  it("round-trips the riskLevel sort key", () => {
+    expect(encodeSort([{ key: "riskLevel", dir: "desc" }])).toBe("-riskLevel");
+    expect(decodeSort("-riskLevel")).toEqual([{ key: "riskLevel", dir: "desc" }]);
+  });
 });

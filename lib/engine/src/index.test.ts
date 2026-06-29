@@ -3,6 +3,7 @@ import {
   processDealIntelligence,
   calculateOwnMomentum,
   generateRecommendations,
+  riskLevelToHealth,
   PATTERN_CODES,
   type EngineThresholds,
   type RawDeal,
@@ -491,6 +492,107 @@ describe("calculateOwnMomentum", () => {
   });
 });
 
+describe("intelligence engine — risk v2 integration", () => {
+  it("attaches a valid risk object with a numeric composite to every deal", () => {
+    const out = processDealIntelligence(makeDeal(), [], [], DEFAULTS);
+    expect(out.risk).toBeDefined();
+    expect(typeof out.risk.compositeScore).toBe("number");
+    expect(out.risk.compositeScore).toBeGreaterThanOrEqual(0);
+    expect(out.risk.compositeScore).toBeLessThanOrEqual(100);
+    expect(["LOW", "MODERATE", "ELEVATED", "HIGH"]).toContain(out.risk.riskLevel);
+    expect(out.risk.dimensions).toHaveLength(7);
+    expect(Array.isArray(out.risk.topDrivers)).toBe(true);
+    expect(Array.isArray(out.risk.recommendedActions)).toBe(true);
+  });
+
+  it("degrades gracefully (still numeric composite) when no stakeholders/competitors/benchmark are supplied", () => {
+    const out = processDealIntelligence(
+      makeDeal({ sales_stage: "Validation" }),
+      [makeGate("G1_CRITERIA_LOCKED", true)],
+      [],
+      DEFAULTS,
+    );
+    expect(typeof out.risk.compositeScore).toBe("number");
+    const stakeholder = out.risk.dimensions.find(
+      (d) => d.name === "Stakeholder Coverage",
+    );
+    const competitive = out.risk.dimensions.find(
+      (d) => d.name === "Competitive Exposure",
+    );
+    expect(stakeholder?.assessable).toBe(false);
+    expect(competitive?.assessable).toBe(false);
+  });
+
+  it("amplifies Commercial Alignment for an unmanaged PREMATURE_COMMERCIAL deal", () => {
+    const deal = makeDeal({ sales_stage: "Commercial" });
+    const out = processDealIntelligence(deal, [], [], DEFAULTS);
+    // sanity: the pattern is unmanaged and surfaces in governance.alerts
+    expect(out.governance.alerts.some((a) => a.code === "PREMATURE_COMMERCIAL")).toBe(
+      true,
+    );
+    const commercial = out.risk.dimensions.find(
+      (d) => d.name === "Commercial Alignment",
+    );
+    expect(commercial).toBeDefined();
+    expect(commercial!.amplification).toBeGreaterThanOrEqual(25);
+    expect(commercial!.contributingPatterns).toContain("PREMATURE_COMMERCIAL");
+  });
+
+  it("does NOT amplify from a managed/dispositioned pattern", () => {
+    const deal = makeDeal({ sales_stage: "Commercial" });
+    const gates = [
+      makeGate("G1_CRITERIA_LOCKED", true),
+      makeGate("G1_EXECUTIVE_AGREED", true),
+      makeGate("G3_PERFORMANCE_PASSED", false),
+    ];
+    // Unmanaged baseline: PREMATURE_COMMERCIAL amplifies Commercial Alignment.
+    const baseline = processDealIntelligence(deal, gates, [], DEFAULTS);
+    const baseCommercial = baseline.risk.dimensions.find(
+      (d) => d.name === "Commercial Alignment",
+    );
+    expect(baseCommercial!.amplification).toBeGreaterThanOrEqual(25);
+
+    // Snooze/acknowledge it -> it must NOT appear in activePatternCodes, so no amplify.
+    const dispositions: RawDisposition[] = [
+      { pattern_code: "PREMATURE_COMMERCIAL", disposition: "snooze" },
+    ];
+    const managed = processDealIntelligence(deal, gates, [], DEFAULTS, {
+      dispositions,
+    });
+    const mgdCommercial = managed.risk.dimensions.find(
+      (d) => d.name === "Commercial Alignment",
+    );
+    expect(mgdCommercial!.amplification).toBe(0);
+    expect(mgdCommercial!.contributingPatterns).not.toContain(
+      "PREMATURE_COMMERCIAL",
+    );
+  });
+
+  it("passes optional stakeholders/competitors through to the dimensions", () => {
+    const out = processDealIntelligence(
+      makeDeal({ sales_stage: "Validation" }),
+      [makeGate("G1_CRITERIA_LOCKED", true)],
+      [],
+      DEFAULTS,
+      {
+        stakeholders: [
+          { name: "Carol", sentiment: "Champion", isDecisionMaker: true },
+        ],
+        competitors: [{ name: "Quest", status: "Active", winRate: 0.3 }],
+        velocityBenchmarkDays: 20,
+      },
+    );
+    const stakeholder = out.risk.dimensions.find(
+      (d) => d.name === "Stakeholder Coverage",
+    );
+    const competitive = out.risk.dimensions.find(
+      (d) => d.name === "Competitive Exposure",
+    );
+    expect(stakeholder?.assessable).toBe(true);
+    expect(competitive?.assessable).toBe(true);
+  });
+});
+
 describe("intelligence engine — TCV calculation", () => {
   it("multiplies product revenue by term years for Multi-Year Committed deals", () => {
     const deal = makeDeal({
@@ -694,16 +796,29 @@ describe("intelligence engine — technical track roll-up", () => {
 });
 
 describe("intelligence engine — health roll-up", () => {
-  it("rolls up to RED when an unmanaged RED pattern fires", () => {
+  // B3 behavior change: governance.healthStatus is now sourced from the
+  // COMPOSITE risk level (riskLevelToHealth), not the old pattern-weight
+  // roll-up (unmanaged-RED → RED, any-unmanaged → YELLOW, else GREEN). The RED
+  // *alert* set is unchanged — only the health badge's source moved.
+  it("reports YELLOW (composite ELEVATED) for a deal whose only unmanaged RED alert is PREMATURE_COMMERCIAL", () => {
     const deal = makeDeal({ sales_stage: "Commercial" });
     const out = processDealIntelligence(deal, [], [], DEFAULTS);
+    // The RED alert still fires (alert layer unchanged) and still gates stage advance.
     expect(out.governance.alerts.some((a) => a.code === "PREMATURE_COMMERCIAL")).toBe(
       true,
     );
-    expect(out.governance.healthStatus).toBe("RED");
+    expect(
+      out.governance.alerts.some(
+        (a) => a.code === "PREMATURE_COMMERCIAL" && a.severity === "RED",
+      ),
+    ).toBe(true);
+    // Composite lands at ELEVATED (≤75) → YELLOW. OLD pattern-weight logic
+    // returned RED here (an unmanaged RED alert was present).
+    expect(out.risk.riskLevel).toBe("ELEVATED");
+    expect(out.governance.healthStatus).toBe("YELLOW");
   });
 
-  it("rolls up to YELLOW when only unmanaged YELLOW patterns fire", () => {
+  it("reports YELLOW when only unmanaged YELLOW patterns fire (composite MODERATE)", () => {
     const deal = makeDeal();
     const out = processDealIntelligence(
       deal,
@@ -714,10 +829,12 @@ describe("intelligence engine — health roll-up", () => {
     expect(out.governance.alerts.map((a) => a.code)).toEqual([
       "UNRESOLVED_CRITICAL_BLOCKERS",
     ]);
+    // MODERATE → YELLOW. OLD pattern-weight logic also returned YELLOW
+    // (one unmanaged YELLOW alert), so the value is unchanged — only its source.
     expect(out.governance.healthStatus).toBe("YELLOW");
   });
 
-  it("excludes managed (dispositioned) alerts from the health roll-up", () => {
+  it("excludes managed (dispositioned) alerts from the composite that drives health", () => {
     // This deal fires exactly one pattern: PREMATURE_COMMERCIAL (RED).
     const deal = makeDeal({ sales_stage: "Commercial" });
     const gates = [
@@ -729,7 +846,10 @@ describe("intelligence engine — health roll-up", () => {
     expect(baseline.governance.alerts.map((a) => a.code)).toEqual([
       "PREMATURE_COMMERCIAL",
     ]);
-    expect(baseline.governance.healthStatus).toBe("RED");
+    // Unmanaged: the RED alert still fires and still gates stage advance, but
+    // with Gate 1 locked the composite stays LOW. OLD pattern-weight logic →
+    // RED (an unmanaged RED alert was present); NEW composite-derived → GREEN.
+    expect(baseline.governance.healthStatus).toBe("GREEN");
 
     const dispositions: RawDisposition[] = [
       { pattern_code: "PREMATURE_COMMERCIAL", disposition: "acknowledge" },
@@ -742,6 +862,121 @@ describe("intelligence engine — health roll-up", () => {
       "PREMATURE_COMMERCIAL",
     ]);
     expect(managed.governance.unmanagedAlertCount).toBe(0);
+    // Managing the pattern removes its amplification → composite drops to LOW
+    // → GREEN. OLD logic also returned GREEN here.
     expect(managed.governance.healthStatus).toBe("GREEN");
+  });
+});
+
+describe("riskLevelToHealth — composite level → 3-state health", () => {
+  it("maps each risk level to its health badge (LOW→GREEN, MODERATE/ELEVATED→YELLOW, HIGH→RED)", () => {
+    expect(riskLevelToHealth("LOW")).toBe("GREEN");
+    expect(riskLevelToHealth("MODERATE")).toBe("YELLOW");
+    // ELEVATED deliberately collapses to YELLOW — "heading toward red, not red yet".
+    expect(riskLevelToHealth("ELEVATED")).toBe("YELLOW");
+    expect(riskLevelToHealth("HIGH")).toBe("RED");
+  });
+
+  it("never emits a value outside the GREEN | YELLOW | RED enum", () => {
+    const levels = ["LOW", "MODERATE", "ELEVATED", "HIGH"] as const;
+    for (const level of levels) {
+      expect(["GREEN", "YELLOW", "RED"]).toContain(riskLevelToHealth(level));
+    }
+  });
+});
+
+describe("intelligence engine — health is composite-derived (B3 behavior change)", () => {
+  it("a zero-signal / fully-healthy deal scores LOW → GREEN", () => {
+    const out = processDealIntelligence(makeDeal(), [], [], DEFAULTS);
+    expect(out.governance.alerts).toHaveLength(0);
+    expect(out.risk.riskLevel).toBe("LOW");
+    expect(out.governance.healthStatus).toBe("GREEN");
+    // healthStatus is exactly riskLevelToHealth(riskLevel) — same source.
+    expect(out.governance.healthStatus).toBe(riskLevelToHealth(out.risk.riskLevel));
+  });
+
+  it("a PREMATURE_COMMERCIAL deal STILL produces a RED alert; health now follows the composite level", () => {
+    const deal = makeDeal({ sales_stage: "Commercial" });
+    const out = processDealIntelligence(deal, [], [], DEFAULTS);
+    // Alert/pattern layer unchanged: PREMATURE_COMMERCIAL is still a RED alert.
+    const alert = out.governance.alerts.find(
+      (a) => a.code === "PREMATURE_COMMERCIAL",
+    );
+    expect(alert).toBeDefined();
+    expect(alert?.severity).toBe("RED");
+    // But health is now sourced from the composite level, not the RED alert.
+    expect(out.governance.healthStatus).toBe(riskLevelToHealth(out.risk.riskLevel));
+  });
+
+  // ── Regression fixture (required by B3) ──────────────────────────────────
+  // Representative deals with their NEW composite-derived healthStatus. The
+  // inline "OLD:" comments record what the previous pattern-weight roll-up
+  // (unmanaged-RED → RED, any-unmanaged → YELLOW, else GREEN) would have
+  // returned, so the diff makes the intended shift explicit and reviewable.
+  it("regression: representative deals map to the new composite-derived health", () => {
+    // (a) Fully healthy — no patterns. composite≈24 LOW.
+    const healthy = processDealIntelligence(makeDeal(), [], [], DEFAULTS);
+    expect(healthy.governance.alerts).toHaveLength(0);
+    expect(healthy.governance.healthStatus).toBe("GREEN"); // OLD: GREEN (no shift)
+
+    // (b) One mild YELLOW pattern (UNPROTECTED_ELEPHANT). composite≈31 MODERATE.
+    const mildYellow = processDealIntelligence(
+      makeDeal({ product_revenue: 600000, services_tier: "None" }),
+      [],
+      [],
+      DEFAULTS,
+    );
+    expect(mildYellow.governance.alerts.map((a) => a.code)).toContain(
+      "UNPROTECTED_ELEPHANT",
+    );
+    expect(mildYellow.governance.healthStatus).toBe("YELLOW"); // OLD: YELLOW (no shift; source changed)
+
+    // (c) RED-guardrail deal (PREMATURE_COMMERCIAL fires a RED alert).
+    //     composite≈52 ELEVATED → YELLOW. This is the headline shift.
+    const redGuardrail = processDealIntelligence(
+      makeDeal({ sales_stage: "Commercial" }),
+      [],
+      [],
+      DEFAULTS,
+    );
+    expect(
+      redGuardrail.governance.alerts.some(
+        (a) => a.code === "PREMATURE_COMMERCIAL" && a.severity === "RED",
+      ),
+    ).toBe(true);
+    expect(redGuardrail.risk.riskLevel).toBe("ELEVATED");
+    expect(redGuardrail.governance.healthStatus).toBe("YELLOW"); // OLD: RED (unmanaged RED alert)
+
+    // (d) High multi-dimension, multi-pattern deal. composite≈84 HIGH → RED.
+    const highRisk = processDealIntelligence(
+      makeDeal({
+        sales_stage: "Commercial",
+        product_revenue: 1200000,
+        services_revenue: 0,
+        services_tier: "None",
+        expected_close_date: daysFromNow(5),
+        win_probability_pct: 10,
+        stage_entered_at: daysAgo(60),
+        manager_strategic_blueprint: null,
+        updated_at: daysAgo(30),
+        competitor: "Quest",
+        compliance_driver: "PCI-DSS",
+        compliance_deadline: daysFromNow(10),
+      }),
+      [
+        makeGate("G1", false),
+        makeGate("G2", false),
+        makeGate("G3", false),
+        makeGate("G4", false),
+      ],
+      [{ severity_name: "High" }],
+      {
+        competitors: [{ name: "Quest", status: "Active", winRate: 0.1 }],
+        stakeholders: [{ name: "X", sentiment: "Hostile", isDecisionMaker: true }],
+        velocityBenchmarkDays: 10,
+      },
+    );
+    expect(highRisk.risk.riskLevel).toBe("HIGH");
+    expect(highRisk.governance.healthStatus).toBe("RED"); // OLD: RED (unmanaged RED alerts; value unchanged)
   });
 });

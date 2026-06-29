@@ -239,6 +239,17 @@ async function seedLookups() {
       { parameterKey: "suite_bundle_min_components", parameterValue: "3", dataType: "number", description: "À-la-carte components in one suite at or above which a bundle upsell is recommended" },
       { parameterKey: "poc_max_validation_days", parameterValue: "30", dataType: "number", description: "Days a PoC can sit in Validation without locked criteria before POC_DEATH_MARCH fires" },
       { parameterKey: "siem_high_volume_log_sources", parameterValue: "500", dataType: "number", description: "Estimated log sources at or above which an undersized Log360 deal fires SIEM_UNDERSCOPED" },
+      // Risk Engine v2.0 dimension weights + level boundaries
+      { parameterKey: "risk_weight_technical", parameterValue: "0.20", dataType: "number", description: "Weight of the technical risk dimension in the composite risk score (Risk Engine v2)" },
+      { parameterKey: "risk_weight_commercial", parameterValue: "0.15", dataType: "number", description: "Weight of the commercial risk dimension in the composite risk score (Risk Engine v2)" },
+      { parameterKey: "risk_weight_stakeholder", parameterValue: "0.15", dataType: "number", description: "Weight of the stakeholder risk dimension in the composite risk score (Risk Engine v2)" },
+      { parameterKey: "risk_weight_temporal", parameterValue: "0.15", dataType: "number", description: "Weight of the temporal risk dimension in the composite risk score (Risk Engine v2)" },
+      { parameterKey: "risk_weight_financial", parameterValue: "0.10", dataType: "number", description: "Weight of the financial risk dimension in the composite risk score (Risk Engine v2)" },
+      { parameterKey: "risk_weight_competitive", parameterValue: "0.10", dataType: "number", description: "Weight of the competitive risk dimension in the composite risk score (Risk Engine v2)" },
+      { parameterKey: "risk_weight_engagement", parameterValue: "0.15", dataType: "number", description: "Weight of the engagement risk dimension in the composite risk score (Risk Engine v2)" },
+      { parameterKey: "risk_level_low_max", parameterValue: "25", dataType: "number", description: "Composite risk score at or below which a deal is classified as Low risk (Risk Engine v2)" },
+      { parameterKey: "risk_level_moderate_max", parameterValue: "50", dataType: "number", description: "Composite risk score at or below which a deal is classified as Moderate risk (Risk Engine v2)" },
+      { parameterKey: "risk_level_elevated_max", parameterValue: "75", dataType: "number", description: "Composite risk score at or below which a deal is classified as Elevated risk; above this is High (Risk Engine v2)" },
     ])
     .onConflictDoNothing();
 

@@ -7,6 +7,7 @@
  */
 import type { Battlecard } from './battlecard';
 import type { ComplianceGuidance } from './complianceGuidance';
+import type { DealRisk } from './dealRisk';
 import type { IntelligenceFinancials } from './intelligenceFinancials';
 import type { IntelligenceGovernance } from './intelligenceGovernance';
 import type { IntelligenceTeam } from './intelligenceTeam';
@@ -27,6 +28,7 @@ export interface Intelligence {
   financials: IntelligenceFinancials;
   technicalTrack: IntelligenceTechnicalTrack;
   governance: IntelligenceGovernance;
+  risk: DealRisk;
   recommendations: Recommendation[];
   battlecard?: Battlecard | null;
   complianceGuidance?: ComplianceGuidance | null;
