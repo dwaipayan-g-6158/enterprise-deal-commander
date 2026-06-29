@@ -46,6 +46,12 @@ function AlertCard({ dealId, alert, isManaged = false }: { dealId: string; alert
   const [showAccept, setShowAccept] = useState(false);
   const [checklistId, setChecklistId] = useState<string>("");
 
+  if (process.env.NODE_ENV !== "production" && isManaged && !alert.disposition) {
+    console.error(
+      `[AlertCard] isManaged=true but disposition is null for pattern "${alert.code}". Engine filter invariant broken.`,
+    );
+  }
+
   const relevantChecklists = checklists?.data.filter((c) => c.triggerPatternCode === alert.code) ?? [];
 
   const apply = async (
