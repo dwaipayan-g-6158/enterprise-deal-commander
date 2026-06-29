@@ -25,6 +25,7 @@ import { CompetitiveSummary } from "@/components/dashboard/widgets/competitive-s
 import { GateFunnel } from "@/components/dashboard/widgets/gate-funnel";
 import { SimulationBand } from "@/components/dashboard/widgets/simulation-band";
 import { MemoryInsights } from "@/components/dashboard/widgets/memory-insights";
+import { PipelineRiskOverview } from "@/components/dashboard/widgets/pipeline-risk-overview";
 import { relativeTime, type Health } from "@/components/dashboard/widgets/_shared";
 
 type OpenDialog = null | "tcv" | "alerts" | "stale" | "health" | "stage";
@@ -114,14 +115,15 @@ export default function Dashboard() {
         onOpenStale={() => setOpenDialog("stale")}
       />
 
-      {/* Row 2 — Health Distribution + Critical Alerts */}
-      <div className="grid grid-cols-1 @3xl:grid-cols-2 gap-6">
+      {/* Row 2 — Health Distribution + Pipeline Risk Overview + Critical Alerts */}
+      <div className="grid grid-cols-1 @3xl:grid-cols-2 @5xl:grid-cols-3 gap-6">
         <HealthDistribution
           counts={counts}
           tcvAtRisk={tcvAtRisk}
           reportingCurrency={reportingCurrency}
           onSelect={openHealth}
         />
+        <PipelineRiskOverview reportingCurrency={reportingCurrency} />
         <CriticalAlertsFeed
           alerts={summary?.criticalAlerts ?? []}
           tcvByDealId={tcvByDealId}
