@@ -27,6 +27,7 @@ const SORT_KEYS: ColumnId[] = [
   "salesStage",
   "calculatedTCV",
   "healthStatus",
+  "riskLevel",
   "score",
   "gatesPct",
   "velocity",
