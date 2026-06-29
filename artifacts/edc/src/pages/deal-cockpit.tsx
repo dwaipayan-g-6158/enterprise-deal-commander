@@ -24,7 +24,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { COCKPIT_GROUPS, alertCount } from "@/components/cockpit/cockpit-tabs";
+import { COCKPIT_GROUPS, alertCount, managedAlertCount } from "@/components/cockpit/cockpit-tabs";
 import { EditDealSheet } from "@/components/cockpit/edit-deal-sheet";
 import { BatSignalDialog } from "@/components/cockpit/bat-signal-dialog";
 import { RiskGovernance } from "@/components/cockpit/risk-governance";
@@ -99,7 +99,7 @@ export default function DealCockpit() {
   };
 
   const [, navigate] = useLocation();
-  const { data: allDeals } = useListDeals({ state: "active" });
+  const { data: allDeals } = useListDeals({ state: "active", limit: 500 });
   const gatesSaveRef = useRef<(() => Promise<void>) | null>(null);
   const formDirtyRef = useRef(false);
 
@@ -190,10 +190,17 @@ export default function DealCockpit() {
   if (!deal || !intel) return <div className="p-8 text-destructive">Deal not found</div>;
 
   const redAlerts = alertCount(intel.governance.alerts);
+  const managedCount = managedAlertCount(intel.governance.managedAlerts);
 
   const renderPanel = (subId: string) => {
     switch (subId) {
-      case "risk": return <RiskGovernance dealId={id} alerts={intel.governance.alerts} />;
+      case "risk": return (
+        <RiskGovernance
+          dealId={id}
+          alerts={intel.governance.alerts}
+          managedAlerts={intel.governance.managedAlerts ?? []}
+        />
+      );
       case "coaching": return <NextBestAction dealId={id} />;
       case "technical": return (
         <TechnicalGates
@@ -354,6 +361,11 @@ export default function DealCockpit() {
                     {g.id === "risk" && redAlerts > 0 && (
                       <span className="ml-2 inline-flex items-center justify-center rounded-full bg-destructive/15 text-destructive text-[10px] font-bold min-w-[18px] h-[18px] px-1.5 tabular-nums">
                         {redAlerts}
+                      </span>
+                    )}
+                    {g.id === "risk" && managedCount > 0 && (
+                      <span className="ml-1 text-[10px] font-medium text-muted-foreground tabular-nums">
+                        · {managedCount} managed
                       </span>
                     )}
                   </TabsTrigger>
