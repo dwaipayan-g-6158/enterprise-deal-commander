@@ -5,6 +5,7 @@ import { DimensionBars } from "./dimension-bars";
 import { ActivePatternsList } from "./active-patterns-list";
 import { StageGuardrailBanner } from "./stage-guardrail-banner";
 import { RecommendedActions } from "./recommended-actions";
+import { RiskRadar } from "./risk-radar";
 
 export function RiskScoreCard({ risk, className }: { risk: DealRisk; className?: string }) {
   const cls = RISK_LEVEL_CLASS[risk.riskLevel];
@@ -33,10 +34,15 @@ export function RiskScoreCard({ risk, className }: { risk: DealRisk; className?:
           </div>
         </div>
 
-        {/* Dimensions. F4 wraps this region in a 2-col @md grid + adds the radar as a sibling. */}
+        {/* Dimensions + radar: responsive 2-col at @md, stacked on mobile. */}
         {dimensions.length ? (
-          <div className="risk-dimensions">
-            <DimensionBars dimensions={dimensions} />
+          <div className="@container">
+            <div className="grid grid-cols-1 @md:grid-cols-2 gap-6 items-start">
+              <div className="risk-dimensions">
+                <DimensionBars dimensions={dimensions} />
+              </div>
+              <RiskRadar dimensions={dimensions} level={risk.riskLevel} />
+            </div>
           </div>
         ) : null}
 

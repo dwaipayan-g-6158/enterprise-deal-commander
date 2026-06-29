@@ -1,6 +1,50 @@
 import { Ban, ShieldAlert, AlertTriangle, Info, type LucideIcon } from "lucide-react";
 import type { RiskActionPriority, RiskDimension } from "./risk-model";
 
+// ---------------------------------------------------------------------------
+// Radar helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Short display labels for the radar axis ticks. Full names stay in `full`
+ * for the tooltip. Keys match the canonical engine dimension names.
+ */
+const AXIS_ABBREV: Record<string, string> = {
+  "Commercial Alignment": "Commercial",
+  "Technical Readiness":  "Technical",
+  "Stakeholder Coverage": "Stakeholder",
+  "Temporal Pressure":    "Temporal",
+  "Financial Structure":  "Financial",
+  "Competitive Exposure": "Competitive",
+  "Engagement Vitality":  "Engagement",
+};
+
+/** Abbreviated axis label for a dimension name — falls back to the raw name if not in the map. */
+export function abbreviateDimension(name: string): string {
+  return AXIS_ABBREV[name] ?? name;
+}
+
+export interface RadarPoint {
+  /** Short tick label shown on the polar angle axis. */
+  axis: string;
+  /** Full name used in the tooltip. */
+  full: string;
+  /** Risk score (0–100). */
+  score: number;
+}
+
+/**
+ * Transform a `RiskDimension[]` into the flat objects that recharts `RadarChart` expects.
+ * Clamps scores to [0,100] so the domain is always honoured.
+ */
+export function radarData(dimensions: RiskDimension[]): RadarPoint[] {
+  return dimensions.map((d) => ({
+    axis:  abbreviateDimension(d.name),
+    full:  d.name,
+    score: Math.max(0, Math.min(100, d.score)),
+  }));
+}
+
 export interface PriorityPresentation {
   Icon: LucideIcon;
   className: string;
