@@ -14,6 +14,7 @@ import {
   type Severity,
   type Explanation,
 } from "@workspace/engine";
+import { competitorWinRates } from "./competitive";
 
 /** An alert shaped to match the engine `Alert` consumed by the intelligence response. */
 export interface MergeableAlert {
@@ -29,27 +30,17 @@ export interface MergeableAlert {
  * they surface alongside the built-in engine patterns in the cockpit Risk tab.
  */
 export async function contextualAlertsFor(dealId: string): Promise<MergeableAlert[]> {
-  // Global per-competitor win rate (Won Against / (Won + Lost)).
-  const allLinks = await db
-    .select({ name: competitors.name, status: dealCompetitors.status })
-    .from(dealCompetitors)
-    .leftJoin(competitors, eq(dealCompetitors.competitorId, competitors.id));
-  const tally = new Map<string, { wins: number; losses: number }>();
-  for (const l of allLinks) {
-    const key = l.name ?? "Unknown";
-    const cur = tally.get(key) ?? { wins: 0, losses: 0 };
-    if (l.status === "Won Against") cur.wins++;
-    if (l.status === "Lost To") cur.losses++;
-    tally.set(key, cur);
-  }
-  const winRate = (name: string) => {
-    const t = tally.get(name);
-    if (!t || t.wins + t.losses === 0) return 0;
-    return t.wins / (t.wins + t.losses);
-  };
+  // Global per-competitor win rate (Won Against / (Won + Lost)), via the shared
+  // cached helper. No history → 0 (preserves the prior inline behavior).
+  const rates = await competitorWinRates();
+  const winRate = (competitorId: number) => rates.get(competitorId)?.winRate ?? 0;
 
   const dealLinks = await db
-    .select({ name: competitors.name, status: dealCompetitors.status })
+    .select({
+      competitorId: dealCompetitors.competitorId,
+      name: competitors.name,
+      status: dealCompetitors.status,
+    })
     .from(dealCompetitors)
     .leftJoin(competitors, eq(dealCompetitors.competitorId, competitors.id))
     .where(eq(dealCompetitors.dealId, dealId));
@@ -74,7 +65,7 @@ export async function contextualAlertsFor(dealId: string): Promise<MergeableAler
     competitorProfiles: dealLinks.map((l) => ({
       competitorName: l.name ?? "Unknown",
       status: l.status,
-      historicalWinRate: winRate(l.name ?? "Unknown"),
+      historicalWinRate: winRate(l.competitorId),
     })),
   });
 
