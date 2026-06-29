@@ -170,4 +170,16 @@ describe("buildInsight", () => {
     const insight = buildInsight(bucketDealsByLevel(rows), averageScore(rows));
     expect(insight).toContain("All scored deals are Low risk");
   });
+
+  it("does not claim all-Low when MODERATE deals are present but riskScore is null", () => {
+    // A deal that has a riskLevel of MODERATE but no numeric riskScore.
+    // bucketDealsByLevel counts it into MODERATE; averageScore returns null.
+    const rows = [row("m1", null, "MODERATE")];
+    const buckets = bucketDealsByLevel(rows);
+    const insight = buildInsight(buckets, null);
+    // Must NOT say "Low risk" or imply a clean pipeline.
+    expect(insight).not.toContain("Low risk");
+    // Must reflect the MODERATE deal.
+    expect(insight).toContain("Moderate risk");
+  });
 });

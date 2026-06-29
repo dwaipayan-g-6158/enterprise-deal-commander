@@ -129,6 +129,7 @@ export function PipelineRiskOverview({ reportingCurrency }: Props) {
                 onClick={() => navigate(`/deals/${highest.id}`)}
                 className="block max-w-full truncate text-left text-sm font-medium hover:underline cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm"
                 title={highest.name}
+                aria-label={`Open ${highest.name} cockpit`}
               >
                 {highest.name}
               </button>
@@ -188,7 +189,7 @@ export function PipelineRiskOverview({ reportingCurrency }: Props) {
 
         {/* Insight */}
         <div className="flex items-start gap-2 rounded-md bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
-          <Lightbulb className="mt-px h-3.5 w-3.5 shrink-0 text-amber-500" aria-hidden />
+          <Lightbulb className="mt-px h-3.5 w-3.5 shrink-0 text-amber-600 dark:text-amber-400" aria-hidden />
           <span>{insight}</span>
         </div>
 

@@ -102,9 +102,13 @@ export function buildInsight(
 
   // All moderate or low
   const modCount = buckets.MODERATE.count;
-  if (modCount > 0 && avgScore != null) {
-    const rounded = Math.round(avgScore);
-    return `${modCount} deal${modCount === 1 ? "" : "s"} at Moderate risk — average score ${rounded}. No High or Elevated deals.`;
+  if (modCount > 0) {
+    const dealWord = `${modCount} deal${modCount === 1 ? "" : "s"}`;
+    if (avgScore != null) {
+      const rounded = Math.round(avgScore);
+      return `${dealWord} at Moderate risk — average score ${rounded}. No High or Elevated deals.`;
+    }
+    return `${dealWord} at Moderate risk. No High or Elevated deals.`;
   }
 
   return "All scored deals are Low risk — pipeline is in good shape.";
