@@ -2,8 +2,6 @@ import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { RISK_LEVEL_CLASS, RISK_LEVEL_LABEL, type DealRisk } from "./risk-model";
 import { DimensionBars } from "./dimension-bars";
-import { ActivePatternsList } from "./active-patterns-list";
-import { StageGuardrailBanner } from "./stage-guardrail-banner";
 import { RecommendedActions } from "./recommended-actions";
 import { RiskRadar } from "./risk-radar";
 
@@ -45,10 +43,6 @@ export function RiskScoreCard({ risk, className }: { risk: DealRisk; className?:
             </div>
           </div>
         ) : null}
-
-        {risk.activePatterns?.length ? <ActivePatternsList patterns={risk.activePatterns} /> : null}
-
-        {risk.stageGuardrail?.active ? <StageGuardrailBanner guardrail={risk.stageGuardrail} /> : null}
 
         {risk.topDrivers?.length ? (
           <div className="space-y-2">

@@ -26,9 +26,6 @@ export interface DealRisk {
   dimensions?: RiskDimension[];
   topDrivers?: RiskDriver[];
   recommendedActions?: RiskAction[];
-  // Optional unified-layer extras (may be absent)
-  activePatterns?: { code: string; severity: string; category?: string; message?: string; isStageGuardrail?: boolean }[];
-  stageGuardrail?: { active: boolean; blockingPattern?: string | null; message?: string | null };
 }
 
 /** Tolerant accessor: reads top-level `risk` or `governance.risk`; null if absent/malformed. */

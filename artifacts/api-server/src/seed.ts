@@ -249,7 +249,7 @@ async function seedLookups() {
       { parameterKey: "risk_weight_engagement", parameterValue: "0.15", dataType: "number", description: "Weight of the engagement risk dimension in the composite risk score (Risk Engine v2)" },
       { parameterKey: "risk_level_low_max", parameterValue: "25", dataType: "number", description: "Composite risk score at or below which a deal is classified as Low risk (Risk Engine v2)" },
       { parameterKey: "risk_level_moderate_max", parameterValue: "50", dataType: "number", description: "Composite risk score at or below which a deal is classified as Moderate risk (Risk Engine v2)" },
-      { parameterKey: "risk_level_elevated_max", parameterValue: "75", dataType: "number", description: "Composite risk score at or below which a deal is classified as Elevated risk; above this is Critical (Risk Engine v2)" },
+      { parameterKey: "risk_level_elevated_max", parameterValue: "75", dataType: "number", description: "Composite risk score at or below which a deal is classified as Elevated risk; above this is High (Risk Engine v2)" },
     ])
     .onConflictDoNothing();
 

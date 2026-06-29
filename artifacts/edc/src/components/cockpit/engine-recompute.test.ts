@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeAll, afterAll } from "vitest";
 import {
   processDealIntelligence,
   calculateOwnMomentum,
@@ -447,6 +447,14 @@ function cleanDeal(): GroundTruth {
 }
 
 describe("Risk Simulator vs server intelligence parity", () => {
+  beforeAll(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-30T12:00:00Z"));
+  });
+  afterAll(() => {
+    vi.useRealTimers();
+  });
+
   it("matches alerts, health and financials for a rich decelerating deal", () => {
     const gt = richDeal();
     const server = runServer(gt);
