@@ -1323,3 +1323,8 @@ export * from "./ramp";
 export * from "./nlc";
 
 export * from "./contextual-patterns";
+
+// Risk Engine v2.0 — Layer-1 dimensional scoring + Layer-3 synthesis.
+// (risk-v2 re-exports risk-v2-types, so types flow through here too.)
+export * from "./dimensions";
+export * from "./risk-v2";
