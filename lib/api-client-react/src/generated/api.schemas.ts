@@ -496,6 +496,77 @@ export interface IntelligenceTechnicalTrack {
   integrityWarnings: IntegrityWarning[];
 }
 
+export type RiskLevel = typeof RiskLevel[keyof typeof RiskLevel];
+
+
+export const RiskLevel = {
+  LOW: 'LOW',
+  MODERATE: 'MODERATE',
+  ELEVATED: 'ELEVATED',
+  HIGH: 'HIGH',
+} as const;
+
+export interface RiskDimensionSignal {
+  factor: string;
+  rawScore: number;
+  weight: number;
+}
+
+export interface RiskDimension {
+  name: string;
+  score: number;
+  baseScore: number;
+  amplification: number;
+  weight: number;
+  assessable: boolean;
+  signals: RiskDimensionSignal[];
+  contributingPatterns: string[];
+}
+
+export interface RiskDriver {
+  dimension: string;
+  factor: string;
+  impact: number;
+}
+
+export type RecommendedActionSource = typeof RecommendedActionSource[keyof typeof RecommendedActionSource];
+
+
+export const RecommendedActionSource = {
+  STAGE_GUARDRAIL: 'STAGE_GUARDRAIL',
+  PATTERN: 'PATTERN',
+  DIMENSION: 'DIMENSION',
+} as const;
+
+export type RecommendedActionPriority = typeof RecommendedActionPriority[keyof typeof RecommendedActionPriority];
+
+
+export const RecommendedActionPriority = {
+  BLOCKER: 'BLOCKER',
+  CRITICAL: 'CRITICAL',
+  HIGH: 'HIGH',
+  MEDIUM: 'MEDIUM',
+  LOW: 'LOW',
+} as const;
+
+export interface RecommendedAction {
+  source: RecommendedActionSource;
+  priority: RecommendedActionPriority;
+  action: string;
+  /** @nullable */
+  patternCode?: string | null;
+  /** @nullable */
+  dimension?: string | null;
+}
+
+export interface DealRisk {
+  compositeScore: number;
+  riskLevel: RiskLevel;
+  dimensions: RiskDimension[];
+  topDrivers: RiskDriver[];
+  recommendedActions: RecommendedAction[];
+}
+
 export type IntelligenceGovernanceHealthStatus = typeof IntelligenceGovernanceHealthStatus[keyof typeof IntelligenceGovernanceHealthStatus];
 
 
@@ -563,6 +634,7 @@ export interface Intelligence {
   financials: IntelligenceFinancials;
   technicalTrack: IntelligenceTechnicalTrack;
   governance: IntelligenceGovernance;
+  risk: DealRisk;
   recommendations: Recommendation[];
   battlecard?: Battlecard | null;
   complianceGuidance?: ComplianceGuidance | null;

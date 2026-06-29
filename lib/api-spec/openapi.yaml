@@ -1916,6 +1916,63 @@ components:
           type: array
           items: { $ref: "#/components/schemas/IntegrityWarning" }
       required: [progressPercentage, currentMilestone, stepsCompleted, totalSteps, gates, integrityWarnings]
+    RiskLevel:
+      type: string
+      enum: [LOW, MODERATE, ELEVATED, HIGH]
+    RiskDimensionSignal:
+      type: object
+      properties:
+        factor: { type: string }
+        rawScore: { type: number }
+        weight: { type: number }
+      required: [factor, rawScore, weight]
+    RiskDimension:
+      type: object
+      properties:
+        name: { type: string }
+        score: { type: number }
+        baseScore: { type: number }
+        amplification: { type: number }
+        weight: { type: number }
+        assessable: { type: boolean }
+        signals:
+          type: array
+          items: { $ref: "#/components/schemas/RiskDimensionSignal" }
+        contributingPatterns:
+          type: array
+          items: { type: string }
+      required: [name, score, baseScore, amplification, weight, assessable, signals, contributingPatterns]
+    RiskDriver:
+      type: object
+      properties:
+        dimension: { type: string }
+        factor: { type: string }
+        impact: { type: number }
+      required: [dimension, factor, impact]
+    RecommendedAction:
+      type: object
+      properties:
+        source: { type: string, enum: [STAGE_GUARDRAIL, PATTERN, DIMENSION] }
+        priority: { type: string, enum: [BLOCKER, CRITICAL, HIGH, MEDIUM, LOW] }
+        action: { type: string }
+        patternCode: { type: ["string", "null"] }
+        dimension: { type: ["string", "null"] }
+      required: [source, priority, action]
+    DealRisk:
+      type: object
+      properties:
+        compositeScore: { type: number }
+        riskLevel: { $ref: "#/components/schemas/RiskLevel" }
+        dimensions:
+          type: array
+          items: { $ref: "#/components/schemas/RiskDimension" }
+        topDrivers:
+          type: array
+          items: { $ref: "#/components/schemas/RiskDriver" }
+        recommendedActions:
+          type: array
+          items: { $ref: "#/components/schemas/RecommendedAction" }
+      required: [compositeScore, riskLevel, dimensions, topDrivers, recommendedActions]
     IntelligenceGovernance:
       type: object
       properties:
@@ -1979,6 +2036,7 @@ components:
         financials: { $ref: "#/components/schemas/IntelligenceFinancials" }
         technicalTrack: { $ref: "#/components/schemas/IntelligenceTechnicalTrack" }
         governance: { $ref: "#/components/schemas/IntelligenceGovernance" }
+        risk: { $ref: "#/components/schemas/DealRisk" }
         recommendations:
           type: array
           items: { $ref: "#/components/schemas/Recommendation" }
@@ -1990,7 +2048,7 @@ components:
           oneOf:
             - { $ref: "#/components/schemas/ComplianceGuidance" }
             - { type: "null" }
-      required: [id, accountName, dealName, team, salesStage, daysInStage, financials, technicalTrack, governance, recommendations]
+      required: [id, accountName, dealName, team, salesStage, daysInStage, financials, technicalTrack, governance, risk, recommendations]
     IntelligenceResponse:
       type: object
       properties:
