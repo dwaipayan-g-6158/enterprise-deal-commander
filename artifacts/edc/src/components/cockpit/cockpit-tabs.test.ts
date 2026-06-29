@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { COCKPIT_GROUPS, groupForSub, alertCount } from "./cockpit-tabs";
+import { COCKPIT_GROUPS, groupForSub, alertCount, managedAlertCount } from "./cockpit-tabs";
 
 describe("cockpit-tabs", () => {
   it("defines exactly 5 primary groups", () => {
@@ -27,5 +27,16 @@ describe("cockpit-tabs", () => {
     expect(alertCount([{ severity: "RED" }, { severity: "YELLOW" }, { severity: "RED" }])).toBe(2);
     expect(alertCount([])).toBe(0);
     expect(alertCount(undefined)).toBe(0);
+  });
+
+  it("managedAlertCount counts alerts with a non-null disposition", () => {
+    expect(managedAlertCount([
+      { disposition: { state: "snoozed" } },
+      { disposition: null },
+      { disposition: { state: "accepted" } },
+      { disposition: undefined },
+    ])).toBe(2);
+    expect(managedAlertCount([])).toBe(0);
+    expect(managedAlertCount(undefined)).toBe(0);
   });
 });

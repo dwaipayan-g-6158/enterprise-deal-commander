@@ -39,3 +39,8 @@ export function groupForSub(subId: string): string | undefined {
 export function alertCount(alerts: { severity?: string }[] | undefined): number {
   return (alerts ?? []).filter((a) => a.severity === "RED").length;
 }
+
+/** Count managed alerts (those with a non-null disposition) for the Risk tab badge. */
+export function managedAlertCount(alerts: { disposition?: unknown }[] | undefined): number {
+  return (alerts ?? []).filter((a) => a.disposition != null).length;
+}
