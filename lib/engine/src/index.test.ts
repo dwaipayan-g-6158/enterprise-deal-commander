@@ -491,6 +491,107 @@ describe("calculateOwnMomentum", () => {
   });
 });
 
+describe("intelligence engine — risk v2 integration", () => {
+  it("attaches a valid risk object with a numeric composite to every deal", () => {
+    const out = processDealIntelligence(makeDeal(), [], [], DEFAULTS);
+    expect(out.risk).toBeDefined();
+    expect(typeof out.risk.compositeScore).toBe("number");
+    expect(out.risk.compositeScore).toBeGreaterThanOrEqual(0);
+    expect(out.risk.compositeScore).toBeLessThanOrEqual(100);
+    expect(["LOW", "MODERATE", "ELEVATED", "HIGH"]).toContain(out.risk.riskLevel);
+    expect(out.risk.dimensions).toHaveLength(7);
+    expect(Array.isArray(out.risk.topDrivers)).toBe(true);
+    expect(Array.isArray(out.risk.recommendedActions)).toBe(true);
+  });
+
+  it("degrades gracefully (still numeric composite) when no stakeholders/competitors/benchmark are supplied", () => {
+    const out = processDealIntelligence(
+      makeDeal({ sales_stage: "Validation" }),
+      [makeGate("G1_CRITERIA_LOCKED", true)],
+      [],
+      DEFAULTS,
+    );
+    expect(typeof out.risk.compositeScore).toBe("number");
+    const stakeholder = out.risk.dimensions.find(
+      (d) => d.name === "Stakeholder Coverage",
+    );
+    const competitive = out.risk.dimensions.find(
+      (d) => d.name === "Competitive Exposure",
+    );
+    expect(stakeholder?.assessable).toBe(false);
+    expect(competitive?.assessable).toBe(false);
+  });
+
+  it("amplifies Commercial Alignment for an unmanaged PREMATURE_COMMERCIAL deal", () => {
+    const deal = makeDeal({ sales_stage: "Commercial" });
+    const out = processDealIntelligence(deal, [], [], DEFAULTS);
+    // sanity: the pattern is unmanaged and surfaces in governance.alerts
+    expect(out.governance.alerts.some((a) => a.code === "PREMATURE_COMMERCIAL")).toBe(
+      true,
+    );
+    const commercial = out.risk.dimensions.find(
+      (d) => d.name === "Commercial Alignment",
+    );
+    expect(commercial).toBeDefined();
+    expect(commercial!.amplification).toBeGreaterThanOrEqual(25);
+    expect(commercial!.contributingPatterns).toContain("PREMATURE_COMMERCIAL");
+  });
+
+  it("does NOT amplify from a managed/dispositioned pattern", () => {
+    const deal = makeDeal({ sales_stage: "Commercial" });
+    const gates = [
+      makeGate("G1_CRITERIA_LOCKED", true),
+      makeGate("G1_EXECUTIVE_AGREED", true),
+      makeGate("G3_PERFORMANCE_PASSED", false),
+    ];
+    // Unmanaged baseline: PREMATURE_COMMERCIAL amplifies Commercial Alignment.
+    const baseline = processDealIntelligence(deal, gates, [], DEFAULTS);
+    const baseCommercial = baseline.risk.dimensions.find(
+      (d) => d.name === "Commercial Alignment",
+    );
+    expect(baseCommercial!.amplification).toBeGreaterThanOrEqual(25);
+
+    // Snooze/acknowledge it -> it must NOT appear in activePatternCodes, so no amplify.
+    const dispositions: RawDisposition[] = [
+      { pattern_code: "PREMATURE_COMMERCIAL", disposition: "snooze" },
+    ];
+    const managed = processDealIntelligence(deal, gates, [], DEFAULTS, {
+      dispositions,
+    });
+    const mgdCommercial = managed.risk.dimensions.find(
+      (d) => d.name === "Commercial Alignment",
+    );
+    expect(mgdCommercial!.amplification).toBe(0);
+    expect(mgdCommercial!.contributingPatterns).not.toContain(
+      "PREMATURE_COMMERCIAL",
+    );
+  });
+
+  it("passes optional stakeholders/competitors through to the dimensions", () => {
+    const out = processDealIntelligence(
+      makeDeal({ sales_stage: "Validation" }),
+      [makeGate("G1_CRITERIA_LOCKED", true)],
+      [],
+      DEFAULTS,
+      {
+        stakeholders: [
+          { name: "Carol", sentiment: "Champion", isDecisionMaker: true },
+        ],
+        competitors: [{ name: "Quest", status: "Active", winRate: 0.3 }],
+        velocityBenchmarkDays: 20,
+      },
+    );
+    const stakeholder = out.risk.dimensions.find(
+      (d) => d.name === "Stakeholder Coverage",
+    );
+    const competitive = out.risk.dimensions.find(
+      (d) => d.name === "Competitive Exposure",
+    );
+    expect(stakeholder?.assessable).toBe(true);
+    expect(competitive?.assessable).toBe(true);
+  });
+});
+
 describe("intelligence engine — TCV calculation", () => {
   it("multiplies product revenue by term years for Multi-Year Committed deals", () => {
     const deal = makeDeal({

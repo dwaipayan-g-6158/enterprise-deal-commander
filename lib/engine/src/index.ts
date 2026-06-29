@@ -5,6 +5,28 @@
 // passed in via arguments, so the identical function runs on the server and in
 // the browser (the Risk Simulator) with no code divergence.
 
+import {
+  scoreTechnicalReadiness,
+  scoreCommercialAlignment,
+  scoreStakeholderCoverage,
+  scoreTemporalPressure,
+  scoreFinancialStructure,
+  scoreCompetitiveExposure,
+  scoreEngagementVitality,
+} from "./dimensions";
+import { computeUnifiedRisk } from "./risk-v2";
+import type {
+  DimensionFnResult,
+  DimensionScore,
+  RiskLevel,
+  RiskDriver,
+  RecommendedAction,
+  StakeholderInput,
+  CompetitorInput,
+  RiskV2Weights,
+  RiskLevelBoundaries,
+} from "./risk-v2-types";
+
 export type Severity = "RED" | "YELLOW" | "GREEN";
 export type DispositionState = "acknowledge" | "accept" | "snooze";
 
@@ -119,6 +141,13 @@ export interface ProcessContext {
   dispositions?: RawDisposition[];
   whitespace?: { productId: string; productName: string }[];
   seededDefaults?: Record<string, string | number>;
+  // Risk Engine v2 inputs (all OPTIONAL — dimensions degrade gracefully when
+  // absent, so every existing caller keeps compiling unchanged).
+  stakeholders?: StakeholderInput[];
+  competitors?: CompetitorInput[];
+  velocityBenchmarkDays?: number | null;
+  riskWeights?: RiskV2Weights;
+  riskBoundaries?: RiskLevelBoundaries;
 }
 
 export interface ExplanationInput {
@@ -159,6 +188,7 @@ interface DealContext {
   termYears: number;
   expectedCloseDate: string | null;
   blueprintNotes: string | null;
+  winProbability: number | null;
   daysSinceCreation: number;
   daysSinceLastUpdate: number;
   daysInStage: number;
@@ -947,6 +977,14 @@ export interface IntelligenceOutput {
   };
   // Opportunity recommendations (separate channel from risk — do not affect health).
   recommendations: Recommendation[];
+  // Risk Engine v2 — unified dimensional risk (Layer 1+2+3). Always present.
+  risk: {
+    compositeScore: number;
+    riskLevel: RiskLevel;
+    dimensions: DimensionScore[];
+    topDrivers: RiskDriver[];
+    recommendedActions: RecommendedAction[];
+  };
 }
 
 /**
@@ -1066,6 +1104,22 @@ export function processDealIntelligence(
     if (daysToClose < 0) daysToClose = 0;
   }
 
+  // Whole-days since the most recently completed gate (reuses the same `now`/DAY
+  // mechanism above — no fresh Date in scoring). null when nothing completed.
+  let lastGateCompletedAt: number | null = null;
+  for (const gate of gates) {
+    if (gate.is_completed && gate.completed_at) {
+      const t = new Date(gate.completed_at).getTime();
+      if (lastGateCompletedAt === null || t > lastGateCompletedAt) {
+        lastGateCompletedAt = t;
+      }
+    }
+  }
+  const daysSinceLastGate: number | null =
+    lastGateCompletedAt === null
+      ? null
+      : Math.floor((now.getTime() - lastGateCompletedAt) / DAY);
+
   let daysToComplianceDeadline: number | null = null;
   if (deal.compliance_deadline) {
     daysToComplianceDeadline = Math.floor(
@@ -1110,6 +1164,7 @@ export function processDealIntelligence(
     termYears,
     expectedCloseDate: deal.expected_close_date,
     blueprintNotes: deal.manager_strategic_blueprint,
+    winProbability: deal.win_probability_pct,
     daysSinceCreation,
     daysSinceLastUpdate,
     daysInStage,
@@ -1248,6 +1303,86 @@ export function processDealIntelligence(
     thresholds,
   );
 
+  // ── Risk Engine v2 (Layers 1+2+3) ──
+  // Only UNMANAGED triggered patterns amplify — the same set surfaced in
+  // governance.alerts (unmanagedAlerts). Managed/accepted/snoozed do not.
+  const activePatternCodes = unmanagedAlerts.map((a) => a.code);
+  const RED_GUARDRAILS = [
+    "PREMATURE_COMMERCIAL",
+    "MISSING_STRUCTURAL_ANCHOR",
+    "DISCOUNT_TRAP",
+  ];
+  const guardrailCodes = activePatternCodes.filter((c) =>
+    RED_GUARDRAILS.includes(c),
+  );
+
+  const dimensionResults: DimensionFnResult[] = [
+    scoreTechnicalReadiness({
+      progressPct: technicalProgressPct,
+      stepsCompleted,
+      totalSteps,
+      salesStage: dealContext.salesStage,
+      gates,
+      gateMap,
+      daysSinceLastGate,
+    }),
+    scoreCommercialAlignment({
+      salesStage: dealContext.salesStage,
+      progressPct: technicalProgressPct,
+      normalizedTCV,
+      servicesRevenue: dealContext.servicesRevenue,
+      productRevenue: baseProductRevenue,
+      servicesTier: dealContext.servicesTier,
+      winProbability: dealContext.winProbability,
+    }),
+    scoreStakeholderCoverage({
+      salesStage: dealContext.salesStage,
+      stakeholders: ctx.stakeholders || [],
+    }),
+    scoreTemporalPressure({
+      salesStage: dealContext.salesStage,
+      daysInStage,
+      daysToClose,
+      expectedCloseDate: dealContext.expectedCloseDate,
+      progressPct: technicalProgressPct,
+      benchmarkMedianDays: ctx.velocityBenchmarkDays ?? null,
+    }),
+    scoreFinancialStructure({
+      normalizedTCV,
+      productRevenue: baseProductRevenue,
+      servicesRevenue: dealContext.servicesRevenue,
+      servicesTier: dealContext.servicesTier,
+      pricingModel: dealContext.pricingModel,
+      termYears,
+      crossSellPitchedCount: pitchedCount,
+      progressPct: technicalProgressPct,
+    }),
+    scoreCompetitiveExposure({
+      competitors: ctx.competitors || [],
+      progressPct: technicalProgressPct,
+    }),
+    scoreEngagementVitality({
+      salesStage: dealContext.salesStage,
+      daysSinceLastUpdate,
+      blueprintNotes: dealContext.blueprintNotes,
+      activeBlockerCount: activeBlockers.length,
+      highSeverityBlockerCount: highSeverityBlockers.length,
+    }),
+  ];
+
+  const risk = computeUnifiedRisk({
+    dimensionResults,
+    activePatternCodes,
+    guardrailCodes,
+    weights: ctx.riskWeights,
+    boundaries: ctx.riskBoundaries,
+    dealView: {
+      tcv: normalizedTCV,
+      daysToClose,
+      progressPct: technicalProgressPct,
+    },
+  });
+
   return {
     id: deal.id,
     accountName: deal.account_name,
@@ -1308,6 +1443,7 @@ export function processDealIntelligence(
       dataQualityNotes,
     },
     recommendations,
+    risk,
   };
 }
 
