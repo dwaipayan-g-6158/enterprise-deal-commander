@@ -345,7 +345,7 @@ function TooltipRow({ label, value }: { label: string; value: string }) {
 
 // ---- Shell -------------------------------------------------------------------
 function Shell({ children }: { children: React.ReactNode }) {
-  return <Card className="overflow-hidden p-5 sm:p-6">{children}</Card>;
+  return <Card className="overflow-hidden p-4">{children}</Card>;
 }
 
 // ---- KPI strip ---------------------------------------------------------------
@@ -357,7 +357,7 @@ function KpiCell({
   children: React.ReactNode;
 }) {
   return (
-    <div className="bg-card p-3 sm:p-4">
+    <div className="bg-card px-3 py-2">
       <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.1em] text-muted-foreground/70">
         {label}
       </p>
@@ -388,12 +388,12 @@ function HealthTrendChip({ summary }: { summary: Summary }) {
 function KpiStrip({ summary }: { summary: Summary }) {
   const { score, gate, tcv, health } = summary;
   return (
-    <div className="my-5 grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-border bg-border sm:grid-cols-4">
+    <div className="my-3 grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-border bg-border sm:grid-cols-4">
       <KpiCell label="Close Score">
-        <p className="mt-1.5 font-mono text-[22px] font-semibold leading-tight tracking-tight tabular-nums">
+        <p className="mt-1 font-mono text-lg font-semibold leading-tight tracking-tight tabular-nums">
           {score.last != null ? score.last.toFixed(0) : "—"}
         </p>
-        <div className="mt-1.5">
+        <div className="mt-1">
           {score.last != null && score.first != null ? (
             <DeltaBadge current={score.last} baseline={score.first} positiveIsGood />
           ) : (
@@ -403,7 +403,7 @@ function KpiStrip({ summary }: { summary: Summary }) {
       </KpiCell>
 
       <KpiCell label="Health">
-        <div className="mt-1.5 flex h-[27px] items-center">
+        <div className="mt-1 flex h-[24px] items-center">
           {health.last ? (
             <span className={`flex items-center gap-1.5 text-base font-semibold ${HEALTH_TEXT[health.last as Shared_Health]}`}>
               <span className={`h-2.5 w-2.5 rounded-full ${HEALTH_DOT[health.last as Shared_Health]}`} />
@@ -413,16 +413,16 @@ function KpiStrip({ summary }: { summary: Summary }) {
             <span className="text-base font-semibold">—</span>
           )}
         </div>
-        <div className="mt-1.5">
+        <div className="mt-1">
           <HealthTrendChip summary={summary} />
         </div>
       </KpiCell>
 
       <KpiCell label="Gate Completion">
-        <p className="mt-1.5 font-mono text-[22px] font-semibold leading-tight tracking-tight tabular-nums">
+        <p className="mt-1 font-mono text-lg font-semibold leading-tight tracking-tight tabular-nums">
           {gate.last != null ? `${gate.last.toFixed(0)}%` : "—"}
         </p>
-        <div className="mt-1.5">
+        <div className="mt-1">
           {gate.last != null && gate.first != null ? (
             <DeltaBadge
               current={gate.last}
@@ -437,10 +437,10 @@ function KpiStrip({ summary }: { summary: Summary }) {
       </KpiCell>
 
       <KpiCell label="Contract Value">
-        <p className="mt-1.5 font-mono text-[22px] font-semibold leading-tight tracking-tight tabular-nums">
+        <p className="mt-1 font-mono text-lg font-semibold leading-tight tracking-tight tabular-nums">
           {tcv.last != null ? compactCurrency(tcv.last) : "—"}
         </p>
-        <div className="mt-1.5">
+        <div className="mt-1">
           {tcv.last != null && tcv.first != null ? (
             <DeltaBadge
               current={tcv.last}
@@ -536,8 +536,8 @@ function HeroChart({ metric, rows }: { metric: Metric; rows: ChartRow[] }) {
   );
 
   return (
-    <ChartContainer config={chartConfig} className="h-[260px] w-full">
-      <ComposedChart data={rows} margin={{ left: 4, right: 64, top: 28, bottom: 0 }}>
+    <ChartContainer config={chartConfig} className="h-[172px] w-full">
+      <ComposedChart data={rows} margin={{ left: 4, right: 64, top: 20, bottom: 0 }}>
         <defs>
           <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor={color} stopOpacity={0.22} />
@@ -605,8 +605,8 @@ function StageRail({ segments }: { segments: StageSegment[] }) {
   if (segments.length === 0) return null;
   const lastIdx = segments.length - 1;
   return (
-    <div className="mt-5">
-      <div className="mb-2 flex items-baseline justify-between gap-3">
+    <div className="mt-3">
+      <div className="mb-1.5 flex items-baseline justify-between gap-3">
         <span className="font-mono text-[10.5px] font-semibold uppercase tracking-[0.12em] text-muted-foreground/70">
           Stage progression · tinted by health
         </span>
@@ -625,7 +625,7 @@ function StageRail({ segments }: { segments: StageSegment[] }) {
           return (
             <div
               key={`${seg.stage}-${i}`}
-              className={`relative flex min-h-[46px] flex-col justify-center rounded-md border px-3 py-2 ${
+              className={`relative flex min-h-[38px] flex-col justify-center rounded-md border px-3 py-1.5 ${
                 current
                   ? "border-amber-500 ring-2 ring-amber-500/20"
                   : "border-transparent"
@@ -675,7 +675,7 @@ function Header({
           {summary.spanDays === 1 ? "day" : "days"}
         </p>
         <h2
-          className="max-w-[42ch] text-[21px] font-semibold leading-snug tracking-tight"
+          className="max-w-[52ch] text-[17px] font-semibold leading-snug tracking-tight"
           style={{ textWrap: "balance" } as React.CSSProperties}
         >
           <span className={TONE_TEXT[v.tone]}>{v.lead}</span>
@@ -683,7 +683,7 @@ function Header({
         </h2>
       </div>
       <Tabs value={metric} onValueChange={(val) => setMetric(val as Metric)}>
-        <TabsList className="h-9">
+        <TabsList className="h-8">
           {(["score", "gate", "tcv"] as const).map((m) => (
             <TabsTrigger key={m} value={m} className="text-xs">
               {METRIC_LABEL[m]}
@@ -707,12 +707,12 @@ function SparseSummary({ point }: { point: TrajectoryPoint | undefined }) {
       </h2>
       <div className="grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-border bg-border sm:grid-cols-4">
         <KpiCell label="Close Score">
-          <p className="mt-1.5 font-mono text-[22px] font-semibold leading-tight tabular-nums">
+          <p className="mt-1 font-mono text-lg font-semibold leading-tight tabular-nums">
             {point?.score != null ? point.score.toFixed(0) : "—"}
           </p>
         </KpiCell>
         <KpiCell label="Health">
-          <div className="mt-1.5 flex h-[27px] items-center">
+          <div className="mt-1 flex h-[24px] items-center">
             {point?.health ? (
               <span className={`flex items-center gap-1.5 text-base font-semibold ${HEALTH_TEXT[point.health as Shared_Health]}`}>
                 <span className={`h-2.5 w-2.5 rounded-full ${HEALTH_DOT[point.health as Shared_Health]}`} />
@@ -724,12 +724,12 @@ function SparseSummary({ point }: { point: TrajectoryPoint | undefined }) {
           </div>
         </KpiCell>
         <KpiCell label="Gate Completion">
-          <p className="mt-1.5 font-mono text-[22px] font-semibold leading-tight tabular-nums">
+          <p className="mt-1 font-mono text-lg font-semibold leading-tight tabular-nums">
             {point?.gatePct != null ? `${point.gatePct.toFixed(0)}%` : "—"}
           </p>
         </KpiCell>
         <KpiCell label="Contract Value">
-          <p className="mt-1.5 font-mono text-[22px] font-semibold leading-tight tabular-nums">
+          <p className="mt-1 font-mono text-lg font-semibold leading-tight tabular-nums">
             {point?.tcv != null ? compactCurrency(point.tcv) : "—"}
           </p>
         </KpiCell>
@@ -751,7 +751,7 @@ export function DealTrajectory({ dealId }: { dealId: string }) {
   if (isLoading) {
     return (
       <Shell>
-        <Skeleton className="h-[420px] w-full" />
+        <Skeleton className="h-[300px] w-full" />
       </Shell>
     );
   }
@@ -793,7 +793,7 @@ export function DealTrajectory({ dealId }: { dealId: string }) {
         <KpiStrip summary={summary} />
         <HeroChart metric={metric} rows={rows} />
         <StageRail segments={segments} />
-        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-border pt-3">
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-3 border-t border-border pt-2.5">
           <span className="font-mono text-[11px] tracking-[0.02em] text-muted-foreground/60">
             Source · deal snapshots + predictive score
           </span>
