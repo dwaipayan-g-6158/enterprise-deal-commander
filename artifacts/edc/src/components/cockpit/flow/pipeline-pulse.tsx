@@ -16,6 +16,8 @@ export function PipelinePulse() {
   const query = useFlowHealthScore();
   const data = query.data?.data as HealthScoreData | undefined;
 
+  if (query.isError) return <div className="bg-card border border-border rounded-lg p-6 text-sm text-destructive">Failed to load pipeline health.</div>;
+
   if (query.isLoading || !data) {
     return <div className="bg-card border border-border rounded-lg p-6 h-64 animate-pulse" />;
   }
@@ -58,7 +60,8 @@ export function PipelinePulse() {
           x="90"
           y="98"
           textAnchor="middle"
-          className={`fill-current ${COLORS(score)} font-mono text-4xl font-bold`}
+          className={`fill-current ${COLORS(score)} font-mono font-bold`}
+          fontSize={48}
         >
           {score}
         </text>
