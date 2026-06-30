@@ -1068,6 +1068,14 @@ paths:
       tags: [v2intel]
       responses:
         "200": { description: Deterministic deal-memory insights vs current pipeline, content: { application/json: { schema: { $ref: "#/components/schemas/GenericDataResponse" } } } }
+  /v2/analytics/deals/{dealId}/trajectory:
+    get:
+      operationId: getDealTrajectory
+      tags: [v2intel]
+      parameters:
+        - { name: dealId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200": { description: "Time-ordered merged metric series for one deal", content: { application/json: { schema: { $ref: "#/components/schemas/GenericDataResponse" } } } }
 
   # --- F2 Competitive Intelligence (per deal) ---
   /v2/deals/{dealId}/competitors:

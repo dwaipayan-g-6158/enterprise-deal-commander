@@ -5371,6 +5371,77 @@ export function useGetMemoryInsights<TData = Awaited<ReturnType<typeof getMemory
 
 
 
+export const getGetDealTrajectoryUrl = (dealId: string,) => {
+
+
+
+
+  return `/api/v2/analytics/deals/${dealId}/trajectory`
+}
+
+export const getDealTrajectory = async (dealId: string, options?: RequestInit): Promise<GenericDataResponse> => {
+
+  return customFetch<GenericDataResponse>(getGetDealTrajectoryUrl(dealId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetDealTrajectoryQueryKey = (dealId: string,) => {
+    return [
+    `/api/v2/analytics/deals/${dealId}/trajectory`
+    ] as const;
+    }
+
+
+export const getGetDealTrajectoryQueryOptions = <TData = Awaited<ReturnType<typeof getDealTrajectory>>, TError = ErrorType<unknown>>(dealId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getDealTrajectory>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetDealTrajectoryQueryKey(dealId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getDealTrajectory>>> = ({ signal }) => getDealTrajectory(dealId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: !!(dealId), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getDealTrajectory>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetDealTrajectoryQueryResult = NonNullable<Awaited<ReturnType<typeof getDealTrajectory>>>
+export type GetDealTrajectoryQueryError = ErrorType<unknown>
+
+
+
+export function useGetDealTrajectory<TData = Awaited<ReturnType<typeof getDealTrajectory>>, TError = ErrorType<unknown>>(
+ dealId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getDealTrajectory>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetDealTrajectoryQueryOptions(dealId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
 export const getListDealCompetitorsUrl = (dealId: string,) => {
 
 

@@ -37,7 +37,7 @@ import { ActivityFeed } from "@/components/cockpit/activity-feed";
 import { HistoryPanel } from "@/components/cockpit/history-panel";
 import { BriefingMode } from "@/components/cockpit/briefing-mode";
 import { RiskSimulator } from "@/components/cockpit/risk-simulator";
-import { SnapshotScrubber } from "@/components/cockpit/snapshot-scrubber";
+import { DealTrajectory } from "@/components/cockpit/deal-trajectory";
 import { AccountNavigationArray } from "@/components/cockpit/account-navigation-array";
 import { ScorePanel } from "@/components/cockpit/v2/score-panel";
 import { CompetitivePanel } from "@/components/cockpit/v2/competitive-panel";
@@ -298,7 +298,7 @@ export default function DealCockpit() {
         </div>
       </div>
 
-      <SnapshotScrubber dealId={id} intel={intel} />
+      <DealTrajectory dealId={id} />
 
       <div className="grid grid-cols-1 @3xl:grid-cols-3 gap-6">
         {/* Left Column - Financials & Team */}

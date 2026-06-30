@@ -23,6 +23,7 @@ import {
 } from "@workspace/engine";
 import { GetDealScoreParams, ParseNlcCommandBody } from "@workspace/api-zod";
 import { notFound } from "../../lib/http";
+import { toISO } from "../../lib/intelligence";
 import { scoreDeal, rescoreActiveDeals } from "../../lib/scoring";
 import { cachedIntel } from "../../lib/portfolio";
 
@@ -700,6 +701,112 @@ router.get("/analytics/memory-insights", async (_req: Request, res: Response) =>
   }
 
   res.json({ data: { insights, archivedCount } });
+});
+
+/* ------------------------------------------- Deal Trajectory (time-series) */
+
+// Time-ordered, merged metric series for a single deal: predictive close score,
+// gate-completion %, governance health, sales stage, and TCV. Snapshots and
+// scores are independent time series; we merge their timestamps into one
+// ascending axis and CARRY FORWARD the last-known value of each metric so every
+// point is fully populated (leading nulls until a metric first appears are
+// expected). `gatePct` is derived from the snapshot `payload.gates` array
+// (GateView[] with `isCompleted`) written by the snapshot service.
+router.get("/analytics/deals/:dealId/trajectory", async (req: Request, res: Response) => {
+  const dealId = String(req.params.dealId);
+
+  const snapRows = await db
+    .select({
+      healthStatus: dealSnapshots.healthStatus,
+      salesStage: dealSnapshots.salesStage,
+      calculatedTcv: dealSnapshots.calculatedTcv,
+      payload: dealSnapshots.payload,
+      snapshotAt: dealSnapshots.snapshotAt,
+    })
+    .from(dealSnapshots)
+    .where(eq(dealSnapshots.dealId, dealId))
+    .orderBy(asc(dealSnapshots.snapshotAt));
+
+  const scoreRows = await db
+    .select({ score: dealScores.score, computedAt: dealScores.computedAt })
+    .from(dealScores)
+    .where(eq(dealScores.dealId, dealId))
+    .orderBy(asc(dealScores.computedAt));
+
+  // Derive gate completion % from the snapshot payload's gate array, if present.
+  const gatePctOf = (payload: Record<string, unknown> | null): number | null => {
+    const gates = (payload as { gates?: unknown } | null)?.gates;
+    if (!Array.isArray(gates) || gates.length === 0) return null;
+    const completed = gates.filter(
+      (g) => (g as { isCompleted?: unknown })?.isCompleted === true,
+    ).length;
+    return Math.round((100 * completed) / gates.length);
+  };
+
+  interface SnapPoint {
+    at: string;
+    health: string | null;
+    stage: string | null;
+    tcv: number | null;
+    gatePct: number | null;
+  }
+  const snapshots: SnapPoint[] = snapRows.map((r) => ({
+    at: toISO(r.snapshotAt) ?? new Date().toISOString(),
+    health: r.healthStatus ?? null,
+    stage: r.salesStage ?? null,
+    tcv: r.calculatedTcv != null ? Number(r.calculatedTcv) : null,
+    gatePct: gatePctOf(r.payload),
+  }));
+
+  const scores = scoreRows.map((r) => ({
+    at: toISO(r.computedAt) ?? new Date().toISOString(),
+    score: r.score,
+  }));
+
+  // Stage-change markers: consecutive snapshot stage transitions (first stage is
+  // the baseline, not a change).
+  const stageChanges: { at: string; from: string | null; to: string | null }[] = [];
+  let prevStage: string | null | undefined = undefined;
+  for (const s of snapshots) {
+    if (prevStage !== undefined && s.stage !== prevStage) {
+      stageChanges.push({ at: s.at, from: prevStage, to: s.stage });
+    }
+    prevStage = s.stage;
+  }
+
+  // Merge both timestamp sets into one ascending, de-duplicated axis.
+  const snapByAt = new Map(snapshots.map((s) => [s.at, s]));
+  const scoreByAt = new Map(scores.map((s) => [s.at, s.score]));
+  const timestamps = [...new Set([...snapshots.map((s) => s.at), ...scores.map((s) => s.at)])].sort(
+    (a, b) => new Date(a).getTime() - new Date(b).getTime(),
+  );
+
+  // Carry-forward last-known value of each metric across the merged axis.
+  let curScore: number | null = null;
+  let curGatePct: number | null = null;
+  let curHealth: string | null = null;
+  let curStage: string | null = null;
+  let curTcv: number | null = null;
+  const points = timestamps.map((at) => {
+    if (scoreByAt.has(at)) curScore = scoreByAt.get(at) ?? curScore;
+    const snap = snapByAt.get(at);
+    if (snap) {
+      if (snap.gatePct != null) curGatePct = snap.gatePct;
+      if (snap.health != null) curHealth = snap.health;
+      if (snap.stage != null) curStage = snap.stage;
+      if (snap.tcv != null) curTcv = snap.tcv;
+    }
+    return {
+      at,
+      score: curScore,
+      gatePct: curGatePct,
+      health: curHealth,
+      stage: curStage,
+      tcv: curTcv,
+    };
+  });
+
+  res.json({ data: { points, stageChanges } });
 });
 
 /* ----------------------------------------------------------- F19 NLC */

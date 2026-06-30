@@ -1700,6 +1700,15 @@ export const GetMemoryInsightsResponse = zod.object({
 })
 
 
+export const GetDealTrajectoryParams = zod.object({
+  "dealId": zod.coerce.string().uuid()
+})
+
+export const GetDealTrajectoryResponse = zod.object({
+  "data": zod.record(zod.string(), zod.unknown())
+})
+
+
 export const ListDealCompetitorsParams = zod.object({
   "dealId": zod.coerce.string()
 })
