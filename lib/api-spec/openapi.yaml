@@ -30,6 +30,8 @@ tags:
     description: Dispositions, interventions, bat-signal
   - name: lookups
     description: Reference data and engine tuning
+  - name: config
+    description: Pipeline configuration (period targets)
 
 paths:
   /healthz:
@@ -1541,6 +1543,40 @@ paths:
       requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/NlcParseInput" } } } }
       responses:
         "200": { description: Parsed query + results, content: { application/json: { schema: { $ref: "#/components/schemas/GenericDataResponse" } } } }
+
+  # ============ CONFIG — Pipeline Targets ============
+  /v2/config/targets:
+    get:
+      operationId: listPipelineTargets
+      tags: [config]
+      responses:
+        "200":
+          description: List of period targets
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/PipelineTarget" }
+    put:
+      operationId: upsertPipelineTarget
+      tags: [config]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PipelineTargetInput" }
+      responses:
+        "200":
+          description: Upserted target
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: "#/components/schemas/PipelineTarget" }
 
 components:
   schemas:
@@ -3450,3 +3486,20 @@ components:
       properties:
         query: { type: string }
       required: [query]
+
+    # Pipeline Targets (config)
+    PipelineTarget:
+      type: object
+      required: [id, periodType, periodStart, targetValue]
+      properties:
+        id: { type: string, format: uuid }
+        periodType: { type: string }
+        periodStart: { type: string, format: date }
+        targetValue: { type: number }
+    PipelineTargetInput:
+      type: object
+      required: [periodStart, targetValue]
+      properties:
+        periodType: { type: string, default: quarter }
+        periodStart: { type: string, format: date }
+        targetValue: { type: number }

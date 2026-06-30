@@ -1,5 +1,5 @@
 import { Router, type IRouter, type Request, type Response } from "express";
-import { and, asc, eq, gt } from "drizzle-orm";
+import { and, asc, desc, eq, gt, sql } from "drizzle-orm";
 import {
   db,
   enterpriseDeals,
@@ -16,6 +16,7 @@ import {
   financialScenarios,
   customRiskPatterns,
   customPatternConditions,
+  pipelineTargets,
 } from "@workspace/db";
 import {
   computeRampTCV,
@@ -45,6 +46,7 @@ import {
   UpdateCustomPatternBody,
   DeleteCustomPatternParams,
   TestCustomPatternBody,
+  UpsertPipelineTargetBody,
 } from "@workspace/api-zod";
 import { getActor } from "../../lib/auth";
 import { notFound } from "../../lib/http";
@@ -623,6 +625,58 @@ router.post("/custom-patterns/test", async (req: Request, res: Response) => {
     .filter((d) => evaluateCustomPatterns([pattern], d).length > 0)
     .map((d) => ({ dealId: d.dealId, dealName: d.dealName, accountName: d.accountName }));
   res.json({ data: { matchCount: matches.length, matches } });
+});
+
+/* ------------------------------------------------- Pipeline Targets (config) */
+
+// GET /v2/config/targets — list all period targets, newest first.
+router.get("/config/targets", async (_req: Request, res: Response) => {
+  const rows = await db
+    .select()
+    .from(pipelineTargets)
+    .orderBy(desc(pipelineTargets.periodStart));
+  res.json({
+    data: rows.map((r) => ({
+      id: r.id,
+      periodType: r.periodType,
+      periodStart: r.periodStart,
+      targetValue: Number(r.targetValue),
+    })),
+  });
+});
+
+// PUT /v2/config/targets — upsert a period target (conflict on periodType + periodStart).
+router.put("/config/targets", async (req: Request, res: Response) => {
+  const body = UpsertPipelineTargetBody.parse(req.body);
+  // body.periodStart is a Date (coerced by Zod's coerce.date() + useDates:true).
+  // pipelineTargets.periodStart is a date column with mode:"string" → needs YYYY-MM-DD.
+  const periodStartStr = body.periodStart instanceof Date
+    ? body.periodStart.toISOString().slice(0, 10)
+    : String(body.periodStart);
+  const [row] = await db
+    .insert(pipelineTargets)
+    .values({
+      periodType: body.periodType ?? "quarter",
+      periodStart: periodStartStr,
+      targetValue: String(body.targetValue),
+      updatedAt: sql`NOW()`,
+    })
+    .onConflictDoUpdate({
+      target: [pipelineTargets.periodType, pipelineTargets.periodStart],
+      set: {
+        targetValue: String(body.targetValue),
+        updatedAt: sql`NOW()`,
+      },
+    })
+    .returning();
+  res.json({
+    data: {
+      id: row.id,
+      periodType: row.periodType,
+      periodStart: row.periodStart,
+      targetValue: Number(row.targetValue),
+    },
+  });
 });
 
 export default router;

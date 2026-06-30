@@ -94,6 +94,7 @@ import type {
   ListDealSnapshotsParams,
   ListDealsParams,
   ListNotificationsParams,
+  ListPipelineTargets200,
   ListPortfolioActivityParams,
   ListScenariosParams,
   LoginInput,
@@ -108,6 +109,7 @@ import type {
   NotificationRuleListResponse,
   NotificationRuleResponse,
   PipelineStageListResponse,
+  PipelineTargetInput,
   PlaybookInput,
   PlaybookListResponse,
   PlaybookResponse,
@@ -140,6 +142,7 @@ import type {
   TeamMemberListResponse,
   TeamMemberResponse,
   ThresholdsUpdate,
+  UpsertPipelineTarget200,
   WebhookDeliveryListResponse,
   WebhookInput,
   WebhookListResponse,
@@ -9381,5 +9384,141 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
         TContext
       > => {
       return useMutation(getParseNlcCommandMutationOptions(options));
+    }
+
+export const getListPipelineTargetsUrl = () => {
+
+
+
+
+  return `/api/v2/config/targets`
+}
+
+export const listPipelineTargets = async ( options?: RequestInit): Promise<ListPipelineTargets200> => {
+
+  return customFetch<ListPipelineTargets200>(getListPipelineTargetsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListPipelineTargetsQueryKey = () => {
+    return [
+    `/api/v2/config/targets`
+    ] as const;
+    }
+
+
+export const getListPipelineTargetsQueryOptions = <TData = Awaited<ReturnType<typeof listPipelineTargets>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listPipelineTargets>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListPipelineTargetsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listPipelineTargets>>> = ({ signal }) => listPipelineTargets({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listPipelineTargets>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListPipelineTargetsQueryResult = NonNullable<Awaited<ReturnType<typeof listPipelineTargets>>>
+export type ListPipelineTargetsQueryError = ErrorType<unknown>
+
+
+
+export function useListPipelineTargets<TData = Awaited<ReturnType<typeof listPipelineTargets>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listPipelineTargets>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListPipelineTargetsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getUpsertPipelineTargetUrl = () => {
+
+
+
+
+  return `/api/v2/config/targets`
+}
+
+export const upsertPipelineTarget = async (pipelineTargetInput: PipelineTargetInput, options?: RequestInit): Promise<UpsertPipelineTarget200> => {
+
+  return customFetch<UpsertPipelineTarget200>(getUpsertPipelineTargetUrl(),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      pipelineTargetInput,)
+  }
+);}
+
+
+
+
+export const getUpsertPipelineTargetMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof upsertPipelineTarget>>, TError,{data: BodyType<PipelineTargetInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof upsertPipelineTarget>>, TError,{data: BodyType<PipelineTargetInput>}, TContext> => {
+
+const mutationKey = ['upsertPipelineTarget'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof upsertPipelineTarget>>, {data: BodyType<PipelineTargetInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  upsertPipelineTarget(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpsertPipelineTargetMutationResult = NonNullable<Awaited<ReturnType<typeof upsertPipelineTarget>>>
+    export type UpsertPipelineTargetMutationBody = BodyType<PipelineTargetInput>
+    export type UpsertPipelineTargetMutationError = ErrorType<unknown>
+
+    export const useUpsertPipelineTarget = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof upsertPipelineTarget>>, TError,{data: BodyType<PipelineTargetInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof upsertPipelineTarget>>,
+        TError,
+        {data: BodyType<PipelineTargetInput>},
+        TContext
+      > => {
+      return useMutation(getUpsertPipelineTargetMutationOptions(options));
     }
 

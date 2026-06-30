@@ -2708,3 +2708,31 @@ export const ParseNlcCommandResponse = zod.object({
 })
 
 
+export const ListPipelineTargetsResponse = zod.object({
+  "data": zod.array(zod.object({
+  "id": zod.string().uuid(),
+  "periodType": zod.string(),
+  "periodStart": zod.coerce.date(),
+  "targetValue": zod.number()
+})).optional()
+})
+
+
+export const upsertPipelineTargetBodyPeriodTypeDefault = `quarter`;
+
+export const UpsertPipelineTargetBody = zod.object({
+  "periodType": zod.string().default(upsertPipelineTargetBodyPeriodTypeDefault),
+  "periodStart": zod.coerce.date(),
+  "targetValue": zod.number()
+})
+
+export const UpsertPipelineTargetResponse = zod.object({
+  "data": zod.object({
+  "id": zod.string().uuid(),
+  "periodType": zod.string(),
+  "periodStart": zod.coerce.date(),
+  "targetValue": zod.number()
+}).optional()
+})
+
+

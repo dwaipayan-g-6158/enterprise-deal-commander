@@ -1826,6 +1826,19 @@ export interface NlcParseInput {
   query: string;
 }
 
+export interface PipelineTarget {
+  id: string;
+  periodType: string;
+  periodStart: string;
+  targetValue: number;
+}
+
+export interface PipelineTargetInput {
+  periodType?: string;
+  periodStart: string;
+  targetValue: number;
+}
+
 export type ListDealsParams = {
 search?: string;
 stage?: string;
@@ -1923,5 +1936,13 @@ deal_id?: string;
 
 export type ListNotificationsParams = {
 unacknowledged?: boolean;
+};
+
+export type ListPipelineTargets200 = {
+  data?: PipelineTarget[];
+};
+
+export type UpsertPipelineTarget200 = {
+  data?: PipelineTarget;
 };
 
