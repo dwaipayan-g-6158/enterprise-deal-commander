@@ -714,24 +714,71 @@ export interface ProductCorrelation {
   alertCorrelations: AlertCorrelation[];
 }
 
-export interface PortfolioAnalysis {
-  byAccountManager: ManagerCorrelation[];
-  byTechnicalLead: LeadCorrelation[];
-  byProduct: ProductCorrelation[];
-  /** @nullable */
-  noTechnicalLeadCycleTimeDays?: number | null;
-}
-
-export interface PortfolioAnalysisResponse {
-  data: PortfolioAnalysis;
-}
-
 export interface ProductMixDeal {
   id: string;
   dealName: string;
   accountName: string;
   salesStage: string;
   tcv: number;
+}
+
+export interface RiskCell {
+  person: string;
+  product: string;
+  dealCount: number;
+  tcv: number;
+  riskScore: number;
+  topAlertCodes: string[];
+  lowConfidence: boolean;
+  deals: ProductMixDeal[];
+}
+
+export interface RiskMatrix {
+  byAccountManager: RiskCell[];
+  byTechnicalLead: RiskCell[];
+  products: string[];
+  accountManagers: string[];
+  technicalLeads: string[];
+}
+
+export type HighestCorrelationClusterScope = typeof HighestCorrelationClusterScope[keyof typeof HighestCorrelationClusterScope];
+
+
+export const HighestCorrelationClusterScope = {
+  manager: 'manager',
+  lead: 'lead',
+  product: 'product',
+} as const;
+
+export interface HighestCorrelationCluster {
+  scope: HighestCorrelationClusterScope;
+  name: string;
+  code: string;
+  lift: number;
+  share: number;
+}
+
+export interface PortfolioSummary {
+  diversificationIndex: number;
+  highestCorrelationCluster: HighestCorrelationCluster | null;
+  correlatedExposureTcv: number;
+  redDealCount: number;
+  totalDealCount: number;
+  reportingCurrency: string;
+}
+
+export interface PortfolioAnalysis {
+  byAccountManager: ManagerCorrelation[];
+  byTechnicalLead: LeadCorrelation[];
+  byProduct: ProductCorrelation[];
+  /** @nullable */
+  noTechnicalLeadCycleTimeDays?: number | null;
+  riskMatrix?: RiskMatrix;
+  summary?: PortfolioSummary;
+}
+
+export interface PortfolioAnalysisResponse {
+  data: PortfolioAnalysis;
 }
 
 export interface SuitePipeline {

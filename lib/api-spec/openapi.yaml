@@ -2241,6 +2241,63 @@ components:
           type: array
           items: { $ref: "#/components/schemas/AlertCorrelation" }
       required: [productName, dealCount, presentInStalledShare, alertCorrelations]
+    RiskCell:
+      type: object
+      properties:
+        person: { type: string }
+        product: { type: string }
+        dealCount: { type: integer }
+        tcv: { type: number }
+        riskScore: { type: number }
+        topAlertCodes:
+          type: array
+          items: { type: string }
+        lowConfidence: { type: boolean }
+        deals:
+          type: array
+          items: { $ref: "#/components/schemas/ProductMixDeal" }
+      required: [person, product, dealCount, tcv, riskScore, topAlertCodes, lowConfidence, deals]
+    RiskMatrix:
+      type: object
+      properties:
+        byAccountManager:
+          type: array
+          items: { $ref: "#/components/schemas/RiskCell" }
+        byTechnicalLead:
+          type: array
+          items: { $ref: "#/components/schemas/RiskCell" }
+        products:
+          type: array
+          items: { type: string }
+        accountManagers:
+          type: array
+          items: { type: string }
+        technicalLeads:
+          type: array
+          items: { type: string }
+      required: [byAccountManager, byTechnicalLead, products, accountManagers, technicalLeads]
+    HighestCorrelationCluster:
+      type: object
+      properties:
+        scope: { type: string, enum: [manager, lead, product] }
+        name: { type: string }
+        code: { type: string }
+        lift: { type: number }
+        share: { type: number }
+      required: [scope, name, code, lift, share]
+    PortfolioSummary:
+      type: object
+      properties:
+        diversificationIndex: { type: number }
+        highestCorrelationCluster:
+          oneOf:
+            - { $ref: "#/components/schemas/HighestCorrelationCluster" }
+            - { type: "null" }
+        correlatedExposureTcv: { type: number }
+        redDealCount: { type: integer }
+        totalDealCount: { type: integer }
+        reportingCurrency: { type: string }
+      required: [diversificationIndex, highestCorrelationCluster, correlatedExposureTcv, redDealCount, totalDealCount, reportingCurrency]
     PortfolioAnalysis:
       type: object
       properties:
@@ -2254,6 +2311,8 @@ components:
           type: array
           items: { $ref: "#/components/schemas/ProductCorrelation" }
         noTechnicalLeadCycleTimeDays: { type: ["number", "null"] }
+        riskMatrix: { $ref: "#/components/schemas/RiskMatrix" }
+        summary: { $ref: "#/components/schemas/PortfolioSummary" }
       required: [byAccountManager, byTechnicalLead, byProduct]
     PortfolioAnalysisResponse:
       type: object

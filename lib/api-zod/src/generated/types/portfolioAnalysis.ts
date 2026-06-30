@@ -7,7 +7,9 @@
  */
 import type { LeadCorrelation } from './leadCorrelation';
 import type { ManagerCorrelation } from './managerCorrelation';
+import type { PortfolioSummary } from './portfolioSummary';
 import type { ProductCorrelation } from './productCorrelation';
+import type { RiskMatrix } from './riskMatrix';
 
 export interface PortfolioAnalysis {
   byAccountManager: ManagerCorrelation[];
@@ -15,4 +17,6 @@ export interface PortfolioAnalysis {
   byProduct: ProductCorrelation[];
   /** @nullable */
   noTechnicalLeadCycleTimeDays?: number | null;
+  riskMatrix?: RiskMatrix;
+  summary?: PortfolioSummary;
 }

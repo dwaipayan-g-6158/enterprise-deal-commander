@@ -4,6 +4,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { AlertTriangle } from "lucide-react";
 import { ProductMixSection } from "@/components/cockpit/product-mix-section";
+import { PortfolioSummaryCards } from "@/components/cockpit/portfolio-summary-cards";
+import { PortfolioRiskHeatmap } from "@/components/cockpit/portfolio-risk-heatmap";
 
 export default function Portfolio() {
   const { data: response, isLoading } = useGetPortfolioAnalysis();
@@ -33,6 +35,15 @@ export default function Portfolio() {
         <h1 className="text-3xl font-bold tracking-tight">Portfolio Risk Analysis</h1>
         <p className="text-muted-foreground mt-2">Correlation of risk patterns across team members and products</p>
       </div>
+
+      {data.summary && <PortfolioSummaryCards summary={data.summary} />}
+
+      {data.riskMatrix && (
+        <PortfolioRiskHeatmap
+          matrix={data.riskMatrix}
+          currency={data.summary?.reportingCurrency}
+        />
+      )}
 
       <div className="grid grid-cols-1 @4xl:grid-cols-2 gap-8">
         <ProductMixSection />

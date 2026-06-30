@@ -7,6 +7,15 @@ import {
 } from "@workspace/db";
 import { assembleDealIntelligence, getThresholds } from "./intelligence";
 import { cache, CacheKeys, CacheTtl } from "./cache";
+import {
+  buildRiskCells,
+  correlatedExposureTcv,
+  diversificationIndex,
+  pickHighestCorrelationCluster,
+  significantCodes,
+  type GroupCorrelation,
+  type MetricsRecord,
+} from "./portfolio-metrics";
 
 /**
  * Shared portfolio/summary compute used by both the read endpoints (live
@@ -135,14 +144,7 @@ export async function computeSummary() {
   };
 }
 
-interface PortfolioRecord {
-  accountManager: string;
-  technicalLead: string;
-  daysInStage: number;
-  alertCodes: string[];
-  products: string[];
-  stalled: boolean;
-}
+type PortfolioRecord = MetricsRecord;
 
 function correlations(
   records: PortfolioRecord[],
@@ -166,11 +168,24 @@ function correlations(
 }
 
 export async function computePortfolioAnalysis() {
+  const { thresholds } = await getThresholds();
+  const reportingCurrency = String(thresholds.reporting_currency || "USD");
   const deals = await loadActiveIntel();
   const records: PortfolioRecord[] = deals.map((d) => ({
+    dealId: d.id,
+    dealName: d.dealName,
+    accountName: d.accountName,
+    salesStage: d.salesStage,
     accountManager: d.team.accountManager,
     technicalLead: d.team.technicalLead,
     daysInStage: d.daysInStage,
+    tcv: d.financials.normalizedTCV,
+    healthStatus: d.governance.healthStatus,
+    maxActiveAlertWeight: d.governance.alerts.reduce(
+      (max, a) => Math.max(max, a.weight ?? 0),
+      0,
+    ),
+    activeAlertCodes: d.governance.alerts.map((a) => a.code),
     alertCodes: [...d.governance.alerts, ...d.governance.managedAlerts].map(
       (a) => a.code,
     ),
@@ -245,10 +260,61 @@ export async function computePortfolioAnalysis() {
     alertCorrelations: correlations(recs, globalShares),
   }));
 
+  // --- Heatmap + summary metrics (pure, in portfolio-metrics.ts) -----------
+  const amCells = buildRiskCells(records, "accountManager");
+  const tlCells = buildRiskCells(records, "technicalLead");
+  const productAxis = [...productGroups.keys()].sort();
+  // Derive each row axis from the cells themselves so the axis labels and the
+  // cell keys are always normalized identically — otherwise an axis built from a
+  // differently-filtered/normalized source (e.g. excluding "Unassigned") leaves
+  // orphan cells that silently vanish from the grid.
+  const riskMatrix = {
+    byAccountManager: amCells,
+    byTechnicalLead: tlCells,
+    products: productAxis,
+    accountManagers: [...new Set(amCells.map((c) => c.person))].sort(),
+    technicalLeads: [...new Set(tlCells.map((c) => c.person))].sort(),
+  };
+
+  const managerCorr: GroupCorrelation[] = byAccountManager.map((g) => ({
+    name: g.accountManager,
+    dealCount: g.dealCount,
+    alertCorrelations: g.alertCorrelations,
+  }));
+  const leadCorr: GroupCorrelation[] = byTechnicalLead.map((g) => ({
+    name: g.technicalLead,
+    dealCount: g.dealCount,
+    alertCorrelations: g.alertCorrelations,
+  }));
+  const productCorr: GroupCorrelation[] = byProduct.map((g) => ({
+    name: g.productName,
+    dealCount: g.dealCount,
+    alertCorrelations: g.alertCorrelations,
+  }));
+  const sigCodes = significantCodes([
+    ...managerCorr,
+    ...leadCorr,
+    ...productCorr,
+  ]);
+  const summary = {
+    diversificationIndex: diversificationIndex(amCells),
+    highestCorrelationCluster: pickHighestCorrelationCluster({
+      manager: managerCorr,
+      lead: leadCorr,
+      product: productCorr,
+    }),
+    correlatedExposureTcv: correlatedExposureTcv(records, sigCodes),
+    redDealCount: records.filter((r) => r.healthStatus === "RED").length,
+    totalDealCount: records.length,
+    reportingCurrency,
+  };
+
   return {
     byAccountManager,
     byTechnicalLead,
     byProduct,
     noTechnicalLeadCycleTimeDays,
+    riskMatrix,
+    summary,
   };
 }

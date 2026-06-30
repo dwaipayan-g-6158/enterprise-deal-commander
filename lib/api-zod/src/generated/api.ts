@@ -978,7 +978,58 @@ export const GetPortfolioAnalysisResponse = zod.object({
   "lift": zod.number()
 }))
 })),
-  "noTechnicalLeadCycleTimeDays": zod.number().nullish()
+  "noTechnicalLeadCycleTimeDays": zod.number().nullish(),
+  "riskMatrix": zod.object({
+  "byAccountManager": zod.array(zod.object({
+  "person": zod.string(),
+  "product": zod.string(),
+  "dealCount": zod.number(),
+  "tcv": zod.number(),
+  "riskScore": zod.number(),
+  "topAlertCodes": zod.array(zod.string()),
+  "lowConfidence": zod.boolean(),
+  "deals": zod.array(zod.object({
+  "id": zod.string(),
+  "dealName": zod.string(),
+  "accountName": zod.string(),
+  "salesStage": zod.string(),
+  "tcv": zod.number()
+}))
+})),
+  "byTechnicalLead": zod.array(zod.object({
+  "person": zod.string(),
+  "product": zod.string(),
+  "dealCount": zod.number(),
+  "tcv": zod.number(),
+  "riskScore": zod.number(),
+  "topAlertCodes": zod.array(zod.string()),
+  "lowConfidence": zod.boolean(),
+  "deals": zod.array(zod.object({
+  "id": zod.string(),
+  "dealName": zod.string(),
+  "accountName": zod.string(),
+  "salesStage": zod.string(),
+  "tcv": zod.number()
+}))
+})),
+  "products": zod.array(zod.string()),
+  "accountManagers": zod.array(zod.string()),
+  "technicalLeads": zod.array(zod.string())
+}).optional(),
+  "summary": zod.object({
+  "diversificationIndex": zod.number(),
+  "highestCorrelationCluster": zod.union([zod.object({
+  "scope": zod.enum(['manager', 'lead', 'product']),
+  "name": zod.string(),
+  "code": zod.string(),
+  "lift": zod.number(),
+  "share": zod.number()
+}),zod.null()]),
+  "correlatedExposureTcv": zod.number(),
+  "redDealCount": zod.number(),
+  "totalDealCount": zod.number(),
+  "reportingCurrency": zod.string()
+}).optional()
 })
 })
 
