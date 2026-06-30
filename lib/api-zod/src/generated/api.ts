@@ -167,7 +167,6 @@ export const CreateDealBody = zod.object({
   "loss_archetype_id": zod.number().nullish(),
   "competitor_id": zod.number().nullish(),
   "compliance_driver_id": zod.number().nullish(),
-  "compliance_deadline": zod.string().nullish(),
   "estimated_log_sources": zod.number().nullish(),
   "product_interest_ids": zod.array(zod.string()).optional(),
   "compliance_driver_ids": zod.array(zod.number()).optional()
@@ -284,7 +283,6 @@ export const UpdateDealBody = zod.object({
   "loss_archetype_id": zod.number().nullish(),
   "competitor_id": zod.number().nullish(),
   "compliance_driver_id": zod.number().nullish(),
-  "compliance_deadline": zod.string().nullish(),
   "estimated_log_sources": zod.number().nullish(),
   "product_interest_ids": zod.array(zod.string()).optional(),
   "compliance_driver_ids": zod.array(zod.number()).optional(),
@@ -1441,11 +1439,74 @@ export const ListCompetitorsResponse = zod.object({
 })
 
 
+/**
+ * @summary Create a competitor (combobox add-new)
+ */
+export const createCompetitorBodyNameMax = 80;
+
+export const createCompetitorBodyCategoryMax = 10;
+
+
+
+export const CreateCompetitorBody = zod.object({
+  "name": zod.string().min(1).max(createCompetitorBodyNameMax),
+  "category": zod.string().min(1).max(createCompetitorBodyCategoryMax).optional()
+})
+
+
 export const ListComplianceDriversResponse = zod.object({
   "data": zod.array(zod.object({
   "id": zod.number(),
   "name": zod.string()
 }))
+})
+
+
+/**
+ * @summary Create a compliance driver (combobox add-new)
+ */
+export const createComplianceDriverBodyNameMax = 60;
+
+
+
+export const CreateComplianceDriverBody = zod.object({
+  "name": zod.string().min(1).max(createComplianceDriverBodyNameMax)
+})
+
+
+export const ListTeamMembersResponse = zod.object({
+  "data": zod.array(zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "can_be_am": zod.boolean(),
+  "can_be_tl": zod.boolean()
+}))
+})
+
+
+/**
+ * @summary Create a team member
+ */
+export const createTeamMemberBodyNameMax = 120;
+
+
+
+export const CreateTeamMemberBody = zod.object({
+  "name": zod.string().min(1).max(createTeamMemberBodyNameMax),
+  "can_be_am": zod.boolean().optional(),
+  "can_be_tl": zod.boolean().optional()
+})
+
+
+/**
+ * @summary Soft-delete a team member
+ */
+export const DeleteTeamMemberParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const DeleteTeamMemberResponse = zod.object({
+  "message": zod.string()
 })
 
 

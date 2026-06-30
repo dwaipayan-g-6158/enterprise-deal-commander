@@ -63,8 +63,6 @@ export interface EngineThresholds {
   low_attach_rate_threshold: number;
   // IAM/SIEM sales additions
   competitive_stall_days: number;
-  compliance_deadline_warning_days: number;
-  compliance_min_gate_pct: number;
   suite_bundle_min_components: number;
   poc_max_validation_days: number;
   siem_high_volume_log_sources: number;
@@ -113,7 +111,6 @@ export interface RawDeal {
   competitor?: string | null;
   compliance_driver?: string | null;
   compliance_drivers?: string[];
-  compliance_deadline?: string | null;
   estimated_log_sources?: number | null;
   anchor_products?: RawProductRef[];
 }
@@ -216,7 +213,6 @@ interface DealContext {
   gateMap: Record<string, boolean>;
   competitor: string | null;
   complianceDriver: string | null;
-  daysToComplianceDeadline: number | null;
   estimatedLogSources: number | null;
   hasLog360: boolean;
 }
@@ -786,49 +782,6 @@ export const riskPatterns: RiskPattern[] = [
     }),
   },
   {
-    // IAM/SIEM — a hard compliance deadline is both the risk and the leverage
-    code: "COMPLIANCE_DEADLINE_RISK",
-    severity: "YELLOW",
-    weight: 82,
-    evaluate: (deal, _b, thresholds) => {
-      if (deal.daysToComplianceDeadline == null) return false;
-      return (
-        deal.daysToComplianceDeadline <=
-          thresholds.compliance_deadline_warning_days &&
-        deal.technicalProgressPct < thresholds.compliance_min_gate_pct
-      );
-    },
-    formatMessage: (deal) =>
-      `COMPLIANCE DEADLINE RISK: A ${deal.complianceDriver ?? "compliance"} mandate is due in ` +
-      `${deal.daysToComplianceDeadline} days, but only ${deal.technicalProgressPct}% of technical gates ` +
-      `are complete. The deal risks slipping the audit window — the very leverage that should be ` +
-      `accelerating it.`,
-    explain: (deal, thresholds, _b, provenance) => ({
-      inputs: [
-        { label: "Compliance Driver", value: deal.complianceDriver ?? "(none)" },
-        {
-          label: "Days To Compliance Deadline",
-          value: deal.daysToComplianceDeadline ?? "(none)",
-        },
-        { label: "Technical Progress %", value: deal.technicalProgressPct },
-      ],
-      thresholdsUsed: [
-        {
-          key: "compliance_deadline_warning_days",
-          value: thresholds.compliance_deadline_warning_days,
-          source: provenance("compliance_deadline_warning_days"),
-        },
-        {
-          key: "compliance_min_gate_pct",
-          value: thresholds.compliance_min_gate_pct,
-          source: provenance("compliance_min_gate_pct"),
-        },
-      ],
-      clearsWhen:
-        "Raise gate completion above the compliance threshold, or re-baseline the compliance deadline with the customer.",
-    }),
-  },
-  {
     // IAM/SIEM — a PoC dragging in Validation with no locked success criteria
     code: "POC_DEATH_MARCH",
     severity: "YELLOW",
@@ -1138,14 +1091,6 @@ export function processDealIntelligence(
       ? null
       : Math.floor((now.getTime() - lastGateCompletedAt) / DAY);
 
-  let daysToComplianceDeadline: number | null = null;
-  if (deal.compliance_deadline) {
-    daysToComplianceDeadline = Math.floor(
-      (new Date(deal.compliance_deadline).getTime() - now.getTime()) / DAY,
-    );
-    if (daysToComplianceDeadline < 0) daysToComplianceDeadline = 0;
-  }
-
   // F13: cross-sell whitespace + attach rate
   const crossSells = deal.cross_sells || [];
   const pitchedCount = crossSells.filter((c) => c.isPitched).length;
@@ -1192,7 +1137,6 @@ export function processDealIntelligence(
     gateMap,
     competitor: deal.competitor ?? null,
     complianceDriver: deal.compliance_driver ?? null,
-    daysToComplianceDeadline,
     estimatedLogSources,
     hasLog360,
   };
@@ -1217,15 +1161,6 @@ export function processDealIntelligence(
         dealContext.daysToClose != null &&
         dealContext.daysToClose <=
           Math.round(thresholds.close_date_warning_days / 2)
-      ) {
-        severity = "RED";
-      }
-      // Compliance deadline inside half the warning window is critical.
-      if (
-        pattern.code === "COMPLIANCE_DEADLINE_RISK" &&
-        dealContext.daysToComplianceDeadline != null &&
-        dealContext.daysToComplianceDeadline <=
-          Math.round(thresholds.compliance_deadline_warning_days / 2)
       ) {
         severity = "RED";
       }

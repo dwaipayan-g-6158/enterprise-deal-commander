@@ -184,8 +184,6 @@ export interface DealInput {
   /** @nullable */
   compliance_driver_id?: number | null;
   /** @nullable */
-  compliance_deadline?: string | null;
-  /** @nullable */
   estimated_log_sources?: number | null;
   product_interest_ids?: string[];
   compliance_driver_ids?: number[];
@@ -245,8 +243,6 @@ export interface DealUpdate {
   competitor_id?: number | null;
   /** @nullable */
   compliance_driver_id?: number | null;
-  /** @nullable */
-  compliance_deadline?: string | null;
   /** @nullable */
   estimated_log_sources?: number | null;
   product_interest_ids?: string[];
@@ -1066,6 +1062,60 @@ export interface CompetitorListResponse {
 
 export interface ComplianceDriverListResponse {
   data: ComplianceDriver[];
+}
+
+export interface CompetitorResponse {
+  data: Competitor;
+}
+
+export interface CreateCompetitorInput {
+  /**
+     * @minLength 1
+     * @maxLength 80
+     */
+  name: string;
+  /**
+     * @minLength 1
+     * @maxLength 10
+     */
+  category?: string;
+}
+
+export interface ComplianceDriverResponse {
+  data: ComplianceDriver;
+}
+
+export interface CreateComplianceDriverInput {
+  /**
+     * @minLength 1
+     * @maxLength 60
+     */
+  name: string;
+}
+
+export interface TeamMember {
+  id: number;
+  name: string;
+  can_be_am: boolean;
+  can_be_tl: boolean;
+}
+
+export interface TeamMemberListResponse {
+  data: TeamMember[];
+}
+
+export interface TeamMemberResponse {
+  data: TeamMember;
+}
+
+export interface CreateTeamMemberInput {
+  /**
+     * @minLength 1
+     * @maxLength 120
+     */
+  name: string;
+  can_be_am?: boolean;
+  can_be_tl?: boolean;
 }
 
 export interface CompetitorBattlecard {

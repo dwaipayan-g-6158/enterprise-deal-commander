@@ -13,6 +13,7 @@ import {
   NotificationSettings,
   CustomPatternsSettings,
 } from "@/components/settings/v2-panels";
+import { TeamSettings } from "@/components/settings/team-settings";
 
 export default function Settings() {
   const { data: response, isLoading } = useListEngineThresholds();
@@ -69,6 +70,7 @@ export default function Settings() {
           <TabsTrigger value="patterns">Custom Patterns</TabsTrigger>
           <TabsTrigger value="alerts">Smart Alerts</TabsTrigger>
           <TabsTrigger value="webhooks">Webhooks</TabsTrigger>
+          <TabsTrigger value="team">Team</TabsTrigger>
         </TabsList>
 
         <TabsContent value="thresholds" className="pt-4 space-y-4">
@@ -119,6 +121,9 @@ export default function Settings() {
         </TabsContent>
         <TabsContent value="webhooks" className="pt-4">
           <WebhooksSettings />
+        </TabsContent>
+        <TabsContent value="team" className="pt-4">
+          <TeamSettings />
         </TabsContent>
       </Tabs>
     </div>

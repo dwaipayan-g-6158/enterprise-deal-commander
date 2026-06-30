@@ -10,6 +10,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { InfoTooltip } from "@/components/ui/info-tooltip";
 import {
   Pencil,
   Radio,
@@ -316,7 +317,13 @@ export default function DealCockpit() {
                 <span className="font-mono">{formatCurrency(intel.financials.servicesRevenue, deal.dealCurrency)}</span>
               </div>
               <div className="flex justify-between py-2 border-b">
-                <span className="text-muted-foreground text-sm">Normalized TCV</span>
+                <span className="flex items-center gap-1.5 text-muted-foreground text-sm">
+                  Normalized TCV
+                  <InfoTooltip>
+                    Total Contract Value converted to your reporting currency at the current FX
+                    rate, so deals in different currencies can be compared on a common basis.
+                  </InfoTooltip>
+                </span>
                 <span className="font-mono">
                   {formatCurrency(intel.financials.normalizedTCV, intel.financials.reportingCurrency)}
                 </span>
@@ -324,6 +331,20 @@ export default function DealCockpit() {
               <div className="flex justify-between py-2 border-b">
                 <span className="text-muted-foreground text-sm">Pricing Model</span>
                 <span>{intel.financials.pricingModel}</span>
+              </div>
+              <div className="flex justify-between py-2 border-b">
+                <span className="text-muted-foreground text-sm">Products of Interest</span>
+                {deal.productsOfInterest && deal.productsOfInterest.length > 0 ? (
+                  <span className="flex flex-wrap justify-end gap-1">
+                    {deal.productsOfInterest.map((p) => (
+                      <Badge key={p.productId} variant="secondary" className="font-normal">
+                        {p.productName}
+                      </Badge>
+                    ))}
+                  </span>
+                ) : (
+                  <span className="text-muted-foreground">—</span>
+                )}
               </div>
               <div className="flex justify-between py-2">
                 <span className="text-muted-foreground text-sm">Term</span>

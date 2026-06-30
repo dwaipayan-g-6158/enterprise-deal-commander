@@ -57,8 +57,6 @@ export const DEFAULT_THRESHOLDS: EngineThresholds = {
   momentum_min_gate_pct: 60,
   low_attach_rate_threshold: 0.34,
   competitive_stall_days: 21,
-  compliance_deadline_warning_days: 45,
-  compliance_min_gate_pct: 60,
   suite_bundle_min_components: 3,
   poc_max_validation_days: 30,
   siem_high_volume_log_sources: 500,
@@ -559,7 +557,6 @@ export async function assembleDealIntelligence(dealId: string) {
     competitor: dealRow.competitorName,
     compliance_driver: dealRow.complianceDriverName,
     compliance_drivers: complianceDriverNames,
-    compliance_deadline: deal.complianceDeadline,
     estimated_log_sources: deal.estimatedLogSources,
     anchor_products: productsOfInterest.map((p) => ({
       code: p.code ?? "",

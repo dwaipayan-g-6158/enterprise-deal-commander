@@ -229,6 +229,14 @@ router.post("/deals", async (req: Request, res: Response) => {
   const actor = getActor(req);
   const body = parsed.data;
 
+  // B6: the UI sends only the multi-select `compliance_driver_ids`. Derive the
+  // single `compliance_driver_id` (engine read) as the first selected, falling
+  // back to any explicit single value the caller still sends.
+  const derivedComplianceDriverId =
+    body.compliance_driver_ids && body.compliance_driver_ids.length > 0
+      ? body.compliance_driver_ids[0]
+      : (body.compliance_driver_id ?? null);
+
   let created;
   try {
     const inserted = await db
@@ -252,8 +260,7 @@ router.post("/deals", async (req: Request, res: Response) => {
         speakerNotes: body.speaker_notes ?? null,
         lossArchetypeId: body.loss_archetype_id ?? null,
         competitorId: body.competitor_id ?? null,
-        complianceDriverId: body.compliance_driver_id ?? null,
-        complianceDeadline: body.compliance_deadline ?? null,
+        complianceDriverId: derivedComplianceDriverId,
         estimatedLogSources: body.estimated_log_sources ?? null,
       })
       .returning({ id: enterpriseDeals.id });
@@ -408,21 +415,23 @@ const updateDealHandler = async (req: Request, res: Response) => {
     track("competitor_id", existing.competitorId, body.competitor_id);
     updates.competitorId = body.competitor_id ?? null;
   }
-  if (body.compliance_driver_id !== undefined) {
+  // B6: derive the single `compliance_driver_id` (engine read) from the
+  // multi-select `compliance_driver_ids` (first element, or null if empty) when
+  // the array is supplied; otherwise honor an explicit single value.
+  if (body.compliance_driver_ids !== undefined) {
+    const derived =
+      body.compliance_driver_ids.length > 0
+        ? body.compliance_driver_ids[0]
+        : null;
+    track("compliance_driver_id", existing.complianceDriverId, derived);
+    updates.complianceDriverId = derived;
+  } else if (body.compliance_driver_id !== undefined) {
     track(
       "compliance_driver_id",
       existing.complianceDriverId,
       body.compliance_driver_id,
     );
     updates.complianceDriverId = body.compliance_driver_id ?? null;
-  }
-  if (body.compliance_deadline !== undefined) {
-    track(
-      "compliance_deadline",
-      existing.complianceDeadline,
-      body.compliance_deadline,
-    );
-    updates.complianceDeadline = body.compliance_deadline ?? null;
   }
   if (body.estimated_log_sources !== undefined) {
     track(

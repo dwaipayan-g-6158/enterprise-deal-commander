@@ -104,13 +104,6 @@ export const PATTERN_DIMENSION_MAP: Record<string, PatternMapEntry> = {
   },
 
   // ── YELLOW / Advisory ──
-  COMPLIANCE_DEADLINE_RISK: {
-    amplifications: [
-      { dimension: "Temporal Pressure", boost: 25 },
-      { dimension: "Technical Readiness", boost: 15 },
-    ],
-    isStageGuardrail: false,
-  },
   COMPETITIVE_DISPLACEMENT_STALL: {
     amplifications: [
       { dimension: "Competitive Exposure", boost: 25 },
@@ -368,16 +361,6 @@ export function generateUnifiedActions(
           priority: "HIGH",
           action:
             "Force an escalation review on the stalled validation. Identify the specific blocker and set a gate-completion deadline.",
-          patternCode: code,
-          dimension: "Temporal Pressure",
-        });
-        break;
-      case "COMPLIANCE_DEADLINE_RISK":
-        actions.push({
-          source: "PATTERN",
-          priority: "HIGH",
-          action:
-            "Fast-track compliance documentation. Assign a dedicated resource to the InfoSec/compliance workstream.",
           patternCode: code,
           dimension: "Temporal Pressure",
         });

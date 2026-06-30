@@ -8,7 +8,12 @@ import {
   useListServicesTiers,
   useListCompetitors,
   useListComplianceDrivers,
+  useListTeamMembers,
+  useCreateCompetitor,
+  useCreateComplianceDriver,
   getListDealsQueryKey,
+  getListCompetitorsQueryKey,
+  getListComplianceDriversQueryKey,
 } from "@workspace/api-client-react";
 import { ProductPicker } from "./product-picker";
 import { useQueryClient } from "@tanstack/react-query";
@@ -24,7 +29,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Checkbox } from "@/components/ui/checkbox";
+import { DatePicker } from "@/components/ui/date-picker";
+import { Combobox, MultiCombobox } from "@/components/ui/combobox";
+import { InfoTooltip } from "@/components/ui/info-tooltip";
 import {
   Select,
   SelectContent,
@@ -45,14 +52,11 @@ interface FormState {
   product_revenue: number;
   services_revenue: number;
   contract_term_years: number;
-  deal_currency: string;
   expected_close_date: string;
   win_probability_pct: number | "";
   manager_strategic_blueprint: string;
   speaker_notes: string;
   competitor_id: number | "";
-  compliance_driver_id: number | "";
-  compliance_deadline: string;
   estimated_log_sources: number | "";
 }
 
@@ -67,13 +71,31 @@ export function CreateDealSheet({
   const [, setLocation] = useLocation();
   const queryClient = useQueryClient();
   const createDeal = useCreateDeal();
+  const createCompetitor = useCreateCompetitor();
+  const createComplianceDriver = useCreateComplianceDriver();
   const { data: stages } = useListPipelineStages();
   const { data: models } = useListPricingModels();
   const { data: tiers } = useListServicesTiers();
   const { data: competitors } = useListCompetitors();
   const { data: drivers } = useListComplianceDrivers();
+  const { data: teamMembers } = useListTeamMembers();
   const [interestIds, setInterestIds] = useState<string[]>([]);
-  const [extraDriverIds, setExtraDriverIds] = useState<number[]>([]);
+  const [driverIds, setDriverIds] = useState<number[]>([]);
+
+  const amOptions = (teamMembers?.data ?? [])
+    .filter((m) => m.can_be_am)
+    .map((m) => ({ value: m.name, label: m.name }));
+  const tlOptions = (teamMembers?.data ?? [])
+    .filter((m) => m.can_be_tl)
+    .map((m) => ({ value: m.name, label: m.name }));
+  const competitorOptions = (competitors?.data ?? []).map((c) => ({
+    value: String(c.id),
+    label: c.name,
+  }));
+  const driverOptions = (drivers?.data ?? []).map((d) => ({
+    value: String(d.id),
+    label: d.name,
+  }));
 
   const defaultValues: FormState = {
     deal_name: "",
@@ -86,14 +108,11 @@ export function CreateDealSheet({
     product_revenue: 0,
     services_revenue: 0,
     contract_term_years: 1,
-    deal_currency: "USD",
     expected_close_date: "",
     win_probability_pct: "",
     manager_strategic_blueprint: "",
     speaker_notes: "",
     competitor_id: "",
-    compliance_driver_id: "",
-    compliance_deadline: "",
     estimated_log_sources: "",
   };
 
@@ -101,11 +120,57 @@ export function CreateDealSheet({
     defaultValues,
   });
 
+  const handleCreateCompetitor = async (name: string) => {
+    try {
+      const res = await createCompetitor.mutateAsync({ data: { name } });
+      await queryClient.invalidateQueries({ queryKey: getListCompetitorsQueryKey() });
+      const created = res?.data;
+      if (created) {
+        setValue("competitor_id", created.id);
+        return { value: String(created.id), label: created.name };
+      }
+    } catch {
+      toast({
+        title: "Could not add competitor",
+        description: "Try a different name.",
+        variant: "destructive",
+      });
+    }
+    return undefined;
+  };
+
+  const handleCreateDriver = async (name: string) => {
+    try {
+      const res = await createComplianceDriver.mutateAsync({ data: { name } });
+      await queryClient.invalidateQueries({ queryKey: getListComplianceDriversQueryKey() });
+      const created = res?.data;
+      if (created) {
+        setDriverIds((prev) => (prev.includes(created.id) ? prev : [...prev, created.id]));
+        return { value: String(created.id), label: created.name };
+      }
+    } catch {
+      toast({
+        title: "Could not add compliance driver",
+        description: "Try a different name.",
+        variant: "destructive",
+      });
+    }
+    return undefined;
+  };
+
   const onSubmit = async (values: FormState) => {
     if (!values.sales_stage_id || !values.pricing_model_id || !values.services_tier_id) {
       toast({
         title: "Missing selections",
         description: "Pick a sales stage, pricing model, and services tier.",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (!values.account_manager || !values.technical_lead) {
+      toast({
+        title: "Missing team",
+        description: "Select an Account Manager and a Technical Lead.",
         variant: "destructive",
       });
       return;
@@ -121,20 +186,18 @@ export function CreateDealSheet({
       product_revenue: Number(values.product_revenue),
       services_revenue: Number(values.services_revenue),
       contract_term_years: Number(values.contract_term_years),
-      deal_currency: values.deal_currency.toUpperCase(),
+      deal_currency: "USD",
       expected_close_date: values.expected_close_date || null,
       win_probability_pct:
         values.win_probability_pct === "" ? null : Number(values.win_probability_pct),
       manager_strategic_blueprint: values.manager_strategic_blueprint || null,
       speaker_notes: values.speaker_notes || null,
       competitor_id: values.competitor_id === "" ? null : Number(values.competitor_id),
-      compliance_driver_id:
-        values.compliance_driver_id === "" ? null : Number(values.compliance_driver_id),
-      compliance_deadline: values.compliance_deadline || null,
+      compliance_driver_id: null,
       estimated_log_sources:
         values.estimated_log_sources === "" ? null : Number(values.estimated_log_sources),
       product_interest_ids: interestIds,
-      compliance_driver_ids: extraDriverIds,
+      compliance_driver_ids: driverIds.map(Number),
     };
     try {
       const created = await createDeal.mutateAsync({ data: data as never });
@@ -142,7 +205,7 @@ export function CreateDealSheet({
       toast({ title: "Deal created", description: "Technical gates seeded and intelligence computed." });
       reset(defaultValues);
       setInterestIds([]);
-      setExtraDriverIds([]);
+      setDriverIds([]);
       onOpenChange(false);
       const newId = created?.data?.id;
       if (newId) setLocation(`/deals/${newId}`);
@@ -184,11 +247,23 @@ export function CreateDealSheet({
           <div className="grid grid-cols-2 gap-4">
             <div className="grid gap-2">
               <Label>Account Manager</Label>
-              <Input {...register("account_manager", { required: true })} />
+              <Combobox
+                options={amOptions}
+                value={watch("account_manager") || ""}
+                onChange={(v) => setValue("account_manager", v)}
+                placeholder="Select account manager"
+                emptyText="No team members found."
+              />
             </div>
             <div className="grid gap-2">
               <Label>Technical Lead</Label>
-              <Input {...register("technical_lead", { required: true })} />
+              <Combobox
+                options={tlOptions}
+                value={watch("technical_lead") || ""}
+                onChange={(v) => setValue("technical_lead", v)}
+                placeholder="Select technical lead"
+                emptyText="No team members found."
+              />
             </div>
           </div>
 
@@ -261,14 +336,10 @@ export function CreateDealSheet({
             </div>
           </div>
 
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-2 gap-4">
             <div className="grid gap-2">
               <Label>Term (yrs)</Label>
               <Input type="number" min={1} max={10} {...register("contract_term_years", { valueAsNumber: true })} />
-            </div>
-            <div className="grid gap-2">
-              <Label>Currency</Label>
-              <Input maxLength={3} className="uppercase" {...register("deal_currency")} />
             </div>
             <div className="grid gap-2">
               <Label>Win %</Label>
@@ -278,56 +349,24 @@ export function CreateDealSheet({
 
           <div className="grid gap-2">
             <Label>Expected Close Date</Label>
-            <Input type="date" {...register("expected_close_date")} />
+            <DatePicker
+              value={watch("expected_close_date")}
+              onChange={(v) => setValue("expected_close_date", v)}
+              placeholder="Pick a date"
+            />
           </div>
 
           <div className="grid grid-cols-2 gap-4">
             <div className="grid gap-2">
               <Label>Incumbent / Competitor</Label>
-              <Select
+              <Combobox
+                options={competitorOptions}
                 value={watch("competitor_id") ? String(watch("competitor_id")) : ""}
-                onValueChange={(v) => setValue("competitor_id", Number(v))}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="None" />
-                </SelectTrigger>
-                <SelectContent>
-                  {competitors?.data.map((c) => (
-                    <SelectItem key={c.id} value={String(c.id)}>
-                      {c.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="grid gap-2">
-              <Label>Compliance Driver</Label>
-              <Select
-                value={
-                  watch("compliance_driver_id")
-                    ? String(watch("compliance_driver_id"))
-                    : ""
-                }
-                onValueChange={(v) => setValue("compliance_driver_id", Number(v))}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="None" />
-                </SelectTrigger>
-                <SelectContent>
-                  {drivers?.data.map((d) => (
-                    <SelectItem key={d.id} value={String(d.id)}>
-                      {d.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div className="grid gap-2">
-              <Label>Compliance Deadline</Label>
-              <Input type="date" {...register("compliance_deadline")} />
+                onChange={(v) => setValue("competitor_id", v ? Number(v) : "")}
+                placeholder="None"
+                emptyText="No competitors found."
+                onCreate={handleCreateCompetitor}
+              />
             </div>
             <div className="grid gap-2">
               <Label>Est. Log Sources (SIEM)</Label>
@@ -340,26 +379,17 @@ export function CreateDealSheet({
             </div>
           </div>
 
-          {drivers?.data && drivers.data.length > 0 && (
-            <div className="grid gap-2">
-              <Label>Additional Compliance Drivers</Label>
-              <div className="flex flex-wrap gap-3 rounded-md border p-3">
-                {drivers.data.map((d) => (
-                  <label key={d.id} className="flex items-center gap-2 text-sm">
-                    <Checkbox
-                      checked={extraDriverIds.includes(d.id)}
-                      onCheckedChange={(c) =>
-                        setExtraDriverIds((prev) =>
-                          c ? [...prev, d.id] : prev.filter((x) => x !== d.id),
-                        )
-                      }
-                    />
-                    {d.name}
-                  </label>
-                ))}
-              </div>
-            </div>
-          )}
+          <div className="grid gap-2">
+            <Label>Compliance Drivers</Label>
+            <MultiCombobox
+              options={driverOptions}
+              value={driverIds.map(String)}
+              onChange={(vals) => setDriverIds(vals.map(Number))}
+              placeholder="Select compliance drivers"
+              emptyText="No compliance drivers found."
+              onCreate={handleCreateDriver}
+            />
+          </div>
 
           <div className="grid gap-2">
             <Label>Products of Interest</Label>
@@ -370,11 +400,23 @@ export function CreateDealSheet({
           </div>
 
           <div className="grid gap-2">
-            <Label>Strategic Blueprint</Label>
+            <div className="flex items-center gap-1.5">
+              <Label>Strategic Blueprint</Label>
+              <InfoTooltip>
+                Your overarching plan to win this deal — positioning, key plays, and the path to
+                close. Surfaces in Briefing Mode and coaching.
+              </InfoTooltip>
+            </div>
             <Textarea rows={3} {...register("manager_strategic_blueprint")} />
           </div>
           <div className="grid gap-2">
-            <Label>Speaker Notes</Label>
+            <div className="flex items-center gap-1.5">
+              <Label>Speaker Notes</Label>
+              <InfoTooltip>
+                Talking points and reminders for live conversations and executive briefings. Private
+                to you; shown in Briefing Mode.
+              </InfoTooltip>
+            </div>
             <Textarea rows={3} {...register("speaker_notes")} />
           </div>
 

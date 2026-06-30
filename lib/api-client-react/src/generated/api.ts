@@ -34,7 +34,12 @@ import type {
   ChangesResponse,
   CompetitorBattlecardListResponse,
   CompetitorListResponse,
+  CompetitorResponse,
   ComplianceDriverListResponse,
+  ComplianceDriverResponse,
+  CreateCompetitorInput,
+  CreateComplianceDriverInput,
+  CreateTeamMemberInput,
   CrossSellListResponse,
   CrossSellUpdate,
   CustomFieldDefInput,
@@ -132,6 +137,8 @@ import type {
   TagInput,
   TagListResponse,
   TagResponse,
+  TeamMemberListResponse,
+  TeamMemberResponse,
   ThresholdsUpdate,
   WebhookDeliveryListResponse,
   WebhookInput,
@@ -3318,6 +3325,77 @@ export function useListCompetitors<TData = Awaited<ReturnType<typeof listCompeti
 
 
 
+export const getCreateCompetitorUrl = () => {
+
+
+
+
+  return `/api/v1/lookups/competitors`
+}
+
+/**
+ * @summary Create a competitor (combobox add-new)
+ */
+export const createCompetitor = async (createCompetitorInput: CreateCompetitorInput, options?: RequestInit): Promise<CompetitorResponse> => {
+
+  return customFetch<CompetitorResponse>(getCreateCompetitorUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      createCompetitorInput,)
+  }
+);}
+
+
+
+
+export const getCreateCompetitorMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createCompetitor>>, TError,{data: BodyType<CreateCompetitorInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createCompetitor>>, TError,{data: BodyType<CreateCompetitorInput>}, TContext> => {
+
+const mutationKey = ['createCompetitor'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createCompetitor>>, {data: BodyType<CreateCompetitorInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  createCompetitor(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateCompetitorMutationResult = NonNullable<Awaited<ReturnType<typeof createCompetitor>>>
+    export type CreateCompetitorMutationBody = BodyType<CreateCompetitorInput>
+    export type CreateCompetitorMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Create a competitor (combobox add-new)
+ */
+export const useCreateCompetitor = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createCompetitor>>, TError,{data: BodyType<CreateCompetitorInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createCompetitor>>,
+        TError,
+        {data: BodyType<CreateCompetitorInput>},
+        TContext
+      > => {
+      return useMutation(getCreateCompetitorMutationOptions(options));
+    }
+
 export const getListComplianceDriversUrl = () => {
 
 
@@ -3388,6 +3466,289 @@ export function useListComplianceDrivers<TData = Awaited<ReturnType<typeof listC
 
 
 
+
+export const getCreateComplianceDriverUrl = () => {
+
+
+
+
+  return `/api/v1/lookups/compliance-drivers`
+}
+
+/**
+ * @summary Create a compliance driver (combobox add-new)
+ */
+export const createComplianceDriver = async (createComplianceDriverInput: CreateComplianceDriverInput, options?: RequestInit): Promise<ComplianceDriverResponse> => {
+
+  return customFetch<ComplianceDriverResponse>(getCreateComplianceDriverUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      createComplianceDriverInput,)
+  }
+);}
+
+
+
+
+export const getCreateComplianceDriverMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createComplianceDriver>>, TError,{data: BodyType<CreateComplianceDriverInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createComplianceDriver>>, TError,{data: BodyType<CreateComplianceDriverInput>}, TContext> => {
+
+const mutationKey = ['createComplianceDriver'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createComplianceDriver>>, {data: BodyType<CreateComplianceDriverInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  createComplianceDriver(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateComplianceDriverMutationResult = NonNullable<Awaited<ReturnType<typeof createComplianceDriver>>>
+    export type CreateComplianceDriverMutationBody = BodyType<CreateComplianceDriverInput>
+    export type CreateComplianceDriverMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Create a compliance driver (combobox add-new)
+ */
+export const useCreateComplianceDriver = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createComplianceDriver>>, TError,{data: BodyType<CreateComplianceDriverInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createComplianceDriver>>,
+        TError,
+        {data: BodyType<CreateComplianceDriverInput>},
+        TContext
+      > => {
+      return useMutation(getCreateComplianceDriverMutationOptions(options));
+    }
+
+export const getListTeamMembersUrl = () => {
+
+
+
+
+  return `/api/v1/lookups/team-members`
+}
+
+export const listTeamMembers = async ( options?: RequestInit): Promise<TeamMemberListResponse> => {
+
+  return customFetch<TeamMemberListResponse>(getListTeamMembersUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListTeamMembersQueryKey = () => {
+    return [
+    `/api/v1/lookups/team-members`
+    ] as const;
+    }
+
+
+export const getListTeamMembersQueryOptions = <TData = Awaited<ReturnType<typeof listTeamMembers>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listTeamMembers>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListTeamMembersQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listTeamMembers>>> = ({ signal }) => listTeamMembers({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listTeamMembers>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListTeamMembersQueryResult = NonNullable<Awaited<ReturnType<typeof listTeamMembers>>>
+export type ListTeamMembersQueryError = ErrorType<unknown>
+
+
+
+export function useListTeamMembers<TData = Awaited<ReturnType<typeof listTeamMembers>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listTeamMembers>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListTeamMembersQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getCreateTeamMemberUrl = () => {
+
+
+
+
+  return `/api/v1/lookups/team-members`
+}
+
+/**
+ * @summary Create a team member
+ */
+export const createTeamMember = async (createTeamMemberInput: CreateTeamMemberInput, options?: RequestInit): Promise<TeamMemberResponse> => {
+
+  return customFetch<TeamMemberResponse>(getCreateTeamMemberUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      createTeamMemberInput,)
+  }
+);}
+
+
+
+
+export const getCreateTeamMemberMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createTeamMember>>, TError,{data: BodyType<CreateTeamMemberInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createTeamMember>>, TError,{data: BodyType<CreateTeamMemberInput>}, TContext> => {
+
+const mutationKey = ['createTeamMember'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createTeamMember>>, {data: BodyType<CreateTeamMemberInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  createTeamMember(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateTeamMemberMutationResult = NonNullable<Awaited<ReturnType<typeof createTeamMember>>>
+    export type CreateTeamMemberMutationBody = BodyType<CreateTeamMemberInput>
+    export type CreateTeamMemberMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Create a team member
+ */
+export const useCreateTeamMember = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createTeamMember>>, TError,{data: BodyType<CreateTeamMemberInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createTeamMember>>,
+        TError,
+        {data: BodyType<CreateTeamMemberInput>},
+        TContext
+      > => {
+      return useMutation(getCreateTeamMemberMutationOptions(options));
+    }
+
+export const getDeleteTeamMemberUrl = (id: number,) => {
+
+
+
+
+  return `/api/v1/lookups/team-members/${id}`
+}
+
+/**
+ * @summary Soft-delete a team member
+ */
+export const deleteTeamMember = async (id: number, options?: RequestInit): Promise<MessageResponse> => {
+
+  return customFetch<MessageResponse>(getDeleteTeamMemberUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+export const getDeleteTeamMemberMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteTeamMember>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteTeamMember>>, TError,{id: number}, TContext> => {
+
+const mutationKey = ['deleteTeamMember'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteTeamMember>>, {id: number}> = (props) => {
+          const {id} = props ?? {};
+
+          return  deleteTeamMember(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteTeamMemberMutationResult = NonNullable<Awaited<ReturnType<typeof deleteTeamMember>>>
+
+    export type DeleteTeamMemberMutationError = ErrorType<ErrorResponse>
+
+    /**
+ * @summary Soft-delete a team member
+ */
+export const useDeleteTeamMember = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteTeamMember>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteTeamMember>>,
+        TError,
+        {id: number},
+        TContext
+      > => {
+      return useMutation(getDeleteTeamMemberMutationOptions(options));
+    }
 
 export const getListCompetitorBattlecardsUrl = () => {
 

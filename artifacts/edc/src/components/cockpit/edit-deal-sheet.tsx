@@ -7,9 +7,15 @@ import {
   useListServicesTiers,
   useListCompetitors,
   useListComplianceDrivers,
+  useListTeamMembers,
+  useCreateCompetitor,
+  useCreateComplianceDriver,
+  getListCompetitorsQueryKey,
+  getListComplianceDriversQueryKey,
   type Deal,
 } from "@workspace/api-client-react";
 import { ProductPicker } from "./product-picker";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   Sheet,
   SheetContent,
@@ -22,7 +28,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Checkbox } from "@/components/ui/checkbox";
+import { DatePicker } from "@/components/ui/date-picker";
+import { Combobox, MultiCombobox } from "@/components/ui/combobox";
+import { InfoTooltip } from "@/components/ui/info-tooltip";
 import {
   Select,
   SelectContent,
@@ -46,14 +54,11 @@ interface FormState {
   product_revenue: number;
   services_revenue: number;
   contract_term_years: number;
-  deal_currency: string;
   expected_close_date: string;
   win_probability_pct: number | "";
   manager_strategic_blueprint: string;
   speaker_notes: string;
   competitor_id: number | "";
-  compliance_driver_id: number | "";
-  compliance_deadline: string;
   estimated_log_sources: number | "";
 }
 
@@ -69,24 +74,41 @@ export function EditDealSheet({
   dirtyRef?: React.MutableRefObject<boolean>;
 }) {
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const invalidate = useCockpitInvalidate(deal.id);
   const updateDeal = useUpdateDeal();
+  const createCompetitor = useCreateCompetitor();
+  const createComplianceDriver = useCreateComplianceDriver();
   const { data: stages } = useListPipelineStages();
   const { data: models } = useListPricingModels();
   const { data: tiers } = useListServicesTiers();
   const { data: competitors } = useListCompetitors();
   const { data: drivers } = useListComplianceDrivers();
+  const { data: teamMembers } = useListTeamMembers();
 
   const [guardrail, setGuardrail] = useState<{ message: string; patternCodes: string[] } | null>(null);
   const [overrideReason, setOverrideReason] = useState("");
   const [interestIds, setInterestIds] = useState<string[]>(
     deal.productsOfInterest?.map((p) => p.productId) ?? [],
   );
-  const [extraDriverIds, setExtraDriverIds] = useState<number[]>(
-    (deal.complianceDrivers ?? [])
-      .filter((d) => d.id !== deal.complianceDriverId)
-      .map((d) => d.id),
+  const [driverIds, setDriverIds] = useState<number[]>(
+    (deal.complianceDrivers ?? []).map((d) => d.id),
   );
+
+  const amOptions = (teamMembers?.data ?? [])
+    .filter((m) => m.can_be_am)
+    .map((m) => ({ value: m.name, label: m.name }));
+  const tlOptions = (teamMembers?.data ?? [])
+    .filter((m) => m.can_be_tl)
+    .map((m) => ({ value: m.name, label: m.name }));
+  const competitorOptions = (competitors?.data ?? []).map((c) => ({
+    value: String(c.id),
+    label: c.name,
+  }));
+  const driverOptions = (drivers?.data ?? []).map((d) => ({
+    value: String(d.id),
+    label: d.name,
+  }));
 
   const { register, handleSubmit, setValue, watch, reset, formState } = useForm<FormState>({
     defaultValues: {
@@ -100,14 +122,11 @@ export function EditDealSheet({
       product_revenue: deal.productRevenue,
       services_revenue: deal.servicesRevenue,
       contract_term_years: deal.contractTermYears ?? 1,
-      deal_currency: deal.dealCurrency,
       expected_close_date: deal.expectedCloseDate?.slice(0, 10) ?? "",
       win_probability_pct: deal.winProbabilityPct ?? "",
       manager_strategic_blueprint: deal.managerStrategicBlueprint ?? "",
       speaker_notes: deal.speakerNotes ?? "",
       competitor_id: deal.competitorId ?? "",
-      compliance_driver_id: deal.complianceDriverId ?? "",
-      compliance_deadline: deal.complianceDeadline?.slice(0, 10) ?? "",
       estimated_log_sources: deal.estimatedLogSources ?? "",
     },
   });
@@ -152,20 +171,18 @@ export function EditDealSheet({
       product_revenue: Number(values.product_revenue),
       services_revenue: Number(values.services_revenue),
       contract_term_years: Number(values.contract_term_years),
-      deal_currency: values.deal_currency.toUpperCase(),
+      deal_currency: "USD",
       expected_close_date: values.expected_close_date || null,
       win_probability_pct:
         values.win_probability_pct === "" ? null : Number(values.win_probability_pct),
       manager_strategic_blueprint: values.manager_strategic_blueprint || null,
       speaker_notes: values.speaker_notes || null,
       competitor_id: values.competitor_id === "" ? null : Number(values.competitor_id),
-      compliance_driver_id:
-        values.compliance_driver_id === "" ? null : Number(values.compliance_driver_id),
-      compliance_deadline: values.compliance_deadline || null,
+      compliance_driver_id: null,
       estimated_log_sources:
         values.estimated_log_sources === "" ? null : Number(values.estimated_log_sources),
       product_interest_ids: interestIds,
-      compliance_driver_ids: extraDriverIds,
+      compliance_driver_ids: driverIds.map(Number),
     };
     if (overrideReason.trim().length >= 10) {
       data.override_reason = overrideReason.trim();
@@ -208,6 +225,44 @@ export function EditDealSheet({
       }
       // Otherwise stay silent — don't interrupt the user mid-edit on auto-save.
     }
+  };
+
+  const handleCreateCompetitor = async (name: string) => {
+    try {
+      const res = await createCompetitor.mutateAsync({ data: { name } });
+      await queryClient.invalidateQueries({ queryKey: getListCompetitorsQueryKey() });
+      const created = res?.data;
+      if (created) {
+        setValue("competitor_id", created.id, { shouldDirty: true });
+        return { value: String(created.id), label: created.name };
+      }
+    } catch {
+      toast({
+        title: "Could not add competitor",
+        description: "Try a different name.",
+        variant: "destructive",
+      });
+    }
+    return undefined;
+  };
+
+  const handleCreateDriver = async (name: string) => {
+    try {
+      const res = await createComplianceDriver.mutateAsync({ data: { name } });
+      await queryClient.invalidateQueries({ queryKey: getListComplianceDriversQueryKey() });
+      const created = res?.data;
+      if (created) {
+        setDriverIds((prev) => (prev.includes(created.id) ? prev : [...prev, created.id]));
+        return { value: String(created.id), label: created.name };
+      }
+    } catch {
+      toast({
+        title: "Could not add compliance driver",
+        description: "Try a different name.",
+        variant: "destructive",
+      });
+    }
+    return undefined;
   };
 
   const onSubmit = async (values: FormState) => {
@@ -267,11 +322,23 @@ export function EditDealSheet({
           <div className="grid grid-cols-2 gap-4">
             <div className="grid gap-2">
               <Label>Account Manager</Label>
-              <Input {...register("account_manager", { required: true })} />
+              <Combobox
+                options={amOptions}
+                value={watch("account_manager") || ""}
+                onChange={(v) => setValue("account_manager", v, { shouldDirty: true })}
+                placeholder="Select account manager"
+                emptyText="No team members found."
+              />
             </div>
             <div className="grid gap-2">
               <Label>Technical Lead</Label>
-              <Input {...register("technical_lead", { required: true })} />
+              <Combobox
+                options={tlOptions}
+                value={watch("technical_lead") || ""}
+                onChange={(v) => setValue("technical_lead", v, { shouldDirty: true })}
+                placeholder="Select technical lead"
+                emptyText="No team members found."
+              />
             </div>
           </div>
 
@@ -279,7 +346,7 @@ export function EditDealSheet({
             <Label>Sales Stage</Label>
             <Select
               value={String(watch("sales_stage_id"))}
-              onValueChange={(v) => setValue("sales_stage_id", Number(v))}
+              onValueChange={(v) => setValue("sales_stage_id", Number(v), { shouldDirty: true })}
             >
               <SelectTrigger>
                 <SelectValue placeholder="Select stage" />
@@ -299,7 +366,7 @@ export function EditDealSheet({
               <Label>Pricing Model</Label>
               <Select
                 value={String(watch("pricing_model_id"))}
-                onValueChange={(v) => setValue("pricing_model_id", Number(v))}
+                onValueChange={(v) => setValue("pricing_model_id", Number(v), { shouldDirty: true })}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Select model" />
@@ -317,7 +384,7 @@ export function EditDealSheet({
               <Label>Services Tier</Label>
               <Select
                 value={String(watch("services_tier_id"))}
-                onValueChange={(v) => setValue("services_tier_id", Number(v))}
+                onValueChange={(v) => setValue("services_tier_id", Number(v), { shouldDirty: true })}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Select tier" />
@@ -344,14 +411,10 @@ export function EditDealSheet({
             </div>
           </div>
 
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-2 gap-4">
             <div className="grid gap-2">
               <Label>Term (yrs)</Label>
               <Input type="number" min={1} max={10} {...register("contract_term_years", { valueAsNumber: true })} />
-            </div>
-            <div className="grid gap-2">
-              <Label>Currency</Label>
-              <Input maxLength={3} className="uppercase" {...register("deal_currency")} />
             </div>
             <div className="grid gap-2">
               <Label>Win %</Label>
@@ -361,56 +424,24 @@ export function EditDealSheet({
 
           <div className="grid gap-2">
             <Label>Expected Close Date</Label>
-            <Input type="date" {...register("expected_close_date")} />
+            <DatePicker
+              value={watch("expected_close_date")}
+              onChange={(v) => setValue("expected_close_date", v, { shouldDirty: true })}
+              placeholder="Pick a date"
+            />
           </div>
 
           <div className="grid grid-cols-2 gap-4">
             <div className="grid gap-2">
               <Label>Incumbent / Competitor</Label>
-              <Select
+              <Combobox
+                options={competitorOptions}
                 value={watch("competitor_id") ? String(watch("competitor_id")) : ""}
-                onValueChange={(v) => setValue("competitor_id", Number(v))}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="None" />
-                </SelectTrigger>
-                <SelectContent>
-                  {competitors?.data.map((c) => (
-                    <SelectItem key={c.id} value={String(c.id)}>
-                      {c.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="grid gap-2">
-              <Label>Compliance Driver</Label>
-              <Select
-                value={
-                  watch("compliance_driver_id")
-                    ? String(watch("compliance_driver_id"))
-                    : ""
-                }
-                onValueChange={(v) => setValue("compliance_driver_id", Number(v))}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="None" />
-                </SelectTrigger>
-                <SelectContent>
-                  {drivers?.data.map((d) => (
-                    <SelectItem key={d.id} value={String(d.id)}>
-                      {d.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div className="grid gap-2">
-              <Label>Compliance Deadline</Label>
-              <Input type="date" {...register("compliance_deadline")} />
+                onChange={(v) => setValue("competitor_id", v ? Number(v) : "", { shouldDirty: true })}
+                placeholder="None"
+                emptyText="No competitors found."
+                onCreate={handleCreateCompetitor}
+              />
             </div>
             <div className="grid gap-2">
               <Label>Est. Log Sources (SIEM)</Label>
@@ -423,26 +454,17 @@ export function EditDealSheet({
             </div>
           </div>
 
-          {drivers?.data && drivers.data.length > 0 && (
-            <div className="grid gap-2">
-              <Label>Additional Compliance Drivers</Label>
-              <div className="flex flex-wrap gap-3 rounded-md border p-3">
-                {drivers.data.map((d) => (
-                  <label key={d.id} className="flex items-center gap-2 text-sm">
-                    <Checkbox
-                      checked={extraDriverIds.includes(d.id)}
-                      onCheckedChange={(c) =>
-                        setExtraDriverIds((prev) =>
-                          c ? [...prev, d.id] : prev.filter((x) => x !== d.id),
-                        )
-                      }
-                    />
-                    {d.name}
-                  </label>
-                ))}
-              </div>
-            </div>
-          )}
+          <div className="grid gap-2">
+            <Label>Compliance Drivers</Label>
+            <MultiCombobox
+              options={driverOptions}
+              value={driverIds.map(String)}
+              onChange={(vals) => setDriverIds(vals.map(Number))}
+              placeholder="Select compliance drivers"
+              emptyText="No compliance drivers found."
+              onCreate={handleCreateDriver}
+            />
+          </div>
 
           <div className="grid gap-2">
             <Label>Products of Interest</Label>
@@ -450,11 +472,23 @@ export function EditDealSheet({
           </div>
 
           <div className="grid gap-2">
-            <Label>Strategic Blueprint</Label>
+            <div className="flex items-center gap-1.5">
+              <Label>Strategic Blueprint</Label>
+              <InfoTooltip>
+                Your overarching plan to win this deal — positioning, key plays, and the path to
+                close. Surfaces in Briefing Mode and coaching.
+              </InfoTooltip>
+            </div>
             <Textarea rows={3} {...register("manager_strategic_blueprint")} />
           </div>
           <div className="grid gap-2">
-            <Label>Speaker Notes</Label>
+            <div className="flex items-center gap-1.5">
+              <Label>Speaker Notes</Label>
+              <InfoTooltip>
+                Talking points and reminders for live conversations and executive briefings. Private
+                to you; shown in Briefing Mode.
+              </InfoTooltip>
+            </div>
             <Textarea rows={3} {...register("speaker_notes")} />
           </div>
 

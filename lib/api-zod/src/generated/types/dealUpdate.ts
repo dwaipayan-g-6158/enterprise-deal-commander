@@ -61,8 +61,6 @@ export interface DealUpdate {
   /** @nullable */
   compliance_driver_id?: number | null;
   /** @nullable */
-  compliance_deadline?: string | null;
-  /** @nullable */
   estimated_log_sources?: number | null;
   product_interest_ids?: string[];
   compliance_driver_ids?: number[];

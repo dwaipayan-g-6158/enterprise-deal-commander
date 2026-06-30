@@ -1,5 +1,5 @@
 import bcrypt from "bcryptjs";
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import {
   db,
   commanders,
@@ -24,6 +24,9 @@ import {
   complianceDrivers,
   competitorBattlecards,
   tagDefinitions,
+  teamMembers,
+  playbooks,
+  playbookSteps,
 } from "@workspace/db";
 import { logger } from "./lib/logger";
 import { rescoreActiveDeals } from "./lib/scoring";
@@ -48,9 +51,14 @@ async function seedLookups() {
       { modelName: "Multi-Year Committed" },
       { modelName: "Perpetual License" },
       { modelName: "Usage-Based" },
-      { modelName: "Hybrid" },
     ])
     .onConflictDoNothing();
+  // B1: "Hybrid" retired — deactivate any pre-existing row so listPricingModels
+  // (which filters isActive = true) hides it.
+  await db
+    .update(pricingModels)
+    .set({ isActive: false })
+    .where(eq(pricingModels.modelName, "Hybrid"));
 
   await db
     .insert(servicesTiers)
@@ -59,7 +67,28 @@ async function seedLookups() {
       { tierName: "Professional Services Pitched" },
       { tierName: "Premium Support Pitched" },
       { tierName: "Combined SOW Shared" },
-      { tierName: "Managed Services Contract" },
+      { tierName: "Online Onboarding" },
+      { tierName: "Onsite Onboarding" },
+      { tierName: "Product Training" },
+    ])
+    .onConflictDoNothing();
+  // B3: "Managed Services Contract" retired — deactivate any pre-existing row so
+  // listServicesTiers (which filters isActive = true) hides it.
+  await db
+    .update(servicesTiers)
+    .set({ isActive: false })
+    .where(eq(servicesTiers.tierName, "Managed Services Contract"));
+
+  // B2: default team roster so the AM/TL dropdowns aren't empty. A person may be
+  // both an AM and a TL — flags are independent.
+  await db
+    .insert(teamMembers)
+    .values([
+      { name: "Sarah Chen", canBeAm: true, canBeTl: false },
+      { name: "David Park", canBeAm: true, canBeTl: false },
+      { name: "Marcus Webb", canBeAm: false, canBeTl: true },
+      { name: "Priya Natarajan", canBeAm: false, canBeTl: true },
+      { name: "Alex Rivera", canBeAm: true, canBeTl: true },
     ])
     .onConflictDoNothing();
 
@@ -101,6 +130,8 @@ async function seedLookups() {
       { code: "EVENTLOG_ANALYZER", productName: "EventLog Analyzer", productCategory: "Log Management/SIEM", suite: "Log360" },
       { code: "DATA_SECURITY_PLUS", productName: "Data Security Plus", productCategory: "DLP/FIM", suite: "Log360" },
       { code: "CLOUD_SECURITY_PLUS", productName: "Cloud Security Plus", productCategory: "Cloud Log", suite: "Log360" },
+      { code: "LOG360_CLOUD", productName: "Log360 Cloud", productCategory: "Cloud SIEM", suite: "Log360" },
+      { code: "IDENTITY360", productName: "Identity360", productCategory: "Identity Platform", suite: "AD360" },
     ])
     .onConflictDoNothing();
 
@@ -119,6 +150,27 @@ async function seedLookups() {
       { name: "Microsoft Sentinel", category: "SIEM" },
       { name: "LogRhythm", category: "SIEM" },
       { name: "Securonix", category: "SIEM" },
+      // B4: named competitive tools by category (category column is varchar(10)).
+      { name: "Quest Active Roles", category: "IAM" },
+      { name: "SolarWinds Access Rights Manager (ARM)", category: "IAM" },
+      { name: "Cayosoft Administrator", category: "IAM" },
+      { name: "Softerra Adaxes", category: "IAM" },
+      { name: "Imanami GroupID", category: "IAM" },
+      { name: "Quest Change Auditor for Active Directory", category: "Audit" },
+      { name: "Netwrix Auditor", category: "Audit" },
+      { name: "Lepide Active Directory Auditor", category: "Audit" },
+      { name: "Varonis DatAdvantage", category: "Audit" },
+      { name: "Lepide Office 365 Auditor", category: "Audit" },
+      { name: "CoreView", category: "M365" },
+      { name: "AdminDroid", category: "M365" },
+      { name: "Syskit Point", category: "M365" },
+      { name: "Specops uReset", category: "SSPR" },
+      { name: "Microsoft Entra ID SSPR (with password writeback)", category: "SSPR" },
+      { name: "Tools4ever Self Service Reset Password Management (SSRPM)", category: "SSPR" },
+      { name: "Quickpass", category: "SSPR" },
+      { name: "PingID (Ping Identity MFA)", category: "MFA" },
+      { name: "Okta MFA + SSO", category: "MFA" },
+      { name: "Cisco Duo", category: "MFA" },
     ])
     .onConflictDoNothing();
 
@@ -190,7 +242,6 @@ async function seedLookups() {
       { triggerPatternCode: "UNPROTECTED_ELEPHANT", name: "Elephant Protection", steps: ["Draft Professional Services SOW", "Confirm deployment ownership", "Add Premium Support line"] },
       { triggerPatternCode: "MISSING_STRUCTURAL_ANCHOR", name: "Anchor Reset", steps: ["Convene success-criteria workshop", "Lock Gate 1 criteria", "Obtain executive sign-off"] },
       { triggerPatternCode: "COMPETITIVE_DISPLACEMENT_STALL", name: "Displacement Acceleration", steps: ["Re-confirm the cost/pain of staying on the incumbent", "Lock a differentiated win-criterion the incumbent cannot meet", "Set a mutual close plan with a hard decision date", "Escalate to the executive sponsor"] },
-      { triggerPatternCode: "COMPLIANCE_DEADLINE_RISK", name: "Compliance Deadline Drive", steps: ["Map remaining gates to the audit deadline", "Stand up a focused validation sprint on the gating controls", "Confirm the audit date with the customer's compliance owner", "Offer Professional Services to compress the timeline"] },
     ])
     .onConflictDoNothing();
 
@@ -234,8 +285,6 @@ async function seedLookups() {
       { parameterKey: "momentum_min_gate_pct", parameterValue: "60", dataType: "number", description: "Gate-completion pct below which a decelerating deal nearing close fires SLOW_MOTION_COLLISION" },
       { parameterKey: "low_attach_rate_threshold", parameterValue: "0.34", dataType: "number", description: "Attach rate at or below which a large deal fires LOW_ATTACH_ELEPHANT" },
       { parameterKey: "competitive_stall_days", parameterValue: "21", dataType: "number", description: "Days in Validation/Commercial against an incumbent before COMPETITIVE_DISPLACEMENT_STALL fires" },
-      { parameterKey: "compliance_deadline_warning_days", parameterValue: "45", dataType: "number", description: "Days before a compliance deadline to start firing COMPLIANCE_DEADLINE_RISK" },
-      { parameterKey: "compliance_min_gate_pct", parameterValue: "60", dataType: "number", description: "Gate-completion pct below which a near compliance deadline fires COMPLIANCE_DEADLINE_RISK" },
       { parameterKey: "suite_bundle_min_components", parameterValue: "3", dataType: "number", description: "À-la-carte components in one suite at or above which a bundle upsell is recommended" },
       { parameterKey: "poc_max_validation_days", parameterValue: "30", dataType: "number", description: "Days a PoC can sit in Validation without locked criteria before POC_DEATH_MARCH fires" },
       { parameterKey: "siem_high_volume_log_sources", parameterValue: "500", dataType: "number", description: "Estimated log sources at or above which an undersized Log360 deal fires SIEM_UNDERSCOPED" },
@@ -262,6 +311,83 @@ async function seedLookups() {
       { baseCurrency: "USD", quoteCurrency: "USD", rate: "1.00000000", asOf: today },
     ])
     .onConflictDoNothing();
+}
+
+// C4: stage-keyed playbooks with ordered steps. The auto-assign engine keys off
+// playbooks.applicableStage (the pipeline stage *name*) and orders steps by
+// stepOrder. Guarded by a presence check (playbooks have no unique name column,
+// so onConflictDoNothing cannot dedupe by name).
+async function seedPlaybooks() {
+  const existing = await db.select({ id: playbooks.id }).from(playbooks).limit(1);
+  if (existing.length > 0) {
+    logger.info("Playbooks already present — skipping playbook seed");
+    return;
+  }
+
+  const playbookData: {
+    playbookName: string;
+    description: string;
+    applicableStage: string;
+    steps: {
+      stepOrder: number;
+      stepName: string;
+      recommendedAction: string;
+      expectedDurationDays: number;
+      isCritical: boolean;
+    }[];
+  }[] = [
+    {
+      playbookName: "POC / Evaluation Playbook",
+      description:
+        "Drive a proof-of-concept to a clean go/no-go with locked success criteria.",
+      applicableStage: "Validation",
+      steps: [
+        { stepOrder: 1, stepName: "Lock success criteria", recommendedAction: "Run a success-criteria workshop and get written sign-off on the PoC exit criteria (Gate 1).", expectedDurationDays: 3, isCritical: true },
+        { stepOrder: 2, stepName: "Secure executive sponsor", recommendedAction: "Confirm an executive sponsor agrees on the evaluation criteria and timeline.", expectedDurationDays: 5, isCritical: true },
+        { stepOrder: 3, stepName: "Demonstrate core workflow", recommendedAction: "Validate the primary use-case workflows in the customer's environment.", expectedDurationDays: 7, isCritical: false },
+        { stepOrder: 4, stepName: "Run performance / scale test", recommendedAction: "Stress the platform under production-representative load and capture the results.", expectedDurationDays: 5, isCritical: false },
+        { stepOrder: 5, stepName: "Go/no-go decision", recommendedAction: "Hold a decision review against the locked criteria and set the next-stage plan.", expectedDurationDays: 2, isCritical: true },
+      ],
+    },
+    {
+      playbookName: "Negotiation / Commercial Playbook",
+      description:
+        "Protect price integrity and attach services while closing the commercial.",
+      applicableStage: "Commercial",
+      steps: [
+        { stepOrder: 1, stepName: "Confirm technical win", recommendedAction: "Verify Gate 3 (performance) is passed before opening commercial discussions.", expectedDurationDays: 2, isCritical: true },
+        { stepOrder: 2, stepName: "Build services-attached business case", recommendedAction: "Draft a Professional Services / Premium Support SOW to protect the deployment.", expectedDurationDays: 4, isCritical: false },
+        { stepOrder: 3, stepName: "Present pricing & anchor value", recommendedAction: "Walk the customer through the value-anchored pricing model and ROI.", expectedDurationDays: 3, isCritical: false },
+        { stepOrder: 4, stepName: "Lock mutual close plan", recommendedAction: "Agree a mutual action plan with a hard decision date and procurement owners.", expectedDurationDays: 3, isCritical: true },
+      ],
+    },
+    {
+      playbookName: "Procurement / Legal Playbook",
+      description: "Clear legal and security review to a signed contract.",
+      applicableStage: "Procurement",
+      steps: [
+        { stepOrder: 1, stepName: "Submit security questionnaire", recommendedAction: "Provide the completed security questionnaire and architecture docs to InfoSec.", expectedDurationDays: 5, isCritical: false },
+        { stepOrder: 2, stepName: "Resolve legal redlines", recommendedAction: "Work counsel through liability, data-processing, and SLA redlines.", expectedDurationDays: 7, isCritical: true },
+        { stepOrder: 3, stepName: "Obtain final sign-off", recommendedAction: "Secure CTO/VP Engineering and procurement sign-off for execution.", expectedDurationDays: 3, isCritical: true },
+      ],
+    },
+  ];
+
+  for (const pb of playbookData) {
+    const [inserted] = await db
+      .insert(playbooks)
+      .values({
+        playbookName: pb.playbookName,
+        description: pb.description,
+        applicableStage: pb.applicableStage,
+        createdBy: "seed",
+      })
+      .returning({ id: playbooks.id });
+    await db.insert(playbookSteps).values(
+      pb.steps.map((s) => ({ playbookId: inserted.id, ...s })),
+    );
+  }
+  logger.info({ count: playbookData.length }, "Seeded stage-keyed playbooks");
 }
 
 async function seedCommander() {
@@ -481,6 +607,7 @@ async function seedDeals() {
 async function main() {
   logger.info("Seeding EDC database...");
   await seedLookups();
+  await seedPlaybooks();
   await seedCommander();
   await seedDeals();
   const scored = await rescoreActiveDeals();

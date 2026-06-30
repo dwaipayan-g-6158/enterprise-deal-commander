@@ -765,6 +765,23 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/CompetitorListResponse"
+    post:
+      operationId: createCompetitor
+      tags: [lookups]
+      summary: Create a competitor (combobox add-new)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateCompetitorInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CompetitorResponse"
   /v1/lookups/compliance-drivers:
     get:
       operationId: listComplianceDrivers
@@ -776,6 +793,71 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ComplianceDriverListResponse"
+    post:
+      operationId: createComplianceDriver
+      tags: [lookups]
+      summary: Create a compliance driver (combobox add-new)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateComplianceDriverInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ComplianceDriverResponse"
+  /v1/lookups/team-members:
+    get:
+      operationId: listTeamMembers
+      tags: [lookups]
+      responses:
+        "200":
+          description: Team members
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TeamMemberListResponse"
+    post:
+      operationId: createTeamMember
+      tags: [lookups]
+      summary: Create a team member
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateTeamMemberInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TeamMemberResponse"
+  /v1/lookups/team-members/{id}:
+    delete:
+      operationId: deleteTeamMember
+      tags: [lookups]
+      summary: Soft-delete a team member
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200":
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResponse"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
   /v1/lookups/competitor-battlecards:
     get:
       operationId: listCompetitorBattlecards
@@ -1600,7 +1682,6 @@ components:
         loss_archetype_id: { type: ["integer", "null"] }
         competitor_id: { type: ["integer", "null"] }
         compliance_driver_id: { type: ["integer", "null"] }
-        compliance_deadline: { type: ["string", "null"] }
         estimated_log_sources: { type: ["integer", "null"] }
         product_interest_ids:
           type: array
@@ -1641,7 +1722,6 @@ components:
         loss_archetype_id: { type: ["integer", "null"] }
         competitor_id: { type: ["integer", "null"] }
         compliance_driver_id: { type: ["integer", "null"] }
-        compliance_deadline: { type: ["string", "null"] }
         estimated_log_sources: { type: ["integer", "null"] }
         product_interest_ids:
           type: array
@@ -2562,6 +2642,54 @@ components:
           type: array
           items: { $ref: "#/components/schemas/ComplianceDriver" }
       required: [data]
+    CompetitorResponse:
+      type: object
+      properties:
+        data: { $ref: "#/components/schemas/Competitor" }
+      required: [data]
+    CreateCompetitorInput:
+      type: object
+      properties:
+        name: { type: string, minLength: 1, maxLength: 80 }
+        category: { type: string, minLength: 1, maxLength: 10 }
+      required: [name]
+    ComplianceDriverResponse:
+      type: object
+      properties:
+        data: { $ref: "#/components/schemas/ComplianceDriver" }
+      required: [data]
+    CreateComplianceDriverInput:
+      type: object
+      properties:
+        name: { type: string, minLength: 1, maxLength: 60 }
+      required: [name]
+    TeamMember:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        can_be_am: { type: boolean }
+        can_be_tl: { type: boolean }
+      required: [id, name, can_be_am, can_be_tl]
+    TeamMemberListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/TeamMember" }
+      required: [data]
+    TeamMemberResponse:
+      type: object
+      properties:
+        data: { $ref: "#/components/schemas/TeamMember" }
+      required: [data]
+    CreateTeamMemberInput:
+      type: object
+      properties:
+        name: { type: string, minLength: 1, maxLength: 120 }
+        can_be_am: { type: boolean }
+        can_be_tl: { type: boolean }
+      required: [name]
     CompetitorBattlecard:
       type: object
       properties:

@@ -36,6 +36,16 @@ export const servicesTiers = pgTable("services_tiers", {
   isActive: boolean("is_active").notNull().default(true),
 });
 
+// Team roster for Account Manager / Technical Lead dropdowns. A single person
+// can fill both roles, so canBeAm / canBeTl are independent flags (B2).
+export const teamMembers = pgTable("team_members", {
+  id: serial("id").primaryKey(),
+  name: varchar("name", { length: 120 }).notNull().unique(),
+  canBeAm: boolean("can_be_am").notNull().default(true),
+  canBeTl: boolean("can_be_tl").notNull().default(false),
+  isActive: boolean("is_active").notNull().default(true),
+});
+
 export const productCatalog = pgTable("product_catalog", {
   id: uuid("id").primaryKey().defaultRandom(),
   // Stable machine code (e.g. "ADAUDIT_PLUS") — the isomorphic engine keys its

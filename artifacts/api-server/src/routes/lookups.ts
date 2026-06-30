@@ -16,6 +16,7 @@ import {
   competitors,
   complianceDrivers,
   competitorBattlecards,
+  teamMembers,
 } from "@workspace/db";
 import {
   ListPipelineStagesResponse,
@@ -36,9 +37,14 @@ import {
   ListCompetitorsResponse,
   ListComplianceDriversResponse,
   ListCompetitorBattlecardsResponse,
+  CreateCompetitorBody,
+  CreateComplianceDriverBody,
+  ListTeamMembersResponse,
+  CreateTeamMemberBody,
+  DeleteTeamMemberParams,
 } from "@workspace/api-zod";
 import { requireAuth } from "../lib/auth";
-import { badRequest } from "../lib/http";
+import { badRequest, conflict, notFound } from "../lib/http";
 
 const router: IRouter = Router();
 
@@ -109,6 +115,35 @@ router.get("/lookups/competitors", async (_req: Request, res: Response) => {
   res.json(ListCompetitorsResponse.parse({ data }));
 });
 
+// B4: combobox add-new — create a competitor (default category "IAM").
+router.post("/lookups/competitors", async (req: Request, res: Response) => {
+  const parsed = CreateCompetitorBody.safeParse(req.body);
+  if (!parsed.success) {
+    throw badRequest("Invalid competitor payload", parsed.error.issues);
+  }
+  try {
+    const [created] = await db
+      .insert(competitors)
+      .values({
+        name: parsed.data.name,
+        category: parsed.data.category ?? "IAM",
+      })
+      .returning();
+    res.status(201).json({
+      data: { id: created.id, name: created.name, category: created.category },
+    });
+  } catch (err) {
+    if (
+      err instanceof Error &&
+      "code" in err &&
+      (err as { code?: string }).code === "23505"
+    ) {
+      throw conflict("A competitor with this name already exists");
+    }
+    throw err;
+  }
+});
+
 router.get(
   "/lookups/compliance-drivers",
   async (_req: Request, res: Response) => {
@@ -119,6 +154,98 @@ router.get(
       .orderBy(asc(complianceDrivers.name));
     const data = rows.map((r) => ({ id: r.id, name: r.name }));
     res.json(ListComplianceDriversResponse.parse({ data }));
+  },
+);
+
+// B6: combobox add-new — create a compliance driver.
+router.post(
+  "/lookups/compliance-drivers",
+  async (req: Request, res: Response) => {
+    const parsed = CreateComplianceDriverBody.safeParse(req.body);
+    if (!parsed.success) {
+      throw badRequest("Invalid compliance driver payload", parsed.error.issues);
+    }
+    try {
+      const [created] = await db
+        .insert(complianceDrivers)
+        .values({ name: parsed.data.name })
+        .returning();
+      res.status(201).json({ data: { id: created.id, name: created.name } });
+    } catch (err) {
+      if (
+        err instanceof Error &&
+        "code" in err &&
+        (err as { code?: string }).code === "23505"
+      ) {
+        throw conflict("A compliance driver with this name already exists");
+      }
+      throw err;
+    }
+  },
+);
+
+// B2: team roster for AM/TL dropdowns. Literal path registered before the
+// :id param path (Express route ordering).
+router.get("/lookups/team-members", async (_req: Request, res: Response) => {
+  const rows = await db
+    .select()
+    .from(teamMembers)
+    .where(eq(teamMembers.isActive, true))
+    .orderBy(asc(teamMembers.name));
+  const data = rows.map((r) => ({
+    id: r.id,
+    name: r.name,
+    can_be_am: r.canBeAm,
+    can_be_tl: r.canBeTl,
+  }));
+  res.json(ListTeamMembersResponse.parse({ data }));
+});
+
+router.post("/lookups/team-members", async (req: Request, res: Response) => {
+  const parsed = CreateTeamMemberBody.safeParse(req.body);
+  if (!parsed.success) {
+    throw badRequest("Invalid team member payload", parsed.error.issues);
+  }
+  try {
+    const [created] = await db
+      .insert(teamMembers)
+      .values({
+        name: parsed.data.name,
+        canBeAm: parsed.data.can_be_am ?? true,
+        canBeTl: parsed.data.can_be_tl ?? false,
+      })
+      .returning();
+    res.status(201).json({
+      data: {
+        id: created.id,
+        name: created.name,
+        can_be_am: created.canBeAm,
+        can_be_tl: created.canBeTl,
+      },
+    });
+  } catch (err) {
+    if (
+      err instanceof Error &&
+      "code" in err &&
+      (err as { code?: string }).code === "23505"
+    ) {
+      throw conflict("A team member with this name already exists");
+    }
+    throw err;
+  }
+});
+
+router.delete(
+  "/lookups/team-members/:id",
+  async (req: Request, res: Response) => {
+    const { id } = DeleteTeamMemberParams.parse(req.params);
+    const result = await db
+      .update(teamMembers)
+      .set({ isActive: false })
+      .where(eq(teamMembers.id, id))
+      .returning({ id: teamMembers.id });
+    if (result.length === 0) throw notFound("Team member not found");
+    res.json({ message: "Team member deleted" });
   },
 );
 

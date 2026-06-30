@@ -33,8 +33,6 @@ const DEFAULTS: EngineThresholds = {
   momentum_min_gate_pct: 60,
   low_attach_rate_threshold: 0.34,
   competitive_stall_days: 21,
-  compliance_deadline_warning_days: 45,
-  compliance_min_gate_pct: 60,
   suite_bundle_min_components: 3,
   poc_max_validation_days: 30,
   siem_high_volume_log_sources: 500,
@@ -309,27 +307,6 @@ describe("intelligence engine — 12 risk patterns", () => {
     ).not.toContain("COMPETITIVE_DISPLACEMENT_STALL");
   });
 
-  it("COMPLIANCE_DEADLINE_RISK fires (and escalates to RED) for a near deadline with behind gates", () => {
-    const deal = makeDeal({
-      compliance_driver: "PCI-DSS",
-      compliance_deadline: daysFromNow(15),
-    });
-    const gates = [makeGate("G1", true), makeGate("G2", false), makeGate("G3", false)];
-    const out = processDealIntelligence(deal, gates, [], DEFAULTS);
-    const alert = out.governance.alerts.find(
-      (a) => a.code === "COMPLIANCE_DEADLINE_RISK",
-    );
-    expect(alert).toBeDefined();
-    // 15 days <= warning/2 (22) -> escalated to RED.
-    expect(alert?.severity).toBe("RED");
-    // A far deadline does not fire.
-    const clear = makeDeal({
-      compliance_driver: "PCI-DSS",
-      compliance_deadline: daysFromNow(180),
-    });
-    expect(triggeredCodes(clear, gates)).not.toContain("COMPLIANCE_DEADLINE_RISK");
-  });
-
   it("recommendations do not affect health status (opportunities, not risk)", () => {
     const deal = makeDeal({
       anchor_products: [{ code: "ADAUDIT_PLUS" }],
@@ -369,9 +346,9 @@ describe("intelligence engine — 12 risk patterns", () => {
     expect(triggeredCodes(noEstimate)).not.toContain("SIEM_UNDERSCOPED");
   });
 
-  it("exports exactly the 16 pattern codes", () => {
-    expect(PATTERN_CODES).toHaveLength(16);
-    expect(new Set(PATTERN_CODES).size).toBe(16);
+  it("exports exactly the 15 pattern codes", () => {
+    expect(PATTERN_CODES).toHaveLength(15);
+    expect(new Set(PATTERN_CODES).size).toBe(15);
   });
 });
 
@@ -961,7 +938,6 @@ describe("intelligence engine — health is composite-derived (B3 behavior chang
         updated_at: daysAgo(30),
         competitor: "Quest",
         compliance_driver: "PCI-DSS",
-        compliance_deadline: daysFromNow(10),
       }),
       [
         makeGate("G1", false),

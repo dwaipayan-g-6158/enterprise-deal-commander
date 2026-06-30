@@ -157,9 +157,51 @@ router.delete("/playbooks/:id", async (req: Request, res: Response) => {
   res.json({ message: "Playbook deleted" });
 });
 
+// Auto-assign-if-missing: when a deal sitting in a stage has no active
+// assignment but its current stage has a configured playbook, create the
+// assignment (currentStepId = first step) and return it. Mirrors the on-stage-
+// change auto-assign in subscribers/playbook-engine.ts so deals that were
+// already in a stage before playbooks existed still pick one up. Returns the
+// new assignment row, or null when no playbook targets the stage.
+async function autoAssignPlaybookIfMissing(dealId: string) {
+  const [deal] = await db
+    .select({ stageName: pipelineStages.stageName })
+    .from(enterpriseDeals)
+    .innerJoin(pipelineStages, eq(enterpriseDeals.salesStageId, pipelineStages.id))
+    .where(eq(enterpriseDeals.id, dealId))
+    .limit(1);
+  if (!deal?.stageName) return null;
+
+  const [playbook] = await db
+    .select()
+    .from(playbooks)
+    .where(
+      and(eq(playbooks.applicableStage, deal.stageName), eq(playbooks.isActive, true)),
+    )
+    .limit(1);
+  if (!playbook) return null;
+
+  const [firstStep] = await db
+    .select({ id: playbookSteps.id })
+    .from(playbookSteps)
+    .where(eq(playbookSteps.playbookId, playbook.id))
+    .orderBy(asc(playbookSteps.stepOrder))
+    .limit(1);
+
+  const [created] = await db
+    .insert(dealPlaybookAssignments)
+    .values({
+      dealId,
+      playbookId: playbook.id,
+      currentStepId: firstStep?.id ?? null,
+    })
+    .returning();
+  return created;
+}
+
 router.get("/deals/:dealId/playbook", async (req: Request, res: Response) => {
   const { dealId } = GetDealPlaybookParams.parse(req.params);
-  const [assignment] = await db
+  let [assignment] = await db
     .select()
     .from(dealPlaybookAssignments)
     .where(
@@ -167,8 +209,12 @@ router.get("/deals/:dealId/playbook", async (req: Request, res: Response) => {
     )
     .limit(1);
   if (!assignment) {
-    res.json({ data: null });
-    return;
+    const created = await autoAssignPlaybookIfMissing(dealId);
+    if (!created) {
+      res.json({ data: null });
+      return;
+    }
+    assignment = created;
   }
   const playbook = await playbookWithSteps(assignment.playbookId);
   const completions = await db
