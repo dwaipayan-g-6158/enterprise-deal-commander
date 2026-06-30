@@ -32,13 +32,11 @@ export function RiskScoreCard({ risk, className }: { risk: DealRisk; className?:
           </div>
         </div>
 
-        {/* Dimensions + radar: responsive 2-col at @md, stacked on mobile. */}
+        {/* Dimensions left, radar right — 2-col at @md to minimise scrolling. */}
         {dimensions.length ? (
           <div className="@container">
-            <div className="grid grid-cols-1 @md:grid-cols-2 gap-6 items-start">
-              <div className="risk-dimensions">
-                <DimensionBars dimensions={dimensions} />
-              </div>
+            <div className="grid grid-cols-1 @md:grid-cols-2 gap-4 items-center">
+              <DimensionBars dimensions={dimensions} />
               <RiskRadar dimensions={dimensions} level={risk.riskLevel} />
             </div>
           </div>
@@ -49,18 +47,44 @@ export function RiskScoreCard({ risk, className }: { risk: DealRisk; className?:
             <p className="text-xs uppercase tracking-wider text-muted-foreground font-medium">
               Top Risk Drivers
             </p>
-            <ul className="space-y-1">
-              {risk.topDrivers.map((d, idx) => (
-                <li key={`${d.dimension}-${idx}`} className="flex items-center gap-3 text-sm">
-                  <span className="flex-1">
-                    {d.dimension} — {d.factor}
-                  </span>
-                  <span className="font-mono tabular-nums text-muted-foreground">
-                    {Number.isFinite(d.impact) ? d.impact : "—"}
-                  </span>
-                </li>
-              ))}
-            </ul>
+            <div className="rounded-md border border-border/60 overflow-hidden">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-border/60 bg-muted/40">
+                    <th className="text-left text-[10px] uppercase tracking-wide font-medium text-muted-foreground px-3 py-2 w-36">
+                      Dimension
+                    </th>
+                    <th className="text-left text-[10px] uppercase tracking-wide font-medium text-muted-foreground px-3 py-2">
+                      Factor
+                    </th>
+                    <th className="text-right text-[10px] uppercase tracking-wide font-medium text-muted-foreground px-3 py-2 w-14">
+                      Impact
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {risk.topDrivers.map((d, idx) => (
+                    <tr
+                      key={`${d.dimension}-${idx}`}
+                      className={cn(
+                        "border-b border-border/40 last:border-0 align-top",
+                        idx % 2 === 1 ? "bg-muted/20" : "bg-transparent",
+                      )}
+                    >
+                      <td className="px-3 py-2 align-top w-36">
+                        <span className="text-xs font-medium text-muted-foreground whitespace-nowrap">
+                          {d.dimension}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2 align-top leading-snug">{d.factor}</td>
+                      <td className="px-3 py-2 align-top text-right font-mono tabular-nums text-muted-foreground w-14">
+                        {Number.isFinite(d.impact) ? d.impact : "—"}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         ) : null}
 

@@ -50,3 +50,10 @@ Thumbs.db
 
 # subagent-driven-development scratch
 .superpowers/
+
+# Secrets and local env
+.env
+.env.*
+
+# Playwright MCP scratch artifacts
+.playwright-mcp/

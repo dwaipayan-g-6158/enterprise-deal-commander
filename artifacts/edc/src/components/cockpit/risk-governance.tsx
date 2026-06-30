@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { cn } from "@/lib/utils";
 import {
   useSetDisposition,
   useClearDisposition,
@@ -32,6 +33,11 @@ import {
   ChevronDown,
   Info,
   Shield,
+  Check,
+  Clock,
+  ShieldOff,
+  Zap,
+  RotateCcw,
 } from "lucide-react";
 import { type DealRisk } from "./risk/risk-model";
 import { RiskScoreCard } from "./risk/risk-score-card";
@@ -102,54 +108,67 @@ function AlertCard({ dealId, alert, isManaged = false }: { dealId: string; alert
   };
 
   const isRed = alert.severity === "RED";
+  const codeColorCls = isRed
+    ? "bg-red-500/10 border-red-500/30 text-red-600 dark:text-red-400"
+    : "bg-amber-500/10 border-amber-500/30 text-amber-600 dark:text-amber-400";
 
   return (
-    <Card className={`border-l-4 ${isRed ? "border-l-destructive" : "border-l-amber-500"}`}>
+    <Card className={cn("border-l-4", isRed ? "border-l-destructive" : "border-l-amber-500")}>
       <CardContent className="p-4 space-y-3">
+        {/* Header: icon + code badge + severity + disposition */}
         <div className="flex gap-3">
           {isRed ? (
             <ShieldAlert className="w-5 h-5 text-destructive shrink-0 mt-0.5" />
           ) : (
             <AlertTriangle className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
           )}
-          <div className="flex-1">
-            <div className="flex items-start justify-between gap-2">
-              <h4 className="font-semibold text-sm">{alert.message}</h4>
+          <div className="flex-1 min-w-0 space-y-1.5">
+            <div className="flex items-center gap-2 flex-wrap">
+              <code className={cn("inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-mono font-medium border", codeColorCls)}>
+                {alert.code}
+              </code>
+              <span className={cn("inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold", codeColorCls)}>
+                {alert.severity}
+              </span>
               {alert.disposition && (
-                <Badge variant="outline" className="capitalize shrink-0">
+                <Badge variant="outline" className="capitalize text-[10px] h-5 py-0">
                   {alert.disposition.state}
                 </Badge>
               )}
             </div>
-            <p className="text-xs text-muted-foreground mt-1 font-mono">{alert.code}</p>
+            <p className="text-sm leading-snug">{alert.message}</p>
             {alert.intervention && (
-              <p className="text-xs text-primary mt-1">Intervention: {alert.intervention.name}</p>
+              <p className="flex items-center gap-1 text-xs text-primary mt-0.5">
+                <Zap className="h-3 w-3 shrink-0" aria-hidden="true" />
+                {alert.intervention.name}
+              </p>
             )}
           </div>
         </div>
 
+        {/* Why this fired */}
         <Collapsible>
-          <CollapsibleTrigger className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
+          <CollapsibleTrigger className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors">
             <Info className="h-3 w-3" /> Why this fired
             <ChevronDown className="h-3 w-3" />
           </CollapsibleTrigger>
           <CollapsibleContent className="pt-2 text-xs space-y-2">
             {alert.explanation.inputs.length > 0 && (
               <div>
-                <p className="font-medium text-muted-foreground">Inputs</p>
+                <p className="font-medium text-muted-foreground mb-1">Inputs</p>
                 {alert.explanation.inputs.map((i, idx) => (
-                  <div key={idx} className="flex justify-between">
+                  <div key={idx} className="flex justify-between py-0.5">
                     <span>{i.label}</span>
-                    <span className="font-mono">{String(i.value ?? "")}</span>
+                    <span className="font-mono text-muted-foreground">{String(i.value ?? "")}</span>
                   </div>
                 ))}
               </div>
             )}
             {alert.explanation.thresholdsUsed.length > 0 && (
               <div>
-                <p className="font-medium text-muted-foreground">Thresholds</p>
+                <p className="font-medium text-muted-foreground mb-1">Thresholds</p>
                 {alert.explanation.thresholdsUsed.map((t, idx) => (
-                  <div key={idx} className="flex justify-between">
+                  <div key={idx} className="flex justify-between py-0.5">
                     <span className="font-mono">{t.key}</span>
                     <span className="font-mono">
                       {String(t.value ?? "")} <span className="text-muted-foreground">({t.source})</span>
@@ -159,31 +178,43 @@ function AlertCard({ dealId, alert, isManaged = false }: { dealId: string; alert
               </div>
             )}
             <p className="text-muted-foreground">
-              <span className="font-medium">Clears when:</span> {alert.explanation.clearsWhen}
+              <span className="font-medium text-foreground">Clears when:</span> {alert.explanation.clearsWhen}
             </p>
           </CollapsibleContent>
         </Collapsible>
 
+        {/* Action buttons */}
         <div className="flex flex-wrap gap-2 pt-1">
           {isManaged || alert.disposition ? (
-            <Button size="sm" variant="outline" onClick={clear} disabled={clearDisposition.isPending}>
-              Clear Disposition
+            <Button size="sm" variant="outline" onClick={clear} disabled={clearDisposition.isPending} className="gap-1.5">
+              <RotateCcw className="h-3.5 w-3.5" /> Clear Disposition
             </Button>
           ) : (
             <>
-              <Button size="sm" variant="outline" onClick={() => apply("acknowledge")} disabled={setDisposition.isPending}>
-                Acknowledge
+              <Button size="sm" variant="outline" onClick={() => apply("acknowledge")} disabled={setDisposition.isPending} className="gap-1.5">
+                <Check className="h-3.5 w-3.5" /> Acknowledge
               </Button>
               <Button
                 size="sm"
                 variant="outline"
                 onClick={() => apply("snooze", { snooze_until_field_change: "any" })}
                 disabled={setDisposition.isPending}
+                className="gap-1.5"
               >
-                Snooze
+                <Clock className="h-3.5 w-3.5" /> Snooze
               </Button>
-              <Button size="sm" variant="outline" onClick={() => setShowAccept((s) => !s)}>
-                Accept Risk
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setShowAccept((s) => !s)}
+                className={cn(
+                  "gap-1.5",
+                  isRed
+                    ? "border-destructive/40 text-destructive hover:bg-destructive/5 hover:border-destructive"
+                    : "border-amber-500/40 text-amber-600 dark:text-amber-400 hover:bg-amber-500/5 hover:border-amber-500",
+                )}
+              >
+                <ShieldOff className="h-3.5 w-3.5" /> Accept Risk
               </Button>
             </>
           )}
