@@ -1760,6 +1760,44 @@ export const GetDealTrajectoryResponse = zod.object({
 })
 
 
+export const GetFlowFunnelResponse = zod.object({
+  "data": zod.record(zod.string(), zod.unknown())
+})
+
+
+export const GetFlowConversionMatrixQueryParams = zod.object({
+  "windowDays": zod.coerce.number().optional()
+})
+
+export const GetFlowConversionMatrixResponse = zod.object({
+  "data": zod.record(zod.string(), zod.unknown())
+})
+
+
+export const GetFlowSankeyQueryParams = zod.object({
+  "mode": zod.enum(['count', 'value']).optional()
+})
+
+export const GetFlowSankeyResponse = zod.object({
+  "data": zod.record(zod.string(), zod.unknown())
+})
+
+
+export const GetFlowRecycleResponse = zod.object({
+  "data": zod.record(zod.string(), zod.unknown())
+})
+
+
+export const GetFlowCoverageResponse = zod.object({
+  "data": zod.record(zod.string(), zod.unknown())
+})
+
+
+export const GetFlowHealthScoreResponse = zod.object({
+  "data": zod.record(zod.string(), zod.unknown())
+})
+
+
 export const ListDealCompetitorsParams = zod.object({
   "dealId": zod.coerce.string()
 })

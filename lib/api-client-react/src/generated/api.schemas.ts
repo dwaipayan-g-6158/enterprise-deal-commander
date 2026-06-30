@@ -1925,6 +1925,22 @@ export type GetPipelineSimulationParams = {
 iterations?: number;
 };
 
+export type GetFlowConversionMatrixParams = {
+windowDays?: number;
+};
+
+export type GetFlowSankeyParams = {
+mode?: GetFlowSankeyMode;
+};
+
+export type GetFlowSankeyMode = typeof GetFlowSankeyMode[keyof typeof GetFlowSankeyMode];
+
+
+export const GetFlowSankeyMode = {
+  count: 'count',
+  value: 'value',
+} as const;
+
 export type SearchDealMemoryParams = {
 q?: string;
 outcome?: string;

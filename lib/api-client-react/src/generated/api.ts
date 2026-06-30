@@ -78,6 +78,8 @@ import type {
   GateUpdateInput,
   GenericDataResponse,
   GetAutopsyParams,
+  GetFlowConversionMatrixParams,
+  GetFlowSankeyParams,
   GetPipelineSimulationParams,
   GetSnapshotParams,
   HealthHistoryListResponse,
@@ -5433,6 +5435,446 @@ export function useGetDealTrajectory<TData = Awaited<ReturnType<typeof getDealTr
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getGetDealTrajectoryQueryOptions(dealId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getGetFlowFunnelUrl = () => {
+
+
+
+
+  return `/api/v2/analytics/flow/funnel`
+}
+
+export const getFlowFunnel = async ( options?: RequestInit): Promise<GenericDataResponse> => {
+
+  return customFetch<GenericDataResponse>(getGetFlowFunnelUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetFlowFunnelQueryKey = () => {
+    return [
+    `/api/v2/analytics/flow/funnel`
+    ] as const;
+    }
+
+
+export const getGetFlowFunnelQueryOptions = <TData = Awaited<ReturnType<typeof getFlowFunnel>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getFlowFunnel>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetFlowFunnelQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getFlowFunnel>>> = ({ signal }) => getFlowFunnel({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getFlowFunnel>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetFlowFunnelQueryResult = NonNullable<Awaited<ReturnType<typeof getFlowFunnel>>>
+export type GetFlowFunnelQueryError = ErrorType<unknown>
+
+
+
+export function useGetFlowFunnel<TData = Awaited<ReturnType<typeof getFlowFunnel>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getFlowFunnel>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetFlowFunnelQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getGetFlowConversionMatrixUrl = (params?: GetFlowConversionMatrixParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/v2/analytics/flow/conversion-matrix?${stringifiedParams}` : `/api/v2/analytics/flow/conversion-matrix`
+}
+
+export const getFlowConversionMatrix = async (params?: GetFlowConversionMatrixParams, options?: RequestInit): Promise<GenericDataResponse> => {
+
+  return customFetch<GenericDataResponse>(getGetFlowConversionMatrixUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetFlowConversionMatrixQueryKey = (params?: GetFlowConversionMatrixParams,) => {
+    return [
+    `/api/v2/analytics/flow/conversion-matrix`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetFlowConversionMatrixQueryOptions = <TData = Awaited<ReturnType<typeof getFlowConversionMatrix>>, TError = ErrorType<unknown>>(params?: GetFlowConversionMatrixParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getFlowConversionMatrix>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetFlowConversionMatrixQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getFlowConversionMatrix>>> = ({ signal }) => getFlowConversionMatrix(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getFlowConversionMatrix>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetFlowConversionMatrixQueryResult = NonNullable<Awaited<ReturnType<typeof getFlowConversionMatrix>>>
+export type GetFlowConversionMatrixQueryError = ErrorType<unknown>
+
+
+
+export function useGetFlowConversionMatrix<TData = Awaited<ReturnType<typeof getFlowConversionMatrix>>, TError = ErrorType<unknown>>(
+ params?: GetFlowConversionMatrixParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getFlowConversionMatrix>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetFlowConversionMatrixQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getGetFlowSankeyUrl = (params?: GetFlowSankeyParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/v2/analytics/flow/sankey?${stringifiedParams}` : `/api/v2/analytics/flow/sankey`
+}
+
+export const getFlowSankey = async (params?: GetFlowSankeyParams, options?: RequestInit): Promise<GenericDataResponse> => {
+
+  return customFetch<GenericDataResponse>(getGetFlowSankeyUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetFlowSankeyQueryKey = (params?: GetFlowSankeyParams,) => {
+    return [
+    `/api/v2/analytics/flow/sankey`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetFlowSankeyQueryOptions = <TData = Awaited<ReturnType<typeof getFlowSankey>>, TError = ErrorType<unknown>>(params?: GetFlowSankeyParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getFlowSankey>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetFlowSankeyQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getFlowSankey>>> = ({ signal }) => getFlowSankey(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getFlowSankey>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetFlowSankeyQueryResult = NonNullable<Awaited<ReturnType<typeof getFlowSankey>>>
+export type GetFlowSankeyQueryError = ErrorType<unknown>
+
+
+
+export function useGetFlowSankey<TData = Awaited<ReturnType<typeof getFlowSankey>>, TError = ErrorType<unknown>>(
+ params?: GetFlowSankeyParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getFlowSankey>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetFlowSankeyQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getGetFlowRecycleUrl = () => {
+
+
+
+
+  return `/api/v2/analytics/flow/recycle`
+}
+
+export const getFlowRecycle = async ( options?: RequestInit): Promise<GenericDataResponse> => {
+
+  return customFetch<GenericDataResponse>(getGetFlowRecycleUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetFlowRecycleQueryKey = () => {
+    return [
+    `/api/v2/analytics/flow/recycle`
+    ] as const;
+    }
+
+
+export const getGetFlowRecycleQueryOptions = <TData = Awaited<ReturnType<typeof getFlowRecycle>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getFlowRecycle>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetFlowRecycleQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getFlowRecycle>>> = ({ signal }) => getFlowRecycle({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getFlowRecycle>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetFlowRecycleQueryResult = NonNullable<Awaited<ReturnType<typeof getFlowRecycle>>>
+export type GetFlowRecycleQueryError = ErrorType<unknown>
+
+
+
+export function useGetFlowRecycle<TData = Awaited<ReturnType<typeof getFlowRecycle>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getFlowRecycle>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetFlowRecycleQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getGetFlowCoverageUrl = () => {
+
+
+
+
+  return `/api/v2/analytics/flow/coverage`
+}
+
+export const getFlowCoverage = async ( options?: RequestInit): Promise<GenericDataResponse> => {
+
+  return customFetch<GenericDataResponse>(getGetFlowCoverageUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetFlowCoverageQueryKey = () => {
+    return [
+    `/api/v2/analytics/flow/coverage`
+    ] as const;
+    }
+
+
+export const getGetFlowCoverageQueryOptions = <TData = Awaited<ReturnType<typeof getFlowCoverage>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getFlowCoverage>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetFlowCoverageQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getFlowCoverage>>> = ({ signal }) => getFlowCoverage({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getFlowCoverage>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetFlowCoverageQueryResult = NonNullable<Awaited<ReturnType<typeof getFlowCoverage>>>
+export type GetFlowCoverageQueryError = ErrorType<unknown>
+
+
+
+export function useGetFlowCoverage<TData = Awaited<ReturnType<typeof getFlowCoverage>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getFlowCoverage>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetFlowCoverageQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getGetFlowHealthScoreUrl = () => {
+
+
+
+
+  return `/api/v2/analytics/flow/health-score`
+}
+
+export const getFlowHealthScore = async ( options?: RequestInit): Promise<GenericDataResponse> => {
+
+  return customFetch<GenericDataResponse>(getGetFlowHealthScoreUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetFlowHealthScoreQueryKey = () => {
+    return [
+    `/api/v2/analytics/flow/health-score`
+    ] as const;
+    }
+
+
+export const getGetFlowHealthScoreQueryOptions = <TData = Awaited<ReturnType<typeof getFlowHealthScore>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getFlowHealthScore>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetFlowHealthScoreQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getFlowHealthScore>>> = ({ signal }) => getFlowHealthScore({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getFlowHealthScore>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetFlowHealthScoreQueryResult = NonNullable<Awaited<ReturnType<typeof getFlowHealthScore>>>
+export type GetFlowHealthScoreQueryError = ErrorType<unknown>
+
+
+
+export function useGetFlowHealthScore<TData = Awaited<ReturnType<typeof getFlowHealthScore>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getFlowHealthScore>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetFlowHealthScoreQueryOptions(options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

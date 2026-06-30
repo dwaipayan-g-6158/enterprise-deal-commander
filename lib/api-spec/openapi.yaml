@@ -1079,6 +1079,48 @@ paths:
       responses:
         "200": { description: "Time-ordered merged metric series for one deal", content: { application/json: { schema: { $ref: "#/components/schemas/GenericDataResponse" } } } }
 
+  # --- Pipeline Flow analytics ---
+  /v2/analytics/flow/funnel:
+    get:
+      operationId: getFlowFunnel
+      tags: [v2intel]
+      responses:
+        "200": { description: Stage completion funnel across active deals, content: { application/json: { schema: { $ref: "#/components/schemas/GenericDataResponse" } } } }
+  /v2/analytics/flow/conversion-matrix:
+    get:
+      operationId: getFlowConversionMatrix
+      tags: [v2intel]
+      parameters:
+        - { name: windowDays, in: query, required: false, schema: { type: integer } }
+      responses:
+        "200": { description: Stage-to-stage conversion rates within a time window, content: { application/json: { schema: { $ref: "#/components/schemas/GenericDataResponse" } } } }
+  /v2/analytics/flow/sankey:
+    get:
+      operationId: getFlowSankey
+      tags: [v2intel]
+      parameters:
+        - { name: mode, in: query, required: false, schema: { type: string, enum: [count, value] } }
+      responses:
+        "200": { description: Sankey flows by deal count or TCV, content: { application/json: { schema: { $ref: "#/components/schemas/GenericDataResponse" } } } }
+  /v2/analytics/flow/recycle:
+    get:
+      operationId: getFlowRecycle
+      tags: [v2intel]
+      responses:
+        "200": { description: Recycling and early-exit rates, content: { application/json: { schema: { $ref: "#/components/schemas/GenericDataResponse" } } } }
+  /v2/analytics/flow/coverage:
+    get:
+      operationId: getFlowCoverage
+      tags: [v2intel]
+      responses:
+        "200": { description: Pipeline coverage ratios vs quarterly target, content: { application/json: { schema: { $ref: "#/components/schemas/GenericDataResponse" } } } }
+  /v2/analytics/flow/health-score:
+    get:
+      operationId: getFlowHealthScore
+      tags: [v2intel]
+      responses:
+        "200": { description: Composite pipeline health score, content: { application/json: { schema: { $ref: "#/components/schemas/GenericDataResponse" } } } }
+
   # --- F2 Competitive Intelligence (per deal) ---
   /v2/deals/{dealId}/competitors:
     get:
