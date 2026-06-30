@@ -39,6 +39,9 @@ export interface FunnelRow {
   pctOfPipeline: number;
 }
 
+// NOTE: a same-stage move (fromSortOrder == toStage.sortOrder, non-terminal) is classified
+// "backward" here, while the conversion matrix independently labels same-stage cells "stagnation"
+// by sortOrder — the stored TransitionType and matrix `kind` are independent classifications.
 export function computeTransitionType(
   fromSortOrder: number | null,
   toStage: StageDef,
@@ -75,7 +78,9 @@ export function computeFunnel(
   return active.map((stage, i) => {
     const inStage = deals.filter((d) => d.stageId === stage.id);
     const next = active[i + 1];
-    const enteredThis = enteredCount.get(stage.id) ?? inStage.length;
+    // Use transition-derived entry count only (no inStage.length fallback) so that
+    // convToNextPct is null — not a misleading 0% — when there is no transition history.
+    const enteredThis = enteredCount.get(stage.id);
     const enteredNext = next ? (enteredCount.get(next.id) ?? 0) : null;
     const n = residN.get(stage.id) ?? 0;
     return {
@@ -84,7 +89,9 @@ export function computeFunnel(
       dealCount: inStage.length,
       totalValue: inStage.reduce((s, d) => s + d.tcv, 0),
       convToNextPct:
-        enteredNext != null && enteredThis > 0 ? round1((enteredNext / enteredThis) * 100) : null,
+        enteredThis != null && enteredThis > 0 && enteredNext != null
+          ? round1((enteredNext / enteredThis) * 100)
+          : null,
       avgDaysInStage: n > 0 ? Math.round((residSum.get(stage.id) ?? 0) / n) : null,
       pctOfPipeline: round1((inStage.reduce((s, d) => s + d.tcv, 0) / totalValue) * 100),
     };

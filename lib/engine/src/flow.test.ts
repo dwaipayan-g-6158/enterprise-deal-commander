@@ -147,9 +147,8 @@ describe("computeHealthScore", () => {
       generation: [0.8, 0.9, 1.0, 1.1], age: [20, 30, 40, 50], attrition: [0.7, 0.8, 0.9, 0.95],
     };
     const r = computeHealthScore(inputs, history, DEFAULT_HEALTH_WEIGHTS);
-    expect(r.score).toBeGreaterThanOrEqual(0);
-    expect(r.score).toBeLessThanOrEqual(100);
-    expect(r.subScores.velocity).not.toBeNull();
+    expect(r.score).toBe(75);
+    expect(r.subScores.velocity).toBe(50);
   });
   it("returns null coverage sub-score when coverage input is null", () => {
     const inputs = { coverageQualified: null, velocityIndex: 40, winRate: 0.5, generationRatio: null, agingScore: 30, retentionRate: 0.9 };
