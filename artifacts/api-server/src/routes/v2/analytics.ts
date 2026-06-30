@@ -15,11 +15,22 @@ import {
   playbookSteps,
   playbookStepCompletions,
   dealSnapshots,
+  pipelineTransitions,
+  pipelineTargets,
 } from "@workspace/db";
 import {
   runPipelineSimulation,
   parseNLC,
   type SimDeal,
+  computeFunnel,
+  computeConversionMatrix,
+  computeSankeyFlows,
+  computeRecycleExit,
+  computeCoverage,
+  computeHealthScore,
+  type StageDef,
+  type TransitionRec,
+  type OpenDeal,
 } from "@workspace/engine";
 import { GetDealScoreParams, ParseNlcCommandBody } from "@workspace/api-zod";
 import { notFound } from "../../lib/http";
@@ -815,6 +826,163 @@ router.post("/nlc/parse", async (req: Request, res: Response) => {
   const b = ParseNlcCommandBody.parse(req.body);
   const parsed = parseNLC(b.query);
   res.json({ data: { query: b.query, parsed } });
+});
+
+/* ------------------------------------------------- Pipeline Flow Analytics */
+
+// Shared loaders for the flow engine. These are not cached — the flow
+// endpoints are low-traffic analytics calls; caching is deferred to a future
+// task if needed.
+
+async function loadFlowStages(): Promise<StageDef[]> {
+  const rows = await db.select().from(pipelineStages);
+  return rows.map((s) => ({
+    id: s.id,
+    name: s.stageName,
+    sortOrder: s.sortOrder,
+    terminal:
+      s.stageName === "Closed-Won"
+        ? "won"
+        : s.stageName === "Closed-Lost"
+          ? "lost"
+          : undefined,
+  }));
+}
+
+async function loadTransitions(): Promise<TransitionRec[]> {
+  const rows = await db
+    .select()
+    .from(pipelineTransitions)
+    .orderBy(asc(pipelineTransitions.transitionedAt));
+  return rows.map((r) => ({
+    dealId: r.dealId,
+    fromStageId: r.fromStageId,
+    toStageId: r.toStageId,
+    transitionType: r.transitionType as TransitionRec["transitionType"],
+    tcv: Number(r.tcvAtTransition ?? 0),
+    daysInFromStage: r.daysInFromStage,
+    transitionedAt: new Date(r.transitionedAt).toISOString(),
+  }));
+}
+
+async function loadOpenDeals(): Promise<OpenDeal[]> {
+  const rows = await db
+    .select({
+      id: enterpriseDeals.id,
+      stageId: enterpriseDeals.salesStageId,
+      productRevenue: enterpriseDeals.productRevenue,
+      servicesRevenue: enterpriseDeals.servicesRevenue,
+      wp: enterpriseDeals.winProbabilityPct,
+      createdAt: enterpriseDeals.createdAt,
+    })
+    .from(enterpriseDeals)
+    .where(activeFilter);
+
+  // AI win-probability from latest deal_scores per deal.
+  // dealScores.score is an integer 0-100; OpenDeal.aiWinProbability is 0..1.
+  // Take the latest score per deal (scores are ordered desc by computedAt in
+  // the latestScores() helper above; we replicate that pattern inline here).
+  const scoreRows = await db
+    .select({ dealId: dealScores.dealId, score: dealScores.score, computedAt: dealScores.computedAt })
+    .from(dealScores)
+    .orderBy(desc(dealScores.computedAt));
+  const aiByDeal = new Map<string, number>();
+  for (const s of scoreRows) {
+    if (!aiByDeal.has(s.dealId)) aiByDeal.set(s.dealId, s.score);
+  }
+
+  return rows.map((r) => {
+    const tcv = (Number(r.productRevenue) || 0) + (Number(r.servicesRevenue) || 0);
+    const rawScore = aiByDeal.get(r.id);
+    return {
+      id: r.id,
+      stageId: r.stageId ?? 0,
+      tcv,
+      winProbabilityPct: r.wp == null ? null : Number(r.wp),
+      aiWinProbability: rawScore != null ? rawScore / 100 : null,
+      createdAt: r.createdAt ? new Date(r.createdAt).toISOString() : new Date().toISOString(),
+    };
+  });
+}
+
+/** Returns the ISO date string (YYYY-MM-DD) for the first day of the active calendar quarter. */
+function activeQuarterStart(now = new Date()): string {
+  const q = Math.floor(now.getUTCMonth() / 3);
+  return new Date(Date.UTC(now.getUTCFullYear(), q * 3, 1)).toISOString().slice(0, 10);
+}
+
+// NOTE: literal paths registered before any param-based routes per repo convention.
+
+router.get("/analytics/flow/funnel", async (_req: Request, res: Response) => {
+  const [stages, deals, transitions] = await Promise.all([
+    loadFlowStages(),
+    loadOpenDeals(),
+    loadTransitions(),
+  ]);
+  res.json({ data: computeFunnel(deals, transitions, stages) });
+});
+
+router.get("/analytics/flow/conversion-matrix", async (req: Request, res: Response) => {
+  const windowDays = Math.max(1, Math.min(365, Number(req.query.windowDays ?? 90)));
+  const [stages, transitions] = await Promise.all([loadFlowStages(), loadTransitions()]);
+  res.json({
+    data: computeConversionMatrix(transitions, stages, windowDays, new Date().toISOString()),
+  });
+});
+
+router.get("/analytics/flow/sankey", async (req: Request, res: Response) => {
+  const mode = req.query.mode === "value" ? "value" : "count";
+  const [stages, transitions] = await Promise.all([loadFlowStages(), loadTransitions()]);
+  res.json({ data: computeSankeyFlows(transitions, stages, mode) });
+});
+
+router.get("/analytics/flow/recycle", async (_req: Request, res: Response) => {
+  const [stages, transitions] = await Promise.all([loadFlowStages(), loadTransitions()]);
+  res.json({ data: computeRecycleExit(transitions, stages) });
+});
+
+router.get("/analytics/flow/coverage", async (_req: Request, res: Response) => {
+  const [stages, deals] = await Promise.all([loadFlowStages(), loadOpenDeals()]);
+  const periodStart = activeQuarterStart();
+  const [tgt] = await db
+    .select()
+    .from(pipelineTargets)
+    .where(eq(pipelineTargets.periodStart, periodStart));
+  const target = tgt ? Number(tgt.targetValue) : null;
+  res.json({ data: computeCoverage(deals, stages, target, periodStart) });
+});
+
+router.get("/analytics/flow/health-score", async (_req: Request, res: Response) => {
+  const [stages, deals, transitions] = await Promise.all([
+    loadFlowStages(),
+    loadOpenDeals(),
+    loadTransitions(),
+  ]);
+  const periodStart = activeQuarterStart();
+  const [tgt] = await db
+    .select()
+    .from(pipelineTargets)
+    .where(eq(pipelineTargets.periodStart, periodStart));
+  const target = tgt ? Number(tgt.targetValue) : null;
+  const coverage = computeCoverage(deals, stages, target, periodStart);
+  const recycle = computeRecycleExit(transitions, stages);
+  const winExits = transitions.filter((t) => t.transitionType === "exit_won").length;
+  const lossExits = transitions.filter((t) => t.transitionType === "exit_lost").length;
+  const winRate = winExits + lossExits > 0 ? winExits / (winExits + lossExits) : 0;
+  const daysWithStage = transitions.filter((t) => t.daysInFromStage != null);
+  const avgResidence =
+    daysWithStage.reduce((s, t) => s + (t.daysInFromStage ?? 0), 0) /
+    Math.max(1, daysWithStage.length);
+  const inputs = {
+    coverageQualified: coverage.qualified,
+    velocityIndex: Math.round(avgResidence),
+    winRate,
+    generationRatio: coverage.netNew,
+    agingScore: Math.round(avgResidence),
+    retentionRate: 1 - recycle.overallRecycleRate / 100,
+  };
+  const history = { coverage: [], velocity: [], conversion: [], generation: [], age: [], attrition: [] };
+  res.json({ data: { ...computeHealthScore(inputs, history), coverage } });
 });
 
 void sql;
