@@ -5,9 +5,12 @@ import {
   text,
   integer,
   numeric,
+  boolean,
   timestamp,
+  date,
   jsonb,
   index,
+  unique,
 } from "drizzle-orm/pg-core";
 import { enterpriseDeals } from "./deals";
 
@@ -120,3 +123,49 @@ export const portfolioRollups = edcV2.table("portfolio_rollups", {
     .notNull()
     .defaultNow(),
 });
+
+/**
+ * Append-only log of every deal stage transition (forward, backward, or skip).
+ * Captures the pipeline velocity signal used by the Pipeline Flow Analytics
+ * engine. `transitioned_at` is the moment the transition took effect (not the
+ * row-insert time), and the natural key (deal_id, transitioned_at) prevents
+ * duplicate events.
+ */
+export const pipelineTransitions = edcV2.table(
+  "pipeline_transitions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    dealId: uuid("deal_id")
+      .notNull()
+      .references(() => enterpriseDeals.id, { onDelete: "cascade" }),
+    fromStageId: integer("from_stage_id"),
+    toStageId: integer("to_stage_id"),
+    transitionType: varchar("transition_type", { length: 20 }).notNull(),
+    tcvAtTransition: numeric("tcv_at_transition", { precision: 18, scale: 2 }),
+    daysInFromStage: integer("days_in_from_stage"),
+    overridden: boolean("overridden").notNull().default(false),
+    transitionedAt: timestamp("transitioned_at", { withTimezone: true }).notNull(),
+    createdBy: varchar("created_by", { length: 255 }).notNull(),
+  },
+  (t) => [
+    index("transitions_deal_time_idx").on(t.dealId, t.transitionedAt.desc()),
+    index("transitions_time_idx").on(t.transitionedAt.desc()),
+    unique("transitions_natural_key").on(t.dealId, t.transitionedAt),
+  ],
+);
+
+/**
+ * Quarterly (or custom period) pipeline targets. One row per period; the
+ * Pipeline Flow Analytics engine uses these to compute attainment metrics.
+ */
+export const pipelineTargets = edcV2.table(
+  "pipeline_targets",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    periodType: varchar("period_type", { length: 10 }).notNull().default("quarter"),
+    periodStart: date("period_start", { mode: "string" }).notNull(),
+    targetValue: numeric("target_value", { precision: 18, scale: 2 }).notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [unique("targets_period_unique").on(t.periodType, t.periodStart)],
+);
