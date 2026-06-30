@@ -1414,3 +1414,5 @@ export * from "./contextual-patterns";
 // (risk-v2 re-exports risk-v2-types, so types flow through here too.)
 export * from "./dimensions";
 export * from "./risk-v2";
+
+export * from "./flow";
