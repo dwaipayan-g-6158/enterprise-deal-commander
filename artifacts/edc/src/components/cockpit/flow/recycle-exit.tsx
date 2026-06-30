@@ -1,4 +1,5 @@
 import { useFlowRecycle } from "./use-flow";
+import { useListPipelineStages } from "@workspace/api-client-react";
 import type { RecycleExit as RecycleExitData, WaterfallStep } from "@workspace/engine";
 
 const deltaColor = (delta: number) =>
@@ -27,12 +28,19 @@ function WaterfallRow({ step }: { step: WaterfallStep }) {
   );
 }
 
-function ExitRateTable({ exitRateByStage }: { exitRateByStage: Record<number, number> }) {
+function ExitRateTable({
+  exitRateByStage,
+  stageNameMap,
+}: {
+  exitRateByStage: Record<number, number>;
+  stageNameMap: Record<number, string>;
+}) {
   const entries = Object.entries(exitRateByStage).map(([k, v]) => ({
     stageId: Number(k),
     rate: v,
   }));
   if (entries.length === 0) return null;
+  const stageName = (id: number) => stageNameMap[id] ?? `Stage ${id}`;
   return (
     <div>
       <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">
@@ -41,7 +49,7 @@ function ExitRateTable({ exitRateByStage }: { exitRateByStage: Record<number, nu
       <div className="space-y-1">
         {entries.map(({ stageId, rate }) => (
           <div key={stageId} className="flex justify-between text-sm tabular-nums">
-            <span className="text-muted-foreground">Stage {stageId}</span>
+            <span className="text-muted-foreground">{stageName(stageId)}</span>
             <span className="font-mono">{rate}%</span>
           </div>
         ))}
@@ -53,6 +61,10 @@ function ExitRateTable({ exitRateByStage }: { exitRateByStage: Record<number, nu
 export function RecycleExit() {
   const query = useFlowRecycle();
   const data = query.data?.data as RecycleExitData | undefined;
+  const { data: stagesData } = useListPipelineStages();
+  const stageNameMap: Record<number, string> = Object.fromEntries(
+    (stagesData?.data ?? []).map((s) => [s.id, s.stageName]),
+  );
 
   if (query.isError) {
     return (
@@ -102,7 +114,9 @@ export function RecycleExit() {
       )}
 
       {/* Exit rate by stage */}
-      {hasExitRates && <ExitRateTable exitRateByStage={data.exitRateByStage} />}
+      {hasExitRates && (
+        <ExitRateTable exitRateByStage={data.exitRateByStage} stageNameMap={stageNameMap} />
+      )}
 
       {/* Empty state if no meaningful data */}
       {!hasWaterfall && !hasExitRates && (

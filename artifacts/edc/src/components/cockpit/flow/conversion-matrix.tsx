@@ -1,4 +1,5 @@
 import { useFlowConversionMatrix } from "./use-flow";
+import { useListPipelineStages } from "@workspace/api-client-react";
 import type { MatrixCell } from "@workspace/engine";
 
 // Inline rgba colors to avoid Tailwind JIT dynamic opacity class generation failures.
@@ -15,6 +16,11 @@ function cellBg(cell: MatrixCell): string | undefined {
 export function ConversionMatrix() {
   const query = useFlowConversionMatrix();
   const data = query.data?.data as MatrixCell[][] | undefined;
+  const { data: stagesData } = useListPipelineStages();
+  const stageNameMap: Record<number, string> = Object.fromEntries(
+    (stagesData?.data ?? []).map((s) => [s.id, s.stageName]),
+  );
+  const stageName = (id: number) => stageNameMap[id] ?? `Stage ${id}`;
 
   if (query.isError) {
     return (
@@ -48,16 +54,16 @@ export function ConversionMatrix() {
                 key={cell.toId}
                 className="h-8 min-w-[64px] px-2 text-center font-normal text-muted-foreground border border-border/40"
               >
-                {cell.toId}
+                {stageName(cell.toId)}
               </th>
             ))}
           </tr>
         </thead>
         <tbody>
-          {data.map((row) => (
-            <tr key={row[0]?.fromId ?? Math.random()}>
+          {data.map((row, i) => (
+            <tr key={row[0]?.fromId ?? i}>
               <td className="pr-2 text-right text-muted-foreground font-normal">
-                {row[0]?.fromId}
+                {row[0]?.fromId !== undefined ? stageName(row[0].fromId) : ""}
               </td>
               {row.map((cell) => (
                 <td
