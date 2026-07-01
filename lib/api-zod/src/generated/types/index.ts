@@ -124,6 +124,7 @@ export * from './getFlowConversionMatrixParams';
 export * from './getFlowSankeyMode';
 export * from './getFlowSankeyParams';
 export * from './getPipelineSimulationParams';
+export * from './getPricingBenchmarksParams';
 export * from './getSnapshotParams';
 export * from './healthCounts';
 export * from './healthHistoryListResponse';

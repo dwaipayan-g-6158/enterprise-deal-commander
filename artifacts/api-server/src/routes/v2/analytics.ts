@@ -37,12 +37,13 @@ import {
   type TransitionRec,
   type OpenDeal,
 } from "@workspace/engine";
-import { GetDealScoreParams, ParseNlcCommandBody } from "@workspace/api-zod";
+import { GetDealScoreParams, GetPricingBenchmarksQueryParams, ParseNlcCommandBody } from "@workspace/api-zod";
 import { notFound } from "../../lib/http";
 import { toISO } from "../../lib/intelligence";
 import { scoreDeal, rescoreActiveDeals } from "../../lib/scoring";
 import { cachedIntel } from "../../lib/portfolio";
 import { computeMemoryHealth } from "../../lib/memory-health";
+import { computeCompetitorIntel, percentiles } from "../../lib/memory-intel";
 
 const router: IRouter = Router();
 
@@ -723,6 +724,35 @@ router.get("/analytics/memory-insights", async (_req: Request, res: Response) =>
 router.get("/analytics/memory-health", async (_req: Request, res: Response) => {
   const rows = await db.select().from(dealMemory);
   res.json({ data: computeMemoryHealth(rows) });
+});
+
+/* ------------------------------------- Competitive & Pricing Intelligence */
+
+router.get("/analytics/competitor-intel", async (_req: Request, res: Response) => {
+  const rows = await db.select().from(dealMemory);
+  res.json({ data: computeCompetitorIntel(rows) });
+});
+
+router.get("/analytics/pricing-benchmarks", async (req: Request, res: Response) => {
+  const q = GetPricingBenchmarksQueryParams.parse(req.query);
+  const conditions = [];
+  if (q.pricingModel) conditions.push(eq(dealMemory.pricingModel, q.pricingModel));
+  if (q.servicesTier) conditions.push(eq(dealMemory.servicesTier, q.servicesTier));
+  if (q.outcome) conditions.push(eq(dealMemory.outcome, q.outcome));
+  const rows = conditions.length
+    ? await db.select().from(dealMemory).where(and(...conditions))
+    : await db.select().from(dealMemory);
+
+  const tcvs = rows.map((r) => Number(r.finalTcv) || 0).filter((n) => n > 0);
+  const cycles = rows.map((r) => r.totalDaysActive ?? 0).filter((n) => n > 0);
+
+  res.json({
+    data: {
+      sampleSize: rows.length,
+      tcv: percentiles(tcvs),
+      cycleDays: percentiles(cycles),
+    },
+  });
 });
 
 /* ------------------------------------------ Closed-Lost Autopsy: Early Warning */

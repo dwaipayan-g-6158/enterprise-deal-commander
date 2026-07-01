@@ -1076,6 +1076,22 @@ paths:
       tags: [v2intel]
       responses:
         "200": { description: Knowledge base health metrics for the deal memory archive, content: { application/json: { schema: { $ref: "#/components/schemas/GenericDataResponse" } } } }
+  /v2/analytics/competitor-intel:
+    get:
+      operationId: getCompetitorIntel
+      tags: [v2intel]
+      responses:
+        "200": { description: Per-competitor win/loss aggregation from the deal memory archive, content: { application/json: { schema: { $ref: "#/components/schemas/GenericDataResponse" } } } }
+  /v2/analytics/pricing-benchmarks:
+    get:
+      operationId: getPricingBenchmarks
+      tags: [v2intel]
+      parameters:
+        - { name: pricingModel, in: query, required: false, schema: { type: string } }
+        - { name: servicesTier, in: query, required: false, schema: { type: string } }
+        - { name: outcome, in: query, required: false, schema: { type: string } }
+      responses:
+        "200": { description: TCV and cycle-time percentile benchmarks over matching archived deals, content: { application/json: { schema: { $ref: "#/components/schemas/GenericDataResponse" } } } }
   /v2/analytics/deals/{dealId}/trajectory:
     get:
       operationId: getDealTrajectory

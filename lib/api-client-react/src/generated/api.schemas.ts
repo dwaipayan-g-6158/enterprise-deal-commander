@@ -2023,6 +2023,12 @@ export type GetPipelineSimulationParams = {
 iterations?: number;
 };
 
+export type GetPricingBenchmarksParams = {
+pricingModel?: string;
+servicesTier?: string;
+outcome?: string;
+};
+
 export type GetFlowConversionMatrixParams = {
 windowDays?: number;
 };

@@ -82,6 +82,7 @@ import type {
   GetFlowConversionMatrixParams,
   GetFlowSankeyParams,
   GetPipelineSimulationParams,
+  GetPricingBenchmarksParams,
   GetSnapshotParams,
   HealthHistoryListResponse,
   HealthStatus,
@@ -5436,6 +5437,155 @@ export function useGetMemoryHealth<TData = Awaited<ReturnType<typeof getMemoryHe
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getGetMemoryHealthQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getGetCompetitorIntelUrl = () => {
+
+
+
+
+  return `/api/v2/analytics/competitor-intel`
+}
+
+export const getCompetitorIntel = async ( options?: RequestInit): Promise<GenericDataResponse> => {
+
+  return customFetch<GenericDataResponse>(getGetCompetitorIntelUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetCompetitorIntelQueryKey = () => {
+    return [
+    `/api/v2/analytics/competitor-intel`
+    ] as const;
+    }
+
+
+export const getGetCompetitorIntelQueryOptions = <TData = Awaited<ReturnType<typeof getCompetitorIntel>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCompetitorIntel>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetCompetitorIntelQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getCompetitorIntel>>> = ({ signal }) => getCompetitorIntel({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getCompetitorIntel>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetCompetitorIntelQueryResult = NonNullable<Awaited<ReturnType<typeof getCompetitorIntel>>>
+export type GetCompetitorIntelQueryError = ErrorType<unknown>
+
+
+
+export function useGetCompetitorIntel<TData = Awaited<ReturnType<typeof getCompetitorIntel>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCompetitorIntel>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetCompetitorIntelQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getGetPricingBenchmarksUrl = (params?: GetPricingBenchmarksParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/v2/analytics/pricing-benchmarks?${stringifiedParams}` : `/api/v2/analytics/pricing-benchmarks`
+}
+
+export const getPricingBenchmarks = async (params?: GetPricingBenchmarksParams, options?: RequestInit): Promise<GenericDataResponse> => {
+
+  return customFetch<GenericDataResponse>(getGetPricingBenchmarksUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetPricingBenchmarksQueryKey = (params?: GetPricingBenchmarksParams,) => {
+    return [
+    `/api/v2/analytics/pricing-benchmarks`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetPricingBenchmarksQueryOptions = <TData = Awaited<ReturnType<typeof getPricingBenchmarks>>, TError = ErrorType<unknown>>(params?: GetPricingBenchmarksParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getPricingBenchmarks>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetPricingBenchmarksQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getPricingBenchmarks>>> = ({ signal }) => getPricingBenchmarks(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getPricingBenchmarks>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetPricingBenchmarksQueryResult = NonNullable<Awaited<ReturnType<typeof getPricingBenchmarks>>>
+export type GetPricingBenchmarksQueryError = ErrorType<unknown>
+
+
+
+export function useGetPricingBenchmarks<TData = Awaited<ReturnType<typeof getPricingBenchmarks>>, TError = ErrorType<unknown>>(
+ params?: GetPricingBenchmarksParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getPricingBenchmarks>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetPricingBenchmarksQueryOptions(params,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

@@ -1763,6 +1763,22 @@ export const GetMemoryHealthResponse = zod.object({
 })
 
 
+export const GetCompetitorIntelResponse = zod.object({
+  "data": zod.record(zod.string(), zod.unknown())
+})
+
+
+export const GetPricingBenchmarksQueryParams = zod.object({
+  "pricingModel": zod.coerce.string().optional(),
+  "servicesTier": zod.coerce.string().optional(),
+  "outcome": zod.coerce.string().optional()
+})
+
+export const GetPricingBenchmarksResponse = zod.object({
+  "data": zod.record(zod.string(), zod.unknown())
+})
+
+
 export const GetDealTrajectoryParams = zod.object({
   "dealId": zod.coerce.string().uuid()
 })
