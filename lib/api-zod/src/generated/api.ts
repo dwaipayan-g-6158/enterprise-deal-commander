@@ -1784,6 +1784,15 @@ export const GetPlaybookEffectivenessResponse = zod.object({
 })
 
 
+export const AskDealMemoryQueryParams = zod.object({
+  "q": zod.coerce.string()
+})
+
+export const AskDealMemoryResponse = zod.object({
+  "data": zod.record(zod.string(), zod.unknown())
+})
+
+
 export const GetDealTrajectoryParams = zod.object({
   "dealId": zod.coerce.string().uuid()
 })

@@ -20,6 +20,7 @@ export * from './alertSeverity';
 export * from './alertThreshold';
 export * from './alertThresholdSource';
 export * from './archetypeAutopsy';
+export * from './askDealMemoryParams';
 export * from './auditListResponse';
 export * from './auditLog';
 export * from './authUser';

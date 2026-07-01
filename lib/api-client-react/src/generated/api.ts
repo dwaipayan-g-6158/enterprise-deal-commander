@@ -21,6 +21,7 @@ import type {
 
 import type {
   ActivityListResponse,
+  AskDealMemoryParams,
   AuditListResponse,
   AuthUser,
   AutopsyResponse,
@@ -5657,6 +5658,84 @@ export function useGetPlaybookEffectiveness<TData = Awaited<ReturnType<typeof ge
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getGetPlaybookEffectivenessQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getAskDealMemoryUrl = (params: AskDealMemoryParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/v2/memory/ask?${stringifiedParams}` : `/api/v2/memory/ask`
+}
+
+export const askDealMemory = async (params: AskDealMemoryParams, options?: RequestInit): Promise<GenericDataResponse> => {
+
+  return customFetch<GenericDataResponse>(getAskDealMemoryUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getAskDealMemoryQueryKey = (params?: AskDealMemoryParams,) => {
+    return [
+    `/api/v2/memory/ask`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getAskDealMemoryQueryOptions = <TData = Awaited<ReturnType<typeof askDealMemory>>, TError = ErrorType<unknown>>(params: AskDealMemoryParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof askDealMemory>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getAskDealMemoryQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof askDealMemory>>> = ({ signal }) => askDealMemory(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof askDealMemory>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type AskDealMemoryQueryResult = NonNullable<Awaited<ReturnType<typeof askDealMemory>>>
+export type AskDealMemoryQueryError = ErrorType<unknown>
+
+
+
+export function useAskDealMemory<TData = Awaited<ReturnType<typeof askDealMemory>>, TError = ErrorType<unknown>>(
+ params: AskDealMemoryParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof askDealMemory>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getAskDealMemoryQueryOptions(params,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

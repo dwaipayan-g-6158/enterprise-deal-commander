@@ -2029,6 +2029,10 @@ servicesTier?: string;
 outcome?: string;
 };
 
+export type AskDealMemoryParams = {
+q: string;
+};
+
 export type GetFlowConversionMatrixParams = {
 windowDays?: number;
 };

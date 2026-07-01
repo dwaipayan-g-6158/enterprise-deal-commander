@@ -62,10 +62,13 @@ import {
   UpdateDealMemoryBody,
   GetSimilarDealsParams,
   CompareDealMemoryQueryParams,
+  AskDealMemoryQueryParams,
 } from "@workspace/api-zod";
 import { getActor } from "../../lib/auth";
 import { notFound, badRequest } from "../../lib/http";
 import { emitDealEvent } from "../../lib/events";
+import { classifyAdvisorIntent, confidenceFor, composeNoDataAnswer, type AdvisorCitation } from "../../lib/advisor";
+import { computeCompetitorIntel } from "../../lib/memory-intel";
 
 const router: IRouter = Router();
 
@@ -789,6 +792,82 @@ router.get("/memory/facets", async (_req: Request, res: Response) => {
       servicesTiers: toList(servicesTiers),
       competitors: toList(competitorCounts),
       total: rows.length,
+    },
+  });
+});
+
+router.get("/memory/ask", async (req: Request, res: Response) => {
+  const { q } = AskDealMemoryQueryParams.parse(req.query);
+  const memory = await db.select().from(dealMemory);
+  if (memory.length === 0) return res.json({ data: composeNoDataAnswer() });
+
+  const knownCompetitors = [...new Set(memory.flatMap((m) => m.competitorsFaced ?? []))];
+  const intent = classifyAdvisorIntent(q, knownCompetitors);
+  const cite = (rows: typeof memory): AdvisorCitation[] =>
+    rows.slice(0, 5).map((r) => ({ id: r.id, dealName: r.dealName, accountName: r.accountName }));
+
+  if (intent.type === "competitive") {
+    const intel = computeCompetitorIntel(memory).find((c) => c.name === intent.competitor);
+    const encounters = memory.filter((m) => m.competitorsFaced?.includes(intent.competitor));
+    if (!intel) return res.json({ data: composeNoDataAnswer() });
+    const citations = cite(encounters);
+    return res.json({
+      data: {
+        answer: `Against ${intel.name}, the historical win rate is ${intel.winRatePct}% across ${intel.encounterCount} archived encounters.${intel.topLossCategory ? ` The most common loss reason is "${intel.topLossCategory}".` : ""}`,
+        confidence: confidenceFor(citations.length),
+        citations,
+      },
+    });
+  }
+
+  if (intent.type === "pricing") {
+    const won = memory.filter((m) => m.outcome === "Won" && Number(m.finalTcv) > 0);
+    if (won.length < 3) return res.json({ data: composeNoDataAnswer() });
+    const tcvs = won.map((m) => Number(m.finalTcv)).sort((a, b) => a - b);
+    const median = tcvs[Math.floor(tcvs.length / 2)];
+    const citations = cite(won);
+    return res.json({
+      data: {
+        answer: `Across ${won.length} won archived deals, the median total contract value is $${Math.round(median).toLocaleString("en-US")}. Check the Pricing tab for percentile breakdowns filtered by pricing model or services tier.`,
+        confidence: confidenceFor(citations.length),
+        citations,
+      },
+    });
+  }
+
+  if (intent.type === "biggest") {
+    const sorted = [...memory].sort((a, b) => Number(b.finalTcv) - Number(a.finalTcv)).slice(0, 3);
+    const citations = cite(sorted);
+    if (citations.length === 0) return res.json({ data: composeNoDataAnswer() });
+    const top = sorted[0];
+    return res.json({
+      data: {
+        answer: `The largest archived deal is ${top.dealName} (${top.accountName}) at $${Math.round(Number(top.finalTcv)).toLocaleString("en-US")}, outcome: ${top.outcome}.`,
+        confidence: confidenceFor(citations.length),
+        citations,
+      },
+    });
+  }
+
+  // fulltext fallback — reuse the same tsvector search as /memory/search.
+  const termRows = await db.execute(sql`
+    SELECT id, deal_name AS "dealName", account_name AS "accountName", key_lessons AS "keyLessons"
+    FROM edc_v2.deal_memory
+    WHERE searchable_vector @@ plainto_tsquery('english', ${q})
+    ORDER BY ts_rank(searchable_vector, plainto_tsquery('english', ${q})) DESC
+    LIMIT 3`);
+  const list = (Array.isArray(termRows) ? termRows : (termRows as { rows: unknown[] }).rows ?? []) as {
+    id: string; dealName: string; accountName: string; keyLessons: string[] | null;
+  }[];
+  if (list.length === 0) return res.json({ data: composeNoDataAnswer() });
+  const lessons = list.flatMap((r) => r.keyLessons ?? []).slice(0, 5);
+  return res.json({
+    data: {
+      answer: lessons.length > 0
+        ? `The closest archived matches surfaced these lessons: ${lessons.join("; ")}.`
+        : `The closest archived matches are cited below — no structured lessons were captured for them yet.`,
+      confidence: confidenceFor(list.length),
+      citations: list.map((r) => ({ id: r.id, dealName: r.dealName, accountName: r.accountName })),
     },
   });
 });

@@ -1098,6 +1098,14 @@ paths:
       tags: [v2intel]
       responses:
         "200": { description: Win-rate comparison between archived deals that had an assigned playbook and those that didn't, content: { application/json: { schema: { $ref: "#/components/schemas/GenericDataResponse" } } } }
+  /v2/memory/ask:
+    get:
+      operationId: askDealMemory
+      tags: [v2intel]
+      parameters:
+        - { name: q, in: query, required: true, schema: { type: string } }
+      responses:
+        "200": { description: "Deterministic, cited answer to a natural-language question over the deal memory archive", content: { application/json: { schema: { $ref: "#/components/schemas/GenericDataResponse" } } } }
   /v2/analytics/deals/{dealId}/trajectory:
     get:
       operationId: getDealTrajectory
