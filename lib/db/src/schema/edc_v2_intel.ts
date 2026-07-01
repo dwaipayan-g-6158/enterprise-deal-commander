@@ -8,7 +8,10 @@
 //
 // The `deal_memory.searchable_vector` tsvector column, its trigger, and GIN
 // index are created in raw SQL (not modeled here) — Drizzle never reads it
-// directly; full-text search uses raw SQL in the route layer.
+// directly; full-text search uses raw SQL in the route layer. Apply
+// lib/db/sql/deal_memory_searchable_vector.sql after `db run push` on any
+// environment (including a fresh clone) — without it, /v2/memory/search and
+// /v2/memory/ask fail with "column searchable_vector does not exist".
 
 import {
   uuid,
