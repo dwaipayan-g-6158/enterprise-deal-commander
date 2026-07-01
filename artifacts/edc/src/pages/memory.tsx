@@ -3,10 +3,12 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { SearchTab } from "@/components/memory/search-tab";
 import { HealthDashboard } from "@/components/memory/health-dashboard";
 import { ComparisonSheet } from "@/components/memory/comparison-sheet";
+import { CompetitorsTab } from "@/components/memory/competitors-tab";
 
 const TABS = [
   { id: "search", label: "Search" },
   { id: "health", label: "Health" },
+  { id: "competitors", label: "Competitors" },
 ];
 
 export default function Memory() {
@@ -34,6 +36,7 @@ export default function Memory() {
         <SearchTab selected={selected} onToggleSelect={toggleSelect} onCompare={() => setCompareOpen(true)} />
       )}
       {tab === "health" && <HealthDashboard />}
+      {tab === "competitors" && <CompetitorsTab />}
       <ComparisonSheet ids={selected} open={compareOpen} onOpenChange={setCompareOpen} />
     </div>
   );
