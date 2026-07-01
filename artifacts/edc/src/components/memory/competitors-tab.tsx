@@ -4,6 +4,7 @@ import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Empty, EmptyHeader, EmptyMedia, EmptyTitle, EmptyDescription } from "@/components/ui/empty";
 import { Swords } from "lucide-react";
+import { money } from "@/lib/format";
 
 interface CompetitorIntel {
   name: string;
@@ -11,10 +12,6 @@ interface CompetitorIntel {
   winRatePct: number;
   topLossCategory: string | null;
   avgTcv: number;
-}
-
-function money(n: number): string {
-  return "$" + Math.round(n).toLocaleString("en-US");
 }
 
 export function CompetitorsTab() {

@@ -2,15 +2,12 @@ import { useGetSimilarDeals, useGetDealPlaybook } from "@workspace/api-client-re
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Link } from "wouter";
+import { money } from "@/lib/format";
 
 interface MemoryDetail {
   id: string;
   dealId: string;
   competitorsFaced?: string[] | null;
-}
-
-function money(n: unknown): string {
-  return "$" + Math.round(Number(n) || 0).toLocaleString("en-US");
 }
 
 export function ConnectionsTab({ memory: m }: { memory: MemoryDetail }) {

@@ -10,10 +10,7 @@ import { ArrowLeft } from "lucide-react";
 import { HistoryPanel } from "@/components/cockpit/history-panel";
 import { NarrativeTab } from "@/components/memory/detail/narrative-tab";
 import { ConnectionsTab } from "@/components/memory/detail/connections-tab";
-
-function money(n: unknown): string {
-  return "$" + Math.round(Number(n) || 0).toLocaleString("en-US");
-}
+import { money } from "@/lib/format";
 
 const TABS = [
   { id: "overview", label: "Overview" },

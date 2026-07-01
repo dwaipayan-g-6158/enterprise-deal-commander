@@ -13,10 +13,7 @@ import { ForecastFan } from "@/components/cockpit/charts/forecast-fan";
 import { WinLossDonut } from "@/components/cockpit/charts/winloss-donut";
 import { useLocation } from "wouter";
 import { VelocityTriageTable } from "@/components/cockpit/velocity-triage";
-
-function money(n: number): string {
-  return "$" + Math.round(Number(n) || 0).toLocaleString("en-US");
-}
+import { money } from "@/lib/format";
 
 interface VelocityDeal {
   id: string;

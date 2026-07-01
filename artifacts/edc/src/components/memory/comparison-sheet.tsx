@@ -1,10 +1,7 @@
 import { useCompareDealMemory } from "@workspace/api-client-react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Badge } from "@/components/ui/badge";
-
-function money(n: unknown): string {
-  return "$" + Math.round(Number(n) || 0).toLocaleString("en-US");
-}
+import { money } from "@/lib/format";
 
 const ROWS: { label: string; key: string; format?: (v: unknown) => string; best?: "max" | "min" }[] = [
   { label: "Outcome", key: "outcome" },

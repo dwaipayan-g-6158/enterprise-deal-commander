@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useGetPricingBenchmarks, useGetMemoryFacets, useGetPlaybookEffectiveness } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { money } from "@/lib/format";
 
 interface Percentiles { p25: number; median: number; p75: number; p90: number }
 interface PricingBenchmarks { sampleSize: number; tcv: Percentiles; cycleDays: Percentiles }
@@ -11,10 +12,6 @@ interface PlaybookEffectiveness {
   withoutPlaybookCount: number;
   withPlaybookWinRatePct: number | null;
   withoutPlaybookWinRatePct: number | null;
-}
-
-function money(n: number): string {
-  return "$" + Math.round(n).toLocaleString("en-US");
 }
 
 function PercentileRow({ label, p, format }: { label: string; p: Percentiles; format: (n: number) => string }) {

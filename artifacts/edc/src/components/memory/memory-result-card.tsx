@@ -2,6 +2,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Link } from "wouter";
+import { money } from "@/lib/format";
 
 type MemoryResult = {
   id: string;
@@ -18,10 +19,6 @@ type MemoryResult = {
   tags?: string[] | null;
   snippet?: string | null;
 };
-
-function money(n: unknown): string {
-  return "$" + Math.round(Number(n) || 0).toLocaleString("en-US");
-}
 
 export function MemoryResultCard({
   memory: m,

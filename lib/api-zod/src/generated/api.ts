@@ -1962,8 +1962,8 @@ export const SearchDealMemoryQueryParams = zod.object({
   "servicesTier": zod.coerce.string().optional(),
   "minTcv": zod.coerce.number().optional(),
   "maxTcv": zod.coerce.number().optional(),
-  "archivedFrom": zod.date().optional(),
-  "archivedTo": zod.date().optional(),
+  "archivedFrom": zod.coerce.string().optional(),
+  "archivedTo": zod.coerce.string().optional(),
   "hasNarrative": zod.coerce.boolean().optional()
 })
 

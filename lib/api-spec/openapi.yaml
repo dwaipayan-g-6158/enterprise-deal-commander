@@ -1232,8 +1232,8 @@ paths:
         - { name: servicesTier, in: query, required: false, schema: { type: string } }
         - { name: minTcv, in: query, required: false, schema: { type: number } }
         - { name: maxTcv, in: query, required: false, schema: { type: number } }
-        - { name: archivedFrom, in: query, required: false, schema: { type: string, format: date-time } }
-        - { name: archivedTo, in: query, required: false, schema: { type: string, format: date-time } }
+        - { name: archivedFrom, in: query, required: false, schema: { type: string } }
+        - { name: archivedTo, in: query, required: false, schema: { type: string } }
         - { name: hasNarrative, in: query, required: false, schema: { type: boolean } }
       responses:
         "200": { description: Search results, content: { application/json: { schema: { $ref: "#/components/schemas/DealMemoryListResponse" } } } }
