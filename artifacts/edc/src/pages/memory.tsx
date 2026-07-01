@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { SearchTab } from "@/components/memory/search-tab";
 import { HealthDashboard } from "@/components/memory/health-dashboard";
+import { ComparisonSheet } from "@/components/memory/comparison-sheet";
 
 const TABS = [
   { id: "search", label: "Search" },
@@ -11,6 +12,7 @@ const TABS = [
 export default function Memory() {
   const [tab, setTab] = useState("search");
   const [selected, setSelected] = useState<string[]>([]);
+  const [compareOpen, setCompareOpen] = useState(false);
 
   const toggleSelect = (id: string) =>
     setSelected((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : prev.length >= 4 ? prev : [...prev, id]));
@@ -29,9 +31,10 @@ export default function Memory() {
       </Tabs>
 
       {tab === "search" && (
-        <SearchTab selected={selected} onToggleSelect={toggleSelect} onCompare={() => { /* wired in Part 2 Task 9 */ }} />
+        <SearchTab selected={selected} onToggleSelect={toggleSelect} onCompare={() => setCompareOpen(true)} />
       )}
       {tab === "health" && <HealthDashboard />}
+      <ComparisonSheet ids={selected} open={compareOpen} onOpenChange={setCompareOpen} />
     </div>
   );
 }
