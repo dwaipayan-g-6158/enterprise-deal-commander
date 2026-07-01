@@ -27,6 +27,7 @@ export interface OpenDeal {
   winProbabilityPct: number | null;
   aiWinProbability: number | null; // 0..1
   createdAt: string;
+  landedAt?: string | null; // pipeline-entry date; falls back to createdAt
 }
 
 export interface FunnelRow {
@@ -298,7 +299,7 @@ export function computeCoverage(
   const aiAdjusted = withAi.reduce((s, d) => s + d.tcv * d.aiWinProbability!, 0);
 
   const periodStart = new Date(periodStartISO).getTime();
-  const netNewValue = open.filter((d) => new Date(d.createdAt).getTime() >= periodStart).reduce((s, d) => s + d.tcv, 0);
+  const netNewValue = open.filter((d) => new Date(d.landedAt ?? d.createdAt).getTime() >= periodStart).reduce((s, d) => s + d.tcv, 0);
   const gap = Math.max(0, target - weighted);
 
   return {

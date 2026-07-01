@@ -28,6 +28,8 @@ export interface Deal {
   /** @nullable */
   expectedCloseDate?: string | null;
   /** @nullable */
+  landedAt?: string | null;
+  /** @nullable */
   winProbabilityPct?: number | null;
   servicesRevenue: number;
   servicesTierId?: number;

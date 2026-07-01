@@ -1,5 +1,5 @@
 import { Router, type IRouter, type Request, type Response } from "express";
-import { and, asc, desc, eq, isNull, lte, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, lte, notInArray, sql } from "drizzle-orm";
 import {
   db,
   enterpriseDeals,
@@ -9,6 +9,9 @@ import {
   dealCompetitors,
   competitors,
   dealMemory,
+  dealProductInterests,
+  productCatalog,
+  lossArchetypes,
   gateDefinitions,
   dealDecisions,
   dealPlaybookAssignments,
@@ -28,6 +31,8 @@ import {
   computeRecycleExit,
   computeCoverage,
   computeHealthScore,
+  computePatternLethality,
+  scoreLossRisk,
   type StageDef,
   type TransitionRec,
   type OpenDeal,
@@ -714,6 +719,204 @@ router.get("/analytics/memory-insights", async (_req: Request, res: Response) =>
   res.json({ data: { insights, archivedCount } });
 });
 
+/* ------------------------------------------ Closed-Lost Autopsy: Early Warning */
+
+// Cross-references each ACTIVE deal's currently-firing pattern codes against
+// how often those same patterns fired on deals that were ultimately
+// Closed-Lost (lib/engine/src/loss-risk.ts). This is a small enrichment on top
+// of the same cachedIntel() tier the roster/summary already use — it
+// complements the Risk Engine v2 composite score, not a competing model.
+router.get("/analytics/loss-risk", async (_req: Request, res: Response) => {
+  const lostDeals = await db
+    .select({ id: enterpriseDeals.id })
+    .from(enterpriseDeals)
+    .innerJoin(pipelineStages, eq(enterpriseDeals.salesStageId, pipelineStages.id))
+    .where(and(activeFilter, eq(pipelineStages.stageName, "Closed-Lost")));
+
+  const lostIntel = await Promise.all(lostDeals.map((d) => cachedIntel(d.id)));
+  const lostAlertCodes = lostIntel
+    .filter((i): i is NonNullable<typeof i> => i != null)
+    .map((i) => [...i.governance.alerts, ...i.governance.managedAlerts].map((a) => a.code));
+  const lethality = computePatternLethality(lostAlertCodes);
+
+  const activeDeals = await db
+    .select({
+      id: enterpriseDeals.id,
+      dealName: enterpriseDeals.dealName,
+      accountName: enterpriseDeals.accountName,
+    })
+    .from(enterpriseDeals)
+    .innerJoin(pipelineStages, eq(enterpriseDeals.salesStageId, pipelineStages.id))
+    .where(and(activeFilter, notInArray(pipelineStages.stageName, ["Closed-Won", "Closed-Lost"])));
+
+  const activeIntel = await Promise.all(activeDeals.map((d) => cachedIntel(d.id)));
+  const deals = activeDeals
+    .map((d, i) => {
+      const intel = activeIntel[i];
+      if (!intel) return null;
+      const codes = [...intel.governance.alerts, ...intel.governance.managedAlerts].map((a) => a.code);
+      const { score, matchedPatterns } = scoreLossRisk(codes, lethality);
+      return { dealId: d.id, dealName: d.dealName, accountName: d.accountName, score, matchedPatterns };
+    })
+    .filter((r): r is NonNullable<typeof r> => r != null && r.score > 0)
+    .sort((a, b) => b.score - a.score);
+
+  res.json({ data: { deals, lostDealCount: lostDeals.length } });
+});
+
+/* ------------------------------------------- Closed-Lost Autopsy: Competitive */
+
+// Aggregates the EXISTING per-deal deal_competitors tracking (captured today
+// via the Competitive tab on the deal cockpit — components/cockpit/v2/
+// competitive-panel.tsx) into a portfolio-wide view: which competitors we
+// lose to most, and a sparse product-suite x competitor win/loss matrix. No
+// new capture UI needed — deal_competitors already holds this data.
+router.get("/analytics/competitive-loss", async (_req: Request, res: Response) => {
+  const rows = await db
+    .select({
+      dealId: dealCompetitors.dealId,
+      competitorId: dealCompetitors.competitorId,
+      competitorName: competitors.name,
+      status: dealCompetitors.status,
+      productRevenue: enterpriseDeals.productRevenue,
+      servicesRevenue: enterpriseDeals.servicesRevenue,
+      lossArchetypeId: enterpriseDeals.lossArchetypeId,
+    })
+    .from(dealCompetitors)
+    .innerJoin(competitors, eq(dealCompetitors.competitorId, competitors.id))
+    .innerJoin(enterpriseDeals, eq(dealCompetitors.dealId, enterpriseDeals.id))
+    .where(inArray(dealCompetitors.status, ["Lost To", "Won Against"]));
+
+  const archetypeRows = await db.select().from(lossArchetypes);
+  const archetypeName = (id: number | null) =>
+    archetypeRows.find((a) => a.id === id)?.archetypeName ?? null;
+
+  const suiteRows = await db
+    .select({ dealId: dealProductInterests.dealId, suite: productCatalog.suite })
+    .from(dealProductInterests)
+    .innerJoin(productCatalog, eq(dealProductInterests.productId, productCatalog.id));
+  const suitesByDeal = new Map<string, Set<string>>();
+  for (const r of suiteRows) {
+    if (!r.suite) continue;
+    const s = suitesByDeal.get(r.dealId) ?? new Set<string>();
+    s.add(r.suite);
+    suitesByDeal.set(r.dealId, s);
+  }
+
+  const byCompetitor = new Map<
+    number,
+    { competitorId: number; name: string; lossCount: number; lossTcv: number; archetypeCounts: Map<string, number> }
+  >();
+  const matrix = new Map<string, { suite: string; competitorName: string; losses: number; wins: number }>();
+
+  for (const r of rows) {
+    const tcv = (Number(r.productRevenue) || 0) + (Number(r.servicesRevenue) || 0);
+    const isLoss = r.status === "Lost To";
+    if (isLoss) {
+      const c = byCompetitor.get(r.competitorId) ?? {
+        competitorId: r.competitorId,
+        name: r.competitorName,
+        lossCount: 0,
+        lossTcv: 0,
+        archetypeCounts: new Map<string, number>(),
+      };
+      c.lossCount++;
+      c.lossTcv += tcv;
+      const an = archetypeName(r.lossArchetypeId);
+      if (an) c.archetypeCounts.set(an, (c.archetypeCounts.get(an) ?? 0) + 1);
+      byCompetitor.set(r.competitorId, c);
+    }
+    for (const suite of suitesByDeal.get(r.dealId) ?? []) {
+      const key = `${suite}::${r.competitorName}`;
+      const cell = matrix.get(key) ?? { suite, competitorName: r.competitorName, losses: 0, wins: 0 };
+      if (isLoss) cell.losses++;
+      else cell.wins++;
+      matrix.set(key, cell);
+    }
+  }
+
+  const byCompetitorList = [...byCompetitor.values()]
+    .map((c) => {
+      let topArchetype: string | null = null;
+      let max = 0;
+      for (const [name, count] of c.archetypeCounts.entries()) {
+        if (count > max) {
+          max = count;
+          topArchetype = name;
+        }
+      }
+      return { competitorId: c.competitorId, name: c.name, lossCount: c.lossCount, lossTcv: c.lossTcv, topArchetype };
+    })
+    .sort((a, b) => b.lossTcv - a.lossTcv);
+
+  res.json({ data: { byCompetitor: byCompetitorList, matrix: [...matrix.values()] } });
+});
+
+/* -------------------------------------------- Closed-Lost Autopsy: Dashboard */
+
+// Loss Pulse is a transparent average of a FEW legible, currently-computable
+// inputs (autopsy completeness, autopsy quality, loss rate) — deliberately not
+// a tuned/weighted model. False precision would be worse than an honest
+// average at the loss volumes this single-user product will ever see.
+router.get("/analytics/loss-dashboard", async (_req: Request, res: Response) => {
+  const memory = await db.select().from(dealMemory);
+  const lost = memory.filter((m) => m.outcome === "Lost");
+  const won = memory.filter((m) => m.outcome === "Won");
+
+  const lostDeals = await db
+    .select({ id: enterpriseDeals.id })
+    .from(enterpriseDeals)
+    .innerJoin(pipelineStages, eq(enterpriseDeals.salesStageId, pipelineStages.id))
+    .where(and(activeFilter, eq(pipelineStages.stageName, "Closed-Lost")));
+  const lostIntel = await Promise.all(lostDeals.map((d) => cachedIntel(d.id)));
+  const alertCodeLists = lostIntel
+    .filter((i): i is NonNullable<typeof i> => i != null)
+    .map((i) => [...i.governance.alerts, ...i.governance.managedAlerts].map((a) => a.code));
+  const topPatterns = computePatternLethality(alertCodeLists)
+    .sort((a, b) => b.lethality - a.lethality)
+    .slice(0, 10)
+    .map((p) => ({ code: p.code, share: p.lethality }));
+
+  const lossCount = lost.length;
+  const lossValue = lost.reduce((s, m) => s + (Number(m.finalTcv) || 0), 0);
+
+  const byCategory = new Map<string, { count: number; value: number }>();
+  for (const m of lost) {
+    const cat = m.primaryLossCategory ?? "uncategorized";
+    const cur = byCategory.get(cat) ?? { count: 0, value: 0 };
+    cur.count++;
+    cur.value += Number(m.finalTcv) || 0;
+    byCategory.set(cat, cur);
+  }
+  const compositionByCategory = [...byCategory.entries()]
+    .map(([category, v]) => ({ category, count: v.count, value: v.value }))
+    .sort((a, b) => b.value - a.value);
+
+  const completed = lost.filter((m) => m.autopsyCompletedAt != null);
+  const autopsyCompletenessPct = lossCount > 0 ? Math.round((completed.length / lossCount) * 100) : 0;
+  const avgQualityScore =
+    completed.length > 0
+      ? Math.round(completed.reduce((s, m) => s + (m.qualityScore ?? 0), 0) / completed.length)
+      : null;
+  const decided = lost.length + won.length;
+  const lossRatePct = decided > 0 ? Math.round((lost.length / decided) * 100) : null;
+
+  const components = [autopsyCompletenessPct, avgQualityScore, lossRatePct != null ? 100 - lossRatePct : null].filter(
+    (c): c is number => c != null,
+  );
+  const lossPulse = components.length > 0 ? Math.round(components.reduce((s, c) => s + c, 0) / components.length) : null;
+
+  res.json({
+    data: {
+      lossPulse,
+      lossPulseComponents: { autopsyCompletenessPct, avgQualityScore, lossRatePct },
+      volume: { lossCount, lossValue },
+      compositionByCategory,
+      topPatterns,
+    },
+  });
+});
+
 /* ------------------------------------------- Deal Trajectory (time-series) */
 
 // Time-ordered, merged metric series for a single deal: predictive close score,
@@ -874,6 +1077,7 @@ async function loadOpenDeals(): Promise<OpenDeal[]> {
       servicesRevenue: enterpriseDeals.servicesRevenue,
       wp: enterpriseDeals.winProbabilityPct,
       createdAt: enterpriseDeals.createdAt,
+      landedAt: enterpriseDeals.landedAt,
     })
     .from(enterpriseDeals)
     .where(activeFilter);
@@ -901,6 +1105,7 @@ async function loadOpenDeals(): Promise<OpenDeal[]> {
       winProbabilityPct: r.wp == null ? null : Number(r.wp),
       aiWinProbability: rawScore != null ? rawScore / 100 : null,
       createdAt: r.createdAt ? new Date(r.createdAt).toISOString() : new Date().toISOString(),
+      landedAt: r.landedAt ? new Date(r.landedAt).toISOString() : null,
     };
   });
 }

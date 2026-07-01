@@ -29,6 +29,8 @@ function summarize(event: DealEvent): string {
       return `Blocker ${event.isResolved ? "resolved" : "reopened"}`;
     case "health.changed":
       return `Health changed ${event.fromStatus ?? "—"} → ${event.toStatus}`;
+    case "deal.autopsy_captured":
+      return `Completed loss autopsy (quality ${event.qualityScore})`;
   }
 }
 

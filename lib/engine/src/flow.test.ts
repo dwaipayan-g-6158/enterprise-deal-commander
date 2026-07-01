@@ -137,6 +137,25 @@ describe("computeCoverage", () => {
     expect(c.qualified).toBeCloseTo(0.3, 2); // 300/1000 (stage 3 only)
     expect(c.weighted).toBeCloseTo(0.29, 2); // (100*.5 + 300*.8)/1000 = 290/1000
   });
+  it("net-new counts landedAt (not createdAt) when landedAt is set", () => {
+    // Both rows were created in-period, but one LANDED before the period.
+    const deals: OpenDeal[] = [
+      { id: "old", stageId: 3, tcv: 500, winProbabilityPct: null, aiWinProbability: null, createdAt: "2026-05-01", landedAt: "2026-01-15" },
+      { id: "new", stageId: 3, tcv: 200, winProbabilityPct: null, aiWinProbability: null, createdAt: "2026-05-01", landedAt: "2026-05-01" },
+    ];
+    const c = computeCoverage(deals, STAGES, 1000, "2026-04-01");
+    // gap = 1000 - 0 weighted = 1000; only the in-period landing counts → 200/1000.
+    expect(c.netNew).toBeCloseTo(0.2, 2);
+  });
+  it("net-new falls back to createdAt when landedAt is absent", () => {
+    const deals: OpenDeal[] = [
+      { id: "old", stageId: 3, tcv: 500, winProbabilityPct: null, aiWinProbability: null, createdAt: "2026-05-01" },
+      { id: "new", stageId: 3, tcv: 200, winProbabilityPct: null, aiWinProbability: null, createdAt: "2026-05-01" },
+    ];
+    const c = computeCoverage(deals, STAGES, 1000, "2026-04-01");
+    // No landedAt → both count by createdAt → 700/1000.
+    expect(c.netNew).toBeCloseTo(0.7, 2);
+  });
 });
 
 describe("computeHealthScore", () => {

@@ -142,6 +142,23 @@ describe("intelligence engine — 12 risk patterns", () => {
     ).not.toContain("PHANTOM_CHAMPION");
   });
 
+  it("PHANTOM_CHAMPION ages off landed_at, not created_at, when landed_at is set", () => {
+    // Recently created in the DB, but the lead actually landed 40 days ago.
+    const backdated = makeDeal({
+      sales_stage: "Technical Validation",
+      created_at: daysAgo(2),
+      landed_at: daysAgo(40),
+    });
+    expect(triggeredCodes(backdated, [])).toContain("PHANTOM_CHAMPION");
+
+    // Same deal with no landed_at falls back to created_at (2 days) — does not fire.
+    const fresh = makeDeal({
+      sales_stage: "Technical Validation",
+      created_at: daysAgo(2),
+    });
+    expect(triggeredCodes(fresh, [])).not.toContain("PHANTOM_CHAMPION");
+  });
+
   it("GHOST_PIPELINE fires with no blockers, no notes, and stale updates", () => {
     const fire = makeDeal({
       manager_strategic_blueprint: null,

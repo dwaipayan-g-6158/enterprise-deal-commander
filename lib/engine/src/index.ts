@@ -105,6 +105,8 @@ export interface RawDeal {
   services_tier: string;
   manager_strategic_blueprint: string | null;
   created_at: string | Date;
+  /** Day the deal landed in the pipeline; falls back to created_at for age. */
+  landed_at?: string | Date | null;
   updated_at: string | Date;
   cross_sells?: RawCrossSell[];
   // IAM/SIEM sales context (all optional)
@@ -1058,12 +1060,14 @@ export function processDealIntelligence(
 
   // temporal calculations
   const now = new Date();
-  const createdAt = new Date(deal.created_at);
+  // Age anchor = the day the deal landed in the pipeline, falling back to the
+  // DB creation date when no landed date is recorded (preserves prior behavior).
+  const ageAnchor = new Date(deal.landed_at ?? deal.created_at);
   const updatedAt = new Date(deal.updated_at);
   const stageEnteredAt = new Date(deal.stage_entered_at);
   const DAY = 1000 * 60 * 60 * 24;
 
-  const daysSinceCreation = Math.floor((now.getTime() - createdAt.getTime()) / DAY);
+  const daysSinceCreation = Math.floor((now.getTime() - ageAnchor.getTime()) / DAY);
   const daysSinceLastUpdate = Math.floor((now.getTime() - updatedAt.getTime()) / DAY);
   const daysInStage = Math.floor((now.getTime() - stageEnteredAt.getTime()) / DAY);
 
@@ -1416,3 +1420,5 @@ export * from "./dimensions";
 export * from "./risk-v2";
 
 export * from "./flow";
+
+export * from "./loss-risk";

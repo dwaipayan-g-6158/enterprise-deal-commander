@@ -146,6 +146,23 @@ export const dealMemory = edcV2.table(
     recommendedPlaybookId: uuid("recommended_playbook_id"),
     tags: text("tags").array(),
     archivedAt: timestamp("archived_at", { withTimezone: true }).notNull().defaultNow(),
+
+    // Closed-Lost Autopsy structured capture (curated by hand — the fields
+    // above this point are auto-populated by the post-mortem subscriber and
+    // must never be overwritten by an autopsy save). Lost-outcome-only in
+    // practice, but left nullable for any outcome.
+    primaryLossCategory: varchar("primary_loss_category", { length: 20 }),
+    lossSubcategory: varchar("loss_subcategory", { length: 80 }),
+    lossNarrative: text("loss_narrative"),
+    winningCompetitorId: integer("winning_competitor_id").references(() => competitors.id),
+    winBackPotential: smallint("win_back_potential"),
+    winBackTimeline: varchar("win_back_timeline", { length: 20 }),
+    causalChain: jsonb("causal_chain").$type<string[]>(),
+    decisionMakerEngaged: boolean("decision_maker_engaged"),
+    championIdentified: boolean("champion_identified"),
+    productGaps: jsonb("product_gaps").$type<string[]>(),
+    qualityScore: smallint("quality_score"),
+    autopsyCompletedAt: timestamp("autopsy_completed_at", { withTimezone: true }),
   },
   (t) => [
     unique("deal_memory_deal_uq").on(t.dealId),

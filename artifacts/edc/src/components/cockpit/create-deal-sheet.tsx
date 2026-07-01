@@ -53,6 +53,7 @@ interface FormState {
   services_revenue: number;
   contract_term_years: number;
   expected_close_date: string;
+  landed_at: string;
   win_probability_pct: number | "";
   manager_strategic_blueprint: string;
   speaker_notes: string;
@@ -109,6 +110,7 @@ export function CreateDealSheet({
     services_revenue: 0,
     contract_term_years: 1,
     expected_close_date: "",
+    landed_at: new Date().toISOString().slice(0, 10),
     win_probability_pct: "",
     manager_strategic_blueprint: "",
     speaker_notes: "",
@@ -188,6 +190,7 @@ export function CreateDealSheet({
       contract_term_years: Number(values.contract_term_years),
       deal_currency: "USD",
       expected_close_date: values.expected_close_date || null,
+      landed_at: values.landed_at || null,
       win_probability_pct:
         values.win_probability_pct === "" ? null : Number(values.win_probability_pct),
       manager_strategic_blueprint: values.manager_strategic_blueprint || null,
@@ -347,13 +350,36 @@ export function CreateDealSheet({
             </div>
           </div>
 
-          <div className="grid gap-2">
-            <Label>Expected Close Date</Label>
-            <DatePicker
-              value={watch("expected_close_date")}
-              onChange={(v) => setValue("expected_close_date", v)}
-              placeholder="Pick a date"
-            />
+          <div className="grid grid-cols-2 gap-4">
+            <div className="grid gap-2">
+              <Label>Landed (entered pipeline)</Label>
+              <DatePicker
+                value={watch("landed_at")}
+                onChange={(v) => setValue("landed_at", v)}
+                placeholder="Pick a date"
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label>Expected Close Date</Label>
+              <DatePicker
+                value={watch("expected_close_date")}
+                onChange={(v) => setValue("expected_close_date", v)}
+                placeholder="Pick a date"
+              />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="grid gap-2">
+              <Label>Compliance Drivers</Label>
+              <MultiCombobox
+                options={driverOptions}
+                value={driverIds.map(String)}
+                onChange={(vals) => setDriverIds(vals.map(Number))}
+                placeholder="Select drivers"
+                emptyText="No compliance drivers found."
+                onCreate={handleCreateDriver}
+              />
+            </div>
           </div>
 
           <div className="grid grid-cols-2 gap-4">
@@ -377,18 +403,6 @@ export function CreateDealSheet({
                 {...register("estimated_log_sources", { valueAsNumber: true })}
               />
             </div>
-          </div>
-
-          <div className="grid gap-2">
-            <Label>Compliance Drivers</Label>
-            <MultiCombobox
-              options={driverOptions}
-              value={driverIds.map(String)}
-              onChange={(vals) => setDriverIds(vals.map(Number))}
-              placeholder="Select compliance drivers"
-              emptyText="No compliance drivers found."
-              onCreate={handleCreateDriver}
-            />
           </div>
 
           <div className="grid gap-2">

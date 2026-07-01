@@ -5,10 +5,28 @@
  * Enterprise Deal Commander (EDC) Phase 1 API
  * OpenAPI spec version: 1.0.0
  */
+import type { DealMemoryUpdatePrimaryLossCategory } from './dealMemoryUpdatePrimaryLossCategory';
+import type { DealMemoryUpdateWinBackTimeline } from './dealMemoryUpdateWinBackTimeline';
 
 export interface DealMemoryUpdate {
   /** @nullable */
   win_loss_narrative?: string | null;
   key_lessons?: string[];
   tags?: string[];
+  primary_loss_category?: DealMemoryUpdatePrimaryLossCategory;
+  /** @maxLength 80 */
+  loss_subcategory?: string;
+  loss_narrative?: string;
+  winning_competitor_id?: number;
+  /**
+     * @minimum 0
+     * @maximum 100
+     */
+  win_back_potential?: number;
+  win_back_timeline?: DealMemoryUpdateWinBackTimeline;
+  /** @maxItems 5 */
+  causal_chain?: string[];
+  decision_maker_engaged?: boolean;
+  champion_identified?: boolean;
+  product_gaps?: string[];
 }

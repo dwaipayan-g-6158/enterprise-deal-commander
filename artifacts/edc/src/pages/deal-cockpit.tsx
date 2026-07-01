@@ -374,6 +374,18 @@ export default function DealCockpit() {
                 <span className="text-muted-foreground text-sm">Days in Stage</span>
                 <span className="font-mono">{intel.daysInStage}</span>
               </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground text-sm">Landed</span>
+                <span className="font-mono">
+                  {(deal.landedAt ?? deal.createdAt)?.slice(0, 10) ?? "—"}
+                  {(() => {
+                    const landed = deal.landedAt ?? deal.createdAt;
+                    if (!landed) return null;
+                    const age = Math.floor((Date.now() - new Date(landed).getTime()) / 86400000);
+                    return <span className="text-muted-foreground"> · {age}d old</span>;
+                  })()}
+                </span>
+              </div>
             </CardContent>
           </Card>
         </div>

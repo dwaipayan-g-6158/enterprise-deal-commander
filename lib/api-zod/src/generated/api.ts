@@ -77,6 +77,7 @@ export const ListDealsResponse = zod.object({
   "contractTermYears": zod.number().optional(),
   "dealCurrency": zod.string(),
   "expectedCloseDate": zod.string().nullish(),
+  "landedAt": zod.string().nullish(),
   "winProbabilityPct": zod.number().nullish(),
   "servicesRevenue": zod.number(),
   "servicesTierId": zod.number().optional(),
@@ -159,6 +160,7 @@ export const CreateDealBody = zod.object({
   "contract_term_years": zod.number().min(1).max(createDealBodyContractTermYearsMax),
   "deal_currency": zod.string().min(createDealBodyDealCurrencyMin).max(createDealBodyDealCurrencyMax).optional(),
   "expected_close_date": zod.string().nullish(),
+  "landed_at": zod.string().nullish(),
   "win_probability_pct": zod.number().nullish(),
   "services_revenue": zod.number().min(createDealBodyServicesRevenueMin),
   "services_tier_id": zod.number(),
@@ -194,6 +196,7 @@ export const GetDealResponse = zod.object({
   "contractTermYears": zod.number().optional(),
   "dealCurrency": zod.string(),
   "expectedCloseDate": zod.string().nullish(),
+  "landedAt": zod.string().nullish(),
   "winProbabilityPct": zod.number().nullish(),
   "servicesRevenue": zod.number(),
   "servicesTierId": zod.number().optional(),
@@ -275,6 +278,7 @@ export const UpdateDealBody = zod.object({
   "contract_term_years": zod.number().min(1).max(updateDealBodyContractTermYearsMax).optional(),
   "deal_currency": zod.string().min(updateDealBodyDealCurrencyMin).max(updateDealBodyDealCurrencyMax).optional(),
   "expected_close_date": zod.string().nullish(),
+  "landed_at": zod.string().nullish(),
   "win_probability_pct": zod.number().nullish(),
   "services_revenue": zod.number().min(updateDealBodyServicesRevenueMin).optional(),
   "services_tier_id": zod.number().optional(),
@@ -306,6 +310,7 @@ export const UpdateDealResponse = zod.object({
   "contractTermYears": zod.number().optional(),
   "dealCurrency": zod.string(),
   "expectedCloseDate": zod.string().nullish(),
+  "landedAt": zod.string().nullish(),
   "winProbabilityPct": zod.number().nullish(),
   "servicesRevenue": zod.number(),
   "servicesTierId": zod.number().optional(),
@@ -375,6 +380,7 @@ export const RestoreDealResponse = zod.object({
   "contractTermYears": zod.number().optional(),
   "dealCurrency": zod.string(),
   "expectedCloseDate": zod.string().nullish(),
+  "landedAt": zod.string().nullish(),
   "winProbabilityPct": zod.number().nullish(),
   "servicesRevenue": zod.number(),
   "servicesTierId": zod.number().optional(),
@@ -439,6 +445,7 @@ export const ArchiveDealResponse = zod.object({
   "contractTermYears": zod.number().optional(),
   "dealCurrency": zod.string(),
   "expectedCloseDate": zod.string().nullish(),
+  "landedAt": zod.string().nullish(),
   "winProbabilityPct": zod.number().nullish(),
   "servicesRevenue": zod.number(),
   "servicesTierId": zod.number().optional(),
@@ -1760,6 +1767,21 @@ export const GetDealTrajectoryResponse = zod.object({
 })
 
 
+export const GetLossRiskResponse = zod.object({
+  "data": zod.record(zod.string(), zod.unknown())
+})
+
+
+export const GetCompetitiveLossResponse = zod.object({
+  "data": zod.record(zod.string(), zod.unknown())
+})
+
+
+export const GetLossDashboardResponse = zod.object({
+  "data": zod.record(zod.string(), zod.unknown())
+})
+
+
 export const GetFlowFunnelResponse = zod.object({
   "data": zod.record(zod.string(), zod.unknown())
 })
@@ -1879,7 +1901,19 @@ export const ListDealMemoryResponse = zod.object({
   "winLossNarrative": zod.string().nullish(),
   "keyLessons": zod.array(zod.string()).nullish(),
   "tags": zod.array(zod.string()).nullish(),
-  "archivedAt": zod.string()
+  "archivedAt": zod.string(),
+  "primaryLossCategory": zod.union([zod.literal('price'),zod.literal('product'),zod.literal('competitive'),zod.literal('timing'),zod.literal('relationship'),zod.literal('process'),zod.literal(null)]).nullish(),
+  "lossSubcategory": zod.string().nullish(),
+  "lossNarrative": zod.string().nullish(),
+  "winningCompetitorId": zod.number().nullish(),
+  "winBackPotential": zod.number().nullish(),
+  "winBackTimeline": zod.union([zod.literal('immediate'),zod.literal('short_term'),zod.literal('long_term'),zod.literal('none'),zod.literal(null)]).nullish(),
+  "causalChain": zod.array(zod.string()).nullish(),
+  "decisionMakerEngaged": zod.boolean().nullish(),
+  "championIdentified": zod.boolean().nullish(),
+  "productGaps": zod.array(zod.string()).nullish(),
+  "qualityScore": zod.number().nullish(),
+  "autopsyCompletedAt": zod.string().nullish()
 }))
 })
 
@@ -1906,7 +1940,19 @@ export const SearchDealMemoryResponse = zod.object({
   "winLossNarrative": zod.string().nullish(),
   "keyLessons": zod.array(zod.string()).nullish(),
   "tags": zod.array(zod.string()).nullish(),
-  "archivedAt": zod.string()
+  "archivedAt": zod.string(),
+  "primaryLossCategory": zod.union([zod.literal('price'),zod.literal('product'),zod.literal('competitive'),zod.literal('timing'),zod.literal('relationship'),zod.literal('process'),zod.literal(null)]).nullish(),
+  "lossSubcategory": zod.string().nullish(),
+  "lossNarrative": zod.string().nullish(),
+  "winningCompetitorId": zod.number().nullish(),
+  "winBackPotential": zod.number().nullish(),
+  "winBackTimeline": zod.union([zod.literal('immediate'),zod.literal('short_term'),zod.literal('long_term'),zod.literal('none'),zod.literal(null)]).nullish(),
+  "causalChain": zod.array(zod.string()).nullish(),
+  "decisionMakerEngaged": zod.boolean().nullish(),
+  "championIdentified": zod.boolean().nullish(),
+  "productGaps": zod.array(zod.string()).nullish(),
+  "qualityScore": zod.number().nullish(),
+  "autopsyCompletedAt": zod.string().nullish()
 }))
 })
 
@@ -1932,7 +1978,19 @@ export const GetSimilarDealsResponse = zod.object({
   "winLossNarrative": zod.string().nullish(),
   "keyLessons": zod.array(zod.string()).nullish(),
   "tags": zod.array(zod.string()).nullish(),
-  "archivedAt": zod.string()
+  "archivedAt": zod.string(),
+  "primaryLossCategory": zod.union([zod.literal('price'),zod.literal('product'),zod.literal('competitive'),zod.literal('timing'),zod.literal('relationship'),zod.literal('process'),zod.literal(null)]).nullish(),
+  "lossSubcategory": zod.string().nullish(),
+  "lossNarrative": zod.string().nullish(),
+  "winningCompetitorId": zod.number().nullish(),
+  "winBackPotential": zod.number().nullish(),
+  "winBackTimeline": zod.union([zod.literal('immediate'),zod.literal('short_term'),zod.literal('long_term'),zod.literal('none'),zod.literal(null)]).nullish(),
+  "causalChain": zod.array(zod.string()).nullish(),
+  "decisionMakerEngaged": zod.boolean().nullish(),
+  "championIdentified": zod.boolean().nullish(),
+  "productGaps": zod.array(zod.string()).nullish(),
+  "qualityScore": zod.number().nullish(),
+  "autopsyCompletedAt": zod.string().nullish()
 }))
 })
 
@@ -1958,7 +2016,19 @@ export const GetDealMemoryResponse = zod.object({
   "winLossNarrative": zod.string().nullish(),
   "keyLessons": zod.array(zod.string()).nullish(),
   "tags": zod.array(zod.string()).nullish(),
-  "archivedAt": zod.string()
+  "archivedAt": zod.string(),
+  "primaryLossCategory": zod.union([zod.literal('price'),zod.literal('product'),zod.literal('competitive'),zod.literal('timing'),zod.literal('relationship'),zod.literal('process'),zod.literal(null)]).nullish(),
+  "lossSubcategory": zod.string().nullish(),
+  "lossNarrative": zod.string().nullish(),
+  "winningCompetitorId": zod.number().nullish(),
+  "winBackPotential": zod.number().nullish(),
+  "winBackTimeline": zod.union([zod.literal('immediate'),zod.literal('short_term'),zod.literal('long_term'),zod.literal('none'),zod.literal(null)]).nullish(),
+  "causalChain": zod.array(zod.string()).nullish(),
+  "decisionMakerEngaged": zod.boolean().nullish(),
+  "championIdentified": zod.boolean().nullish(),
+  "productGaps": zod.array(zod.string()).nullish(),
+  "qualityScore": zod.number().nullish(),
+  "autopsyCompletedAt": zod.string().nullish()
 })
 })
 
@@ -1967,10 +2037,29 @@ export const UpdateDealMemoryParams = zod.object({
   "id": zod.coerce.string()
 })
 
+export const updateDealMemoryBodyLossSubcategoryMax = 80;
+
+export const updateDealMemoryBodyWinBackPotentialMin = 0;
+export const updateDealMemoryBodyWinBackPotentialMax = 100;
+
+export const updateDealMemoryBodyCausalChainMax = 5;
+
+
+
 export const UpdateDealMemoryBody = zod.object({
   "win_loss_narrative": zod.string().nullish(),
   "key_lessons": zod.array(zod.string()).optional(),
-  "tags": zod.array(zod.string()).optional()
+  "tags": zod.array(zod.string()).optional(),
+  "primary_loss_category": zod.enum(['price', 'product', 'competitive', 'timing', 'relationship', 'process']).optional(),
+  "loss_subcategory": zod.string().max(updateDealMemoryBodyLossSubcategoryMax).optional(),
+  "loss_narrative": zod.string().optional(),
+  "winning_competitor_id": zod.number().optional(),
+  "win_back_potential": zod.number().min(updateDealMemoryBodyWinBackPotentialMin).max(updateDealMemoryBodyWinBackPotentialMax).optional(),
+  "win_back_timeline": zod.enum(['immediate', 'short_term', 'long_term', 'none']).optional(),
+  "causal_chain": zod.array(zod.string()).max(updateDealMemoryBodyCausalChainMax).optional(),
+  "decision_maker_engaged": zod.boolean().optional(),
+  "champion_identified": zod.boolean().optional(),
+  "product_gaps": zod.array(zod.string()).optional()
 })
 
 export const UpdateDealMemoryResponse = zod.object({
@@ -1990,7 +2079,19 @@ export const UpdateDealMemoryResponse = zod.object({
   "winLossNarrative": zod.string().nullish(),
   "keyLessons": zod.array(zod.string()).nullish(),
   "tags": zod.array(zod.string()).nullish(),
-  "archivedAt": zod.string()
+  "archivedAt": zod.string(),
+  "primaryLossCategory": zod.union([zod.literal('price'),zod.literal('product'),zod.literal('competitive'),zod.literal('timing'),zod.literal('relationship'),zod.literal('process'),zod.literal(null)]).nullish(),
+  "lossSubcategory": zod.string().nullish(),
+  "lossNarrative": zod.string().nullish(),
+  "winningCompetitorId": zod.number().nullish(),
+  "winBackPotential": zod.number().nullish(),
+  "winBackTimeline": zod.union([zod.literal('immediate'),zod.literal('short_term'),zod.literal('long_term'),zod.literal('none'),zod.literal(null)]).nullish(),
+  "causalChain": zod.array(zod.string()).nullish(),
+  "decisionMakerEngaged": zod.boolean().nullish(),
+  "championIdentified": zod.boolean().nullish(),
+  "productGaps": zod.array(zod.string()).nullish(),
+  "qualityScore": zod.number().nullish(),
+  "autopsyCompletedAt": zod.string().nullish()
 })
 })
 

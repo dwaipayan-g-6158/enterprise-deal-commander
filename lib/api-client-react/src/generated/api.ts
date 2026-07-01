@@ -5447,6 +5447,219 @@ export function useGetDealTrajectory<TData = Awaited<ReturnType<typeof getDealTr
 
 
 
+export const getGetLossRiskUrl = () => {
+
+
+
+
+  return `/api/v2/analytics/loss-risk`
+}
+
+export const getLossRisk = async ( options?: RequestInit): Promise<GenericDataResponse> => {
+
+  return customFetch<GenericDataResponse>(getGetLossRiskUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetLossRiskQueryKey = () => {
+    return [
+    `/api/v2/analytics/loss-risk`
+    ] as const;
+    }
+
+
+export const getGetLossRiskQueryOptions = <TData = Awaited<ReturnType<typeof getLossRisk>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getLossRisk>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetLossRiskQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getLossRisk>>> = ({ signal }) => getLossRisk({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getLossRisk>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetLossRiskQueryResult = NonNullable<Awaited<ReturnType<typeof getLossRisk>>>
+export type GetLossRiskQueryError = ErrorType<unknown>
+
+
+
+export function useGetLossRisk<TData = Awaited<ReturnType<typeof getLossRisk>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getLossRisk>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetLossRiskQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getGetCompetitiveLossUrl = () => {
+
+
+
+
+  return `/api/v2/analytics/competitive-loss`
+}
+
+export const getCompetitiveLoss = async ( options?: RequestInit): Promise<GenericDataResponse> => {
+
+  return customFetch<GenericDataResponse>(getGetCompetitiveLossUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetCompetitiveLossQueryKey = () => {
+    return [
+    `/api/v2/analytics/competitive-loss`
+    ] as const;
+    }
+
+
+export const getGetCompetitiveLossQueryOptions = <TData = Awaited<ReturnType<typeof getCompetitiveLoss>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCompetitiveLoss>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetCompetitiveLossQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getCompetitiveLoss>>> = ({ signal }) => getCompetitiveLoss({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getCompetitiveLoss>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetCompetitiveLossQueryResult = NonNullable<Awaited<ReturnType<typeof getCompetitiveLoss>>>
+export type GetCompetitiveLossQueryError = ErrorType<unknown>
+
+
+
+export function useGetCompetitiveLoss<TData = Awaited<ReturnType<typeof getCompetitiveLoss>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCompetitiveLoss>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetCompetitiveLossQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getGetLossDashboardUrl = () => {
+
+
+
+
+  return `/api/v2/analytics/loss-dashboard`
+}
+
+export const getLossDashboard = async ( options?: RequestInit): Promise<GenericDataResponse> => {
+
+  return customFetch<GenericDataResponse>(getGetLossDashboardUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetLossDashboardQueryKey = () => {
+    return [
+    `/api/v2/analytics/loss-dashboard`
+    ] as const;
+    }
+
+
+export const getGetLossDashboardQueryOptions = <TData = Awaited<ReturnType<typeof getLossDashboard>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getLossDashboard>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetLossDashboardQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getLossDashboard>>> = ({ signal }) => getLossDashboard({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getLossDashboard>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetLossDashboardQueryResult = NonNullable<Awaited<ReturnType<typeof getLossDashboard>>>
+export type GetLossDashboardQueryError = ErrorType<unknown>
+
+
+
+export function useGetLossDashboard<TData = Awaited<ReturnType<typeof getLossDashboard>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getLossDashboard>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetLossDashboardQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
 export const getGetFlowFunnelUrl = () => {
 
 

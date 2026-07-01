@@ -1079,6 +1079,26 @@ paths:
       responses:
         "200": { description: "Time-ordered merged metric series for one deal", content: { application/json: { schema: { $ref: "#/components/schemas/GenericDataResponse" } } } }
 
+  # --- Closed-Lost Autopsy analytics ---
+  /v2/analytics/loss-risk:
+    get:
+      operationId: getLossRisk
+      tags: [v2intel]
+      responses:
+        "200": { description: "Active deals ranked by historical loss-pattern match (\"Early Warning\")", content: { application/json: { schema: { $ref: "#/components/schemas/GenericDataResponse" } } } }
+  /v2/analytics/competitive-loss:
+    get:
+      operationId: getCompetitiveLoss
+      tags: [v2intel]
+      responses:
+        "200": { description: Per-competitor loss aggregation and product-suite win/loss matrix, content: { application/json: { schema: { $ref: "#/components/schemas/GenericDataResponse" } } } }
+  /v2/analytics/loss-dashboard:
+    get:
+      operationId: getLossDashboard
+      tags: [v2intel]
+      responses:
+        "200": { description: "Loss Pulse composite, volume/value tracker, category composition, and top loss patterns", content: { application/json: { schema: { $ref: "#/components/schemas/GenericDataResponse" } } } }
+
   # --- Pipeline Flow analytics ---
   /v2/analytics/flow/funnel:
     get:
@@ -1694,6 +1714,7 @@ components:
         contractTermYears: { type: integer }
         dealCurrency: { type: string }
         expectedCloseDate: { type: ["string", "null"] }
+        landedAt: { type: ["string", "null"] }
         winProbabilityPct: { type: ["integer", "null"] }
         servicesRevenue: { type: number }
         servicesTierId: { type: integer }
@@ -1760,6 +1781,7 @@ components:
         contract_term_years: { type: integer, minimum: 1, maximum: 10 }
         deal_currency: { type: string, minLength: 3, maxLength: 3 }
         expected_close_date: { type: ["string", "null"] }
+        landed_at: { type: ["string", "null"] }
         win_probability_pct: { type: ["integer", "null"] }
         services_revenue: { type: number, minimum: 0 }
         services_tier_id: { type: integer }
@@ -1800,6 +1822,7 @@ components:
         contract_term_years: { type: integer, minimum: 1, maximum: 10 }
         deal_currency: { type: string, minLength: 3, maxLength: 3 }
         expected_close_date: { type: ["string", "null"] }
+        landed_at: { type: ["string", "null"] }
         win_probability_pct: { type: ["integer", "null"] }
         services_revenue: { type: number, minimum: 0 }
         services_tier_id: { type: integer }
@@ -3059,6 +3082,19 @@ components:
         keyLessons: { type: ["array", "null"], items: { type: string } }
         tags: { type: ["array", "null"], items: { type: string } }
         archivedAt: { type: string }
+        # Closed-Lost Autopsy structured capture (curated, PUT via updateDealMemory)
+        primaryLossCategory: { type: ["string", "null"], enum: [price, product, competitive, timing, relationship, process, null] }
+        lossSubcategory: { type: ["string", "null"] }
+        lossNarrative: { type: ["string", "null"] }
+        winningCompetitorId: { type: ["integer", "null"] }
+        winBackPotential: { type: ["integer", "null"] }
+        winBackTimeline: { type: ["string", "null"], enum: [immediate, short_term, long_term, none, null] }
+        causalChain: { type: ["array", "null"], items: { type: string } }
+        decisionMakerEngaged: { type: ["boolean", "null"] }
+        championIdentified: { type: ["boolean", "null"] }
+        productGaps: { type: ["array", "null"], items: { type: string } }
+        qualityScore: { type: ["integer", "null"] }
+        autopsyCompletedAt: { type: ["string", "null"] }
       required: [id, dealId, accountName, dealName, outcome, archivedAt]
     DealMemoryUpdate:
       type: object
@@ -3066,6 +3102,16 @@ components:
         win_loss_narrative: { type: ["string", "null"] }
         key_lessons: { type: array, items: { type: string } }
         tags: { type: array, items: { type: string } }
+        primary_loss_category: { type: string, enum: [price, product, competitive, timing, relationship, process] }
+        loss_subcategory: { type: string, maxLength: 80 }
+        loss_narrative: { type: string }
+        winning_competitor_id: { type: integer }
+        win_back_potential: { type: integer, minimum: 0, maximum: 100 }
+        win_back_timeline: { type: string, enum: [immediate, short_term, long_term, none] }
+        causal_chain: { type: array, items: { type: string }, maxItems: 5 }
+        decision_maker_engaged: { type: boolean }
+        champion_identified: { type: boolean }
+        product_gaps: { type: array, items: { type: string } }
     DealMemoryListResponse:
       type: object
       properties:

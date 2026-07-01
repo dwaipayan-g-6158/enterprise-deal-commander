@@ -27,6 +27,8 @@ import {
   teamMembers,
   playbooks,
   playbookSteps,
+  dealMemory,
+  dealCompetitors,
 } from "@workspace/db";
 import { logger } from "./lib/logger";
 import { rescoreActiveDeals } from "./lib/scoring";
@@ -600,8 +602,180 @@ async function seedDeals() {
     .returning({ id: enterpriseDeals.id });
   await insertGates(d4.id, ["G1_CRITERIA_LOCKED", "G1_EXECUTIVE_AGREED"]);
   await insertInterests(d4.id, ["ADSELFSERVICE_PLUS"]);
+  await archiveLostDeal({
+    dealId: d4.id,
+    accountName: "Soylent Systems",
+    dealName: "Project Delta",
+    finalTcv: 420000,
+    pricingModel: "Annual Subscription",
+    servicesTier: "None",
+    gatesCompleted: 2,
+    daysActive: 60,
+    competitorName: "Okta",
+    competitorId: competitorId("Okta"),
+  });
 
-  logger.info("Seeded 4 demo deals");
+  // Deals 5-12: additional Closed-Lost deals spread across the remaining loss
+  // archetypes and several competitors, so the Closed-Lost Autopsy analytics
+  // (archetype breakdown, competitive-loss aggregation, loss-risk lethality map)
+  // have more than a single data point to work with.
+  const lostDealSeeds: {
+    dealName: string;
+    accountName: string;
+    archetype: string;
+    competitor: string | null;
+    tcv: number;
+    servicesTier: string;
+    gates: string[];
+    daysActive: number;
+    productCode: string;
+    lossReason: string;
+  }[] = [
+    {
+      dealName: "Project Sentinel", accountName: "Meridian Health",
+      archetype: "Technical Disqualification", competitor: "Splunk",
+      tcv: 350000, servicesTier: "None", gates: [], daysActive: 45,
+      productCode: "EVENTLOG_ANALYZER",
+      lossReason: "PoC failed the log-ingestion performance benchmark.",
+    },
+    {
+      dealName: "Project Vantage", accountName: "Bluewave Logistics",
+      archetype: "Budget Freeze", competitor: "Netwrix",
+      tcv: 610000, servicesTier: "Professional Services Pitched",
+      gates: ["G1_CRITERIA_LOCKED", "G1_EXECUTIVE_AGREED", "G2_WORKFLOW_VERIFIED"],
+      daysActive: 52, productCode: "ADMANAGER_PLUS",
+      lossReason: "Customer froze all new software spend for the fiscal year.",
+    },
+    {
+      dealName: "Project Halcyon", accountName: "Ferrous Metals Co",
+      archetype: "Loss to Incumbent", competitor: "Microsoft Entra",
+      tcv: 275000, servicesTier: "None", gates: ["G1_CRITERIA_LOCKED"],
+      daysActive: 38, productCode: "ADSELFSERVICE_PLUS",
+      lossReason: "Renewed the incumbent Entra ID contract instead of switching.",
+    },
+    {
+      dealName: "Project Ember", accountName: "Coral Bay Retail",
+      archetype: "Compliance Gap", competitor: "SailPoint",
+      tcv: 190000, servicesTier: "None", gates: [],
+      daysActive: 21, productCode: "ADAUDIT_PLUS",
+      lossReason: "Missing SOC 2 Type II attestation disqualified us in security review.",
+    },
+    {
+      dealName: "Project Wraith", accountName: "Nimbus Cloud Services",
+      archetype: "No Decision", competitor: null,
+      tcv: 500000, servicesTier: "None",
+      gates: ["G1_CRITERIA_LOCKED", "G1_EXECUTIVE_AGREED"],
+      daysActive: 70, productCode: "DATA_SECURITY_PLUS",
+      lossReason: "Customer indefinitely deferred the initiative; no vendor selected.",
+    },
+    {
+      dealName: "Project Solace", accountName: "Ironclad Manufacturing",
+      archetype: "Technical Disqualification", competitor: "IBM QRadar",
+      tcv: 430000, servicesTier: "None", gates: [],
+      daysActive: 33, productCode: "CLOUD_SECURITY_PLUS",
+      lossReason: "Failed to demonstrate required OT-network log coverage.",
+    },
+    {
+      dealName: "Project Meridian Rise", accountName: "Northgate Financial",
+      archetype: "Loss to Incumbent", competitor: "Quest",
+      tcv: 720000, servicesTier: "Combined SOW Shared",
+      gates: ["G1_CRITERIA_LOCKED", "G1_EXECUTIVE_AGREED", "G2_WORKFLOW_VERIFIED", "G2_CHAMPION_DEFENSIBLE"],
+      daysActive: 95, productCode: "ADMANAGER_PLUS",
+      lossReason: "Long-standing Quest relationship made switching too costly to justify.",
+    },
+    {
+      dealName: "Project Tundra", accountName: "Alpine Freight",
+      archetype: "Champion Departure", competitor: "Okta",
+      tcv: 260000, servicesTier: "None", gates: ["G1_CRITERIA_LOCKED"],
+      daysActive: 40, productCode: "ADSELFSERVICE_PLUS",
+      lossReason: "Internal champion left the company; successor restarted the evaluation with Okta.",
+    },
+  ];
+
+  for (const s of lostDealSeeds) {
+    const [d] = await db
+      .insert(enterpriseDeals)
+      .values({
+        dealName: s.dealName,
+        accountName: s.accountName,
+        accountManager: "Sarah Chen",
+        technicalLead: "Marcus Webb",
+        salesStageId: stageId("Closed-Lost"),
+        stageEnteredAt: daysAgo(s.daysActive),
+        productRevenue: String(s.tcv),
+        pricingModelId: pricingId("Annual Subscription"),
+        contractTermYears: 1,
+        dealCurrency: "USD",
+        expectedCloseDate: dateInDays(-s.daysActive + 5),
+        winProbabilityPct: 0,
+        servicesRevenue: "0",
+        servicesTierId: tierId(s.servicesTier),
+        managerStrategicBlueprint: s.lossReason,
+        lossReason: s.lossReason,
+        lossArchetypeId: archetypeId(s.archetype),
+        competitorId: s.competitor ? competitorId(s.competitor) : null,
+      })
+      .returning({ id: enterpriseDeals.id });
+    await insertGates(d.id, s.gates);
+    await insertInterests(d.id, [s.productCode]);
+    await archiveLostDeal({
+      dealId: d.id,
+      accountName: s.accountName,
+      dealName: s.dealName,
+      finalTcv: s.tcv,
+      pricingModel: "Annual Subscription",
+      servicesTier: s.servicesTier,
+      gatesCompleted: s.gates.length,
+      daysActive: s.daysActive,
+      competitorName: s.competitor,
+      competitorId: s.competitor ? competitorId(s.competitor) : null,
+    });
+  }
+
+  logger.info({ count: 4 + lostDealSeeds.length }, "Seeded demo deals");
+
+  async function archiveLostDeal(params: {
+    dealId: string;
+    accountName: string;
+    dealName: string;
+    finalTcv: number;
+    pricingModel: string | null;
+    servicesTier: string | null;
+    gatesCompleted: number;
+    daysActive: number;
+    competitorName: string | null;
+    competitorId: number | null;
+  }) {
+    // The post-mortem subscriber (lib/subscribers/post-mortem.ts) only archives to
+    // deal_memory on a live `deal.stage_changed` event; direct seed inserts never
+    // fire that event, so we replicate its archive shape here for seeded losses.
+    await db
+      .insert(dealMemory)
+      .values({
+        dealId: params.dealId,
+        accountName: params.accountName,
+        dealName: params.dealName,
+        outcome: "Lost",
+        finalTcv: String(params.finalTcv),
+        pricingModel: params.pricingModel,
+        servicesTier: params.servicesTier,
+        totalGatesCompleted: params.gatesCompleted,
+        totalBlockersEncountered: 0,
+        totalDaysActive: params.daysActive,
+        competitorsFaced: params.competitorName ? [params.competitorName] : [],
+      })
+      .onConflictDoNothing();
+    if (params.competitorId) {
+      await db
+        .insert(dealCompetitors)
+        .values({
+          dealId: params.dealId,
+          competitorId: params.competitorId,
+          status: "Lost To",
+        })
+        .onConflictDoNothing();
+    }
+  }
 }
 
 async function main() {

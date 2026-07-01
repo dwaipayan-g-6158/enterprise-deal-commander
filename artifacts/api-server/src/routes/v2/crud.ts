@@ -64,6 +64,7 @@ import {
 } from "@workspace/api-zod";
 import { getActor } from "../../lib/auth";
 import { notFound, badRequest } from "../../lib/http";
+import { emitDealEvent } from "../../lib/events";
 
 const router: IRouter = Router();
 
@@ -634,7 +635,51 @@ function memoryOut(r: typeof dealMemory.$inferSelect) {
     keyLessons: r.keyLessons,
     tags: r.tags,
     archivedAt: r.archivedAt instanceof Date ? r.archivedAt.toISOString() : String(r.archivedAt),
+    primaryLossCategory: r.primaryLossCategory,
+    lossSubcategory: r.lossSubcategory,
+    lossNarrative: r.lossNarrative,
+    winningCompetitorId: r.winningCompetitorId,
+    winBackPotential: r.winBackPotential,
+    winBackTimeline: r.winBackTimeline,
+    causalChain: r.causalChain,
+    decisionMakerEngaged: r.decisionMakerEngaged,
+    championIdentified: r.championIdentified,
+    productGaps: r.productGaps,
+    qualityScore: r.qualityScore,
+    autopsyCompletedAt: r.autopsyCompletedAt instanceof Date ? r.autopsyCompletedAt.toISOString() : r.autopsyCompletedAt,
   };
+}
+
+// Completeness score over the curated autopsy fields (never trusted from the
+// client) — a simple filled-field count, not a weighted rubric; false
+// precision would be worse than an honest completeness percentage at this
+// data volume.
+function computeAutopsyQualityScore(f: {
+  primaryLossCategory?: string | null;
+  lossSubcategory?: string | null;
+  lossNarrative?: string | null;
+  winningCompetitorId?: number | null;
+  winBackPotential?: number | null;
+  winBackTimeline?: string | null;
+  causalChain?: string[] | null;
+  decisionMakerEngaged?: boolean | null;
+  championIdentified?: boolean | null;
+  productGaps?: string[] | null;
+}): number {
+  const checks = [
+    !!f.primaryLossCategory,
+    !!f.lossSubcategory,
+    !!f.lossNarrative,
+    f.winningCompetitorId != null,
+    f.winBackPotential != null,
+    !!f.winBackTimeline,
+    !!f.causalChain?.length,
+    f.decisionMakerEngaged != null,
+    f.championIdentified != null,
+    !!f.productGaps?.length,
+  ];
+  const filled = checks.filter(Boolean).length;
+  return Math.round((filled / checks.length) * 100);
 }
 
 router.get("/memory", async (_req: Request, res: Response) => {
@@ -717,16 +762,45 @@ router.get("/memory/:id", async (req: Request, res: Response) => {
 router.put("/memory/:id", async (req: Request, res: Response) => {
   const { id } = UpdateDealMemoryParams.parse(req.params);
   const b = UpdateDealMemoryBody.parse(req.body);
+
+  const existingRows = await db.select().from(dealMemory).where(eq(dealMemory.id, id)).limit(1);
+  if (!existingRows[0]) throw notFound("Memory not found");
+  const existing = existingRows[0];
+
+  const merged = {
+    primaryLossCategory: b.primary_loss_category ?? existing.primaryLossCategory,
+    lossSubcategory: b.loss_subcategory ?? existing.lossSubcategory,
+    lossNarrative: b.loss_narrative ?? existing.lossNarrative,
+    winningCompetitorId: b.winning_competitor_id ?? existing.winningCompetitorId,
+    winBackPotential: b.win_back_potential ?? existing.winBackPotential,
+    winBackTimeline: b.win_back_timeline ?? existing.winBackTimeline,
+    causalChain: b.causal_chain ?? existing.causalChain,
+    decisionMakerEngaged: b.decision_maker_engaged ?? existing.decisionMakerEngaged,
+    championIdentified: b.champion_identified ?? existing.championIdentified,
+    productGaps: b.product_gaps ?? existing.productGaps,
+  };
+  const isAutopsyUpdate = Object.keys(b).some((k) => k !== "win_loss_narrative" && k !== "key_lessons" && k !== "tags");
+
   const [row] = await db
     .update(dealMemory)
     .set({
       winLossNarrative: b.win_loss_narrative ?? undefined,
       keyLessons: b.key_lessons ?? undefined,
       tags: b.tags ?? undefined,
+      ...merged,
+      qualityScore: computeAutopsyQualityScore(merged),
+      autopsyCompletedAt: isAutopsyUpdate ? new Date() : undefined,
     })
     .where(eq(dealMemory.id, id))
     .returning();
   if (!row) throw notFound("Memory not found");
+  if (isAutopsyUpdate) {
+    emitDealEvent("deal.autopsy_captured", {
+      dealId: row.dealId,
+      actor: getActor(req).displayName,
+      qualityScore: row.qualityScore ?? 0,
+    });
+  }
   res.json({ data: memoryOut(row) });
 });
 

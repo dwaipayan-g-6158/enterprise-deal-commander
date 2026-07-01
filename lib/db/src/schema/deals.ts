@@ -53,6 +53,9 @@ export const enterpriseDeals = pgTable(
       .notNull()
       .default("USD"),
     expectedCloseDate: date("expected_close_date", { mode: "string" }),
+    // Day the deal landed / entered the pipeline. Nullable; user-editable and
+    // backdatable. Falls back to createdAt where consumed (analytics, risk age).
+    landedAt: date("landed_at", { mode: "string" }),
     winProbabilityPct: smallint("win_probability_pct"),
     servicesRevenue: numeric("services_revenue", { precision: 15, scale: 2 })
       .notNull()

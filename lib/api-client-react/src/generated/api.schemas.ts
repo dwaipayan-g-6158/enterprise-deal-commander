@@ -88,6 +88,8 @@ export interface Deal {
   /** @nullable */
   expectedCloseDate?: string | null;
   /** @nullable */
+  landedAt?: string | null;
+  /** @nullable */
   winProbabilityPct?: number | null;
   servicesRevenue: number;
   servicesTierId?: number;
@@ -169,6 +171,8 @@ export interface DealInput {
   /** @nullable */
   expected_close_date?: string | null;
   /** @nullable */
+  landed_at?: string | null;
+  /** @nullable */
   win_probability_pct?: number | null;
   /** @minimum 0 */
   services_revenue: number;
@@ -228,6 +232,8 @@ export interface DealUpdate {
   deal_currency?: string;
   /** @nullable */
   expected_close_date?: string | null;
+  /** @nullable */
+  landed_at?: string | null;
   /** @nullable */
   win_probability_pct?: number | null;
   /** @minimum 0 */
@@ -1321,6 +1327,34 @@ export interface DealCompetitorResponse {
   data: DealCompetitor;
 }
 
+/**
+ * @nullable
+ */
+export type DealMemoryPrimaryLossCategory = typeof DealMemoryPrimaryLossCategory[keyof typeof DealMemoryPrimaryLossCategory] | null;
+
+
+export const DealMemoryPrimaryLossCategory = {
+  price: 'price',
+  product: 'product',
+  competitive: 'competitive',
+  timing: 'timing',
+  relationship: 'relationship',
+  process: 'process',
+} as const;
+
+/**
+ * @nullable
+ */
+export type DealMemoryWinBackTimeline = typeof DealMemoryWinBackTimeline[keyof typeof DealMemoryWinBackTimeline] | null;
+
+
+export const DealMemoryWinBackTimeline = {
+  immediate: 'immediate',
+  short_term: 'short_term',
+  long_term: 'long_term',
+  none: 'none',
+} as const;
+
 export interface DealMemory {
   id: string;
   dealId: string;
@@ -1348,13 +1382,75 @@ export interface DealMemory {
   /** @nullable */
   tags?: string[] | null;
   archivedAt: string;
+  /** @nullable */
+  primaryLossCategory?: DealMemoryPrimaryLossCategory;
+  /** @nullable */
+  lossSubcategory?: string | null;
+  /** @nullable */
+  lossNarrative?: string | null;
+  /** @nullable */
+  winningCompetitorId?: number | null;
+  /** @nullable */
+  winBackPotential?: number | null;
+  /** @nullable */
+  winBackTimeline?: DealMemoryWinBackTimeline;
+  /** @nullable */
+  causalChain?: string[] | null;
+  /** @nullable */
+  decisionMakerEngaged?: boolean | null;
+  /** @nullable */
+  championIdentified?: boolean | null;
+  /** @nullable */
+  productGaps?: string[] | null;
+  /** @nullable */
+  qualityScore?: number | null;
+  /** @nullable */
+  autopsyCompletedAt?: string | null;
 }
+
+export type DealMemoryUpdatePrimaryLossCategory = typeof DealMemoryUpdatePrimaryLossCategory[keyof typeof DealMemoryUpdatePrimaryLossCategory];
+
+
+export const DealMemoryUpdatePrimaryLossCategory = {
+  price: 'price',
+  product: 'product',
+  competitive: 'competitive',
+  timing: 'timing',
+  relationship: 'relationship',
+  process: 'process',
+} as const;
+
+export type DealMemoryUpdateWinBackTimeline = typeof DealMemoryUpdateWinBackTimeline[keyof typeof DealMemoryUpdateWinBackTimeline];
+
+
+export const DealMemoryUpdateWinBackTimeline = {
+  immediate: 'immediate',
+  short_term: 'short_term',
+  long_term: 'long_term',
+  none: 'none',
+} as const;
 
 export interface DealMemoryUpdate {
   /** @nullable */
   win_loss_narrative?: string | null;
   key_lessons?: string[];
   tags?: string[];
+  primary_loss_category?: DealMemoryUpdatePrimaryLossCategory;
+  /** @maxLength 80 */
+  loss_subcategory?: string;
+  loss_narrative?: string;
+  winning_competitor_id?: number;
+  /**
+     * @minimum 0
+     * @maximum 100
+     */
+  win_back_potential?: number;
+  win_back_timeline?: DealMemoryUpdateWinBackTimeline;
+  /** @maxItems 5 */
+  causal_chain?: string[];
+  decision_maker_engaged?: boolean;
+  champion_identified?: boolean;
+  product_gaps?: string[];
 }
 
 export interface DealMemoryListResponse {

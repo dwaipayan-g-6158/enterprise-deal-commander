@@ -7,12 +7,12 @@ import {
 } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { FileText, Download, TrendingUp, Swords } from "lucide-react";
+import { FileText, Download, TrendingUp, Swords, Gauge } from "lucide-react";
 import { Empty, EmptyHeader, EmptyMedia, EmptyTitle, EmptyDescription } from "@/components/ui/empty";
 import { ForecastFan } from "@/components/cockpit/charts/forecast-fan";
-import { VelocityBars } from "@/components/cockpit/charts/velocity-bars";
 import { WinLossDonut } from "@/components/cockpit/charts/winloss-donut";
+import { useLocation } from "wouter";
+import { VelocityTriageTable } from "@/components/cockpit/velocity-triage";
 
 function money(n: number): string {
   return "$" + Math.round(Number(n) || 0).toLocaleString("en-US");
@@ -42,6 +42,7 @@ export function AnalyticsOverview() {
   const winLoss = useGetWinLossAnalytics();
   const competitive = useGetCompetitiveAnalytics();
   const pipeline = useGetPipelineAnalytics();
+  const [, navigate] = useLocation();
 
   const vDeals = ((velocity.data?.data as { deals?: VelocityDeal[] })?.deals ?? []) as VelocityDeal[];
   const simData = sim.data?.data as
@@ -52,12 +53,6 @@ export function AnalyticsOverview() {
     | undefined;
   const comps = ((competitive.data?.data as { competitors?: CompetitorRow[] })?.competitors ?? []) as CompetitorRow[];
   const pipe = pipeline.data?.data as { totalTcv: number; activeDeals: number } | undefined;
-
-  const velocityColor: Record<string, string> = {
-    SLOW: "bg-destructive text-white",
-    FAST: "bg-emerald-500 text-white",
-    NORMAL: "bg-muted text-muted-foreground",
-  };
 
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -159,52 +154,28 @@ export function AnalyticsOverview() {
         </Card>
       </div>
 
-      {/* Velocity heatmap */}
+      {/* Velocity triage */}
       <Card>
         <CardHeader>
           <CardTitle className="text-lg">Velocity — Most Overdue First</CardTitle>
         </CardHeader>
         <CardContent>
-          {vDeals.length > 0 && (
-            <div className="mb-6">
-              <VelocityBars
-                deals={vDeals.map((d) => ({
-                  dealName: d.dealName,
-                  daysInStage: d.daysInStage,
-                  benchmarkDays: d.benchmarkDays,
-                  deltaDays: d.deltaDays,
-                }))}
-              />
-            </div>
+          {vDeals.length > 0 ? (
+            <VelocityTriageTable
+              deals={vDeals}
+              onSelect={(dealId) => navigate(`/deals/${dealId}`)}
+            />
+          ) : (
+            <Empty>
+              <EmptyHeader>
+                <EmptyMedia variant="icon"><Gauge className="h-5 w-5" /></EmptyMedia>
+                <EmptyTitle>No active deals to track</EmptyTitle>
+                <EmptyDescription>
+                  Velocity ranks open deals by how far past their stage benchmark they've run.
+                </EmptyDescription>
+              </EmptyHeader>
+            </Empty>
           )}
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="text-xs uppercase text-muted-foreground border-b">
-                <th className="text-left py-2">Deal</th>
-                <th className="text-left py-2">Stage</th>
-                <th className="text-right py-2">Days</th>
-                <th className="text-right py-2">Benchmark</th>
-                <th className="text-right py-2">Delta</th>
-                <th className="text-right py-2">Velocity</th>
-              </tr>
-            </thead>
-            <tbody>
-              {vDeals.map((d) => (
-                <tr key={d.id} className="border-b">
-                  <td className="py-2">{d.dealName}<span className="text-muted-foreground"> · {d.accountName}</span></td>
-                  <td className="py-2">{d.stage}</td>
-                  <td className="py-2 text-right font-mono">{d.daysInStage}</td>
-                  <td className="py-2 text-right font-mono text-muted-foreground">{d.benchmarkDays}</td>
-                  <td className={`py-2 text-right font-mono ${d.deltaDays > 0 ? "text-destructive" : "text-emerald-600"}`}>
-                    {d.deltaDays > 0 ? `+${d.deltaDays}` : d.deltaDays}
-                  </td>
-                  <td className="py-2 text-right">
-                    <Badge className={velocityColor[d.velocity] ?? ""}>{d.velocity}</Badge>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
         </CardContent>
       </Card>
 

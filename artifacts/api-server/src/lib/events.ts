@@ -49,6 +49,9 @@ export type DealEventPayloads = {
     toStatus: string;
     reason: string | null;
   };
+  "deal.autopsy_captured": DealEventBase & {
+    qualityScore: number;
+  };
 };
 
 export type DealEventType = keyof DealEventPayloads;

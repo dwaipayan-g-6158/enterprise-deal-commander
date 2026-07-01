@@ -253,6 +253,7 @@ router.post("/deals", async (req: Request, res: Response) => {
         contractTermYears: body.contract_term_years,
         dealCurrency: body.deal_currency ?? "USD",
         expectedCloseDate: body.expected_close_date ?? null,
+        landedAt: body.landed_at ?? new Date().toISOString().slice(0, 10),
         winProbabilityPct: body.win_probability_pct ?? null,
         servicesRevenue: String(body.services_revenue),
         servicesTierId: body.services_tier_id,
@@ -390,6 +391,10 @@ const updateDealHandler = async (req: Request, res: Response) => {
       body.expected_close_date,
     );
     updates.expectedCloseDate = body.expected_close_date ?? null;
+  }
+  if (body.landed_at !== undefined) {
+    track("landed_at", existing.landedAt, body.landed_at);
+    updates.landedAt = body.landed_at ?? null;
   }
   if (body.win_probability_pct !== undefined) {
     updates.winProbabilityPct = body.win_probability_pct ?? null;
