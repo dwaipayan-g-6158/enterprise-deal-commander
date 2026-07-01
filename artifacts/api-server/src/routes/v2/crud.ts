@@ -690,19 +690,39 @@ router.get("/memory", async (_req: Request, res: Response) => {
 router.get("/memory/search", async (req: Request, res: Response) => {
   const q = SearchDealMemoryQueryParams.parse(req.query);
   const term = (q.q ?? "").trim();
+
+  const extraFilters = [];
+  if (q.outcome) extraFilters.push(sql`AND outcome = ${q.outcome}`);
+  if (q.competitor) extraFilters.push(sql`AND competitors_faced @> ARRAY[${q.competitor}]::text[]`);
+  if (q.pricingModel) extraFilters.push(sql`AND pricing_model = ${q.pricingModel}`);
+  if (q.servicesTier) extraFilters.push(sql`AND services_tier = ${q.servicesTier}`);
+  if (q.minTcv != null) extraFilters.push(sql`AND final_tcv::numeric >= ${q.minTcv}`);
+  if (q.maxTcv != null) extraFilters.push(sql`AND final_tcv::numeric <= ${q.maxTcv}`);
+  if (q.archivedFrom) extraFilters.push(sql`AND archived_at >= ${new Date(q.archivedFrom)}`);
+  if (q.archivedTo) extraFilters.push(sql`AND archived_at <= ${new Date(q.archivedTo)}`);
+  if (q.hasNarrative === true) extraFilters.push(sql`AND win_loss_narrative IS NOT NULL AND win_loss_narrative <> ''`);
+  const extra = sql.join(extraFilters, sql` `);
+
   const rows = term
     ? await db.execute(sql`
-        SELECT * FROM edc_v2.deal_memory
+        SELECT *,
+          ts_headline('english',
+            coalesce(win_loss_narrative,'') || ' ' || coalesce(array_to_string(key_lessons, ' '), ''),
+            plainto_tsquery('english', ${term}),
+            'StartSel=<mark>,StopSel=</mark>,MaxWords=40,MinWords=15,MaxFragments=2'
+          ) AS snippet
+        FROM edc_v2.deal_memory
         WHERE searchable_vector @@ plainto_tsquery('english', ${term})
-        ${q.outcome ? sql`AND outcome = ${q.outcome}` : sql``}
+        ${extra}
         ORDER BY ts_rank(searchable_vector, plainto_tsquery('english', ${term})) DESC
         LIMIT 50`)
-    : await db
-        .select()
-        .from(dealMemory)
-        .where(q.outcome ? eq(dealMemory.outcome, q.outcome) : sql`true`)
-        .orderBy(desc(dealMemory.archivedAt))
-        .limit(50);
+    : await db.execute(sql`
+        SELECT *, NULL AS snippet
+        FROM edc_v2.deal_memory
+        WHERE true
+        ${extra}
+        ORDER BY archived_at DESC
+        LIMIT 50`);
   const list = Array.isArray(rows) ? rows : (rows as { rows: unknown[] }).rows ?? [];
   res.json({ data: (list as Record<string, unknown>[]).map(normalizeMemoryRow) });
 });
@@ -730,6 +750,7 @@ function normalizeMemoryRow(r: Record<string, unknown>) {
       (r["archived_at"] instanceof Date
         ? (r["archived_at"] as Date).toISOString()
         : String(r["archived_at"] ?? "")),
+    snippet: (r.snippet as string | null) ?? null,
   };
 }
 

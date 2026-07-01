@@ -9,4 +9,12 @@
 export type SearchDealMemoryParams = {
 q?: string;
 outcome?: string;
+competitor?: string;
+pricingModel?: string;
+servicesTier?: string;
+minTcv?: number;
+maxTcv?: number;
+archivedFrom?: Date;
+archivedTo?: Date;
+hasNarrative?: boolean;
 };

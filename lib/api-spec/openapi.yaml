@@ -1191,6 +1191,14 @@ paths:
       parameters:
         - { name: q, in: query, required: false, schema: { type: string } }
         - { name: outcome, in: query, required: false, schema: { type: string } }
+        - { name: competitor, in: query, required: false, schema: { type: string } }
+        - { name: pricingModel, in: query, required: false, schema: { type: string } }
+        - { name: servicesTier, in: query, required: false, schema: { type: string } }
+        - { name: minTcv, in: query, required: false, schema: { type: number } }
+        - { name: maxTcv, in: query, required: false, schema: { type: number } }
+        - { name: archivedFrom, in: query, required: false, schema: { type: string, format: date-time } }
+        - { name: archivedTo, in: query, required: false, schema: { type: string, format: date-time } }
+        - { name: hasNarrative, in: query, required: false, schema: { type: boolean } }
       responses:
         "200": { description: Search results, content: { application/json: { schema: { $ref: "#/components/schemas/DealMemoryListResponse" } } } }
   /v2/memory/similar/{dealId}:
@@ -3082,6 +3090,7 @@ components:
         keyLessons: { type: ["array", "null"], items: { type: string } }
         tags: { type: ["array", "null"], items: { type: string } }
         archivedAt: { type: string }
+        snippet: { type: ["string", "null"] }
         # Closed-Lost Autopsy structured capture (curated, PUT via updateDealMemory)
         primaryLossCategory: { type: ["string", "null"], enum: [price, product, competitive, timing, relationship, process, null] }
         lossSubcategory: { type: ["string", "null"] }

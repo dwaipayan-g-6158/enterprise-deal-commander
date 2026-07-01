@@ -1383,6 +1383,8 @@ export interface DealMemory {
   tags?: string[] | null;
   archivedAt: string;
   /** @nullable */
+  snippet?: string | null;
+  /** @nullable */
   primaryLossCategory?: DealMemoryPrimaryLossCategory;
   /** @nullable */
   lossSubcategory?: string | null;
@@ -2040,6 +2042,14 @@ export const GetFlowSankeyMode = {
 export type SearchDealMemoryParams = {
 q?: string;
 outcome?: string;
+competitor?: string;
+pricingModel?: string;
+servicesTier?: string;
+minTcv?: number;
+maxTcv?: number;
+archivedFrom?: string;
+archivedTo?: string;
+hasNarrative?: boolean;
 };
 
 export type ListScenariosParams = {

@@ -36,6 +36,8 @@ export interface DealMemory {
   tags?: string[] | null;
   archivedAt: string;
   /** @nullable */
+  snippet?: string | null;
+  /** @nullable */
   primaryLossCategory?: DealMemoryPrimaryLossCategory;
   /** @nullable */
   lossSubcategory?: string | null;

@@ -1902,6 +1902,7 @@ export const ListDealMemoryResponse = zod.object({
   "keyLessons": zod.array(zod.string()).nullish(),
   "tags": zod.array(zod.string()).nullish(),
   "archivedAt": zod.string(),
+  "snippet": zod.string().nullish(),
   "primaryLossCategory": zod.union([zod.literal('price'),zod.literal('product'),zod.literal('competitive'),zod.literal('timing'),zod.literal('relationship'),zod.literal('process'),zod.literal(null)]).nullish(),
   "lossSubcategory": zod.string().nullish(),
   "lossNarrative": zod.string().nullish(),
@@ -1920,7 +1921,15 @@ export const ListDealMemoryResponse = zod.object({
 
 export const SearchDealMemoryQueryParams = zod.object({
   "q": zod.coerce.string().optional(),
-  "outcome": zod.coerce.string().optional()
+  "outcome": zod.coerce.string().optional(),
+  "competitor": zod.coerce.string().optional(),
+  "pricingModel": zod.coerce.string().optional(),
+  "servicesTier": zod.coerce.string().optional(),
+  "minTcv": zod.coerce.number().optional(),
+  "maxTcv": zod.coerce.number().optional(),
+  "archivedFrom": zod.date().optional(),
+  "archivedTo": zod.date().optional(),
+  "hasNarrative": zod.coerce.boolean().optional()
 })
 
 export const SearchDealMemoryResponse = zod.object({
@@ -1941,6 +1950,7 @@ export const SearchDealMemoryResponse = zod.object({
   "keyLessons": zod.array(zod.string()).nullish(),
   "tags": zod.array(zod.string()).nullish(),
   "archivedAt": zod.string(),
+  "snippet": zod.string().nullish(),
   "primaryLossCategory": zod.union([zod.literal('price'),zod.literal('product'),zod.literal('competitive'),zod.literal('timing'),zod.literal('relationship'),zod.literal('process'),zod.literal(null)]).nullish(),
   "lossSubcategory": zod.string().nullish(),
   "lossNarrative": zod.string().nullish(),
@@ -1979,6 +1989,7 @@ export const GetSimilarDealsResponse = zod.object({
   "keyLessons": zod.array(zod.string()).nullish(),
   "tags": zod.array(zod.string()).nullish(),
   "archivedAt": zod.string(),
+  "snippet": zod.string().nullish(),
   "primaryLossCategory": zod.union([zod.literal('price'),zod.literal('product'),zod.literal('competitive'),zod.literal('timing'),zod.literal('relationship'),zod.literal('process'),zod.literal(null)]).nullish(),
   "lossSubcategory": zod.string().nullish(),
   "lossNarrative": zod.string().nullish(),
@@ -2017,6 +2028,7 @@ export const GetDealMemoryResponse = zod.object({
   "keyLessons": zod.array(zod.string()).nullish(),
   "tags": zod.array(zod.string()).nullish(),
   "archivedAt": zod.string(),
+  "snippet": zod.string().nullish(),
   "primaryLossCategory": zod.union([zod.literal('price'),zod.literal('product'),zod.literal('competitive'),zod.literal('timing'),zod.literal('relationship'),zod.literal('process'),zod.literal(null)]).nullish(),
   "lossSubcategory": zod.string().nullish(),
   "lossNarrative": zod.string().nullish(),
@@ -2080,6 +2092,7 @@ export const UpdateDealMemoryResponse = zod.object({
   "keyLessons": zod.array(zod.string()).nullish(),
   "tags": zod.array(zod.string()).nullish(),
   "archivedAt": zod.string(),
+  "snippet": zod.string().nullish(),
   "primaryLossCategory": zod.union([zod.literal('price'),zod.literal('product'),zod.literal('competitive'),zod.literal('timing'),zod.literal('relationship'),zod.literal('process'),zod.literal(null)]).nullish(),
   "lossSubcategory": zod.string().nullish(),
   "lossNarrative": zod.string().nullish(),
