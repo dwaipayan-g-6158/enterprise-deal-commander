@@ -2052,6 +2052,10 @@ archivedTo?: string;
 hasNarrative?: boolean;
 };
 
+export type CompareDealMemoryParams = {
+ids: string;
+};
+
 export type ListScenariosParams = {
 deal_id?: string;
 };

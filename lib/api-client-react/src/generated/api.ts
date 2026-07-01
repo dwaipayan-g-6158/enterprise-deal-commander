@@ -32,6 +32,7 @@ import type {
   BlockerSeverityListResponse,
   BlockerUpdate,
   ChangesResponse,
+  CompareDealMemoryParams,
   CompetitorBattlecardListResponse,
   CompetitorListResponse,
   CompetitorResponse,
@@ -6650,6 +6651,84 @@ export function useGetSimilarDeals<TData = Awaited<ReturnType<typeof getSimilarD
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getGetSimilarDealsQueryOptions(dealId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getCompareDealMemoryUrl = (params: CompareDealMemoryParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/v2/memory/compare?${stringifiedParams}` : `/api/v2/memory/compare`
+}
+
+export const compareDealMemory = async (params: CompareDealMemoryParams, options?: RequestInit): Promise<DealMemoryListResponse> => {
+
+  return customFetch<DealMemoryListResponse>(getCompareDealMemoryUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getCompareDealMemoryQueryKey = (params?: CompareDealMemoryParams,) => {
+    return [
+    `/api/v2/memory/compare`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getCompareDealMemoryQueryOptions = <TData = Awaited<ReturnType<typeof compareDealMemory>>, TError = ErrorType<unknown>>(params: CompareDealMemoryParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof compareDealMemory>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getCompareDealMemoryQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof compareDealMemory>>> = ({ signal }) => compareDealMemory(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof compareDealMemory>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type CompareDealMemoryQueryResult = NonNullable<Awaited<ReturnType<typeof compareDealMemory>>>
+export type CompareDealMemoryQueryError = ErrorType<unknown>
+
+
+
+export function useCompareDealMemory<TData = Awaited<ReturnType<typeof compareDealMemory>>, TError = ErrorType<unknown>>(
+ params: CompareDealMemoryParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof compareDealMemory>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getCompareDealMemoryQueryOptions(params,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

@@ -2011,6 +2011,45 @@ export const GetSimilarDealsResponse = zod.object({
 })
 
 
+export const CompareDealMemoryQueryParams = zod.object({
+  "ids": zod.coerce.string()
+})
+
+export const CompareDealMemoryResponse = zod.object({
+  "data": zod.array(zod.object({
+  "id": zod.string(),
+  "dealId": zod.string(),
+  "accountName": zod.string(),
+  "dealName": zod.string(),
+  "outcome": zod.string(),
+  "finalTcv": zod.string().nullish(),
+  "pricingModel": zod.string().nullish(),
+  "servicesTier": zod.string().nullish(),
+  "totalGatesCompleted": zod.number().nullish(),
+  "totalBlockersEncountered": zod.number().nullish(),
+  "totalDaysActive": zod.number().nullish(),
+  "competitorsFaced": zod.array(zod.string()).nullish(),
+  "winLossNarrative": zod.string().nullish(),
+  "keyLessons": zod.array(zod.string()).nullish(),
+  "tags": zod.array(zod.string()).nullish(),
+  "archivedAt": zod.string(),
+  "snippet": zod.string().nullish(),
+  "primaryLossCategory": zod.union([zod.literal('price'),zod.literal('product'),zod.literal('competitive'),zod.literal('timing'),zod.literal('relationship'),zod.literal('process'),zod.literal(null)]).nullish(),
+  "lossSubcategory": zod.string().nullish(),
+  "lossNarrative": zod.string().nullish(),
+  "winningCompetitorId": zod.number().nullish(),
+  "winBackPotential": zod.number().nullish(),
+  "winBackTimeline": zod.union([zod.literal('immediate'),zod.literal('short_term'),zod.literal('long_term'),zod.literal('none'),zod.literal(null)]).nullish(),
+  "causalChain": zod.array(zod.string()).nullish(),
+  "decisionMakerEngaged": zod.boolean().nullish(),
+  "championIdentified": zod.boolean().nullish(),
+  "productGaps": zod.array(zod.string()).nullish(),
+  "qualityScore": zod.number().nullish(),
+  "autopsyCompletedAt": zod.string().nullish()
+}))
+})
+
+
 export const GetMemoryFacetsResponse = zod.object({
   "data": zod.record(zod.string(), zod.unknown())
 })

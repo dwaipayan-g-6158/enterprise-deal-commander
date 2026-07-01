@@ -40,6 +40,7 @@ export * from './blockerUpdate';
 export * from './changeLine';
 export * from './changesResponse';
 export * from './changesSinceLastReview';
+export * from './compareDealMemoryParams';
 export * from './competitor';
 export * from './competitorBattlecard';
 export * from './competitorBattlecardListResponse';

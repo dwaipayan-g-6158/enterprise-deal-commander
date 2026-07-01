@@ -1215,6 +1215,14 @@ paths:
         - { name: dealId, in: path, required: true, schema: { type: string } }
       responses:
         "200": { description: Similar deals, content: { application/json: { schema: { $ref: "#/components/schemas/DealMemoryListResponse" } } } }
+  /v2/memory/compare:
+    get:
+      operationId: compareDealMemory
+      tags: [v2intel]
+      parameters:
+        - { name: ids, in: query, required: true, schema: { type: string } }
+      responses:
+        "200": { description: Up to 4 memory records by id for side-by-side comparison, content: { application/json: { schema: { $ref: "#/components/schemas/DealMemoryListResponse" } } } }
   /v2/memory/facets:
     get:
       operationId: getMemoryFacets

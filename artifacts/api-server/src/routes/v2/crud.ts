@@ -1,5 +1,5 @@
 import { Router, type IRouter, type Request, type Response } from "express";
-import { and, asc, desc, eq, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 import crypto from "node:crypto";
 import {
   db,
@@ -61,6 +61,7 @@ import {
   UpdateDealMemoryParams,
   UpdateDealMemoryBody,
   GetSimilarDealsParams,
+  CompareDealMemoryQueryParams,
 } from "@workspace/api-zod";
 import { getActor } from "../../lib/auth";
 import { notFound, badRequest } from "../../lib/http";
@@ -809,6 +810,14 @@ router.get("/memory/similar/:dealId", async (req: Request, res: Response) => {
     return tcv > 0 && Math.abs(mt - tcv) / tcv <= 0.5;
   });
   res.json({ data: similar.slice(0, 10).map(memoryOut) });
+});
+
+router.get("/memory/compare", async (req: Request, res: Response) => {
+  const { ids } = CompareDealMemoryQueryParams.parse(req.query);
+  const idList = ids.split(",").map((s) => s.trim()).filter(Boolean).slice(0, 4);
+  if (idList.length === 0) return res.json({ data: [] });
+  const rows = await db.select().from(dealMemory).where(inArray(dealMemory.id, idList));
+  return res.json({ data: rows.map(memoryOut) });
 });
 
 router.get("/memory/:id", async (req: Request, res: Response) => {
