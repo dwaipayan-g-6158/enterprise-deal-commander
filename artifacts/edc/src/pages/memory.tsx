@@ -5,12 +5,14 @@ import { HealthDashboard } from "@/components/memory/health-dashboard";
 import { ComparisonSheet } from "@/components/memory/comparison-sheet";
 import { CompetitorsTab } from "@/components/memory/competitors-tab";
 import { PricingTab } from "@/components/memory/pricing-tab";
+import { AdvisorTab } from "@/components/memory/advisor-tab";
 
 const TABS = [
   { id: "search", label: "Search" },
   { id: "health", label: "Health" },
   { id: "competitors", label: "Competitors" },
   { id: "pricing", label: "Pricing" },
+  { id: "ask", label: "Ask Advisor" },
 ];
 
 export default function Memory() {
@@ -40,6 +42,7 @@ export default function Memory() {
       {tab === "health" && <HealthDashboard />}
       {tab === "competitors" && <CompetitorsTab />}
       {tab === "pricing" && <PricingTab />}
+      {tab === "ask" && <AdvisorTab />}
       <ComparisonSheet ids={selected} open={compareOpen} onOpenChange={setCompareOpen} />
     </div>
   );
