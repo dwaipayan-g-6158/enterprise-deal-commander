@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { SearchTab } from "@/components/memory/search-tab";
+import { HealthDashboard } from "@/components/memory/health-dashboard";
 
 const TABS = [
   { id: "search", label: "Search" },
@@ -30,7 +31,7 @@ export default function Memory() {
       {tab === "search" && (
         <SearchTab selected={selected} onToggleSelect={toggleSelect} onCompare={() => { /* wired in Part 2 Task 9 */ }} />
       )}
-      {tab === "health" && <div className="text-sm text-muted-foreground">Built in Task 4.</div>}
+      {tab === "health" && <HealthDashboard />}
     </div>
   );
 }
