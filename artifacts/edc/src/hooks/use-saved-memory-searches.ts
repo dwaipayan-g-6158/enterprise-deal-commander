@@ -7,7 +7,6 @@ export interface SavedMemorySearch {
   outcome: string;
   competitor: string;
   pricingModel: string;
-  servicesTier: string;
 }
 
 const MAX_HISTORY = 10;

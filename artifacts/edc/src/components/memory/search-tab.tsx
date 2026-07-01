@@ -121,7 +121,7 @@ export function SearchTab({
             className="w-full"
             onClick={() => {
               const label = q.trim() || `${outcome}/${competitor}/${pricingModel}`;
-              save({ label, q, outcome, competitor, pricingModel, servicesTier: "all" });
+              save({ label, q, outcome, competitor, pricingModel });
             }}
           >
             Save current search
