@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { computeCompetitorIntel, percentiles, type MemoryRow } from "./memory-intel";
+import { computeCompetitorIntel, computePlaybookEffectiveness, percentiles, type MemoryRow } from "./memory-intel";
 
 function row(overrides: Partial<MemoryRow> = {}): MemoryRow {
   return {
@@ -55,5 +55,28 @@ describe("computeCompetitorIntel", () => {
       ...Array.from({ length: 5 }, () => row({ competitorsFaced: ["BigCo"] })),
     ];
     expect(computeCompetitorIntel(rows).map((c) => c.name)).toEqual(["BigCo", "Rival"]);
+  });
+});
+
+describe("computePlaybookEffectiveness", () => {
+  it("compares win rate between deals that used a playbook and those that didn't", () => {
+    const memory = [
+      { dealId: "a", outcome: "Won" },
+      { dealId: "b", outcome: "Won" },
+      { dealId: "c", outcome: "Lost" },
+      { dealId: "d", outcome: "Lost" },
+    ];
+    const assigned = new Set(["a", "b", "c"]); // 3 with playbook: 2 won, 1 lost; 1 without: lost
+    const eff = computePlaybookEffectiveness(memory, assigned);
+    expect(eff.withPlaybookCount).toBe(3);
+    expect(eff.withoutPlaybookCount).toBe(1);
+    expect(eff.withPlaybookWinRatePct).toBe(67);
+    expect(eff.withoutPlaybookWinRatePct).toBe(0);
+  });
+
+  it("returns null win rates for a group with no decided deals", () => {
+    const eff = computePlaybookEffectiveness([], new Set());
+    expect(eff.withPlaybookWinRatePct).toBeNull();
+    expect(eff.withoutPlaybookWinRatePct).toBeNull();
   });
 });

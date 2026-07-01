@@ -43,7 +43,7 @@ import { toISO } from "../../lib/intelligence";
 import { scoreDeal, rescoreActiveDeals } from "../../lib/scoring";
 import { cachedIntel } from "../../lib/portfolio";
 import { computeMemoryHealth } from "../../lib/memory-health";
-import { computeCompetitorIntel, percentiles } from "../../lib/memory-intel";
+import { computeCompetitorIntel, computePlaybookEffectiveness, percentiles } from "../../lib/memory-intel";
 
 const router: IRouter = Router();
 
@@ -753,6 +753,13 @@ router.get("/analytics/pricing-benchmarks", async (req: Request, res: Response) 
       cycleDays: percentiles(cycles),
     },
   });
+});
+
+router.get("/analytics/playbook-effectiveness", async (_req: Request, res: Response) => {
+  const memory = await db.select({ dealId: dealMemory.dealId, outcome: dealMemory.outcome }).from(dealMemory);
+  const assignments = await db.select({ dealId: dealPlaybookAssignments.dealId }).from(dealPlaybookAssignments);
+  const assignedIds = new Set(assignments.map((a) => a.dealId));
+  res.json({ data: computePlaybookEffectiveness(memory, assignedIds) });
 });
 
 /* ------------------------------------------ Closed-Lost Autopsy: Early Warning */

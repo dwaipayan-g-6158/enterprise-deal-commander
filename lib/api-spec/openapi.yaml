@@ -1092,6 +1092,12 @@ paths:
         - { name: outcome, in: query, required: false, schema: { type: string } }
       responses:
         "200": { description: TCV and cycle-time percentile benchmarks over matching archived deals, content: { application/json: { schema: { $ref: "#/components/schemas/GenericDataResponse" } } } }
+  /v2/analytics/playbook-effectiveness:
+    get:
+      operationId: getPlaybookEffectiveness
+      tags: [v2intel]
+      responses:
+        "200": { description: Win-rate comparison between archived deals that had an assigned playbook and those that didn't, content: { application/json: { schema: { $ref: "#/components/schemas/GenericDataResponse" } } } }
   /v2/analytics/deals/{dealId}/trajectory:
     get:
       operationId: getDealTrajectory

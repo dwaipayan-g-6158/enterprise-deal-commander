@@ -5598,6 +5598,77 @@ export function useGetPricingBenchmarks<TData = Awaited<ReturnType<typeof getPri
 
 
 
+export const getGetPlaybookEffectivenessUrl = () => {
+
+
+
+
+  return `/api/v2/analytics/playbook-effectiveness`
+}
+
+export const getPlaybookEffectiveness = async ( options?: RequestInit): Promise<GenericDataResponse> => {
+
+  return customFetch<GenericDataResponse>(getGetPlaybookEffectivenessUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetPlaybookEffectivenessQueryKey = () => {
+    return [
+    `/api/v2/analytics/playbook-effectiveness`
+    ] as const;
+    }
+
+
+export const getGetPlaybookEffectivenessQueryOptions = <TData = Awaited<ReturnType<typeof getPlaybookEffectiveness>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getPlaybookEffectiveness>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetPlaybookEffectivenessQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getPlaybookEffectiveness>>> = ({ signal }) => getPlaybookEffectiveness({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getPlaybookEffectiveness>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetPlaybookEffectivenessQueryResult = NonNullable<Awaited<ReturnType<typeof getPlaybookEffectiveness>>>
+export type GetPlaybookEffectivenessQueryError = ErrorType<unknown>
+
+
+
+export function useGetPlaybookEffectiveness<TData = Awaited<ReturnType<typeof getPlaybookEffectiveness>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getPlaybookEffectiveness>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetPlaybookEffectivenessQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
 export const getGetDealTrajectoryUrl = (dealId: string,) => {
 
 

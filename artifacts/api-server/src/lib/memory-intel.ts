@@ -66,3 +66,29 @@ export function computeCompetitorIntel(rows: MemoryRow[]): CompetitorIntel[] {
 
   return result.sort((a, b) => b.encounterCount - a.encounterCount);
 }
+
+export interface PlaybookEffectiveness {
+  withPlaybookCount: number;
+  withoutPlaybookCount: number;
+  withPlaybookWinRatePct: number | null;
+  withoutPlaybookWinRatePct: number | null;
+}
+
+export function computePlaybookEffectiveness(
+  memoryRows: { dealId: string; outcome: string }[],
+  assignedDealIds: Set<string>,
+): PlaybookEffectiveness {
+  const winRate = (rows: { outcome: string }[]) => {
+    const decided = rows.filter((r) => r.outcome === "Won" || r.outcome === "Lost");
+    if (decided.length === 0) return null;
+    return Math.round((decided.filter((r) => r.outcome === "Won").length / decided.length) * 100);
+  };
+  const withPlaybook = memoryRows.filter((r) => assignedDealIds.has(r.dealId));
+  const withoutPlaybook = memoryRows.filter((r) => !assignedDealIds.has(r.dealId));
+  return {
+    withPlaybookCount: withPlaybook.length,
+    withoutPlaybookCount: withoutPlaybook.length,
+    withPlaybookWinRatePct: winRate(withPlaybook),
+    withoutPlaybookWinRatePct: winRate(withoutPlaybook),
+  };
+}
