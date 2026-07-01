@@ -1758,6 +1758,11 @@ export const GetMemoryInsightsResponse = zod.object({
 })
 
 
+export const GetMemoryHealthResponse = zod.object({
+  "data": zod.record(zod.string(), zod.unknown())
+})
+
+
 export const GetDealTrajectoryParams = zod.object({
   "dealId": zod.coerce.string().uuid()
 })
@@ -2003,6 +2008,11 @@ export const GetSimilarDealsResponse = zod.object({
   "qualityScore": zod.number().nullish(),
   "autopsyCompletedAt": zod.string().nullish()
 }))
+})
+
+
+export const GetMemoryFacetsResponse = zod.object({
+  "data": zod.record(zod.string(), zod.unknown())
 })
 
 

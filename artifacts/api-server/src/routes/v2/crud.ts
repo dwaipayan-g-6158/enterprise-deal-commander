@@ -754,6 +754,44 @@ function normalizeMemoryRow(r: Record<string, unknown>) {
   };
 }
 
+router.get("/memory/facets", async (_req: Request, res: Response) => {
+  const rows = await db
+    .select({
+      outcome: dealMemory.outcome,
+      pricingModel: dealMemory.pricingModel,
+      servicesTier: dealMemory.servicesTier,
+      competitorsFaced: dealMemory.competitorsFaced,
+    })
+    .from(dealMemory);
+
+  const bump = (m: Map<string, number>, k: string | null | undefined) => {
+    if (!k) return;
+    m.set(k, (m.get(k) ?? 0) + 1);
+  };
+  const outcomes = new Map<string, number>();
+  const pricingModels = new Map<string, number>();
+  const servicesTiers = new Map<string, number>();
+  const competitorCounts = new Map<string, number>();
+  for (const r of rows) {
+    bump(outcomes, r.outcome);
+    bump(pricingModels, r.pricingModel);
+    bump(servicesTiers, r.servicesTier);
+    for (const c of r.competitorsFaced ?? []) bump(competitorCounts, c);
+  }
+  const toList = (m: Map<string, number>) =>
+    [...m.entries()].map(([value, count]) => ({ value, count })).sort((a, b) => b.count - a.count);
+
+  res.json({
+    data: {
+      outcomes: toList(outcomes),
+      pricingModels: toList(pricingModels),
+      servicesTiers: toList(servicesTiers),
+      competitors: toList(competitorCounts),
+      total: rows.length,
+    },
+  });
+});
+
 router.get("/memory/similar/:dealId", async (req: Request, res: Response) => {
   const { dealId } = GetSimilarDealsParams.parse(req.params);
   const dealRows = await db

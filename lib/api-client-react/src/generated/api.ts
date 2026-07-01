@@ -5376,6 +5376,77 @@ export function useGetMemoryInsights<TData = Awaited<ReturnType<typeof getMemory
 
 
 
+export const getGetMemoryHealthUrl = () => {
+
+
+
+
+  return `/api/v2/analytics/memory-health`
+}
+
+export const getMemoryHealth = async ( options?: RequestInit): Promise<GenericDataResponse> => {
+
+  return customFetch<GenericDataResponse>(getGetMemoryHealthUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetMemoryHealthQueryKey = () => {
+    return [
+    `/api/v2/analytics/memory-health`
+    ] as const;
+    }
+
+
+export const getGetMemoryHealthQueryOptions = <TData = Awaited<ReturnType<typeof getMemoryHealth>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getMemoryHealth>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetMemoryHealthQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getMemoryHealth>>> = ({ signal }) => getMemoryHealth({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getMemoryHealth>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetMemoryHealthQueryResult = NonNullable<Awaited<ReturnType<typeof getMemoryHealth>>>
+export type GetMemoryHealthQueryError = ErrorType<unknown>
+
+
+
+export function useGetMemoryHealth<TData = Awaited<ReturnType<typeof getMemoryHealth>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getMemoryHealth>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetMemoryHealthQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
 export const getGetDealTrajectoryUrl = (dealId: string,) => {
 
 
@@ -6579,6 +6650,77 @@ export function useGetSimilarDeals<TData = Awaited<ReturnType<typeof getSimilarD
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getGetSimilarDealsQueryOptions(dealId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getGetMemoryFacetsUrl = () => {
+
+
+
+
+  return `/api/v2/memory/facets`
+}
+
+export const getMemoryFacets = async ( options?: RequestInit): Promise<GenericDataResponse> => {
+
+  return customFetch<GenericDataResponse>(getGetMemoryFacetsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetMemoryFacetsQueryKey = () => {
+    return [
+    `/api/v2/memory/facets`
+    ] as const;
+    }
+
+
+export const getGetMemoryFacetsQueryOptions = <TData = Awaited<ReturnType<typeof getMemoryFacets>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getMemoryFacets>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetMemoryFacetsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getMemoryFacets>>> = ({ signal }) => getMemoryFacets({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getMemoryFacets>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetMemoryFacetsQueryResult = NonNullable<Awaited<ReturnType<typeof getMemoryFacets>>>
+export type GetMemoryFacetsQueryError = ErrorType<unknown>
+
+
+
+export function useGetMemoryFacets<TData = Awaited<ReturnType<typeof getMemoryFacets>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getMemoryFacets>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetMemoryFacetsQueryOptions(options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

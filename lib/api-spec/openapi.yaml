@@ -1070,6 +1070,12 @@ paths:
       tags: [v2intel]
       responses:
         "200": { description: Deterministic deal-memory insights vs current pipeline, content: { application/json: { schema: { $ref: "#/components/schemas/GenericDataResponse" } } } }
+  /v2/analytics/memory-health:
+    get:
+      operationId: getMemoryHealth
+      tags: [v2intel]
+      responses:
+        "200": { description: Knowledge base health metrics for the deal memory archive, content: { application/json: { schema: { $ref: "#/components/schemas/GenericDataResponse" } } } }
   /v2/analytics/deals/{dealId}/trajectory:
     get:
       operationId: getDealTrajectory
@@ -1209,6 +1215,12 @@ paths:
         - { name: dealId, in: path, required: true, schema: { type: string } }
       responses:
         "200": { description: Similar deals, content: { application/json: { schema: { $ref: "#/components/schemas/DealMemoryListResponse" } } } }
+  /v2/memory/facets:
+    get:
+      operationId: getMemoryFacets
+      tags: [v2intel]
+      responses:
+        "200": { description: Distinct facet values and counts for deal memory search filters, content: { application/json: { schema: { $ref: "#/components/schemas/GenericDataResponse" } } } }
   /v2/memory/{id}:
     get:
       operationId: getDealMemory

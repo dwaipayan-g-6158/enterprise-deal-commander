@@ -42,6 +42,7 @@ import { notFound } from "../../lib/http";
 import { toISO } from "../../lib/intelligence";
 import { scoreDeal, rescoreActiveDeals } from "../../lib/scoring";
 import { cachedIntel } from "../../lib/portfolio";
+import { computeMemoryHealth } from "../../lib/memory-health";
 
 const router: IRouter = Router();
 
@@ -717,6 +718,11 @@ router.get("/analytics/memory-insights", async (_req: Request, res: Response) =>
   }
 
   res.json({ data: { insights, archivedCount } });
+});
+
+router.get("/analytics/memory-health", async (_req: Request, res: Response) => {
+  const rows = await db.select().from(dealMemory);
+  res.json({ data: computeMemoryHealth(rows) });
 });
 
 /* ------------------------------------------ Closed-Lost Autopsy: Early Warning */
