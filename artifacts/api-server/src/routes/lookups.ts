@@ -43,6 +43,8 @@ import {
   CreateTeamMemberBody,
   DeleteTeamMemberParams,
 } from "@workspace/api-zod";
+import { logSettingsChange } from "../lib/settings-audit";
+import { getActor } from "../lib/auth";
 import { requireAuth } from "../lib/auth";
 import { badRequest, conflict, notFound } from "../lib/http";
 
@@ -121,6 +123,7 @@ router.post("/lookups/competitors", async (req: Request, res: Response) => {
   if (!parsed.success) {
     throw badRequest("Invalid competitor payload", parsed.error.issues);
   }
+  const actor = getActor(req);
   try {
     const [created] = await db
       .insert(competitors)
@@ -129,6 +132,15 @@ router.post("/lookups/competitors", async (req: Request, res: Response) => {
         category: parsed.data.category ?? "IAM",
       })
       .returning();
+    await logSettingsChange({
+      module: "competitors",
+      settingKey: created.name,
+      entityId: String(created.id),
+      action: "create",
+      oldValue: null,
+      newValue: { name: created.name, category: created.category },
+      actor: actor.username,
+    });
     res.status(201).json({
       data: { id: created.id, name: created.name, category: created.category },
     });
@@ -165,11 +177,21 @@ router.post(
     if (!parsed.success) {
       throw badRequest("Invalid compliance driver payload", parsed.error.issues);
     }
+    const actor = getActor(req);
     try {
       const [created] = await db
         .insert(complianceDrivers)
         .values({ name: parsed.data.name })
         .returning();
+      await logSettingsChange({
+        module: "compliance_drivers",
+        settingKey: created.name,
+        entityId: String(created.id),
+        action: "create",
+        oldValue: null,
+        newValue: { name: created.name },
+        actor: actor.username,
+      });
       res.status(201).json({ data: { id: created.id, name: created.name } });
     } catch (err) {
       if (
@@ -206,6 +228,7 @@ router.post("/lookups/team-members", async (req: Request, res: Response) => {
   if (!parsed.success) {
     throw badRequest("Invalid team member payload", parsed.error.issues);
   }
+  const actor = getActor(req);
   try {
     const [created] = await db
       .insert(teamMembers)
@@ -215,6 +238,15 @@ router.post("/lookups/team-members", async (req: Request, res: Response) => {
         canBeTl: parsed.data.can_be_tl ?? false,
       })
       .returning();
+    await logSettingsChange({
+      module: "team_members",
+      settingKey: created.name,
+      entityId: String(created.id),
+      action: "create",
+      oldValue: null,
+      newValue: { name: created.name, canBeAm: created.canBeAm, canBeTl: created.canBeTl },
+      actor: actor.username,
+    });
     res.status(201).json({
       data: {
         id: created.id,
@@ -239,12 +271,22 @@ router.delete(
   "/lookups/team-members/:id",
   async (req: Request, res: Response) => {
     const { id } = DeleteTeamMemberParams.parse(req.params);
+    const actor = getActor(req);
     const result = await db
       .update(teamMembers)
       .set({ isActive: false })
       .where(eq(teamMembers.id, id))
-      .returning({ id: teamMembers.id });
+      .returning({ id: teamMembers.id, name: teamMembers.name });
     if (result.length === 0) throw notFound("Team member not found");
+    await logSettingsChange({
+      module: "team_members",
+      settingKey: result[0].name,
+      entityId: String(id),
+      action: "deactivate",
+      oldValue: { isActive: true },
+      newValue: { isActive: false },
+      actor: actor.username,
+    });
     res.json({ message: "Team member deleted" });
   },
 );
@@ -367,7 +409,11 @@ router.put(
     if (!parsed.success) {
       throw badRequest("Invalid thresholds payload", parsed.error.issues);
     }
+    const actor = getActor(req);
+    const before = await db.select().from(engineThresholds);
+    const beforeByKey = new Map(before.map((r) => [r.parameterKey, r]));
     for (const update of parsed.data.updates) {
+      const prior = beforeByKey.get(update.parameter_key);
       await db
         .insert(engineThresholds)
         .values({
@@ -378,6 +424,15 @@ router.put(
           target: engineThresholds.parameterKey,
           set: { parameterValue: update.parameter_value },
         });
+      await logSettingsChange({
+        module: "engine_thresholds",
+        settingKey: update.parameter_key,
+        action: "update",
+        oldValue: prior?.parameterValue ?? null,
+        newValue: update.parameter_value,
+        dataType: prior?.dataType ?? "number",
+        actor: actor.username,
+      });
     }
     const rows = await db
       .select()
@@ -412,7 +467,14 @@ router.put("/lookups/fx-rates", async (req: Request, res: Response) => {
   if (!parsed.success) {
     throw badRequest("Invalid fx rates payload", parsed.error.issues);
   }
+  const actor = getActor(req);
+  const before = await db.select().from(fxRates);
+  const beforeByKey = new Map(
+    before.map((r) => [`${r.baseCurrency}:${r.quoteCurrency}:${r.asOf}`, r]),
+  );
   for (const update of parsed.data.updates) {
+    const key = `${update.base_currency}:${update.quote_currency}:${update.as_of}`;
+    const prior = beforeByKey.get(key);
     await db
       .insert(fxRates)
       .values({
@@ -425,6 +487,15 @@ router.put("/lookups/fx-rates", async (req: Request, res: Response) => {
         target: [fxRates.baseCurrency, fxRates.quoteCurrency, fxRates.asOf],
         set: { rate: String(update.rate) },
       });
+    await logSettingsChange({
+      module: "fx_rates",
+      settingKey: key,
+      action: "update",
+      oldValue: prior ? Number(prior.rate) : null,
+      newValue: update.rate,
+      dataType: "number",
+      actor: actor.username,
+    });
   }
   const rows = await db
     .select()
