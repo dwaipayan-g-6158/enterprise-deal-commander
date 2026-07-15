@@ -54,6 +54,9 @@ Thumbs.db
 # Secrets and local env
 .env
 .env.*
+# ...but DO track the example templates (they contain no secrets)
+!.env.example
+!**/.env.example
 
 # Playwright MCP scratch artifacts
 .playwright-mcp/

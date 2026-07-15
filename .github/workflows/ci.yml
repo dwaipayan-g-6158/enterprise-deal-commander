@@ -1,0 +1,84 @@
+name: CI
+
+# Starting CI pipeline for the pnpm monorepo. It installs the workspace,
+# typechecks and builds every package, and runs the pure (DB-free) test
+# suites. The API-server suite that needs PostgreSQL runs in a separate job
+# with a Postgres service; adjust the connection/seed as your tests require.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    name: Typecheck, build & pure tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm run typecheck
+
+      - name: Build
+        run: pnpm run build
+
+      - name: Engine tests (pure, isomorphic)
+        run: pnpm --filter @workspace/engine run test
+
+      - name: Frontend tests
+        run: pnpm --filter @workspace/edc run test
+
+  api-tests:
+    name: API server tests (PostgreSQL)
+    runs-on: ubuntu-latest
+    # DB-backed tests. This job is best-effort scaffolding — wire up your test
+    # schema/seed before relying on it as a required check.
+    continue-on-error: true
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: edc
+          POSTGRES_PASSWORD: edc
+          POSTGRES_DB: edc
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U edc"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgres://edc:edc@localhost:5432/edc
+      SESSION_SECRET: ci-test-secret
+      NODE_ENV: test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Push schema
+        run: pnpm --filter @workspace/db run push || true
+      - name: API server tests
+        run: pnpm --filter @workspace/api-server run test
