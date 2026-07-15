@@ -46,6 +46,22 @@ export const teamMembers = pgTable("team_members", {
   isActive: boolean("is_active").notNull().default(true),
 });
 
+export const segments = pgTable("segments", {
+  id: serial("id").primaryKey(),
+  name: varchar("name", { length: 80 }).notNull().unique(),
+  description: text("description"),
+  sortOrder: smallint("sort_order").notNull().default(0),
+  isActive: boolean("is_active").notNull().default(true),
+});
+
+export const dealTypes = pgTable("deal_types", {
+  id: serial("id").primaryKey(),
+  name: varchar("name", { length: 80 }).notNull().unique(),
+  description: text("description"),
+  sortOrder: smallint("sort_order").notNull().default(0),
+  isActive: boolean("is_active").notNull().default(true),
+});
+
 export const productCatalog = pgTable("product_catalog", {
   id: uuid("id").primaryKey().defaultRandom(),
   // Stable machine code (e.g. "ADAUDIT_PLUS") — the isomorphic engine keys its
