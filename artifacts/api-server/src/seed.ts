@@ -14,6 +14,10 @@ import {
   interventionChecklists,
   engineThresholds,
   fxRates,
+  scoringModelWeights,
+  segments,
+  dealTypes,
+  automationRuleTemplates,
   enterpriseDeals,
   dealTechnicalGates,
   dealCrossSells,
@@ -301,6 +305,23 @@ async function seedLookups() {
       { parameterKey: "risk_level_low_max", parameterValue: "25", dataType: "number", description: "Composite risk score at or below which a deal is classified as Low risk (Risk Engine v2)" },
       { parameterKey: "risk_level_moderate_max", parameterValue: "50", dataType: "number", description: "Composite risk score at or below which a deal is classified as Moderate risk (Risk Engine v2)" },
       { parameterKey: "risk_level_elevated_max", parameterValue: "75", dataType: "number", description: "Composite risk score at or below which a deal is classified as Elevated risk; above this is High (Risk Engine v2)" },
+      // Pipeline Flow health-score weights (Settings redesign — previously hardcoded DEFAULT_HEALTH_WEIGHTS)
+      { parameterKey: "health_weight_coverage", parameterValue: "0.1667", dataType: "number", description: "Weight of the coverage component in the pipeline health score" },
+      { parameterKey: "health_weight_velocity", parameterValue: "0.1667", dataType: "number", description: "Weight of the velocity component in the pipeline health score" },
+      { parameterKey: "health_weight_conversion", parameterValue: "0.1667", dataType: "number", description: "Weight of the conversion component in the pipeline health score" },
+      { parameterKey: "health_weight_generation", parameterValue: "0.1667", dataType: "number", description: "Weight of the generation component in the pipeline health score" },
+      { parameterKey: "health_weight_age", parameterValue: "0.1667", dataType: "number", description: "Weight of the age component in the pipeline health score" },
+      { parameterKey: "health_weight_attrition", parameterValue: "0.1665", dataType: "number", description: "Weight of the attrition component in the pipeline health score" },
+      // Portfolio Risk Analysis constants (Settings redesign — previously hardcoded in portfolio-metrics.ts)
+      { parameterKey: "portfolio_health_base_green", parameterValue: "10", dataType: "number", description: "Baseline composite risk score for a GREEN-health deal" },
+      { parameterKey: "portfolio_health_base_yellow", parameterValue: "45", dataType: "number", description: "Baseline composite risk score for a YELLOW-health deal" },
+      { parameterKey: "portfolio_health_base_red", parameterValue: "75", dataType: "number", description: "Baseline composite risk score for a RED-health deal" },
+      { parameterKey: "portfolio_alert_bump_cap", parameterValue: "25", dataType: "number", description: "Maximum bump to a deal's composite risk score from its strongest active alert" },
+      { parameterKey: "portfolio_alert_bump_per_weight", parameterValue: "0.25", dataType: "number", description: "Multiplier applied to the strongest active alert's weight to compute the risk bump" },
+      { parameterKey: "portfolio_min_confidence_deals", parameterValue: "3", dataType: "number", description: "Minimum deals in a heatmap cell before it is flagged low-confidence" },
+      { parameterKey: "portfolio_significant_lift", parameterValue: "1.5", dataType: "number", description: "Minimum lift over baseline for an alert-code correlation to be treated as significant" },
+      { parameterKey: "portfolio_cluster_min_share", parameterValue: "0.5", dataType: "number", description: "Minimum share of a group's deals carrying a code for it to count toward a correlation cluster" },
+      { parameterKey: "portfolio_cluster_min_deals", parameterValue: "3", dataType: "number", description: "Minimum deals in a group before its correlations are considered for clustering" },
     ])
     .onConflictDoNothing();
 
@@ -311,6 +332,67 @@ async function seedLookups() {
       { baseCurrency: "EUR", quoteCurrency: "USD", rate: "1.08000000", asOf: today },
       { baseCurrency: "GBP", quoteCurrency: "USD", rate: "1.27000000", asOf: today },
       { baseCurrency: "USD", quoteCurrency: "USD", rate: "1.00000000", asOf: today },
+    ])
+    .onConflictDoNothing();
+
+  // Predictive scoring model calibrated weights (Settings redesign)
+  // All weights are stored as fractions of 1.0 (numeric(5,4) constraint) and sum to 1.0000.
+  // Task 6 will read these and scale by 100 to preserve the 0-100 scoring convention.
+  const scoringWeightDefaults: { featureId: string; calibratedWeight: string }[] = [
+    { featureId: "gate_momentum", calibratedWeight: "0.2500" },
+    { featureId: "stage_velocity", calibratedWeight: "0.1500" },
+    { featureId: "services_attachment", calibratedWeight: "0.1000" },
+    { featureId: "executive_alignment", calibratedWeight: "0.1500" },
+    { featureId: "blocker_load", calibratedWeight: "0.1000" },
+    { featureId: "deal_size_confidence", calibratedWeight: "0.0500" },
+    { featureId: "close_pressure", calibratedWeight: "0.1000" },
+    { featureId: "historical_win_rate", calibratedWeight: "0.1000" },
+  ];
+  await db
+    .insert(scoringModelWeights)
+    .values(
+      scoringWeightDefaults.map((w) => ({
+        featureId: w.featureId,
+        calibratedWeight: w.calibratedWeight,
+        sampleSize: 0,
+        calibrationDate: today,
+      })),
+    )
+    .onConflictDoNothing();
+
+  // Sample segments and deal types (Settings redesign)
+  await db
+    .insert(segments)
+    .values([
+      { name: "Enterprise", sortOrder: 1 },
+      { name: "Mid-Market", sortOrder: 2 },
+      { name: "Commercial", sortOrder: 3 },
+    ])
+    .onConflictDoNothing();
+
+  await db
+    .insert(dealTypes)
+    .values([
+      { name: "New Business", sortOrder: 1 },
+      { name: "Expansion", sortOrder: 2 },
+      { name: "Renewal", sortOrder: 3 },
+      { name: "Migration", sortOrder: 4 },
+    ])
+    .onConflictDoNothing();
+
+  // Built-in automation rule template (Settings redesign)
+  await db
+    .insert(automationRuleTemplates)
+    .values([
+      {
+        name: "Critical anomaly alert",
+        description: "Notify the deal owner when a Critical-severity anomaly is detected on a deal above $50K.",
+        category: "risk",
+        triggerEvent: "health_changed",
+        conditions: [{ field: "toStatus", operator: "eq", value: "RED" }],
+        actions: [{ actionType: "in_app_notify", config: { message: "Deal health changed to RED — review immediately." } }],
+        isBuiltin: true,
+      },
     ])
     .onConflictDoNothing();
 }
