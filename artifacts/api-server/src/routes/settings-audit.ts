@@ -75,6 +75,10 @@ router.post("/settings/change-log/:id/rollback", async (req: Request, res: Respo
     throw conflict(`Rollback not yet supported for module "${row.module}"`);
   }
 
+  if (row.action === "rollback" || row.action === "import") {
+    throw conflict(`Cannot roll back a "${row.action}" entry — only original create/update/deactivate/delete changes can be rolled back`);
+  }
+
   const inverse = computeRollback({
     module: row.module,
     settingKey: row.settingKey,
@@ -133,7 +137,21 @@ router.post("/settings/change-log/:id/rollback", async (req: Request, res: Respo
 
 router.get("/settings/config/export", async (_req: Request, res: Response) => {
   const thresholds = await db.select().from(engineThresholds);
-  const scoringWeights = await db.select().from(scoringModelWeights);
+  // scoring_model_weights is an append-only history table (one row per
+  // calibration, not per feature) — mirror the same "latest row per
+  // featureId" dedup that `getScoringWeights()` (lib/scoring.ts) already
+  // does internally, so "export" means "the current effective
+  // configuration" rather than the entire calibration history. Without
+  // this, repeated export -> import round-trips grow the table unbounded.
+  const scoringWeightHistory = await db
+    .select()
+    .from(scoringModelWeights)
+    .orderBy(desc(scoringModelWeights.calibrationDate));
+  const latestByFeature = new Map<string, typeof scoringModelWeights.$inferSelect>();
+  for (const row of scoringWeightHistory) {
+    if (!latestByFeature.has(row.featureId)) latestByFeature.set(row.featureId, row);
+  }
+  const scoringWeights = [...latestByFeature.values()];
   res.json({
     data: {
       exportedAt: new Date().toISOString(),
