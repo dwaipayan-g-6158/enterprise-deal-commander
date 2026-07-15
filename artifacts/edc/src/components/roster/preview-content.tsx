@@ -7,6 +7,7 @@ import { formatCurrency } from "@/components/cockpit/use-invalidate";
 import { shortDate } from "@/components/dashboard/widgets/_shared";
 import { HealthBadge, ScoreCell, VelocityCell, LastActivityCell } from "./cells";
 import { useDealPreview } from "./hooks/use-deal-preview";
+import { extractDealRisk, sortActions } from "@/components/cockpit/risk/risk-model";
 import type { RosterRow } from "./model/roster-types";
 
 function Stat({ label, children }: { label: string; children: React.ReactNode }) {
@@ -39,6 +40,13 @@ export function PreviewContent({
   const alerts = intelligence?.governance.alerts ?? [];
   const blockerCount = intelligence?.governance.activeBlockerCount ?? 0;
   const unmanaged = intelligence?.governance.unmanagedAlertCount ?? 0;
+
+  // Top next-best-action: prefer the ranked risk action, fall back to the
+  // opportunity recommendation rationale.
+  const topAction =
+    sortActions(extractDealRisk(intelligence)?.recommendedActions ?? [])[0]?.action ??
+    intelligence?.recommendations?.[0]?.rationale ??
+    null;
 
   return (
     <div className={cn(variant === "panel" ? "space-y-5" : "grid gap-5 md:grid-cols-3")}>
@@ -110,10 +118,13 @@ export function PreviewContent({
                 <p className="text-xs leading-relaxed line-clamp-4">{deal.managerStrategicBlueprint}</p>
               </div>
             )}
-            {intelligence?.recommendations?.[0] && (
-              <div className="flex items-start gap-2 rounded-md border bg-muted/30 p-2 text-xs">
-                <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-primary mt-0.5" />
-                <span>{intelligence.recommendations[0].rationale}</span>
+            {topAction && (
+              <div className="space-y-1">
+                <div className="text-xs text-muted-foreground">Next best action</div>
+                <div className="flex items-start gap-2 rounded-md border bg-muted/30 p-2 text-xs">
+                  <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-primary mt-0.5" />
+                  <span>{topAction}</span>
+                </div>
               </div>
             )}
           </>

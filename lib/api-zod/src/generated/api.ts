@@ -261,6 +261,8 @@ export const updateDealBodyDealCurrencyMax = 3;
 
 export const updateDealBodyServicesRevenueMin = 0;
 
+export const updateDealBodyLossReasonMax = 2000;
+
 export const updateDealBodyOverrideReasonMin = 10;
 export const updateDealBodyOverrideReasonMax = 1000;
 
@@ -285,6 +287,7 @@ export const UpdateDealBody = zod.object({
   "manager_strategic_blueprint": zod.string().nullish(),
   "speaker_notes": zod.string().nullish(),
   "loss_archetype_id": zod.number().nullish(),
+  "loss_reason": zod.string().max(updateDealBodyLossReasonMax).nullish(),
   "competitor_id": zod.number().nullish(),
   "compliance_driver_id": zod.number().nullish(),
   "estimated_log_sources": zod.number().nullish(),

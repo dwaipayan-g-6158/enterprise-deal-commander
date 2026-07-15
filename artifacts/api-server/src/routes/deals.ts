@@ -416,6 +416,10 @@ const updateDealHandler = async (req: Request, res: Response) => {
   if (body.loss_archetype_id !== undefined) {
     updates.lossArchetypeId = body.loss_archetype_id ?? null;
   }
+  if (body.loss_reason !== undefined) {
+    track("loss_reason", existing.lossReason, body.loss_reason);
+    updates.lossReason = body.loss_reason ?? null;
+  }
   if (body.competitor_id !== undefined) {
     track("competitor_id", existing.competitorId, body.competitor_id);
     updates.competitorId = body.competitor_id ?? null;

@@ -1,7 +1,4 @@
 import { useMemo, useState } from "react";
-import { useLocation } from "wouter";
-import { useToast } from "@/hooks/use-toast";
-import { ToastAction } from "@/components/ui/toast";
 import type { PipelineStage } from "@workspace/api-client-react";
 import { buildBoard, type BoardStage } from "../model/board";
 import type { RowActions } from "../row-context-menu";
@@ -11,13 +8,15 @@ import type { StageMoveApi } from "./use-stage-move";
 
 // The Kanban board: a horizontally scrollable rail of stage columns over the
 // already-filtered/sorted rows. All intelligence lives on the cards; moving a
-// card between columns changes the deal's stage through the shared move API.
+// card between columns changes the deal's stage through the shared move API,
+// and dropping onto a terminal column asks the parent to open the close dialog.
 export function RosterBoard({
   rows,
   stages,
   readOnly,
   stageFilter,
   onCardClick,
+  onRequestClose,
   rowActions,
   moveApi,
 }: {
@@ -27,11 +26,10 @@ export function RosterBoard({
   /** filters.stage — stage names; when non-empty, only these columns render. */
   stageFilter: string[];
   onCardClick: (row: RosterRow) => void;
+  onRequestClose: (row: RosterRow, stage: BoardStage) => void;
   rowActions: RowActions;
   moveApi: StageMoveApi;
 }) {
-  const [, navigate] = useLocation();
-  const { toast } = useToast();
   const [dragActive, setDragActive] = useState(false);
 
   const columns = useMemo(() => {
@@ -47,16 +45,9 @@ export function RosterBoard({
     [stages],
   );
 
-  const onTerminalDrop = (dealId: string) => {
-    toast({
-      title: "Closed stages are set from the cockpit",
-      description: "Open the deal to record a won/lost outcome.",
-      action: (
-        <ToastAction altText="Open deal cockpit" onClick={() => navigate(`/deals/${dealId}`)}>
-          Open cockpit
-        </ToastAction>
-      ),
-    });
+  const requestClose = (dealId: string, stage: BoardStage) => {
+    const row = rows.find((r) => r.id === dealId);
+    if (row) onRequestClose(row, stage);
   };
 
   return (
@@ -76,7 +67,7 @@ export function RosterBoard({
             onDragStart={() => setDragActive(true)}
             onDragEnd={() => setDragActive(false)}
             onDropDeal={(dealId, stage) => moveApi.move(dealId, stage)}
-            onTerminalDrop={onTerminalDrop}
+            onTerminalDrop={(dealId) => requestClose(dealId, column.stage)}
           />
         ))}
       </div>

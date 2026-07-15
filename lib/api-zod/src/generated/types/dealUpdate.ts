@@ -58,6 +58,11 @@ export interface DealUpdate {
   speaker_notes?: string | null;
   /** @nullable */
   loss_archetype_id?: number | null;
+  /**
+     * @maxLength 2000
+     * @nullable
+     */
+  loss_reason?: string | null;
   /** @nullable */
   competitor_id?: number | null;
   /** @nullable */

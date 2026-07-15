@@ -6,6 +6,7 @@ import {
   getGetRosterEnrichmentQueryKey,
   getGetDealQueryKey,
   getGetDealIntelligenceQueryKey,
+  getSearchDealMemoryQueryKey,
   type Deal,
   type DealUpdate,
 } from "@workspace/api-client-react";
@@ -18,11 +19,15 @@ export interface PendingOverride {
   toStage: BoardStage;
   message: string;
   patternCodes: string[];
+  /** Extra fields (e.g. loss archetype/reason on a close) to re-send with the override. */
+  extra?: DealUpdate;
 }
 
 export interface StageMoveApi {
-  /** Attempt to move a deal to a stage. No-op for same-stage or terminal targets. */
+  /** Move a deal to a non-terminal stage. No-op for same-stage or terminal targets. */
   move: (dealId: string, toStage: BoardStage) => void;
+  /** Close a deal into a terminal stage, carrying won/lost fields. */
+  close: (dealId: string, toStage: BoardStage, extra: DealUpdate) => void;
   /** Deals with an in-flight move (used to dim/lock their cards). */
   movingIds: Set<string>;
   /** Set when the last attempt hit the 409 guardrail; drives the override dialog. */
@@ -31,6 +36,11 @@ export interface StageMoveApi {
   submitOverride: (reason: string) => void;
   /** Dismiss the override dialog (the optimistic change was already rolled back). */
   cancelOverride: () => void;
+}
+
+export interface StageMoveOptions {
+  /** Called after a successful move into a terminal stage (in place of the generic toast). */
+  onClosed?: (row: RosterRow, outcome: "won" | "lost") => void;
 }
 
 // Optimistically move a deal between columns in a cached deals-list response.
@@ -51,13 +61,13 @@ function patchDealStage(cached: unknown, dealId: string, toStage: BoardStage): u
 
 /**
  * Drag-drop / context-menu stage moves for the board. Optimistically relocates
- * the card, submits `PUT /deals/:id { sales_stage_id }` (which the server routes
- * through the guardrail, audit log, stage-changed event and pipeline-transition
- * recording), and on a 409 guardrail surfaces the override dialog. Enrichment is
- * invalidated on success because nothing else refreshes it and risk/velocity are
- * stage-dependent.
+ * the card, submits `PUT /deals/:id` (which the server routes through the
+ * guardrail, audit log, stage-changed event and pipeline-transition recording),
+ * and on a 409 guardrail surfaces the override dialog. Terminal moves (close)
+ * carry won/lost fields and notify via `onClosed`. Enrichment is invalidated on
+ * success because nothing else refreshes it and risk/velocity are stage-dependent.
  */
-export function useStageMove(rows: RosterRow[]): StageMoveApi {
+export function useStageMove(rows: RosterRow[], opts: StageMoveOptions = {}): StageMoveApi {
   const qc = useQueryClient();
   const updateDeal = useUpdateDeal();
   const { toast } = useToast();
@@ -71,6 +81,8 @@ export function useStageMove(rows: RosterRow[]): StageMoveApi {
   rowsRef.current = rows;
   const pendingRef = useRef<PendingOverride | null>(null);
   pendingRef.current = pendingOverride;
+  const onClosedRef = useRef(opts.onClosed);
+  onClosedRef.current = opts.onClosed;
 
   const markMoving = (id: string, on: boolean) =>
     setMovingIds((prev) => {
@@ -81,7 +93,13 @@ export function useStageMove(rows: RosterRow[]): StageMoveApi {
     });
 
   const attempt = useCallback(
-    async (row: RosterRow, toStage: BoardStage, overrideReason: string | undefined, isOverride: boolean) => {
+    async (
+      row: RosterRow,
+      toStage: BoardStage,
+      overrideReason: string | undefined,
+      isOverride: boolean,
+      extra?: DealUpdate,
+    ) => {
       const dealId = row.id;
       const listKey = getListDealsQueryKey();
 
@@ -93,24 +111,32 @@ export function useStageMove(rows: RosterRow[]): StageMoveApi {
       markMoving(dealId, true);
 
       try {
-        const data: DealUpdate = { sales_stage_id: toStage.id };
+        const data: DealUpdate = { ...extra, sales_stage_id: toStage.id };
         if (overrideReason && overrideReason.length >= 10) data.override_reason = overrideReason;
         await updateDeal.mutateAsync({ id: dealId, data });
 
-        await Promise.all([
+        const invalidations = [
           qc.invalidateQueries({ queryKey: listKey }),
           qc.invalidateQueries({ queryKey: getGetRosterEnrichmentQueryKey() }),
           qc.invalidateQueries({ queryKey: getGetDealQueryKey(dealId) }),
           qc.invalidateQueries({ queryKey: getGetDealIntelligenceQueryKey(dealId) }),
-        ]);
-        toast({ title: `Moved to ${toStage.name}` });
+        ];
+        // A close archives the deal to memory (post-mortem subscriber) — refresh
+        // the memory surfaces so the autopsy sheet finds the new row.
+        if (toStage.terminal) {
+          invalidations.push(qc.invalidateQueries({ queryKey: getSearchDealMemoryQueryKey() }));
+        }
+        await Promise.all(invalidations);
+
         setPendingOverride(null);
+        if (toStage.terminal) onClosedRef.current?.(row, toStage.terminal);
+        else toast({ title: `Moved to ${toStage.name}` });
       } catch (err: unknown) {
         // Roll back every snapshotted variant.
         snapshot.forEach(([key, prev]) => qc.setQueryData(key, prev));
         const guardrail = extractGuardrail(err);
         if (guardrail && !isOverride) {
-          setPendingOverride({ deal: row, toStage, message: guardrail.message, patternCodes: guardrail.patternCodes });
+          setPendingOverride({ deal: row, toStage, message: guardrail.message, patternCodes: guardrail.patternCodes, extra });
         } else {
           const msg = (err as { data?: { error?: { message?: string } } })?.data?.error?.message;
           toast({
@@ -132,8 +158,18 @@ export function useStageMove(rows: RosterRow[]): StageMoveApi {
       const row = rowsRef.current.find((r) => r.id === dealId);
       if (!row) return;
       if (row.salesStageId === toStage.id) return; // same column — no-op
-      if (toStage.terminal) return; // terminal columns are view-only in v1
+      if (toStage.terminal) return; // closing goes through close(), not a plain move
       void attempt(row, toStage, undefined, false);
+    },
+    [attempt],
+  );
+
+  const close = useCallback(
+    (dealId: string, toStage: BoardStage, extra: DealUpdate) => {
+      const row = rowsRef.current.find((r) => r.id === dealId);
+      if (!row) return;
+      if (row.salesStageId === toStage.id) return; // already there — no-op
+      void attempt(row, toStage, undefined, false, extra);
     },
     [attempt],
   );
@@ -142,12 +178,12 @@ export function useStageMove(rows: RosterRow[]): StageMoveApi {
     (reason: string) => {
       const po = pendingRef.current;
       if (!po) return;
-      void attempt(po.deal, po.toStage, reason.trim(), true);
+      void attempt(po.deal, po.toStage, reason.trim(), true, po.extra);
     },
     [attempt],
   );
 
   const cancelOverride = useCallback(() => setPendingOverride(null), []);
 
-  return { move, movingIds, pendingOverride, submitOverride, cancelOverride };
+  return { move, close, movingIds, pendingOverride, submitOverride, cancelOverride };
 }

@@ -38,9 +38,13 @@ import { RosterTable } from "@/components/roster/roster-table";
 import { RosterCardList } from "@/components/roster/roster-card-list";
 import { RosterBoard } from "@/components/roster/board/roster-board";
 import { StageOverrideDialog } from "@/components/roster/board/stage-override-dialog";
+import { CloseDealDialog, type PendingClose } from "@/components/roster/board/close-deal-dialog";
 import { useStageMove } from "@/components/roster/board/use-stage-move";
 import { PreviewPanel } from "@/components/roster/preview-panel";
+import { LossAutopsySheet } from "@/components/autopsy/loss-autopsy-sheet";
+import { ToastAction } from "@/components/ui/toast";
 import type { RowActions } from "@/components/roster/row-context-menu";
+import type { BoardStage } from "@/components/roster/model/board";
 import { cn } from "@/lib/utils";
 import type { FilterOption } from "@/components/roster/multi-select-filter";
 import { COLUMNS } from "@/components/roster/model/roster-columns";
@@ -105,9 +109,33 @@ export default function Deals() {
   });
   const derived = useDerivedRows(rows, view);
 
+  // Board-only close flow: a terminal-column drop opens this dialog; on a lost
+  // close the success toast offers to complete the autopsy.
+  const [pendingClose, setPendingClose] = useState<PendingClose | null>(null);
+  const [autopsyTarget, setAutopsyTarget] = useState<{ dealId: string; dealName: string } | null>(null);
+
   // Board-only stage-move API (drag-drop + context menu + 409 override). Harmless
   // in table mode — it holds no subscriptions until a move is triggered.
-  const moveApi = useStageMove(derived.flat);
+  const moveApi = useStageMove(derived.flat, {
+    onClosed: (row, outcome) => {
+      if (outcome === "lost") {
+        toast({
+          title: `${row.dealName} marked Lost`,
+          description: "Capture the full autopsy while it's fresh.",
+          action: (
+            <ToastAction
+              altText="Complete autopsy"
+              onClick={() => setAutopsyTarget({ dealId: row.id, dealName: row.dealName })}
+            >
+              Complete autopsy
+            </ToastAction>
+          ),
+        });
+      } else {
+        toast({ title: `${row.dealName} marked Won` });
+      }
+    },
+  });
 
   // Visible columns in their configured order; guard against any stale ids.
   const visibleColumns = useMemo<ColumnId[]>(
@@ -364,6 +392,7 @@ export default function Deals() {
                 readOnly={filters.state !== "active"}
                 stageFilter={filters.stage}
                 onCardClick={(row) => setPreviewDealId(row.id)}
+                onRequestClose={(row: RosterRow, stage: BoardStage) => setPendingClose({ row, toStage: stage })}
                 rowActions={rowActions}
                 moveApi={moveApi}
               />
@@ -403,6 +432,25 @@ export default function Deals() {
 
       {/* Board-only: opens when a stage move hits the 409 risk guardrail. */}
       <StageOverrideDialog moveApi={moveApi} />
+
+      {/* Board-only: drag-to-close confirmation (won/lost + loss capture). */}
+      <CloseDealDialog
+        pending={pendingClose}
+        onCancel={() => setPendingClose(null)}
+        onConfirm={(extra) => {
+          if (pendingClose) moveApi.close(pendingClose.row.id, pendingClose.toStage, extra);
+          setPendingClose(null);
+        }}
+      />
+
+      {autopsyTarget && (
+        <LossAutopsySheet
+          dealId={autopsyTarget.dealId}
+          dealName={autopsyTarget.dealName}
+          open={autopsyTarget !== null}
+          onOpenChange={(v) => !v && setAutopsyTarget(null)}
+        />
+      )}
 
       {!isLoading && !isError && derived.flat.length > 0 && (
         <p className="text-xs text-muted-foreground">

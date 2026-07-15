@@ -1947,6 +1947,7 @@ components:
         manager_strategic_blueprint: { type: ["string", "null"] }
         speaker_notes: { type: ["string", "null"] }
         loss_archetype_id: { type: ["integer", "null"] }
+        loss_reason: { type: ["string", "null"], maxLength: 2000 }
         competitor_id: { type: ["integer", "null"] }
         compliance_driver_id: { type: ["integer", "null"] }
         estimated_log_sources: { type: ["integer", "null"] }

@@ -30,8 +30,8 @@ function SectionCards({
 }
 
 // One stage column: a value/count rollup header, then an At-Risk band above an
-// On-Track band. Terminal columns (Closed-Won/Lost) render their deals but are
-// view-only in v1 — a drop there fires a redirect toast instead of moving.
+// On-Track band. Dropping onto a terminal column (Closed-Won/Lost) opens the
+// close-out dialog instead of a plain move.
 export function BoardColumn({
   column,
   readOnly,
@@ -61,14 +61,14 @@ export function BoardColumn({
 }) {
   const { stage, atRisk, onTrack, dealCount, totalTCV } = column;
   const terminal = stage.terminal !== null;
-  const droppable = !terminal && !readOnly;
+  const droppable = !terminal && !readOnly; // plain move target
+  const closable = terminal && !readOnly; // close-out target (won/lost)
   const [isOver, setIsOver] = useState(false);
   const depth = useRef(0);
 
-  // Terminal columns still preventDefault so their drop fires (to explain via a
-  // toast); droppable columns accept the move. Read-only non-terminal columns
-  // accept nothing.
-  const acceptsDrop = droppable || terminal;
+  // Both move targets and close targets accept a drop; only a read-only column
+  // (archived/deleted state) accepts nothing.
+  const acceptsDrop = droppable || closable;
 
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
@@ -76,7 +76,7 @@ export function BoardColumn({
     setIsOver(false);
     const dealId = e.dataTransfer.getData(DEAL_DND_MIME);
     if (!dealId) return;
-    if (terminal) onTerminalDrop(dealId);
+    if (closable) onTerminalDrop(dealId);
     else if (droppable) onDropDeal(dealId, stage);
   };
 
@@ -115,7 +115,7 @@ export function BoardColumn({
         acceptsDrop
           ? (e) => {
               e.preventDefault();
-              e.dataTransfer.dropEffect = terminal ? "none" : "move";
+              e.dataTransfer.dropEffect = "move";
             }
           : undefined
       }
@@ -134,10 +134,11 @@ export function BoardColumn({
       className={cn(
         "flex w-[300px] shrink-0 flex-col rounded-lg border bg-muted/20 transition-opacity",
         isOver && droppable && "ring-2 ring-primary",
-        isOver && terminal && "ring-2 ring-amber-500/70",
+        isOver && closable && stage.terminal === "won" && "ring-2 ring-emerald-500/70",
+        isOver && closable && stage.terminal === "lost" && "ring-2 ring-rose-500/70",
         terminal && "bg-muted/40",
-        // Terminal columns can't receive a move — fade them while dragging.
-        terminal && dragActive && !isOver && "opacity-60",
+        // Read-only terminal columns can't receive a close — fade while dragging.
+        terminal && !closable && dragActive && !isOver && "opacity-60",
       )}
     >
       <div className="flex items-start justify-between gap-2 border-b px-3 py-2">
@@ -155,7 +156,7 @@ export function BoardColumn({
       <div className="flex-1 space-y-3 overflow-y-auto p-2 max-h-[calc(100vh-19rem)]">
         {dealCount === 0 ? (
           <div className="flex h-24 items-center justify-center rounded-md border border-dashed text-xs text-muted-foreground">
-            {terminal ? "No deals" : isOver ? "Drop to move here" : "No deals"}
+            {isOver && closable ? "Drop to close" : isOver && droppable ? "Drop to move here" : "No deals"}
           </div>
         ) : (
           <>
