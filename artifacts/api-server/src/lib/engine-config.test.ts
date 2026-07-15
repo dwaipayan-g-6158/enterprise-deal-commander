@@ -7,7 +7,12 @@ import {
   derivePortfolioConfig,
   mergeScoringWeights,
 } from "./engine-config";
-import type { EngineThresholds, HealthWeights } from "@workspace/engine";
+import {
+  type EngineThresholds,
+  type HealthWeights,
+  type ScoringInput,
+  computePredictiveScore,
+} from "@workspace/engine";
 import { DEFAULT_PORTFOLIO_CONFIG } from "./portfolio-metrics";
 
 // `EngineThresholds` has 16 required named fields (elephant_tcv_threshold,
@@ -154,15 +159,15 @@ describe("derivePortfolioConfig", () => {
 });
 
 describe("mergeScoringWeights", () => {
-  it("overrides only the factors present in the calibrated rows, leaving the rest at default", () => {
+  it("overrides only the factors present in the calibrated rows (scaled ×100 to the engine's native scale), leaving the rest at default", () => {
     const merged = mergeScoringWeights([
       { featureId: "gate_momentum", calibratedWeight: 0.4 },
       { featureId: "stage_velocity", calibratedWeight: 0.05 },
     ]);
-    expect(merged.gate_momentum).toBe(0.4);
-    expect(merged.stage_velocity).toBe(0.05);
-    // Untouched factors keep their scaled default (fraction-of-1, see Step 7).
-    expect(merged.executive_alignment).toBeCloseTo(0.15, 4);
+    expect(merged.gate_momentum).toBe(40);
+    expect(merged.stage_velocity).toBe(5);
+    // Untouched factors keep their native-scale default.
+    expect(merged.executive_alignment).toBe(15);
   });
 
   it("ignores rows with an unknown featureId or a non-finite weight", () => {
@@ -171,11 +176,32 @@ describe("mergeScoringWeights", () => {
       { featureId: "blocker_load", calibratedWeight: Number.NaN },
     ]);
     expect(merged.not_a_real_factor).toBeUndefined();
-    expect(merged.blocker_load).toBeCloseTo(0.1, 4);
+    expect(merged.blocker_load).toBe(10);
   });
 
-  it("returns the full default set (scaled to fractions of 1) when given no rows", () => {
+  it("returns the full default set (native 0-100 scale) when given no rows", () => {
     const merged = mergeScoringWeights([]);
-    expect(Object.values(merged).reduce((a, b) => a + b, 0)).toBeCloseTo(1, 4);
+    expect(Object.values(merged).reduce((a, b) => a + b, 0)).toBe(100);
+  });
+
+  it("regression guard: merged weights fed into computePredictiveScore produce non-zero per-factor contributions", () => {
+    const merged = mergeScoringWeights([{ featureId: "gate_momentum", calibratedWeight: 0.5 }]);
+    const input: ScoringInput = {
+      progressPct: 90,
+      daysInStage: 5,
+      productRevenue: 500000,
+      servicesRevenue: 100000,
+      ctoSignedOff: true,
+      executiveAgreed: true,
+      totalBlockerCount: 0,
+      highBlockerCount: 0,
+      calculatedTCV: 600000,
+      daysToClose: 30,
+      profileKey: "Commercial|Multi-Year",
+    };
+    const result = computePredictiveScore(input, {}, merged);
+    const gateMomentum = result.breakdown.find((b) => b.featureId === "gate_momentum");
+    expect(gateMomentum?.contribution).toBeGreaterThan(0);
+    expect(result.score).toBeGreaterThan(0);
   });
 });

@@ -75,21 +75,23 @@ export function derivePortfolioConfig(thresholds: EngineThresholds): PortfolioMe
 
 /**
  * Merge calibrated scoring weights (from `scoring_model_weights`, stored as
- * fractions of 1 — see Task 2's seed) over the engine's default weights
- * (which are on a 0-100 scale — see DEFAULT_SCORING_WEIGHTS). Only known
- * factor ids are honored; anything else is ignored so a stray/misspelled row
- * can never silently vanish a factor from scoring.
+ * fractions of 1 — see the seed data) over the engine's default weights
+ * (which are on a 0-100 scale — see DEFAULT_SCORING_WEIGHTS). Calibrated rows
+ * are scaled UP by ×100 to match the engine's native scale — NOT the other
+ * way around — because computePredictiveScore rounds each factor's
+ * contribution (raw * weight) to the nearest integer per factor; feeding it
+ * fraction-of-1 weights would round every contribution down to 0 even though
+ * the top-line aggregate score (weightedSum/totalWeight) stays correct
+ * either way. Only known factor ids are honored; anything else is ignored so
+ * a stray/misspelled row can never silently vanish a factor from scoring.
  */
 export function mergeScoringWeights(
   rows: { featureId: string; calibratedWeight: number }[],
 ): Record<string, number> {
-  const scaledDefaults: Record<string, number> = Object.fromEntries(
-    Object.entries(DEFAULT_SCORING_WEIGHTS).map(([id, w]) => [id, w / 100]),
-  );
-  const merged: Record<string, number> = { ...scaledDefaults };
+  const merged: Record<string, number> = { ...DEFAULT_SCORING_WEIGHTS };
   for (const row of rows) {
     if (row.featureId in merged && Number.isFinite(row.calibratedWeight)) {
-      merged[row.featureId] = row.calibratedWeight;
+      merged[row.featureId] = row.calibratedWeight * 100;
     }
   }
   return merged;
