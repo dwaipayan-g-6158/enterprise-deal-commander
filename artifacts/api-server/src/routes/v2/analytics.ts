@@ -39,7 +39,7 @@ import {
 } from "@workspace/engine";
 import { GetDealScoreParams, GetPricingBenchmarksQueryParams, ParseNlcCommandBody } from "@workspace/api-zod";
 import { notFound } from "../../lib/http";
-import { toISO } from "../../lib/intelligence";
+import { toISO, getHealthWeights } from "../../lib/intelligence";
 import { scoreDeal, rescoreActiveDeals } from "../../lib/scoring";
 import { cachedIntel } from "../../lib/portfolio";
 import { computeMemoryHealth } from "../../lib/memory-health";
@@ -1230,7 +1230,8 @@ router.get("/analytics/flow/health-score", async (_req: Request, res: Response) 
     retentionRate: 1 - recycle.overallRecycleRate / 100,
   };
   const history = { coverage: [], velocity: [], conversion: [], generation: [], age: [], attrition: [] };
-  res.json({ data: { ...computeHealthScore(inputs, history), coverage } });
+  const weights = await getHealthWeights();
+  res.json({ data: { ...computeHealthScore(inputs, history, weights), coverage } });
 });
 
 void sql;

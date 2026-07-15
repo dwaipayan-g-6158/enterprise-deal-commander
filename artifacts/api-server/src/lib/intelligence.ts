@@ -40,7 +40,7 @@ import {
 } from "@workspace/engine";
 import { cache, CacheKeys, CacheTtl } from "./cache";
 import { competitorWinRates } from "./competitive";
-import { deriveRiskWeights, deriveRiskBoundaries } from "./engine-config";
+import { deriveRiskWeights, deriveRiskBoundaries, deriveHealthWeights } from "./engine-config";
 
 export const DEFAULT_THRESHOLDS: EngineThresholds = {
   elephant_tcv_threshold: 250000,
@@ -118,6 +118,17 @@ export async function getThresholds(): Promise<{
       return { thresholds, seededDefaults: { ...DEFAULT_THRESHOLDS } };
     },
   );
+}
+
+/**
+ * Pipeline Flow health-score weights, derived from the same cached thresholds
+ * `getThresholds()` already loads — no separate cache entry needed since
+ * `getThresholds()` is itself cached under `lookup:thresholds` and this is a
+ * cheap, pure, synchronous mapping over its result.
+ */
+export async function getHealthWeights() {
+  const { thresholds } = await getThresholds();
+  return deriveHealthWeights(thresholds);
 }
 
 export async function getFxRate(

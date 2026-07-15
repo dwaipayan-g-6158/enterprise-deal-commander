@@ -1,6 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { num, deriveRiskWeights, deriveRiskBoundaries } from "./engine-config";
-import type { EngineThresholds } from "@workspace/engine";
+import {
+  num,
+  deriveRiskWeights,
+  deriveRiskBoundaries,
+  deriveHealthWeights,
+} from "./engine-config";
+import type { EngineThresholds, HealthWeights } from "@workspace/engine";
 
 // `EngineThresholds` has 16 required named fields (elephant_tcv_threshold,
 // mega_deal_tcv_threshold, ...) plus a `[key: string]: number | string` index
@@ -81,5 +86,37 @@ describe("deriveRiskBoundaries", () => {
       moderateMax: 50,
       elevatedMax: 75,
     });
+  });
+});
+
+describe("deriveHealthWeights", () => {
+  it("reads all six health-score weights from thresholds", () => {
+    const thresholds = asThresholds({
+      health_weight_coverage: 0.3,
+      health_weight_velocity: 0.2,
+      health_weight_conversion: 0.2,
+      health_weight_generation: 0.1,
+      health_weight_age: 0.1,
+      health_weight_attrition: 0.1,
+    });
+    const result: HealthWeights = deriveHealthWeights(thresholds);
+    expect(result).toEqual({
+      coverage: 0.3,
+      velocity: 0.2,
+      conversion: 0.2,
+      generation: 0.1,
+      age: 0.1,
+      attrition: 0.1,
+    });
+  });
+
+  it("defaults to equal-sixths (matching the prior hardcoded DEFAULT_HEALTH_WEIGHTS) when thresholds are empty", () => {
+    const result = deriveHealthWeights(asThresholds({}));
+    expect(result.coverage).toBeCloseTo(1 / 6, 6);
+    expect(result.velocity).toBeCloseTo(1 / 6, 6);
+    expect(result.conversion).toBeCloseTo(1 / 6, 6);
+    expect(result.generation).toBeCloseTo(1 / 6, 6);
+    expect(result.age).toBeCloseTo(1 / 6, 6);
+    expect(result.attrition).toBeCloseTo(1 / 6, 6);
   });
 });

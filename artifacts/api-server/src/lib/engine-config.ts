@@ -6,6 +6,7 @@ import type {
   EngineThresholds,
   RiskV2Weights,
   RiskLevelBoundaries,
+  HealthWeights,
 } from "@workspace/engine";
 
 /** Read a numeric tunable from the merged thresholds, falling back when absent/non-numeric. */
@@ -38,5 +39,17 @@ export function deriveRiskBoundaries(thresholds: EngineThresholds): RiskLevelBou
     lowMax: num(thresholds, "risk_level_low_max", 25),
     moderateMax: num(thresholds, "risk_level_moderate_max", 50),
     elevatedMax: num(thresholds, "risk_level_elevated_max", 75),
+  };
+}
+
+/** Derive the Pipeline Flow health-score weights from the merged thresholds. */
+export function deriveHealthWeights(thresholds: EngineThresholds): HealthWeights {
+  return {
+    coverage: num(thresholds, "health_weight_coverage", 1 / 6),
+    velocity: num(thresholds, "health_weight_velocity", 1 / 6),
+    conversion: num(thresholds, "health_weight_conversion", 1 / 6),
+    generation: num(thresholds, "health_weight_generation", 1 / 6),
+    age: num(thresholds, "health_weight_age", 1 / 6),
+    attrition: num(thresholds, "health_weight_attrition", 1 / 6),
   };
 }
