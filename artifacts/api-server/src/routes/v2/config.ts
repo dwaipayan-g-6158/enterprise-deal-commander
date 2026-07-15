@@ -50,6 +50,7 @@ import {
 } from "@workspace/api-zod";
 import { getActor } from "../../lib/auth";
 import { notFound } from "../../lib/http";
+import { logSettingsChange } from "../../lib/settings-audit";
 
 const router: IRouter = Router();
 
@@ -515,12 +516,23 @@ router.post("/custom-patterns", async (req: Request, res: Response) => {
       })),
     );
   }
+  await logSettingsChange({
+    module: "custom_risk_patterns",
+    settingKey: b.pattern_name,
+    entityId: String(p.id),
+    action: "create",
+    oldValue: null,
+    newValue: { patternName: b.pattern_name, severity: b.severity, weight: b.weight },
+    actor: actor.username,
+  });
   res.status(201).json({ data: await patternWithConditions(p.id) });
 });
 
 router.put("/custom-patterns/:id", async (req: Request, res: Response) => {
   const { id } = UpdateCustomPatternParams.parse(req.params);
   const b = UpdateCustomPatternBody.parse(req.body);
+  const actor = getActor(req);
+  const [prior] = await db.select().from(customRiskPatterns).where(eq(customRiskPatterns.id, id));
   const [p] = await db
     .update(customRiskPatterns)
     .set({
@@ -547,12 +559,34 @@ router.put("/custom-patterns/:id", async (req: Request, res: Response) => {
       })),
     );
   }
+  await logSettingsChange({
+    module: "custom_risk_patterns",
+    settingKey: b.pattern_name,
+    entityId: String(id),
+    action: "update",
+    oldValue: prior ? { patternName: prior.patternName, severity: prior.severity, weight: prior.weight } : null,
+    newValue: { patternName: b.pattern_name, severity: b.severity, weight: b.weight },
+    actor: actor.username,
+  });
   res.json({ data: await patternWithConditions(id) });
 });
 
 router.delete("/custom-patterns/:id", async (req: Request, res: Response) => {
   const { id } = DeleteCustomPatternParams.parse(req.params);
+  const actor = getActor(req);
+  const [prior] = await db.select().from(customRiskPatterns).where(eq(customRiskPatterns.id, id));
   await db.delete(customRiskPatterns).where(eq(customRiskPatterns.id, id));
+  if (prior) {
+    await logSettingsChange({
+      module: "custom_risk_patterns",
+      settingKey: prior.patternName,
+      entityId: String(id),
+      action: "delete",
+      oldValue: { patternName: prior.patternName, severity: prior.severity, weight: prior.weight },
+      newValue: null,
+      actor: actor.username,
+    });
+  }
   res.json({ message: "Pattern deleted" });
 });
 
@@ -648,15 +682,21 @@ router.get("/config/targets", async (_req: Request, res: Response) => {
 // PUT /v2/config/targets — upsert a period target (conflict on periodType + periodStart).
 router.put("/config/targets", async (req: Request, res: Response) => {
   const body = UpsertPipelineTargetBody.parse(req.body);
+  const actor = getActor(req);
   // body.periodStart is a Date (coerced by Zod's coerce.date() + useDates:true).
   // pipelineTargets.periodStart is a date column with mode:"string" → needs YYYY-MM-DD.
   const periodStartStr = body.periodStart instanceof Date
     ? body.periodStart.toISOString().slice(0, 10)
     : String(body.periodStart);
+  const periodType = body.periodType ?? "quarter";
+  const [priorRow] = await db
+    .select()
+    .from(pipelineTargets)
+    .where(and(eq(pipelineTargets.periodType, periodType), eq(pipelineTargets.periodStart, periodStartStr)));
   const [row] = await db
     .insert(pipelineTargets)
     .values({
-      periodType: body.periodType ?? "quarter",
+      periodType,
       periodStart: periodStartStr,
       targetValue: String(body.targetValue),
       updatedAt: sql`NOW()`,
@@ -669,6 +709,16 @@ router.put("/config/targets", async (req: Request, res: Response) => {
       },
     })
     .returning();
+  await logSettingsChange({
+    module: "pipeline_targets",
+    settingKey: `${periodType}:${periodStartStr}`,
+    entityId: String(row.id),
+    action: priorRow ? "update" : "create",
+    oldValue: priorRow ? Number(priorRow.targetValue) : null,
+    newValue: body.targetValue,
+    dataType: "number",
+    actor: actor.username,
+  });
   res.json({
     data: {
       id: row.id,

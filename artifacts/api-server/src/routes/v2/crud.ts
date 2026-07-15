@@ -66,6 +66,7 @@ import {
 } from "@workspace/api-zod";
 import { getActor } from "../../lib/auth";
 import { notFound, badRequest } from "../../lib/http";
+import { logSettingsChange } from "../../lib/settings-audit";
 import { emitDealEvent } from "../../lib/events";
 import { classifyAdvisorIntent, confidenceFor, composeNoDataAnswer, type AdvisorCitation } from "../../lib/advisor";
 import { computeCompetitorIntel } from "../../lib/memory-intel";
@@ -339,12 +340,23 @@ router.post("/webhooks", async (req: Request, res: Response) => {
       createdBy: actor.username,
     })
     .returning();
+  await logSettingsChange({
+    module: "webhooks",
+    settingKey: b.webhook_name,
+    entityId: String(row.id),
+    action: "create",
+    oldValue: null,
+    newValue: { webhookName: b.webhook_name, targetUrl: b.target_url, events: b.events },
+    actor: actor.username,
+  });
   res.status(201).json({ data: webhookOut(row) });
 });
 
 router.put("/webhooks/:id", async (req: Request, res: Response) => {
   const { id } = UpdateWebhookParams.parse(req.params);
   const b = UpdateWebhookBody.parse(req.body);
+  const actor = getActor(req);
+  const [prior] = await db.select().from(webhooks).where(eq(webhooks.id, id));
   const [row] = await db
     .update(webhooks)
     .set({
@@ -357,12 +369,34 @@ router.put("/webhooks/:id", async (req: Request, res: Response) => {
     .where(eq(webhooks.id, id))
     .returning();
   if (!row) throw notFound("Webhook not found");
+  await logSettingsChange({
+    module: "webhooks",
+    settingKey: b.webhook_name,
+    entityId: String(id),
+    action: "update",
+    oldValue: prior ? { webhookName: prior.webhookName, targetUrl: prior.targetUrl, events: prior.events } : null,
+    newValue: { webhookName: row.webhookName, targetUrl: row.targetUrl, events: row.events },
+    actor: actor.username,
+  });
   res.json({ data: webhookOut(row) });
 });
 
 router.delete("/webhooks/:id", async (req: Request, res: Response) => {
   const { id } = DeleteWebhookParams.parse(req.params);
+  const actor = getActor(req);
+  const [prior] = await db.select().from(webhooks).where(eq(webhooks.id, id));
   await db.delete(webhooks).where(eq(webhooks.id, id));
+  if (prior) {
+    await logSettingsChange({
+      module: "webhooks",
+      settingKey: prior.webhookName,
+      entityId: String(id),
+      action: "delete",
+      oldValue: { webhookName: prior.webhookName, targetUrl: prior.targetUrl, events: prior.events },
+      newValue: null,
+      actor: actor.username,
+    });
+  }
   res.json({ message: "Webhook deleted" });
 });
 
@@ -415,6 +449,15 @@ router.post("/notification-rules", async (req: Request, res: Response) => {
       isActive: b.is_active ?? true,
     })
     .returning();
+  await logSettingsChange({
+    module: "notification_rules",
+    settingKey: b.rule_name,
+    entityId: String(row.id),
+    action: "create",
+    oldValue: null,
+    newValue: { ruleName: b.rule_name, triggerEvent: b.trigger_event, channel: row.channel },
+    actor: actor.username,
+  });
   res.status(201).json({
     data: {
       id: row.id,
@@ -430,6 +473,8 @@ router.post("/notification-rules", async (req: Request, res: Response) => {
 router.put("/notification-rules/:id", async (req: Request, res: Response) => {
   const { id } = UpdateNotificationRuleParams.parse(req.params);
   const b = UpdateNotificationRuleBody.parse(req.body);
+  const actor = getActor(req);
+  const [prior] = await db.select().from(notificationRules).where(eq(notificationRules.id, id));
   const [row] = await db
     .update(notificationRules)
     .set({
@@ -442,6 +487,15 @@ router.put("/notification-rules/:id", async (req: Request, res: Response) => {
     .where(eq(notificationRules.id, id))
     .returning();
   if (!row) throw notFound("Rule not found");
+  await logSettingsChange({
+    module: "notification_rules",
+    settingKey: b.rule_name,
+    entityId: String(id),
+    action: "update",
+    oldValue: prior ? { ruleName: prior.ruleName, triggerEvent: prior.triggerEvent, channel: prior.channel } : null,
+    newValue: { ruleName: row.ruleName, triggerEvent: row.triggerEvent, channel: row.channel },
+    actor: actor.username,
+  });
   res.json({
     data: {
       id: row.id,
@@ -456,7 +510,20 @@ router.put("/notification-rules/:id", async (req: Request, res: Response) => {
 
 router.delete("/notification-rules/:id", async (req: Request, res: Response) => {
   const { id } = DeleteNotificationRuleParams.parse(req.params);
+  const actor = getActor(req);
+  const [prior] = await db.select().from(notificationRules).where(eq(notificationRules.id, id));
   await db.delete(notificationRules).where(eq(notificationRules.id, id));
+  if (prior) {
+    await logSettingsChange({
+      module: "notification_rules",
+      settingKey: prior.ruleName,
+      entityId: String(id),
+      action: "delete",
+      oldValue: { ruleName: prior.ruleName, triggerEvent: prior.triggerEvent, channel: prior.channel },
+      newValue: null,
+      actor: actor.username,
+    });
+  }
   res.json({ message: "Rule deleted" });
 });
 
