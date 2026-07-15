@@ -1,6 +1,6 @@
 import { db, settingsChangeLog } from "@workspace/db";
 
-export type SettingsAction = "create" | "update" | "deactivate" | "reactivate" | "delete" | "rollback";
+export type SettingsAction = "create" | "update" | "deactivate" | "reactivate" | "delete" | "rollback" | "import";
 
 export interface SettingsChangeInput {
   module: string;

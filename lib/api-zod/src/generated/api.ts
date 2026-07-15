@@ -1680,6 +1680,87 @@ export const UpdateFxRatesResponse = zod.object({
 })
 
 
+export const listSettingsChangeLogQueryLimitDefault = 50;
+
+export const ListSettingsChangeLogQueryParams = zod.object({
+  "module": zod.coerce.string().optional(),
+  "limit": zod.coerce.number().default(listSettingsChangeLogQueryLimitDefault)
+})
+
+export const ListSettingsChangeLogResponse = zod.object({
+  "data": zod.array(zod.object({
+  "id": zod.string(),
+  "module": zod.string(),
+  "settingKey": zod.string(),
+  "entityId": zod.string().nullish(),
+  "action": zod.string(),
+  "oldValue": zod.unknown().optional(),
+  "newValue": zod.unknown().optional(),
+  "dataType": zod.string().nullish(),
+  "actor": zod.string(),
+  "reason": zod.string().nullish(),
+  "rollbackOf": zod.string().nullish(),
+  "changedAt": zod.string()
+}))
+})
+
+
+export const GetSettingsChangeParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const GetSettingsChangeResponse = zod.object({
+  "data": zod.object({
+  "id": zod.string(),
+  "module": zod.string(),
+  "settingKey": zod.string(),
+  "entityId": zod.string().nullish(),
+  "action": zod.string(),
+  "oldValue": zod.unknown().optional(),
+  "newValue": zod.unknown().optional(),
+  "dataType": zod.string().nullish(),
+  "actor": zod.string(),
+  "reason": zod.string().nullish(),
+  "rollbackOf": zod.string().nullish(),
+  "changedAt": zod.string()
+})
+})
+
+
+export const RollbackSettingsChangeParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const RollbackSettingsChangeBody = zod.object({
+  "reason": zod.string().optional()
+})
+
+export const RollbackSettingsChangeResponse = zod.object({
+  "data": zod.record(zod.string(), zod.unknown())
+})
+
+
+export const ExportSettingsConfigResponse = zod.object({
+  "data": zod.record(zod.string(), zod.unknown())
+})
+
+
+export const ImportSettingsConfigBody = zod.object({
+  "engineThresholds": zod.array(zod.object({
+  "parameterKey": zod.string(),
+  "parameterValue": zod.string()
+})),
+  "scoringModelWeights": zod.array(zod.object({
+  "featureId": zod.string(),
+  "calibratedWeight": zod.number()
+}))
+})
+
+export const ImportSettingsConfigResponse = zod.object({
+  "data": zod.record(zod.string(), zod.unknown())
+})
+
+
 export const GetDealScoreParams = zod.object({
   "dealId": zod.coerce.string()
 })

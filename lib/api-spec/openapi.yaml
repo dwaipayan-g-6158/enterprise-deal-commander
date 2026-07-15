@@ -980,6 +980,66 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/FxRateListResponse"
+  /v1/settings/change-log:
+    get:
+      operationId: listSettingsChangeLog
+      tags: [settingsAudit]
+      parameters:
+        - { name: module, in: query, required: false, schema: { type: string } }
+        - { name: limit, in: query, required: false, schema: { type: integer, default: 50 } }
+      responses:
+        "200":
+          description: Settings change log
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SettingsChangeLogListResponse"
+  /v1/settings/change-log/{id}:
+    get:
+      operationId: getSettingsChange
+      tags: [settingsAudit]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: One change-log entry
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SettingsChangeLogEntryResponse"
+  /v1/settings/change-log/{id}/rollback:
+    post:
+      operationId: rollbackSettingsChange
+      tags: [settingsAudit]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RollbackSettingsChangeBody"
+      responses:
+        "200": { description: Rolled back, content: { application/json: { schema: { $ref: "#/components/schemas/GenericDataResponse" } } } }
+        "409": { description: Rollback not supported for this module, content: { application/json: { schema: { $ref: "#/components/schemas/GenericDataResponse" } } } }
+  /v1/settings/config/export:
+    get:
+      operationId: exportSettingsConfig
+      tags: [settingsAudit]
+      responses:
+        "200": { description: Full config snapshot, content: { application/json: { schema: { $ref: "#/components/schemas/GenericDataResponse" } } } }
+  /v1/settings/config/import:
+    post:
+      operationId: importSettingsConfig
+      tags: [settingsAudit]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ImportSettingsConfigBody"
+      responses:
+        "200": { description: Imported, content: { application/json: { schema: { $ref: "#/components/schemas/GenericDataResponse" } } } }
 
   # ============ V2 SOVEREIGN INTELLIGENCE ============
 
@@ -3036,6 +3096,58 @@ components:
           type: array
           items: { $ref: "#/components/schemas/ThresholdUpdateItem" }
       required: [updates]
+    SettingsChangeLogEntry:
+      type: object
+      properties:
+        id: { type: string }
+        module: { type: string }
+        settingKey: { type: string }
+        entityId: { type: ["string", "null"] }
+        action: { type: string }
+        oldValue: {}
+        newValue: {}
+        dataType: { type: ["string", "null"] }
+        actor: { type: string }
+        reason: { type: ["string", "null"] }
+        rollbackOf: { type: ["string", "null"] }
+        changedAt: { type: string }
+      required: [id, module, settingKey, action, actor, changedAt]
+    SettingsChangeLogListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/SettingsChangeLogEntry" }
+      required: [data]
+    SettingsChangeLogEntryResponse:
+      type: object
+      properties:
+        data: { $ref: "#/components/schemas/SettingsChangeLogEntry" }
+      required: [data]
+    RollbackSettingsChangeBody:
+      type: object
+      properties:
+        reason: { type: string }
+    ImportSettingsConfigBody:
+      type: object
+      properties:
+        engineThresholds:
+          type: array
+          items:
+            type: object
+            properties:
+              parameterKey: { type: string }
+              parameterValue: { type: string }
+            required: [parameterKey, parameterValue]
+        scoringModelWeights:
+          type: array
+          items:
+            type: object
+            properties:
+              featureId: { type: string }
+              calibratedWeight: { type: number }
+            required: [featureId, calibratedWeight]
+      required: [engineThresholds, scoringModelWeights]
     FxRate:
       type: object
       properties:

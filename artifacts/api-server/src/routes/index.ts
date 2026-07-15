@@ -12,6 +12,7 @@ import auditRouter from "./audit";
 import batSignalRouter from "./batsignal";
 import sharedRouter from "./shared";
 import lookupsRouter from "./lookups";
+import settingsAuditRouter from "./settings-audit";
 import v2Router from "./v2";
 import { cacheInvalidationMiddleware } from "../lib/cache-middleware";
 
@@ -32,6 +33,7 @@ router.use("/v1", interventionsRouter);
 router.use("/v1", auditRouter);
 router.use("/v1", batSignalRouter);
 router.use("/v1", lookupsRouter);
+router.use("/v1", settingsAuditRouter);
 router.use("/v2", v2Router);
 
 export default router;

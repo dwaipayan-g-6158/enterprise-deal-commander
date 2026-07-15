@@ -87,6 +87,7 @@ import type {
   GetSnapshotParams,
   HealthHistoryListResponse,
   HealthStatus,
+  ImportSettingsConfigBody,
   IntelligenceResponse,
   InterventionChecklistListResponse,
   InterventionInput,
@@ -102,6 +103,7 @@ import type {
   ListPipelineTargets200,
   ListPortfolioActivityParams,
   ListScenariosParams,
+  ListSettingsChangeLogParams,
   LoginInput,
   LossArchetypeListResponse,
   MeetingSessionInput,
@@ -126,12 +128,15 @@ import type {
   ProductListResponse,
   ProductMixResponse,
   ReviewMarkerResponse,
+  RollbackSettingsChangeBody,
   ScenarioComputeInput,
   ScenarioInput,
   ScenarioListResponse,
   ScenarioResponse,
   SearchDealMemoryParams,
   ServicesTierListResponse,
+  SettingsChangeLogEntryResponse,
+  SettingsChangeLogListResponse,
   ShareCardResponse,
   SnapshotDetailResponse,
   SnapshotListResponse,
@@ -4454,6 +4459,357 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
         TContext
       > => {
       return useMutation(getUpdateFxRatesMutationOptions(options));
+    }
+
+export const getListSettingsChangeLogUrl = (params?: ListSettingsChangeLogParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/v1/settings/change-log?${stringifiedParams}` : `/api/v1/settings/change-log`
+}
+
+export const listSettingsChangeLog = async (params?: ListSettingsChangeLogParams, options?: RequestInit): Promise<SettingsChangeLogListResponse> => {
+
+  return customFetch<SettingsChangeLogListResponse>(getListSettingsChangeLogUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListSettingsChangeLogQueryKey = (params?: ListSettingsChangeLogParams,) => {
+    return [
+    `/api/v1/settings/change-log`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListSettingsChangeLogQueryOptions = <TData = Awaited<ReturnType<typeof listSettingsChangeLog>>, TError = ErrorType<unknown>>(params?: ListSettingsChangeLogParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listSettingsChangeLog>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListSettingsChangeLogQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listSettingsChangeLog>>> = ({ signal }) => listSettingsChangeLog(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listSettingsChangeLog>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListSettingsChangeLogQueryResult = NonNullable<Awaited<ReturnType<typeof listSettingsChangeLog>>>
+export type ListSettingsChangeLogQueryError = ErrorType<unknown>
+
+
+
+export function useListSettingsChangeLog<TData = Awaited<ReturnType<typeof listSettingsChangeLog>>, TError = ErrorType<unknown>>(
+ params?: ListSettingsChangeLogParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listSettingsChangeLog>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListSettingsChangeLogQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getGetSettingsChangeUrl = (id: string,) => {
+
+
+
+
+  return `/api/v1/settings/change-log/${id}`
+}
+
+export const getSettingsChange = async (id: string, options?: RequestInit): Promise<SettingsChangeLogEntryResponse> => {
+
+  return customFetch<SettingsChangeLogEntryResponse>(getGetSettingsChangeUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetSettingsChangeQueryKey = (id: string,) => {
+    return [
+    `/api/v1/settings/change-log/${id}`
+    ] as const;
+    }
+
+
+export const getGetSettingsChangeQueryOptions = <TData = Awaited<ReturnType<typeof getSettingsChange>>, TError = ErrorType<unknown>>(id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getSettingsChange>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetSettingsChangeQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getSettingsChange>>> = ({ signal }) => getSettingsChange(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: !!(id), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getSettingsChange>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetSettingsChangeQueryResult = NonNullable<Awaited<ReturnType<typeof getSettingsChange>>>
+export type GetSettingsChangeQueryError = ErrorType<unknown>
+
+
+
+export function useGetSettingsChange<TData = Awaited<ReturnType<typeof getSettingsChange>>, TError = ErrorType<unknown>>(
+ id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getSettingsChange>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetSettingsChangeQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getRollbackSettingsChangeUrl = (id: string,) => {
+
+
+
+
+  return `/api/v1/settings/change-log/${id}/rollback`
+}
+
+export const rollbackSettingsChange = async (id: string,
+    rollbackSettingsChangeBody?: RollbackSettingsChangeBody, options?: RequestInit): Promise<GenericDataResponse> => {
+
+  return customFetch<GenericDataResponse>(getRollbackSettingsChangeUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      rollbackSettingsChangeBody,)
+  }
+);}
+
+
+
+
+export const getRollbackSettingsChangeMutationOptions = <TError = ErrorType<GenericDataResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof rollbackSettingsChange>>, TError,{id: string;data?: BodyType<RollbackSettingsChangeBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof rollbackSettingsChange>>, TError,{id: string;data?: BodyType<RollbackSettingsChangeBody>}, TContext> => {
+
+const mutationKey = ['rollbackSettingsChange'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof rollbackSettingsChange>>, {id: string;data?: BodyType<RollbackSettingsChangeBody>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  rollbackSettingsChange(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RollbackSettingsChangeMutationResult = NonNullable<Awaited<ReturnType<typeof rollbackSettingsChange>>>
+    export type RollbackSettingsChangeMutationBody = BodyType<RollbackSettingsChangeBody> | undefined
+    export type RollbackSettingsChangeMutationError = ErrorType<GenericDataResponse>
+
+    export const useRollbackSettingsChange = <TError = ErrorType<GenericDataResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof rollbackSettingsChange>>, TError,{id: string;data?: BodyType<RollbackSettingsChangeBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof rollbackSettingsChange>>,
+        TError,
+        {id: string;data?: BodyType<RollbackSettingsChangeBody>},
+        TContext
+      > => {
+      return useMutation(getRollbackSettingsChangeMutationOptions(options));
+    }
+
+export const getExportSettingsConfigUrl = () => {
+
+
+
+
+  return `/api/v1/settings/config/export`
+}
+
+export const exportSettingsConfig = async ( options?: RequestInit): Promise<GenericDataResponse> => {
+
+  return customFetch<GenericDataResponse>(getExportSettingsConfigUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getExportSettingsConfigQueryKey = () => {
+    return [
+    `/api/v1/settings/config/export`
+    ] as const;
+    }
+
+
+export const getExportSettingsConfigQueryOptions = <TData = Awaited<ReturnType<typeof exportSettingsConfig>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof exportSettingsConfig>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getExportSettingsConfigQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof exportSettingsConfig>>> = ({ signal }) => exportSettingsConfig({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof exportSettingsConfig>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ExportSettingsConfigQueryResult = NonNullable<Awaited<ReturnType<typeof exportSettingsConfig>>>
+export type ExportSettingsConfigQueryError = ErrorType<unknown>
+
+
+
+export function useExportSettingsConfig<TData = Awaited<ReturnType<typeof exportSettingsConfig>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof exportSettingsConfig>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getExportSettingsConfigQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getImportSettingsConfigUrl = () => {
+
+
+
+
+  return `/api/v1/settings/config/import`
+}
+
+export const importSettingsConfig = async (importSettingsConfigBody: ImportSettingsConfigBody, options?: RequestInit): Promise<GenericDataResponse> => {
+
+  return customFetch<GenericDataResponse>(getImportSettingsConfigUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      importSettingsConfigBody,)
+  }
+);}
+
+
+
+
+export const getImportSettingsConfigMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof importSettingsConfig>>, TError,{data: BodyType<ImportSettingsConfigBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof importSettingsConfig>>, TError,{data: BodyType<ImportSettingsConfigBody>}, TContext> => {
+
+const mutationKey = ['importSettingsConfig'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof importSettingsConfig>>, {data: BodyType<ImportSettingsConfigBody>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  importSettingsConfig(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ImportSettingsConfigMutationResult = NonNullable<Awaited<ReturnType<typeof importSettingsConfig>>>
+    export type ImportSettingsConfigMutationBody = BodyType<ImportSettingsConfigBody>
+    export type ImportSettingsConfigMutationError = ErrorType<unknown>
+
+    export const useImportSettingsConfig = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof importSettingsConfig>>, TError,{data: BodyType<ImportSettingsConfigBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof importSettingsConfig>>,
+        TError,
+        {data: BodyType<ImportSettingsConfigBody>},
+        TContext
+      > => {
+      return useMutation(getImportSettingsConfigMutationOptions(options));
     }
 
 export const getGetDealScoreUrl = (dealId: string,) => {

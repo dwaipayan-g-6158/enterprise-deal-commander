@@ -1255,6 +1255,52 @@ export interface ThresholdsUpdate {
   updates: ThresholdUpdateItem[];
 }
 
+export interface SettingsChangeLogEntry {
+  id: string;
+  module: string;
+  settingKey: string;
+  /** @nullable */
+  entityId?: string | null;
+  action: string;
+  oldValue?: unknown;
+  newValue?: unknown;
+  /** @nullable */
+  dataType?: string | null;
+  actor: string;
+  /** @nullable */
+  reason?: string | null;
+  /** @nullable */
+  rollbackOf?: string | null;
+  changedAt: string;
+}
+
+export interface SettingsChangeLogListResponse {
+  data: SettingsChangeLogEntry[];
+}
+
+export interface SettingsChangeLogEntryResponse {
+  data: SettingsChangeLogEntry;
+}
+
+export interface RollbackSettingsChangeBody {
+  reason?: string;
+}
+
+export type ImportSettingsConfigBodyEngineThresholdsItem = {
+  parameterKey: string;
+  parameterValue: string;
+};
+
+export type ImportSettingsConfigBodyScoringModelWeightsItem = {
+  featureId: string;
+  calibratedWeight: number;
+};
+
+export interface ImportSettingsConfigBody {
+  engineThresholds: ImportSettingsConfigBodyEngineThresholdsItem[];
+  scoringModelWeights: ImportSettingsConfigBodyScoringModelWeightsItem[];
+}
+
 export interface FxRate {
   baseCurrency: string;
   quoteCurrency: string;
@@ -2017,6 +2063,11 @@ since?: string;
 until?: string;
 limit?: number;
 offset?: number;
+};
+
+export type ListSettingsChangeLogParams = {
+module?: string;
+limit?: number;
 };
 
 export type GetPipelineSimulationParams = {
