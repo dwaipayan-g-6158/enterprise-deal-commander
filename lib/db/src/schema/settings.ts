@@ -12,6 +12,7 @@
 // later Automation Studio phase is additive, not a migration.
 
 import {
+  AnyPgColumn,
   uuid,
   varchar,
   text,
@@ -38,7 +39,7 @@ export const settingsChangeLog = edcV2.table(
     dataType: varchar("data_type", { length: 20 }),
     actor: varchar("actor", { length: 255 }).notNull(),
     reason: text("reason"),
-    rollbackOf: uuid("rollback_of"),
+    rollbackOf: uuid("rollback_of").references((): AnyPgColumn => settingsChangeLog.id),
     changedAt: timestamp("changed_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
