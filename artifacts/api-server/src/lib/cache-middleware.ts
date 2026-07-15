@@ -19,7 +19,7 @@ import { invalidatePortfolioRollups } from "./portfolio-rollups";
  * subscriber is harmless — invalidation is idempotent.
  */
 const DEAL_PATH = /\/deals\/([^/?]+)/;
-const GLOBAL_CONFIG_PATH = /\/lookups\//;
+const GLOBAL_CONFIG_PATH = /\/lookups\/|\/settings\//;
 
 export function cacheInvalidationMiddleware(
   req: Request,

@@ -101,6 +101,12 @@ describe("cacheInvalidationMiddleware", () => {
     expect(cache.get(CacheKeys.intelligence(DEAL_ID))).toBeUndefined();
   });
 
+  it("drops caches on a settings-audit rollback (new /v1/settings/ path)", () => {
+    cache.set(`${CacheKeys.lookupPrefix}scoring-weights`, { stale: true });
+    run({ method: "POST", url: "/api/v1/settings/change-log/abc-123/rollback" });
+    expect(cache.get(`${CacheKeys.lookupPrefix}scoring-weights`)).toBeUndefined();
+  });
+
   it("does NOT invalidate on a read (GET)", () => {
     cache.set(CacheKeys.intelligence(DEAL_ID), { fresh: true });
     run({ method: "GET", url: `/api/v1/deals/${DEAL_ID}` });
