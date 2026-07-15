@@ -8,10 +8,17 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import { ChevronDown } from "lucide-react";
 import { useGetDealTrajectory } from "@workspace/api-client-react";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Button } from "@/components/ui/button";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 import {
   ChartContainer,
   ChartTooltip,
@@ -343,11 +350,6 @@ function TooltipRow({ label, value }: { label: string; value: string }) {
   );
 }
 
-// ---- Shell -------------------------------------------------------------------
-function Shell({ children }: { children: React.ReactNode }) {
-  return <Card className="overflow-hidden p-4">{children}</Card>;
-}
-
 // ---- KPI strip ---------------------------------------------------------------
 function KpiCell({
   label,
@@ -625,10 +627,10 @@ function StageRail({ segments }: { segments: StageSegment[] }) {
           return (
             <div
               key={`${seg.stage}-${i}`}
-              className={`relative flex min-h-[38px] flex-col justify-center rounded-md border px-3 py-1.5 ${
+              className={`relative flex min-h-[38px] min-w-[6.5rem] flex-col rounded-md border px-3 ${
                 current
-                  ? "border-amber-500 ring-2 ring-amber-500/20"
-                  : "border-transparent"
+                  ? "justify-start border-amber-500 pb-1.5 pt-8 ring-2 ring-amber-500/20"
+                  : "justify-center border-transparent py-1.5"
               }`}
               style={{
                 flexGrow: seg.days,
@@ -641,10 +643,10 @@ function StageRail({ segments }: { segments: StageSegment[] }) {
                   CURRENT
                 </span>
               )}
-              <span className="text-[12.5px] font-semibold tracking-tight">
+              <span className="truncate text-[12.5px] font-semibold tracking-tight" title={seg.stage}>
                 {seg.stage}
               </span>
-              <span className="mt-0.5 font-mono text-[10.5px] font-medium text-muted-foreground">
+              <span className="mt-0.5 whitespace-nowrap font-mono text-[10.5px] font-medium text-muted-foreground">
                 {fmtRange(seg.start, seg.end)} · {seg.days}d
               </span>
             </div>
@@ -655,56 +657,75 @@ function StageRail({ segments }: { segments: StageSegment[] }) {
   );
 }
 
-// ---- Header (kicker + verdict + metric toggle) -------------------------------
-function Header({
-  summary,
-  v,
+// ---- Header bar (kicker + verdict, always visible; metric toggle + collapse
+// chevron on the right — two independent Collapsible triggers so choosing a
+// metric never toggles the panel) ----------------------------------------------
+function TrajectoryHeaderBar({
+  kicker,
+  headline,
   metric,
   setMetric,
+  showTabs,
+  open,
 }: {
-  summary: Summary;
-  v: Verdict;
+  kicker: React.ReactNode;
+  headline: React.ReactNode;
   metric: Metric;
   setMetric: (m: Metric) => void;
+  showTabs: boolean;
+  open: boolean;
 }) {
   return (
     <div className="flex flex-wrap items-start justify-between gap-4">
-      <div className="min-w-0">
-        <p className="mb-1.5 font-mono text-[10.5px] font-semibold uppercase tracking-[0.13em] text-muted-foreground/70">
-          Deal Trajectory · last {summary.spanDays}{" "}
-          {summary.spanDays === 1 ? "day" : "days"}
-        </p>
-        <h2
-          className="max-w-[52ch] text-[17px] font-semibold leading-snug tracking-tight"
-          style={{ textWrap: "balance" } as React.CSSProperties}
+      <CollapsibleTrigger asChild>
+        <button
+          type="button"
+          className="flex min-w-0 flex-1 flex-col items-start text-left"
         >
-          <span className={TONE_TEXT[v.tone]}>{v.lead}</span>
-          {v.rest}
-        </h2>
+          <p className="mb-1.5 font-mono text-[10.5px] font-semibold uppercase tracking-[0.13em] text-muted-foreground/70">
+            {kicker}
+          </p>
+          <h2
+            className="max-w-[52ch] text-[17px] font-semibold leading-snug tracking-tight"
+            style={{ textWrap: "balance" } as React.CSSProperties}
+          >
+            {headline}
+          </h2>
+        </button>
+      </CollapsibleTrigger>
+      <div className="flex shrink-0 items-center gap-2">
+        {showTabs && (
+          <Tabs value={metric} onValueChange={(val) => setMetric(val as Metric)}>
+            <TabsList className="h-8">
+              {(["score", "gate", "tcv"] as const).map((m) => (
+                <TabsTrigger key={m} value={m} className="text-xs">
+                  {METRIC_LABEL[m]}
+                </TabsTrigger>
+              ))}
+            </TabsList>
+          </Tabs>
+        )}
+        <CollapsibleTrigger asChild>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8"
+            aria-label={open ? "Collapse deal trajectory" : "Expand deal trajectory"}
+          >
+            <ChevronDown
+              className={`h-4 w-4 text-muted-foreground transition-transform duration-200 ${open ? "rotate-180" : ""}`}
+            />
+          </Button>
+        </CollapsibleTrigger>
       </div>
-      <Tabs value={metric} onValueChange={(val) => setMetric(val as Metric)}>
-        <TabsList className="h-8">
-          {(["score", "gate", "tcv"] as const).map((m) => (
-            <TabsTrigger key={m} value={m} className="text-xs">
-              {METRIC_LABEL[m]}
-            </TabsTrigger>
-          ))}
-        </TabsList>
-      </Tabs>
     </div>
   );
 }
 
-// ---- Sparse fallback (0–1 points) -------------------------------------------
-function SparseSummary({ point }: { point: TrajectoryPoint | undefined }) {
+// ---- Sparse body (0–1 points): KPI grid + current-stage line, no title -------
+function SparseBody({ point }: { point: TrajectoryPoint | undefined }) {
   return (
-    <Shell>
-      <p className="mb-1.5 font-mono text-[10.5px] font-semibold uppercase tracking-[0.13em] text-muted-foreground/70">
-        Deal Trajectory
-      </p>
-      <h2 className="mb-5 max-w-[42ch] text-[21px] font-semibold leading-snug tracking-tight">
-        Awaiting history — not enough snapshots to chart a trend yet.
-      </h2>
+    <>
       <div className="grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-border bg-border sm:grid-cols-4">
         <KpiCell label="Close Score">
           <p className="mt-1 font-mono text-lg font-semibold leading-tight tabular-nums">
@@ -739,66 +760,94 @@ function SparseSummary({ point }: { point: TrajectoryPoint | undefined }) {
           Current stage · <span className="font-medium text-foreground">{point.stage}</span>
         </p>
       )}
-    </Shell>
+    </>
   );
 }
 
 // ---- Main --------------------------------------------------------------------
+// Collapsed by default: the card always shows the kicker + verdict headline
+// (computed from the same fetch), with the KPI strip / chart / stage rail
+// revealed on expand via a fluid height animation (tw-animate-css's
+// collapsible-down/up keyframes, the same primitive the Accordion uses).
 export function DealTrajectory({ dealId }: { dealId: string }) {
   const { data, isLoading, isError } = useGetDealTrajectory(dealId);
   const [metric, setMetric] = React.useState<Metric>("score");
-
-  if (isLoading) {
-    return (
-      <Shell>
-        <Skeleton className="h-[300px] w-full" />
-      </Shell>
-    );
-  }
-
-  if (isError) {
-    return (
-      <Shell>
-        <p className="py-12 text-center text-sm text-muted-foreground">
-          Could not load deal trajectory.
-        </p>
-      </Shell>
-    );
-  }
+  const [open, setOpen] = React.useState(false);
 
   const traj = (data?.data as TrajectoryData | undefined) ?? {
     points: [],
     stageChanges: [],
   };
   const points = traj.points ?? [];
+  const isSparse = !isLoading && !isError && points.length <= 1;
+  const isFull = !isLoading && !isError && points.length > 1;
 
-  // Sparse data: 0 or 1 points → summary card, not an empty chart.
-  if (points.length <= 1) {
-    return <SparseSummary point={points[points.length - 1]} />;
+  let rows: ChartRow[] = [];
+  let summary: Summary | null = null;
+  let v: Verdict | null = null;
+  let segments: StageSegment[] = [];
+
+  if (isFull) {
+    rows = points
+      .map((p) => ({ ...p, t: Date.parse(p.at) }))
+      .filter((r) => !Number.isNaN(r.t))
+      .sort((a, b) => a.t - b.t);
+    summary = deriveSummary(rows);
+    v = verdict(summary);
+    segments = stageSegments(rows);
   }
 
-  const rows: ChartRow[] = points
-    .map((p) => ({ ...p, t: Date.parse(p.at) }))
-    .filter((r) => !Number.isNaN(r.t))
-    .sort((a, b) => a.t - b.t);
+  let kicker: React.ReactNode = "Deal Trajectory";
+  let headline: React.ReactNode = null;
 
-  const summary = deriveSummary(rows);
-  const v = verdict(summary);
-  const segments = stageSegments(rows);
+  if (isLoading) {
+    headline = <Skeleton className="h-[22px] w-64 max-w-full" />;
+  } else if (isError) {
+    headline = (
+      <span className="text-muted-foreground">Could not load deal trajectory.</span>
+    );
+  } else if (isSparse) {
+    headline = "Awaiting history — not enough snapshots to chart a trend yet.";
+  } else if (summary && v) {
+    kicker = `Deal Trajectory · last ${summary.spanDays} ${summary.spanDays === 1 ? "day" : "days"}`;
+    headline = (
+      <>
+        <span className={TONE_TEXT[v.tone]}>{v.lead}</span>
+        {v.rest}
+      </>
+    );
+  }
 
   return (
-    <Shell>
-      <div className="motion-safe:animate-in motion-safe:fade-in motion-safe:duration-500">
-        <Header summary={summary} v={v} metric={metric} setMetric={setMetric} />
-        <KpiStrip summary={summary} />
-        <HeroChart metric={metric} rows={rows} />
-        <StageRail segments={segments} />
-        <div className="mt-3 flex flex-wrap items-center justify-between gap-3 border-t border-border pt-2.5">
-          <span className="font-mono text-[11px] tracking-[0.02em] text-muted-foreground/60">
-            Source · deal snapshots + predictive score
-          </span>
-        </div>
-      </div>
-    </Shell>
+    <Card className="overflow-hidden p-4">
+      <Collapsible open={open} onOpenChange={setOpen}>
+        <TrajectoryHeaderBar
+          kicker={kicker}
+          headline={headline}
+          metric={metric}
+          setMetric={setMetric}
+          showTabs={open && isFull}
+          open={open}
+        />
+        <CollapsibleContent className="overflow-hidden data-[state=closed]:animate-collapsible-up data-[state=open]:animate-collapsible-down">
+          <div className="motion-safe:animate-in motion-safe:fade-in motion-safe:duration-500 pt-4">
+            {isLoading && <Skeleton className="h-[300px] w-full" />}
+            {isSparse && <SparseBody point={points[points.length - 1]} />}
+            {isFull && summary && (
+              <>
+                <KpiStrip summary={summary} />
+                <HeroChart metric={metric} rows={rows} />
+                <StageRail segments={segments} />
+                <div className="mt-3 flex flex-wrap items-center justify-between gap-3 border-t border-border pt-2.5">
+                  <span className="font-mono text-[11px] tracking-[0.02em] text-muted-foreground/60">
+                    Source · deal snapshots + predictive score
+                  </span>
+                </div>
+              </>
+            )}
+          </div>
+        </CollapsibleContent>
+      </Collapsible>
+    </Card>
   );
 }
