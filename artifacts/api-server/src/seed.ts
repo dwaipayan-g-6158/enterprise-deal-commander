@@ -338,6 +338,8 @@ async function seedLookups() {
   // Predictive scoring model calibrated weights (Settings redesign)
   // All weights are stored as fractions of 1.0 (numeric(5,4) constraint) and sum to 1.0000.
   // Task 6 will read these and scale by 100 to preserve the 0-100 scoring convention.
+  // Guarded by a presence check (scoring model weights have no unique constraint on featureId,
+  // so onConflictDoNothing cannot dedupe by featureId).
   const scoringWeightDefaults: { featureId: string; calibratedWeight: string }[] = [
     { featureId: "gate_momentum", calibratedWeight: "0.2500" },
     { featureId: "stage_velocity", calibratedWeight: "0.1500" },
@@ -348,17 +350,22 @@ async function seedLookups() {
     { featureId: "close_pressure", calibratedWeight: "0.1000" },
     { featureId: "historical_win_rate", calibratedWeight: "0.1000" },
   ];
-  await db
-    .insert(scoringModelWeights)
-    .values(
-      scoringWeightDefaults.map((w) => ({
-        featureId: w.featureId,
-        calibratedWeight: w.calibratedWeight,
-        sampleSize: 0,
-        calibrationDate: today,
-      })),
-    )
-    .onConflictDoNothing();
+  const existingScoringWeights = await db.select({ id: scoringModelWeights.id }).from(scoringModelWeights).limit(1);
+  if (existingScoringWeights.length === 0) {
+    await db
+      .insert(scoringModelWeights)
+      .values(
+        scoringWeightDefaults.map((w) => ({
+          featureId: w.featureId,
+          calibratedWeight: w.calibratedWeight,
+          sampleSize: 0,
+          calibrationDate: today,
+        })),
+      )
+      .onConflictDoNothing();
+  } else {
+    logger.info("Scoring model weights already present — skipping seed");
+  }
 
   // Sample segments and deal types (Settings redesign)
   await db
@@ -381,20 +388,27 @@ async function seedLookups() {
     .onConflictDoNothing();
 
   // Built-in automation rule template (Settings redesign)
-  await db
-    .insert(automationRuleTemplates)
-    .values([
-      {
-        name: "Critical anomaly alert",
-        description: "Notify the deal owner when a Critical-severity anomaly is detected on a deal above $50K.",
-        category: "risk",
-        triggerEvent: "health_changed",
-        conditions: [{ field: "toStatus", operator: "eq", value: "RED" }],
-        actions: [{ actionType: "in_app_notify", config: { message: "Deal health changed to RED — review immediately." } }],
-        isBuiltin: true,
-      },
-    ])
-    .onConflictDoNothing();
+  // Guarded by a presence check (automation rule templates have no unique constraint on name,
+  // so onConflictDoNothing cannot dedupe by name).
+  const existingTemplates = await db.select({ id: automationRuleTemplates.id }).from(automationRuleTemplates).limit(1);
+  if (existingTemplates.length === 0) {
+    await db
+      .insert(automationRuleTemplates)
+      .values([
+        {
+          name: "Critical anomaly alert",
+          description: "Notify the deal owner when a Critical-severity anomaly is detected on a deal above $50K.",
+          category: "risk",
+          triggerEvent: "health_changed",
+          conditions: [{ field: "toStatus", operator: "eq", value: "RED" }],
+          actions: [{ actionType: "in_app_notify", config: { message: "Deal health changed to RED — review immediately." } }],
+          isBuiltin: true,
+        },
+      ])
+      .onConflictDoNothing();
+  } else {
+    logger.info("Automation rule templates already present — skipping seed");
+  }
 }
 
 // C4: stage-keyed playbooks with ordered steps. The auto-assign engine keys off
