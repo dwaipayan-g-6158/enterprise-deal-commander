@@ -12,6 +12,8 @@ import {
   dealMemory,
   dealProductInterests,
   productCatalog,
+  dealBlockers,
+  blockerCategories,
   lossArchetypes,
   gateDefinitions,
   dealDecisions,
@@ -46,6 +48,7 @@ import { cachedIntel } from "../../lib/portfolio";
 import { computeMemoryHealth } from "../../lib/memory-health";
 import { computeCompetitorIntel, computePlaybookEffectiveness, percentiles } from "../../lib/memory-intel";
 import { pickLatestPerDeal, computeScoreDelta } from "../../lib/roster-enrichment";
+import { clusterProductGaps } from "../../lib/product-gaps";
 
 const router: IRouter = Router();
 
@@ -634,6 +637,58 @@ router.get("/analytics/roster", async (_req: Request, res: Response) => {
   });
 
   res.json({ data: { deals: rows } });
+});
+
+/* ------------------------------------------------- Product-gap register */
+
+// Cluster the free-text product gaps captured in loss autopsies across Lost
+// deals, augmented by unresolved Technical blockers, into a "what to build/fix"
+// register with TCV-at-risk. Computed on read — no new tables.
+router.get("/analytics/product-gaps", async (_req: Request, res: Response) => {
+  const lostMemories = await db
+    .select({
+      dealId: dealMemory.dealId,
+      dealName: dealMemory.dealName,
+      finalTcv: dealMemory.finalTcv,
+      productGaps: dealMemory.productGaps,
+    })
+    .from(dealMemory)
+    .where(eq(dealMemory.outcome, "Lost"));
+
+  const techBlockers = await db
+    .select({
+      dealId: dealBlockers.dealId,
+      dealName: enterpriseDeals.dealName,
+      description: dealBlockers.description,
+      productRevenue: enterpriseDeals.productRevenue,
+      servicesRevenue: enterpriseDeals.servicesRevenue,
+    })
+    .from(dealBlockers)
+    .innerJoin(enterpriseDeals, eq(dealBlockers.dealId, enterpriseDeals.id))
+    .innerJoin(blockerCategories, eq(dealBlockers.categoryId, blockerCategories.id))
+    .where(and(eq(dealBlockers.isResolved, false), eq(blockerCategories.categoryName, "Technical")));
+
+  const catalog = await db
+    .select({ id: productCatalog.id, productName: productCatalog.productName, code: productCatalog.code })
+    .from(productCatalog);
+
+  const clusters = clusterProductGaps(
+    lostMemories.map((m) => ({
+      dealId: m.dealId,
+      dealName: m.dealName,
+      finalTcv: m.finalTcv == null ? null : Number(m.finalTcv),
+      productGaps: (m.productGaps as string[] | null) ?? [],
+    })),
+    techBlockers.map((b) => ({
+      dealId: b.dealId,
+      dealName: b.dealName,
+      description: b.description,
+      tcv: (Number(b.productRevenue) || 0) + (Number(b.servicesRevenue) || 0),
+    })),
+    catalog,
+  );
+
+  res.json({ data: { clusters } });
 });
 
 /* ------------------------------------------ Dashboard: Deal Memory Insights */

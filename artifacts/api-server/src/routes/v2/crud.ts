@@ -70,6 +70,9 @@ import { logSettingsChange } from "../../lib/settings-audit";
 import { emitDealEvent } from "../../lib/events";
 import { classifyAdvisorIntent, confidenceFor, composeNoDataAnswer, type AdvisorCitation } from "../../lib/advisor";
 import { computeCompetitorIntel } from "../../lib/memory-intel";
+import { selectRevivalCandidates } from "../../lib/revival";
+import { getThresholds } from "../../lib/intelligence";
+import { num } from "../../lib/engine-config";
 
 const router: IRouter = Router();
 
@@ -964,6 +967,42 @@ router.get("/memory/compare", async (req: Request, res: Response) => {
   if (idList.length === 0) return res.json({ data: [] });
   const rows = await db.select().from(dealMemory).where(inArray(dealMemory.id, idList));
   return res.json({ data: rows.map(memoryOut) });
+});
+
+// Literal route — MUST stay above "/memory/:id" so it isn't captured as an id.
+router.get("/memory/revival-candidates", async (_req: Request, res: Response) => {
+  const { thresholds } = await getThresholds();
+  const cfg = {
+    minWinBack: num(thresholds, "revival_min_win_back", 3),
+    cooloffDays: num(thresholds, "revival_cooloff_days", 60),
+    maxAgeDays: num(thresholds, "revival_max_age_days", 365),
+  };
+  const rows = await db
+    .select({
+      id: dealMemory.id,
+      dealId: dealMemory.dealId,
+      accountName: dealMemory.accountName,
+      dealName: dealMemory.dealName,
+      outcome: dealMemory.outcome,
+      finalTcv: dealMemory.finalTcv,
+      winBackPotential: dealMemory.winBackPotential,
+      winBackTimeline: dealMemory.winBackTimeline,
+      primaryLossCategory: dealMemory.primaryLossCategory,
+      archivedAt: dealMemory.archivedAt,
+    })
+    .from(dealMemory)
+    .where(eq(dealMemory.outcome, "Lost"));
+
+  const candidates = selectRevivalCandidates(
+    rows.map((r) => ({
+      ...r,
+      finalTcv: r.finalTcv == null ? null : Number(r.finalTcv),
+      archivedAt: r.archivedAt as unknown as string | Date,
+    })),
+    cfg,
+    Date.now(),
+  );
+  res.json({ data: candidates });
 });
 
 router.get("/memory/:id", async (req: Request, res: Response) => {

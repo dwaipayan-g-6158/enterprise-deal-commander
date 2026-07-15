@@ -1124,6 +1124,18 @@ paths:
       tags: [v2intel]
       responses:
         "200": { description: Per-deal score/gates/velocity enrichment, content: { application/json: { schema: { $ref: "#/components/schemas/GenericDataResponse" } } } }
+  /v2/analytics/product-gaps:
+    get:
+      operationId: getProductGaps
+      tags: [v2intel]
+      responses:
+        "200": { description: "Product gaps clustered from loss autopsies + unresolved technical blockers", content: { application/json: { schema: { $ref: "#/components/schemas/ProductGapsResponse" } } } }
+  /v2/memory/revival-candidates:
+    get:
+      operationId: listRevivalCandidates
+      tags: [v2intel]
+      responses:
+        "200": { description: "Closed-Lost deals worth re-engaging (win-back potential, past cool-off)", content: { application/json: { schema: { $ref: "#/components/schemas/RevivalCandidatesResponse" } } } }
   /v2/analytics/memory-insights:
     get:
       operationId: getMemoryInsights
@@ -3296,6 +3308,56 @@ components:
       type: object
       properties:
         data: { $ref: "#/components/schemas/DealMemory" }
+      required: [data]
+
+    RevivalCandidate:
+      type: object
+      properties:
+        memoryId: { type: string }
+        dealId: { type: string }
+        accountName: { type: string }
+        dealName: { type: string }
+        finalTcv: { type: ["number", "null"] }
+        winBackPotential: { type: ["integer", "null"] }
+        winBackTimeline: { type: ["string", "null"] }
+        primaryLossCategory: { type: ["string", "null"] }
+        archivedAt: { type: string }
+        ageDays: { type: integer }
+        reasons: { type: array, items: { type: string } }
+      required: [memoryId, dealId, accountName, dealName, archivedAt, ageDays, reasons]
+    RevivalCandidatesResponse:
+      type: object
+      properties:
+        data: { type: array, items: { $ref: "#/components/schemas/RevivalCandidate" } }
+      required: [data]
+
+    ProductGapDeal:
+      type: object
+      properties:
+        dealId: { type: string }
+        dealName: { type: string }
+        source: { type: string, enum: [autopsy, blocker] }
+        tcv: { type: ["number", "null"] }
+      required: [dealId, dealName, source]
+    ProductGapCluster:
+      type: object
+      properties:
+        label: { type: string }
+        productId: { type: ["string", "null"] }
+        productName: { type: ["string", "null"] }
+        dealCount: { type: integer }
+        lostTcv: { type: number }
+        openBlockerCount: { type: integer }
+        deals: { type: array, items: { $ref: "#/components/schemas/ProductGapDeal" } }
+      required: [label, dealCount, lostTcv, openBlockerCount, deals]
+    ProductGapsResponse:
+      type: object
+      properties:
+        data:
+          type: object
+          properties:
+            clusters: { type: array, items: { $ref: "#/components/schemas/ProductGapCluster" } }
+          required: [clusters]
       required: [data]
 
     # F8 Stakeholders

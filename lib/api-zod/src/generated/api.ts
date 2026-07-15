@@ -1844,6 +1844,43 @@ export const GetRosterEnrichmentResponse = zod.object({
 })
 
 
+export const GetProductGapsResponse = zod.object({
+  "data": zod.object({
+  "clusters": zod.array(zod.object({
+  "label": zod.string(),
+  "productId": zod.string().nullish(),
+  "productName": zod.string().nullish(),
+  "dealCount": zod.number(),
+  "lostTcv": zod.number(),
+  "openBlockerCount": zod.number(),
+  "deals": zod.array(zod.object({
+  "dealId": zod.string(),
+  "dealName": zod.string(),
+  "source": zod.enum(['autopsy', 'blocker']),
+  "tcv": zod.number().nullish()
+}))
+}))
+})
+})
+
+
+export const ListRevivalCandidatesResponse = zod.object({
+  "data": zod.array(zod.object({
+  "memoryId": zod.string(),
+  "dealId": zod.string(),
+  "accountName": zod.string(),
+  "dealName": zod.string(),
+  "finalTcv": zod.number().nullish(),
+  "winBackPotential": zod.number().nullish(),
+  "winBackTimeline": zod.string().nullish(),
+  "primaryLossCategory": zod.string().nullish(),
+  "archivedAt": zod.string(),
+  "ageDays": zod.number(),
+  "reasons": zod.array(zod.string())
+}))
+})
+
+
 export const GetMemoryInsightsResponse = zod.object({
   "data": zod.record(zod.string(), zod.unknown())
 })

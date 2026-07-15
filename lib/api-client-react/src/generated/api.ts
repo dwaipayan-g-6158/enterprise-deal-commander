@@ -125,9 +125,11 @@ import type {
   PricingModelListResponse,
   PricingScheduleInput,
   PricingScheduleResponse,
+  ProductGapsResponse,
   ProductListResponse,
   ProductMixResponse,
   ReviewMarkerResponse,
+  RevivalCandidatesResponse,
   RollbackSettingsChangeBody,
   ScenarioComputeInput,
   ScenarioInput,
@@ -5652,6 +5654,148 @@ export function useGetRosterEnrichment<TData = Awaited<ReturnType<typeof getRost
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getGetRosterEnrichmentQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getGetProductGapsUrl = () => {
+
+
+
+
+  return `/api/v2/analytics/product-gaps`
+}
+
+export const getProductGaps = async ( options?: RequestInit): Promise<ProductGapsResponse> => {
+
+  return customFetch<ProductGapsResponse>(getGetProductGapsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetProductGapsQueryKey = () => {
+    return [
+    `/api/v2/analytics/product-gaps`
+    ] as const;
+    }
+
+
+export const getGetProductGapsQueryOptions = <TData = Awaited<ReturnType<typeof getProductGaps>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getProductGaps>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetProductGapsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getProductGaps>>> = ({ signal }) => getProductGaps({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getProductGaps>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetProductGapsQueryResult = NonNullable<Awaited<ReturnType<typeof getProductGaps>>>
+export type GetProductGapsQueryError = ErrorType<unknown>
+
+
+
+export function useGetProductGaps<TData = Awaited<ReturnType<typeof getProductGaps>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getProductGaps>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetProductGapsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getListRevivalCandidatesUrl = () => {
+
+
+
+
+  return `/api/v2/memory/revival-candidates`
+}
+
+export const listRevivalCandidates = async ( options?: RequestInit): Promise<RevivalCandidatesResponse> => {
+
+  return customFetch<RevivalCandidatesResponse>(getListRevivalCandidatesUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListRevivalCandidatesQueryKey = () => {
+    return [
+    `/api/v2/memory/revival-candidates`
+    ] as const;
+    }
+
+
+export const getListRevivalCandidatesQueryOptions = <TData = Awaited<ReturnType<typeof listRevivalCandidates>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listRevivalCandidates>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListRevivalCandidatesQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listRevivalCandidates>>> = ({ signal }) => listRevivalCandidates({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listRevivalCandidates>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListRevivalCandidatesQueryResult = NonNullable<Awaited<ReturnType<typeof listRevivalCandidates>>>
+export type ListRevivalCandidatesQueryError = ErrorType<unknown>
+
+
+
+export function useListRevivalCandidates<TData = Awaited<ReturnType<typeof listRevivalCandidates>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listRevivalCandidates>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListRevivalCandidatesQueryOptions(options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

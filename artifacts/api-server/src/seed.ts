@@ -294,6 +294,10 @@ async function seedLookups() {
       { parameterKey: "suite_bundle_min_components", parameterValue: "3", dataType: "number", description: "À-la-carte components in one suite at or above which a bundle upsell is recommended" },
       { parameterKey: "poc_max_validation_days", parameterValue: "30", dataType: "number", description: "Days a PoC can sit in Validation without locked criteria before POC_DEATH_MARCH fires" },
       { parameterKey: "siem_high_volume_log_sources", parameterValue: "500", dataType: "number", description: "Estimated log sources at or above which an undersized Log360 deal fires SIEM_UNDERSCOPED" },
+      // Deal Revival watch: which Closed-Lost deals are worth re-engaging
+      { parameterKey: "revival_min_win_back", parameterValue: "3", dataType: "number", description: "Minimum win-back potential (1-5) for a Lost deal to be a revival candidate" },
+      { parameterKey: "revival_cooloff_days", parameterValue: "60", dataType: "number", description: "Days a Lost deal must age before it surfaces as a revival candidate" },
+      { parameterKey: "revival_max_age_days", parameterValue: "365", dataType: "number", description: "Days after which a Lost deal is too stale to bother reviving" },
       // Risk Engine v2.0 dimension weights + level boundaries
       { parameterKey: "risk_weight_technical", parameterValue: "0.20", dataType: "number", description: "Weight of the technical risk dimension in the composite risk score (Risk Engine v2)" },
       { parameterKey: "risk_weight_commercial", parameterValue: "0.15", dataType: "number", description: "Weight of the commercial risk dimension in the composite risk score (Risk Engine v2)" },

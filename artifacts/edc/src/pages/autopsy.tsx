@@ -3,6 +3,7 @@ import { ArchetypeBreakdown } from "@/components/autopsy/archetype-breakdown";
 import { LossDashboardPanel } from "@/components/autopsy/loss-dashboard-panel";
 import { CompetitiveLossPanel } from "@/components/autopsy/competitive-loss-panel";
 import { LossRiskPanel } from "@/components/autopsy/loss-risk-panel";
+import { ProductGapsPanel } from "@/components/autopsy/product-gaps-panel";
 
 export default function Autopsy() {
   return (
@@ -18,6 +19,7 @@ export default function Autopsy() {
           <TabsTrigger value="early-warning">Early Warning</TabsTrigger>
           <TabsTrigger value="competitive">Competitive</TabsTrigger>
           <TabsTrigger value="archetypes">Archetypes</TabsTrigger>
+          <TabsTrigger value="product-gaps">Product Gaps</TabsTrigger>
         </TabsList>
         <TabsContent value="loss-intelligence" className="pt-6">
           <LossDashboardPanel />
@@ -30,6 +32,9 @@ export default function Autopsy() {
         </TabsContent>
         <TabsContent value="archetypes" className="pt-6">
           <ArchetypeBreakdown />
+        </TabsContent>
+        <TabsContent value="product-gaps" className="pt-6">
+          <ProductGapsPanel />
         </TabsContent>
       </Tabs>
     </div>

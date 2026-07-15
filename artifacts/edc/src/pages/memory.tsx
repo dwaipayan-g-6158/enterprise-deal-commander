@@ -6,10 +6,12 @@ import { ComparisonSheet } from "@/components/memory/comparison-sheet";
 import { CompetitorsTab } from "@/components/memory/competitors-tab";
 import { PricingTab } from "@/components/memory/pricing-tab";
 import { AdvisorTab } from "@/components/memory/advisor-tab";
+import { RevivalTab } from "@/components/memory/revival-tab";
 
 const TABS = [
   { id: "search", label: "Search" },
   { id: "health", label: "Health" },
+  { id: "revival", label: "Revival" },
   { id: "competitors", label: "Competitors" },
   { id: "pricing", label: "Pricing" },
   { id: "ask", label: "Ask Advisor" },
@@ -40,6 +42,7 @@ export default function Memory() {
         <SearchTab selected={selected} onToggleSelect={toggleSelect} onCompare={() => setCompareOpen(true)} />
       )}
       {tab === "health" && <HealthDashboard />}
+      {tab === "revival" && <RevivalTab />}
       {tab === "competitors" && <CompetitorsTab />}
       {tab === "pricing" && <PricingTab />}
       {tab === "ask" && <AdvisorTab />}

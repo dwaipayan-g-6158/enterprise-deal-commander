@@ -1517,6 +1517,64 @@ export interface DealMemoryResponse {
   data: DealMemory;
 }
 
+export interface RevivalCandidate {
+  memoryId: string;
+  dealId: string;
+  accountName: string;
+  dealName: string;
+  /** @nullable */
+  finalTcv?: number | null;
+  /** @nullable */
+  winBackPotential?: number | null;
+  /** @nullable */
+  winBackTimeline?: string | null;
+  /** @nullable */
+  primaryLossCategory?: string | null;
+  archivedAt: string;
+  ageDays: number;
+  reasons: string[];
+}
+
+export interface RevivalCandidatesResponse {
+  data: RevivalCandidate[];
+}
+
+export type ProductGapDealSource = typeof ProductGapDealSource[keyof typeof ProductGapDealSource];
+
+
+export const ProductGapDealSource = {
+  autopsy: 'autopsy',
+  blocker: 'blocker',
+} as const;
+
+export interface ProductGapDeal {
+  dealId: string;
+  dealName: string;
+  source: ProductGapDealSource;
+  /** @nullable */
+  tcv?: number | null;
+}
+
+export interface ProductGapCluster {
+  label: string;
+  /** @nullable */
+  productId?: string | null;
+  /** @nullable */
+  productName?: string | null;
+  dealCount: number;
+  lostTcv: number;
+  openBlockerCount: number;
+  deals: ProductGapDeal[];
+}
+
+export type ProductGapsResponseData = {
+  clusters: ProductGapCluster[];
+};
+
+export interface ProductGapsResponse {
+  data: ProductGapsResponseData;
+}
+
 export interface Stakeholder {
   id: string;
   dealId: string;
