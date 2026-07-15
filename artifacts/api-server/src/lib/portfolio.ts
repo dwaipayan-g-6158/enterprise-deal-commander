@@ -5,7 +5,7 @@ import {
   dealReviewMarkers,
   dealAuditLog,
 } from "@workspace/db";
-import { assembleDealIntelligence, getThresholds } from "./intelligence";
+import { assembleDealIntelligence, getThresholds, getPortfolioConfig } from "./intelligence";
 import { cache, CacheKeys, CacheTtl } from "./cache";
 import {
   buildRiskCells,
@@ -169,6 +169,7 @@ function correlations(
 
 export async function computePortfolioAnalysis() {
   const { thresholds } = await getThresholds();
+  const portfolioConfig = await getPortfolioConfig();
   const reportingCurrency = String(thresholds.reporting_currency || "USD");
   const deals = await loadActiveIntel();
   const records: PortfolioRecord[] = deals.map((d) => ({
@@ -261,8 +262,8 @@ export async function computePortfolioAnalysis() {
   }));
 
   // --- Heatmap + summary metrics (pure, in portfolio-metrics.ts) -----------
-  const amCells = buildRiskCells(records, "accountManager");
-  const tlCells = buildRiskCells(records, "technicalLead");
+  const amCells = buildRiskCells(records, "accountManager", portfolioConfig);
+  const tlCells = buildRiskCells(records, "technicalLead", portfolioConfig);
   const productAxis = [...productGroups.keys()].sort();
   // Derive each row axis from the cells themselves so the axis labels and the
   // cell keys are always normalized identically — otherwise an axis built from a
@@ -295,14 +296,14 @@ export async function computePortfolioAnalysis() {
     ...managerCorr,
     ...leadCorr,
     ...productCorr,
-  ]);
+  ], portfolioConfig);
   const summary = {
     diversificationIndex: diversificationIndex(amCells),
     highestCorrelationCluster: pickHighestCorrelationCluster({
       manager: managerCorr,
       lead: leadCorr,
       product: productCorr,
-    }),
+    }, portfolioConfig),
     correlatedExposureTcv: correlatedExposureTcv(records, sigCodes),
     redDealCount: records.filter((r) => r.healthStatus === "RED").length,
     totalDealCount: records.length,

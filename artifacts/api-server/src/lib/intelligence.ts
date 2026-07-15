@@ -40,7 +40,7 @@ import {
 } from "@workspace/engine";
 import { cache, CacheKeys, CacheTtl } from "./cache";
 import { competitorWinRates } from "./competitive";
-import { deriveRiskWeights, deriveRiskBoundaries, deriveHealthWeights } from "./engine-config";
+import { deriveRiskWeights, deriveRiskBoundaries, deriveHealthWeights, derivePortfolioConfig } from "./engine-config";
 
 export const DEFAULT_THRESHOLDS: EngineThresholds = {
   elephant_tcv_threshold: 250000,
@@ -129,6 +129,12 @@ export async function getThresholds(): Promise<{
 export async function getHealthWeights() {
   const { thresholds } = await getThresholds();
   return deriveHealthWeights(thresholds);
+}
+
+/** Portfolio Risk Analysis constants, derived from the same cached thresholds. */
+export async function getPortfolioConfig() {
+  const { thresholds } = await getThresholds();
+  return derivePortfolioConfig(thresholds);
 }
 
 export async function getFxRate(

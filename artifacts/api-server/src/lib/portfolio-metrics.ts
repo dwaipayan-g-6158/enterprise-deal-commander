@@ -71,20 +71,29 @@ export interface HighestCorrelationCluster {
   share: number;
 }
 
-const HEALTH_BASE: Record<HealthStatus, number> = {
-  GREEN: 10,
-  YELLOW: 45,
-  RED: 75,
+export interface PortfolioMetricsConfig {
+  healthBase: Record<HealthStatus, number>;
+  alertBumpCap: number;
+  alertBumpPerWeight: number;
+  minConfidenceDeals: number;
+  significantLift: number;
+  clusterMinShare: number;
+  clusterMinDeals: number;
+}
+
+/** The values this module used before config became DB-tunable — unchanged behavior when no config is passed. */
+export const DEFAULT_PORTFOLIO_CONFIG: PortfolioMetricsConfig = {
+  healthBase: { GREEN: 10, YELLOW: 45, RED: 75 },
+  alertBumpCap: 25,
+  alertBumpPerWeight: 0.25,
+  minConfidenceDeals: 3,
+  significantLift: 1.5,
+  clusterMinShare: 0.5,
+  clusterMinDeals: 3,
 };
-const ALERT_BUMP_CAP = 25;
-const ALERT_BUMP_PER_WEIGHT = 0.25;
 
-export const MIN_CONFIDENCE_DEALS = 3;
-
-/** Thresholds for treating a (group, code) correlation as meaningful. */
-const SIGNIFICANT_LIFT = 1.5;
-const CLUSTER_MIN_SHARE = 0.5;
-const CLUSTER_MIN_DEALS = 3;
+/** @deprecated kept for any external import; equals DEFAULT_PORTFOLIO_CONFIG.minConfidenceDeals */
+export const MIN_CONFIDENCE_DEALS = DEFAULT_PORTFOLIO_CONFIG.minConfidenceDeals;
 
 const UNASSIGNED = "Unassigned";
 
@@ -93,12 +102,12 @@ function clamp(n: number, lo: number, hi: number): number {
 }
 
 /** Per-deal composite risk in [0, 100]: health base + a capped strongest-alert bump. */
-export function computeDealRisk(d: {
-  healthStatus: HealthStatus;
-  maxActiveAlertWeight: number;
-}): number {
-  const base = HEALTH_BASE[d.healthStatus];
-  const bump = Math.min(ALERT_BUMP_CAP, d.maxActiveAlertWeight * ALERT_BUMP_PER_WEIGHT);
+export function computeDealRisk(
+  d: { healthStatus: HealthStatus; maxActiveAlertWeight: number },
+  config: PortfolioMetricsConfig = DEFAULT_PORTFOLIO_CONFIG,
+): number {
+  const base = config.healthBase[d.healthStatus];
+  const bump = Math.min(config.alertBumpCap, d.maxActiveAlertWeight * config.alertBumpPerWeight);
   return Math.round(clamp(base + bump, 0, 100));
 }
 
@@ -125,6 +134,7 @@ function topCodes(records: MetricsRecord[], limit = 3): string[] {
 export function buildRiskCells(
   records: MetricsRecord[],
   axis: "accountManager" | "technicalLead",
+  config: PortfolioMetricsConfig = DEFAULT_PORTFOLIO_CONFIG,
 ): RiskCell[] {
   const groups = new Map<
     string,
@@ -146,7 +156,7 @@ export function buildRiskCells(
   const cells: RiskCell[] = [];
   for (const { person, product, recs } of groups.values()) {
     const meanRisk =
-      recs.reduce((s, r) => s + computeDealRisk(r), 0) / recs.length;
+      recs.reduce((s, r) => s + computeDealRisk(r, config), 0) / recs.length;
     cells.push({
       person,
       product,
@@ -154,7 +164,7 @@ export function buildRiskCells(
       tcv: recs.reduce((s, r) => s + r.tcv, 0),
       riskScore: Math.round(meanRisk),
       topAlertCodes: topCodes(recs),
-      lowConfidence: recs.length < MIN_CONFIDENCE_DEALS,
+      lowConfidence: recs.length < config.minConfidenceDeals,
       deals: recs.map((r) => ({
         id: r.dealId,
         dealName: r.dealName,
@@ -184,12 +194,15 @@ export function diversificationIndex(cells: RiskCell[]): number {
 }
 
 /** Codes that are concentrated in at least one sufficiently large group. */
-export function significantCodes(groups: GroupCorrelation[]): Set<string> {
+export function significantCodes(
+  groups: GroupCorrelation[],
+  config: PortfolioMetricsConfig = DEFAULT_PORTFOLIO_CONFIG,
+): Set<string> {
   const codes = new Set<string>();
   for (const g of groups) {
-    if (g.dealCount < CLUSTER_MIN_DEALS) continue;
+    if (g.dealCount < config.clusterMinDeals) continue;
     for (const c of g.alertCorrelations) {
-      if (c.lift >= SIGNIFICANT_LIFT && c.share >= CLUSTER_MIN_SHARE) {
+      if (c.lift >= config.significantLift && c.share >= config.clusterMinShare) {
         codes.add(c.code);
       }
     }
@@ -216,11 +229,14 @@ export function correlatedExposureTcv(
 }
 
 /** The eligible (group, code) pair with the strongest lift, or null. */
-export function pickHighestCorrelationCluster(groups: {
-  manager: GroupCorrelation[];
-  lead: GroupCorrelation[];
-  product: GroupCorrelation[];
-}): HighestCorrelationCluster | null {
+export function pickHighestCorrelationCluster(
+  groups: {
+    manager: GroupCorrelation[];
+    lead: GroupCorrelation[];
+    product: GroupCorrelation[];
+  },
+  config: PortfolioMetricsConfig = DEFAULT_PORTFOLIO_CONFIG,
+): HighestCorrelationCluster | null {
   const scopes: [HighestCorrelationCluster["scope"], GroupCorrelation[]][] = [
     ["manager", groups.manager],
     ["lead", groups.lead],
@@ -229,9 +245,9 @@ export function pickHighestCorrelationCluster(groups: {
   let best: HighestCorrelationCluster | null = null;
   for (const [scope, list] of scopes) {
     for (const g of list) {
-      if (g.dealCount < CLUSTER_MIN_DEALS) continue;
+      if (g.dealCount < config.clusterMinDeals) continue;
       for (const c of g.alertCorrelations) {
-        if (c.share < CLUSTER_MIN_SHARE) continue;
+        if (c.share < config.clusterMinShare) continue;
         // Only a positively-concentrated pattern (lift > baseline) is a
         // meaningful "correlation cluster"; lift <= 1 is at/below the norm.
         if (c.lift <= 1) continue;

@@ -8,6 +8,7 @@ import type {
   RiskLevelBoundaries,
   HealthWeights,
 } from "@workspace/engine";
+import { DEFAULT_PORTFOLIO_CONFIG, type PortfolioMetricsConfig } from "./portfolio-metrics";
 
 /** Read a numeric tunable from the merged thresholds, falling back when absent/non-numeric. */
 export function num(
@@ -51,5 +52,22 @@ export function deriveHealthWeights(thresholds: EngineThresholds): HealthWeights
     generation: num(thresholds, "health_weight_generation", 1 / 6),
     age: num(thresholds, "health_weight_age", 1 / 6),
     attrition: num(thresholds, "health_weight_attrition", 1 / 6),
+  };
+}
+
+/** Derive the Portfolio Risk Analysis constants from the merged thresholds. */
+export function derivePortfolioConfig(thresholds: EngineThresholds): PortfolioMetricsConfig {
+  return {
+    healthBase: {
+      GREEN: num(thresholds, "portfolio_health_base_green", DEFAULT_PORTFOLIO_CONFIG.healthBase.GREEN),
+      YELLOW: num(thresholds, "portfolio_health_base_yellow", DEFAULT_PORTFOLIO_CONFIG.healthBase.YELLOW),
+      RED: num(thresholds, "portfolio_health_base_red", DEFAULT_PORTFOLIO_CONFIG.healthBase.RED),
+    },
+    alertBumpCap: num(thresholds, "portfolio_alert_bump_cap", DEFAULT_PORTFOLIO_CONFIG.alertBumpCap),
+    alertBumpPerWeight: num(thresholds, "portfolio_alert_bump_per_weight", DEFAULT_PORTFOLIO_CONFIG.alertBumpPerWeight),
+    minConfidenceDeals: num(thresholds, "portfolio_min_confidence_deals", DEFAULT_PORTFOLIO_CONFIG.minConfidenceDeals),
+    significantLift: num(thresholds, "portfolio_significant_lift", DEFAULT_PORTFOLIO_CONFIG.significantLift),
+    clusterMinShare: num(thresholds, "portfolio_cluster_min_share", DEFAULT_PORTFOLIO_CONFIG.clusterMinShare),
+    clusterMinDeals: num(thresholds, "portfolio_cluster_min_deals", DEFAULT_PORTFOLIO_CONFIG.clusterMinDeals),
   };
 }

@@ -4,8 +4,10 @@ import {
   deriveRiskWeights,
   deriveRiskBoundaries,
   deriveHealthWeights,
+  derivePortfolioConfig,
 } from "./engine-config";
 import type { EngineThresholds, HealthWeights } from "@workspace/engine";
+import { DEFAULT_PORTFOLIO_CONFIG } from "./portfolio-metrics";
 
 // `EngineThresholds` has 16 required named fields (elephant_tcv_threshold,
 // mega_deal_tcv_threshold, ...) plus a `[key: string]: number | string` index
@@ -118,5 +120,34 @@ describe("deriveHealthWeights", () => {
     expect(result.generation).toBeCloseTo(1 / 6, 6);
     expect(result.age).toBeCloseTo(1 / 6, 6);
     expect(result.attrition).toBeCloseTo(1 / 6, 6);
+  });
+});
+
+describe("derivePortfolioConfig", () => {
+  it("reads all 7 portfolio constants from thresholds", () => {
+    const thresholds = {
+      portfolio_health_base_green: 5,
+      portfolio_health_base_yellow: 40,
+      portfolio_health_base_red: 80,
+      portfolio_alert_bump_cap: 20,
+      portfolio_alert_bump_per_weight: 0.3,
+      portfolio_min_confidence_deals: 4,
+      portfolio_significant_lift: 1.8,
+      portfolio_cluster_min_share: 0.6,
+      portfolio_cluster_min_deals: 4,
+    };
+    expect(derivePortfolioConfig(asThresholds(thresholds))).toEqual({
+      healthBase: { GREEN: 5, YELLOW: 40, RED: 80 },
+      alertBumpCap: 20,
+      alertBumpPerWeight: 0.3,
+      minConfidenceDeals: 4,
+      significantLift: 1.8,
+      clusterMinShare: 0.6,
+      clusterMinDeals: 4,
+    });
+  });
+
+  it("defaults to DEFAULT_PORTFOLIO_CONFIG when thresholds are empty", () => {
+    expect(derivePortfolioConfig(asThresholds({}))).toEqual(DEFAULT_PORTFOLIO_CONFIG);
   });
 });

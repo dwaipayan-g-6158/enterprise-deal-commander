@@ -8,6 +8,8 @@ import {
   pickHighestCorrelationCluster,
   type MetricsRecord,
   type GroupCorrelation,
+  type PortfolioMetricsConfig,
+  DEFAULT_PORTFOLIO_CONFIG,
 } from "./portfolio-metrics";
 
 function rec(over: Partial<MetricsRecord> = {}): MetricsRecord {
@@ -198,5 +200,47 @@ describe("pickHighestCorrelationCluster", () => {
       product: [],
     });
     expect(top).toBeNull();
+  });
+});
+
+describe("computeDealRisk with a custom config", () => {
+  const customConfig: PortfolioMetricsConfig = {
+    healthBase: { GREEN: 0, YELLOW: 50, RED: 100 },
+    alertBumpCap: 10,
+    alertBumpPerWeight: 0.5,
+    minConfidenceDeals: 5,
+    significantLift: 2.0,
+    clusterMinShare: 0.75,
+    clusterMinDeals: 5,
+  };
+
+  it("uses the custom health-base and bump values instead of the defaults", () => {
+    expect(computeDealRisk({ healthStatus: "GREEN", maxActiveAlertWeight: 0 }, customConfig)).toBe(0);
+    // RED base 100 + min(10, 90*0.5=45) => 110 -> clamped to 100
+    expect(computeDealRisk({ healthStatus: "RED", maxActiveAlertWeight: 90 }, customConfig)).toBe(100);
+  });
+
+  it("defaults to DEFAULT_PORTFOLIO_CONFIG when no config is passed (unchanged behavior)", () => {
+    expect(computeDealRisk({ healthStatus: "GREEN", maxActiveAlertWeight: 0 })).toBe(10);
+    expect(DEFAULT_PORTFOLIO_CONFIG.healthBase.GREEN).toBe(10);
+    expect(DEFAULT_PORTFOLIO_CONFIG.alertBumpCap).toBe(25);
+  });
+
+  it("buildRiskCells honors a custom minConfidenceDeals", () => {
+    const recs = [rec(), rec(), rec()]; // 3 deals
+    const cellsDefault = buildRiskCells(recs, "accountManager");
+    expect(cellsDefault[0].lowConfidence).toBe(false); // default minConfidenceDeals=3, 3 >= 3
+    const cellsCustom = buildRiskCells(recs, "accountManager", customConfig);
+    expect(cellsCustom[0].lowConfidence).toBe(true); // custom minConfidenceDeals=5, 3 < 5
+  });
+
+  it("significantCodes honors a custom lift/share/deal-count threshold", () => {
+    const groups: GroupCorrelation[] = [
+      { name: "Alice", dealCount: 4, alertCorrelations: [{ code: "GHOST_PIPELINE", share: 0.6, lift: 1.8 }] },
+    ];
+    // Default (lift>=1.5, share>=0.5, dealCount>=3): matches.
+    expect(significantCodes(groups).has("GHOST_PIPELINE")).toBe(true);
+    // Custom requires lift>=2.0: does not match.
+    expect(significantCodes(groups, customConfig).has("GHOST_PIPELINE")).toBe(false);
   });
 });
