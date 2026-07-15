@@ -37,6 +37,7 @@ import { FilterChips } from "@/components/roster/filter-chips";
 import { RosterTable } from "@/components/roster/roster-table";
 import { RosterCardList } from "@/components/roster/roster-card-list";
 import { RosterBoard } from "@/components/roster/board/roster-board";
+import { RosterTimeline } from "@/components/roster/timeline/roster-timeline";
 import { StageOverrideDialog } from "@/components/roster/board/stage-override-dialog";
 import { CloseDealDialog, type PendingClose } from "@/components/roster/board/close-deal-dialog";
 import { useStageMove } from "@/components/roster/board/use-stage-move";
@@ -272,8 +273,8 @@ export default function Deals() {
     <div
       className={cn(
         "p-4 sm:p-8 space-y-6 mx-auto animate-in fade-in slide-in-from-bottom-4 duration-500",
-        // Board wants the full width for its horizontal rail; table stays capped.
-        viewMode === "board" ? "max-w-full" : "max-w-[1600px]",
+        // Board/timeline want the full width for their horizontal rail; table stays capped.
+        viewMode === "table" ? "max-w-[1600px]" : "max-w-full",
       )}
     >
       <div className="flex items-center justify-between gap-4">
@@ -400,6 +401,12 @@ export default function Deals() {
                 onRequestClose={(row: RosterRow, stage: BoardStage) => setPendingClose({ row, toStage: stage })}
                 rowActions={rowActions}
                 moveApi={moveApi}
+              />
+            ) : viewMode === "timeline" ? (
+              <RosterTimeline
+                rows={derived.flat}
+                onCardClick={(row) => setPreviewDealId(row.id)}
+                rowActions={rowActions}
               />
             ) : (
               <Card className="min-w-0 overflow-hidden">

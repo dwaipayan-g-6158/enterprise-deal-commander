@@ -1,4 +1,4 @@
-import { Search, X, Table as TableIcon, SquareKanban } from "lucide-react";
+import { Search, X, Table as TableIcon, SquareKanban, CalendarRange } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import {
@@ -88,6 +88,7 @@ export function RosterToolbar({
   setBoardBand: (b: BandBy) => void;
 }) {
   const isBoard = viewMode === "board";
+  const isTable = viewMode === "table";
   return (
     <div className="flex flex-wrap items-center gap-2">
       <div className="relative flex-1 min-w-[200px] max-w-sm">
@@ -133,8 +134,9 @@ export function RosterToolbar({
       />
       <MoreFiltersPanel filters={filters} setFilters={setFilters} amOptions={amOptions} tlOptions={tlOptions} tagOptions={tagOptions} />
 
-      {/* Grouping applies to the table; the board bands each stage column instead. */}
-      {isBoard ? (
+      {/* Grouping applies to the table; the board bands each stage column
+          instead; the timeline has neither. */}
+      {isBoard && (
         <Select value={boardBand} onValueChange={(v) => setBoardBand(v as BandBy)}>
           <SelectTrigger className="w-[160px]" aria-label="Band board columns">
             <SelectValue />
@@ -147,7 +149,8 @@ export function RosterToolbar({
             ))}
           </SelectContent>
         </Select>
-      ) : (
+      )}
+      {isTable && (
         <Select value={group} onValueChange={(v) => setGroup(v as GroupBy)}>
           <SelectTrigger className="w-[150px]" aria-label="Group rows">
             <SelectValue />
@@ -179,9 +182,12 @@ export function RosterToolbar({
           <ToggleGroupItem value="board" aria-label="Board view" title="Board view">
             <SquareKanban className="h-4 w-4" />
           </ToggleGroupItem>
+          <ToggleGroupItem value="timeline" aria-label="Timeline view" title="Timeline view">
+            <CalendarRange className="h-4 w-4" />
+          </ToggleGroupItem>
         </ToggleGroup>
         {/* Column layout only makes sense for the table. */}
-        {!isBoard && <ColumnCustomizer layout={columnLayout} onChange={setColumnLayout} />}
+        {isTable && <ColumnCustomizer layout={columnLayout} onChange={setColumnLayout} />}
         <Select value={filters.state} onValueChange={(v) => setFilters({ state: v as DealState })}>
           <SelectTrigger className="w-[130px]">
             <SelectValue placeholder="State" />
@@ -193,7 +199,7 @@ export function RosterToolbar({
           </SelectContent>
         </Select>
         {/* Density only affects table row height. */}
-        {!isBoard && <DensityToggle density={density} onChange={setDensity} />}
+        {isTable && <DensityToggle density={density} onChange={setDensity} />}
       </div>
     </div>
   );
