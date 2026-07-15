@@ -5,7 +5,7 @@
 CREATE TABLE IF NOT EXISTS edc_v2.settings_change_log (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   module varchar(40) NOT NULL,
-  setting_key varchar(120) NOT NULL,
+  setting_key varchar(255) NOT NULL,
   entity_id varchar(100),
   action varchar(20) NOT NULL,
   old_value jsonb,

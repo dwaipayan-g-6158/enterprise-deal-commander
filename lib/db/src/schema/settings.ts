@@ -31,7 +31,7 @@ export const settingsChangeLog = edcV2.table(
   {
     id: uuid("id").primaryKey().defaultRandom(),
     module: varchar("module", { length: 40 }).notNull(),
-    settingKey: varchar("setting_key", { length: 120 }).notNull(),
+    settingKey: varchar("setting_key", { length: 255 }).notNull(),
     entityId: varchar("entity_id", { length: 100 }),
     action: varchar("action", { length: 20 }).notNull(),
     oldValue: jsonb("old_value"),

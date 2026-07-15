@@ -75,8 +75,8 @@ router.post("/settings/change-log/:id/rollback", async (req: Request, res: Respo
     throw conflict(`Rollback not yet supported for module "${row.module}"`);
   }
 
-  if (row.action === "rollback" || row.action === "import") {
-    throw conflict(`Cannot roll back a "${row.action}" entry — only original create/update/deactivate/delete changes can be rolled back`);
+  if (row.action !== "update") {
+    throw conflict(`Cannot roll back a "${row.action}" entry — only original update changes can be rolled back`);
   }
 
   const inverse = computeRollback({
