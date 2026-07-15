@@ -8,7 +8,12 @@ import { shortDate, daysUntil } from "@/components/dashboard/widgets/_shared";
 import { formatCurrency } from "@/components/cockpit/use-invalidate";
 import { RISK_LEVEL_CLASS, RISK_LEVEL_LABEL, type RiskLevel } from "@/components/cockpit/risk/risk-model";
 import { VELOCITY_LABEL } from "./model/velocity";
+import { terminalOutcome } from "./model/board";
 import type { ColumnId, Health, RosterRow, VelocityBucket } from "./model/roster-types";
+
+// `terminalOutcome` moved to the pure board model; re-exported here so existing
+// importers (and the table badge below) keep their import path.
+export { terminalOutcome };
 
 export function HealthBadge({ health }: { health: string }) {
   return (
@@ -103,14 +108,6 @@ function MatchedInHint({ sources }: { sources?: string[] }) {
 // A deal's sales stage can be terminal (the deal is decided) while its lifecycle
 // state is still "active" (it hasn't been archived/deleted). Surface that outcome
 // as a badge so Won / Lost deals are scannable without reading the Stage column.
-export function terminalOutcome(stage: string | null | undefined): "won" | "lost" | null {
-  if (!stage) return null;
-  const s = stage.toLowerCase();
-  if (/closed.?won/.test(s)) return "won";
-  if (/closed.?lost/.test(s)) return "lost";
-  return null;
-}
-
 export function TerminalStageBadge({ stage }: { stage: string | null | undefined }) {
   const outcome = terminalOutcome(stage);
   if (!outcome) return null;

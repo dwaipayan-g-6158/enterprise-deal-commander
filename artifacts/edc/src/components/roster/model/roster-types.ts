@@ -8,6 +8,8 @@ export type { Deal };
 export type Health = "GREEN" | "YELLOW" | "RED";
 export type DealState = "active" | "archived" | "deleted";
 export type Density = "comfortable" | "compact" | "ultra";
+/** Desktop (lg+) roster presentation: the classic table or the Kanban board. */
+export type ViewMode = "table" | "board";
 
 /**
  * Client-derived velocity bucket. The backend only emits FAST/NORMAL/SLOW

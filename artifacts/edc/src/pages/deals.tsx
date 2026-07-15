@@ -36,8 +36,12 @@ import { ManageViewsDialog } from "@/components/roster/manage-views-dialog";
 import { FilterChips } from "@/components/roster/filter-chips";
 import { RosterTable } from "@/components/roster/roster-table";
 import { RosterCardList } from "@/components/roster/roster-card-list";
+import { RosterBoard } from "@/components/roster/board/roster-board";
+import { StageOverrideDialog } from "@/components/roster/board/stage-override-dialog";
+import { useStageMove } from "@/components/roster/board/use-stage-move";
 import { PreviewPanel } from "@/components/roster/preview-panel";
 import type { RowActions } from "@/components/roster/row-context-menu";
+import { cn } from "@/lib/utils";
 import type { FilterOption } from "@/components/roster/multi-select-filter";
 import { COLUMNS } from "@/components/roster/model/roster-columns";
 import type { ColumnId, RosterRow } from "@/components/roster/model/roster-types";
@@ -72,6 +76,8 @@ export default function Deals() {
     setColumnLayout,
     customViews,
     setCustomViews,
+    viewMode,
+    setViewMode,
   } = useRosterState();
   const filters = view.filters;
 
@@ -98,6 +104,10 @@ export default function Deals() {
     search: filters.search,
   });
   const derived = useDerivedRows(rows, view);
+
+  // Board-only stage-move API (drag-drop + context menu + 409 override). Harmless
+  // in table mode — it holds no subscriptions until a move is triggered.
+  const moveApi = useStageMove(derived.flat);
 
   // Visible columns in their configured order; guard against any stale ids.
   const visibleColumns = useMemo<ColumnId[]>(
@@ -229,7 +239,13 @@ export default function Deals() {
       : `No ${filters.state} deals.`;
 
   return (
-    <div className="p-4 sm:p-8 space-y-6 max-w-[1600px] mx-auto animate-in fade-in slide-in-from-bottom-4 duration-500">
+    <div
+      className={cn(
+        "p-4 sm:p-8 space-y-6 mx-auto animate-in fade-in slide-in-from-bottom-4 duration-500",
+        // Board wants the full width for its horizontal rail; table stays capped.
+        viewMode === "board" ? "max-w-full" : "max-w-[1600px]",
+      )}
+    >
       <div className="flex items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Deal Roster</h1>
@@ -268,6 +284,8 @@ export default function Deals() {
         setGroup={setGroup}
         columnLayout={columnLayout}
         setColumnLayout={setColumnLayout}
+        viewMode={viewMode}
+        setViewMode={setViewMode}
       />
 
       <FilterChips
@@ -335,30 +353,43 @@ export default function Deals() {
         </Card>
       ) : (
         <>
-          {/* Table at lg+ ; cards below (mobile + tablet). The preview always
-              opens as a right-side Sheet overlay so the table never reflows. */}
+          {/* At lg+, either the table or the Kanban board; cards below (mobile +
+              tablet). The preview always opens as a right-side Sheet overlay so
+              the layout never reflows. */}
           <div className="hidden lg:block">
-            <Card className="min-w-0 overflow-hidden">
-              <RosterTable
-                derived={derived}
-                visibleColumns={visibleColumns}
-                columnWidths={columnLayout.width}
-                onColumnResize={onColumnResize}
-                density={density}
-                sort={view.sort}
-                onToggleSort={toggleSort}
-                selection={selected}
-                onToggleRow={toggleOne}
-                onToggleAll={toggleAll}
-                allSelected={allSelected}
-                grouped={grouped}
-                collapsedGroups={collapsedGroups}
-                onToggleGroup={toggleGroup}
-                onRowClick={(row) => setPreviewDealId(row.id)}
-                previewId={previewDealId}
+            {viewMode === "board" ? (
+              <RosterBoard
+                rows={derived.flat}
+                stages={stagesData?.data ?? []}
+                readOnly={filters.state !== "active"}
+                stageFilter={filters.stage}
+                onCardClick={(row) => setPreviewDealId(row.id)}
                 rowActions={rowActions}
+                moveApi={moveApi}
               />
-            </Card>
+            ) : (
+              <Card className="min-w-0 overflow-hidden">
+                <RosterTable
+                  derived={derived}
+                  visibleColumns={visibleColumns}
+                  columnWidths={columnLayout.width}
+                  onColumnResize={onColumnResize}
+                  density={density}
+                  sort={view.sort}
+                  onToggleSort={toggleSort}
+                  selection={selected}
+                  onToggleRow={toggleOne}
+                  onToggleAll={toggleAll}
+                  allSelected={allSelected}
+                  grouped={grouped}
+                  collapsedGroups={collapsedGroups}
+                  onToggleGroup={toggleGroup}
+                  onRowClick={(row) => setPreviewDealId(row.id)}
+                  previewId={previewDealId}
+                  rowActions={rowActions}
+                />
+              </Card>
+            )}
           </div>
           <div className="lg:hidden">
             <RosterCardList rows={derived.flat} />
@@ -369,6 +400,9 @@ export default function Deals() {
       {/* Preview always opens as a right-side Sheet overlay (handles its own Esc
           / outside-click), so opening it never resizes or reflows the table. */}
       <PreviewPanel row={previewRow} onClose={() => setPreviewDealId(null)} />
+
+      {/* Board-only: opens when a stage move hits the 409 risk guardrail. */}
+      <StageOverrideDialog moveApi={moveApi} />
 
       {!isLoading && !isError && derived.flat.length > 0 && (
         <p className="text-xs text-muted-foreground">

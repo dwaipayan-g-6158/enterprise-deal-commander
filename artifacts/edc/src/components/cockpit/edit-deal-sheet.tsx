@@ -41,7 +41,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { ToastAction } from "@/components/ui/toast";
 import { useCockpitInvalidate } from "./use-invalidate";
-import { AlertTriangle } from "lucide-react";
+import { GuardrailNotice } from "./risk/guardrail-notice";
 
 interface FormState {
   deal_name: string;
@@ -508,16 +508,7 @@ export function EditDealSheet({
 
           {guardrail && (
             <div className="rounded-md border border-destructive/40 bg-destructive/10 p-4 space-y-3">
-              <div className="flex gap-2 text-destructive">
-                <AlertTriangle className="h-5 w-5 shrink-0" />
-                <div>
-                  <p className="font-semibold text-sm">Stage Guardrail</p>
-                  <p className="text-sm">{guardrail.message}</p>
-                  {guardrail.patternCodes.length > 0 && (
-                    <p className="text-xs font-mono mt-1">{guardrail.patternCodes.join(", ")}</p>
-                  )}
-                </div>
-              </div>
+              <GuardrailNotice message={guardrail.message} patternCodes={guardrail.patternCodes} />
               <div className="grid gap-2">
                 <Label className="text-xs">Override reason (min 10 chars)</Label>
                 <Textarea

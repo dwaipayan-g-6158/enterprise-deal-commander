@@ -1,4 +1,4 @@
-import { Search, X } from "lucide-react";
+import { Search, X, Table as TableIcon, SquareKanban } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import {
@@ -8,6 +8,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { MultiSelectFilter, type FilterOption } from "./multi-select-filter";
 import { MoreFiltersPanel } from "./more-filters-panel";
 import { ColumnCustomizer } from "./column-customizer";
@@ -21,6 +22,7 @@ import type {
   Health,
   RosterFilters,
   VelocityBucket,
+  ViewMode,
 } from "./model/roster-types";
 
 const GROUP_OPTIONS: { value: GroupBy; label: string }[] = [
@@ -53,6 +55,8 @@ export function RosterToolbar({
   setGroup,
   columnLayout,
   setColumnLayout,
+  viewMode,
+  setViewMode,
 }: {
   filters: RosterFilters;
   setFilters: (patch: Partial<RosterFilters>) => void;
@@ -68,7 +72,10 @@ export function RosterToolbar({
   setGroup: (g: GroupBy) => void;
   columnLayout: ColumnLayout;
   setColumnLayout: (next: ColumnLayout) => void;
+  viewMode: ViewMode;
+  setViewMode: (m: ViewMode) => void;
 }) {
+  const isBoard = viewMode === "board";
   return (
     <div className="flex flex-wrap items-center gap-2">
       <div className="relative flex-1 min-w-[200px] max-w-sm">
@@ -114,21 +121,42 @@ export function RosterToolbar({
       />
       <MoreFiltersPanel filters={filters} setFilters={setFilters} amOptions={amOptions} tlOptions={tlOptions} tagOptions={tagOptions} />
 
-      <Select value={group} onValueChange={(v) => setGroup(v as GroupBy)}>
-        <SelectTrigger className="w-[150px]" aria-label="Group rows">
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          {GROUP_OPTIONS.map((o) => (
-            <SelectItem key={o.value} value={o.value}>
-              {o.label}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+      {/* Grouping only applies to the table; the board groups by stage inherently. */}
+      {!isBoard && (
+        <Select value={group} onValueChange={(v) => setGroup(v as GroupBy)}>
+          <SelectTrigger className="w-[150px]" aria-label="Group rows">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {GROUP_OPTIONS.map((o) => (
+              <SelectItem key={o.value} value={o.value}>
+                {o.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      )}
 
       <div className="ml-auto flex items-center gap-2">
-        <ColumnCustomizer layout={columnLayout} onChange={setColumnLayout} />
+        {/* View mode is a desktop-only concern — mobile/tablet always get cards. */}
+        <ToggleGroup
+          type="single"
+          value={viewMode}
+          onValueChange={(v) => v && setViewMode(v as ViewMode)}
+          variant="outline"
+          size="sm"
+          className="hidden lg:flex"
+          aria-label="View mode"
+        >
+          <ToggleGroupItem value="table" aria-label="Table view" title="Table view">
+            <TableIcon className="h-4 w-4" />
+          </ToggleGroupItem>
+          <ToggleGroupItem value="board" aria-label="Board view" title="Board view">
+            <SquareKanban className="h-4 w-4" />
+          </ToggleGroupItem>
+        </ToggleGroup>
+        {/* Column layout only makes sense for the table. */}
+        {!isBoard && <ColumnCustomizer layout={columnLayout} onChange={setColumnLayout} />}
         <Select value={filters.state} onValueChange={(v) => setFilters({ state: v as DealState })}>
           <SelectTrigger className="w-[130px]">
             <SelectValue placeholder="State" />
@@ -139,7 +167,8 @@ export function RosterToolbar({
             <SelectItem value="deleted">Deleted</SelectItem>
           </SelectContent>
         </Select>
-        <DensityToggle density={density} onChange={setDensity} />
+        {/* Density only affects table row height. */}
+        {!isBoard && <DensityToggle density={density} onChange={setDensity} />}
       </div>
     </div>
   );
