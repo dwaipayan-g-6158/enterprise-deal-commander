@@ -9,6 +9,7 @@ import {
   GatesCell,
   VelocityCell,
   CloseDateCell,
+  LastActivityCell,
   TerminalStageBadge,
   HEALTH_BORDER,
   RISK_BORDER,
@@ -105,11 +106,12 @@ export const BoardCard = memo(function BoardCard({
             Risk <RiskCell score={row.riskScore} level={row.riskLevel} />
           </span>
           <span className="inline-flex items-center gap-1">
-            Score <ScoreCell score={row.score} />
+            Score <ScoreCell score={row.score} delta={row.scoreDelta} />
           </span>
           <GatesCell pct={row.gatesPct} />
           <VelocityCell bucket={row.velocity} delta={row.deltaDays} />
           {row.daysInStage != null && <span className="tabular-nums">{row.daysInStage}d in stage</span>}
+          <LastActivityCell days={row.daysSinceLastActivity} />
           <span className="inline-flex items-center gap-1">
             Close <CloseDateCell iso={row.expectedCloseDate} />
           </span>

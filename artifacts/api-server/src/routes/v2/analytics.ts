@@ -1,11 +1,12 @@
 import { Router, type IRouter, type Request, type Response } from "express";
-import { and, asc, desc, eq, inArray, isNull, lte, notInArray, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, lte, max, ne, notInArray, sql } from "drizzle-orm";
 import {
   db,
   enterpriseDeals,
   pipelineStages,
   dealTechnicalGates,
   dealScores,
+  dealActivityLog,
   dealCompetitors,
   competitors,
   dealMemory,
@@ -44,6 +45,7 @@ import { scoreDeal, rescoreActiveDeals } from "../../lib/scoring";
 import { cachedIntel } from "../../lib/portfolio";
 import { computeMemoryHealth } from "../../lib/memory-health";
 import { computeCompetitorIntel, computePlaybookEffectiveness, percentiles } from "../../lib/memory-intel";
+import { pickLatestPerDeal, computeScoreDelta } from "../../lib/roster-enrichment";
 
 const router: IRouter = Router();
 
@@ -179,9 +181,18 @@ async function latestScores(): Promise<Map<string, number>> {
     .select({ dealId: dealScores.dealId, score: dealScores.score, computedAt: dealScores.computedAt })
     .from(dealScores)
     .orderBy(desc(dealScores.computedAt));
-  const m = new Map<string, number>();
-  for (const r of rows) if (!m.has(r.dealId)) m.set(r.dealId, r.score);
-  return m;
+  return pickLatestPerDeal(rows);
+}
+
+// Each deal's score as of `cutoff` (latest row at or before it) — the baseline
+// for the roster score-trend arrow.
+async function scoresAsOf(cutoff: Date): Promise<Map<string, number>> {
+  const rows = await db
+    .select({ dealId: dealScores.dealId, score: dealScores.score, computedAt: dealScores.computedAt })
+    .from(dealScores)
+    .where(lte(dealScores.computedAt, cutoff))
+    .orderBy(desc(dealScores.computedAt));
+  return pickLatestPerDeal(rows);
 }
 
 router.get("/analytics/simulation", async (req: Request, res: Response) => {
@@ -539,6 +550,18 @@ router.get("/analytics/roster", async (_req: Request, res: Response) => {
     .where(activeFilter);
 
   const scores = await latestScores();
+  // Score trend: baseline = each deal's score as of 7 days ago (null delta when
+  // there's no prior score to compare against).
+  const baselineScores = await scoresAsOf(new Date(Date.now() - 7 * 86_400_000));
+
+  // Last-activity age: newest activity-log entry per deal, excluding the
+  // auto-generated health.changed churn so the metric reflects real work.
+  const activityRows = await db
+    .select({ dealId: dealActivityLog.dealId, last: max(dealActivityLog.occurredAt) })
+    .from(dealActivityLog)
+    .where(ne(dealActivityLog.eventType, "health.changed"))
+    .groupBy(dealActivityLog.dealId);
+  const lastActivityByDeal = new Map(activityRows.map((r) => [r.dealId, r.last]));
 
   const gateRows = await db
     .select({ dealId: dealTechnicalGates.dealId, isCompleted: dealTechnicalGates.isCompleted })
@@ -592,12 +615,16 @@ router.get("/analytics/roster", async (_req: Request, res: Response) => {
     const days = daysBetween(d.stageEnteredAt);
     const bench = median(byStage.get(d.stageName ?? "?") ?? [days]);
     const risk = riskByDeal.get(d.id);
+    const scoreNow = scores.get(d.id) ?? null;
+    const lastActivity = lastActivityByDeal.get(d.id);
     return {
       id: d.id,
       dealName: d.dealName,
-      score: scores.get(d.id) ?? null,
+      score: scoreNow,
+      scoreDelta: computeScoreDelta(scoreNow, baselineScores.get(d.id) ?? null),
       gatesPct: g.t ? Math.round((g.c / g.t) * 100) : 0,
       daysInStage: days,
+      daysSinceLastActivity: lastActivity ? daysBetween(lastActivity) : null,
       benchmarkDays: bench,
       deltaDays: days - bench,
       velocityStatus: days > bench * 1.5 ? "SLOW" : days < bench * 0.5 ? "FAST" : "NORMAL",

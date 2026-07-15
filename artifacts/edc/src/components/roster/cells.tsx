@@ -29,11 +29,40 @@ export function HealthBadge({ health }: { health: string }) {
   );
 }
 
-export function ScoreCell({ score }: { score: number | null }) {
+export function ScoreCell({ score, delta }: { score: number | null; delta?: number | null }) {
   if (score == null) return <span className="text-muted-foreground">—</span>;
   const tone =
     score >= 70 ? "text-emerald-600 dark:text-emerald-400" : score >= 40 ? "text-amber-600 dark:text-amber-400" : "text-red-600 dark:text-red-400";
-  return <span className={cn("font-mono", tone)}>{score}</span>;
+  const showTrend = delta != null && delta !== 0;
+  return (
+    <span className="inline-flex items-center gap-0.5">
+      <span className={cn("font-mono", tone)}>{score}</span>
+      {showTrend && (
+        <span
+          className={cn("text-[10px]", delta > 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400")}
+          aria-label={`${delta > 0 ? "up" : "down"} ${Math.abs(delta)} vs last week`}
+        >
+          {delta > 0 ? "▲" : "▼"}
+          {Math.abs(delta)}
+        </span>
+      )}
+    </span>
+  );
+}
+
+// Days since the deal's last meaningful activity. Ages amber past 2 weeks, red
+// past a month — a stale-deal cue mirroring Vivun's "Last: N ago" column.
+const LAST_ACTIVITY_WARN = 14;
+const LAST_ACTIVITY_STALE = 30;
+export function LastActivityCell({ days }: { days: number | null }) {
+  if (days == null) return <span className="text-muted-foreground">—</span>;
+  const tone =
+    days >= LAST_ACTIVITY_STALE
+      ? "text-red-600 dark:text-red-400 font-medium"
+      : days >= LAST_ACTIVITY_WARN
+        ? "text-amber-600 dark:text-amber-400"
+        : "text-muted-foreground";
+  return <span className={cn("font-mono text-xs tabular-nums", tone)}>act. {days}d</span>;
 }
 
 export function RiskCell({ score, level }: { score: number | null; level: RiskLevel | null }) {
@@ -161,11 +190,13 @@ export function RosterCellContent({ columnId, row }: { columnId: ColumnId; row: 
     case "riskLevel":
       return <RiskCell score={row.riskScore} level={row.riskLevel} />;
     case "score":
-      return <ScoreCell score={row.score} />;
+      return <ScoreCell score={row.score} delta={row.scoreDelta} />;
     case "gatesPct":
       return <GatesCell pct={row.gatesPct} />;
     case "velocity":
       return <VelocityCell bucket={row.velocity} delta={row.deltaDays} />;
+    case "lastActivity":
+      return <LastActivityCell days={row.daysSinceLastActivity} />;
     case "accountManager":
       return <span className="text-muted-foreground">{row.accountManager}</span>;
     case "technicalLead":

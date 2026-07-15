@@ -23,8 +23,12 @@ export interface RosterEnrichment {
   id: string;
   dealName: string;
   score: number | null;
+  /** Predictive-score change vs ~7 days ago; null when there's no baseline. */
+  scoreDelta?: number | null;
   gatesPct: number;
   daysInStage: number;
+  /** Days since the newest meaningful activity-log entry; null if none. */
+  daysSinceLastActivity?: number | null;
   benchmarkDays: number;
   deltaDays: number;
   velocityStatus: "FAST" | "NORMAL" | "SLOW";
@@ -35,8 +39,10 @@ export interface RosterEnrichment {
 /** A deal merged with its enrichment + the client-derived velocity bucket. */
 export interface RosterRow extends Deal {
   score: number | null;
+  scoreDelta: number | null;
   gatesPct: number;
   daysInStage: number | null;
+  daysSinceLastActivity: number | null;
   benchmarkDays: number | null;
   deltaDays: number | null;
   riskScore: number | null;
@@ -57,6 +63,7 @@ export type ColumnId =
   | "score"
   | "gatesPct"
   | "velocity"
+  | "lastActivity"
   | "accountManager"
   | "technicalLead"
   | "expectedCloseDate";

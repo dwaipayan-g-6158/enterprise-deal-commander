@@ -1,7 +1,7 @@
 import { Link } from "wouter";
 import { cn } from "@/lib/utils";
 import { formatCurrency } from "@/components/cockpit/use-invalidate";
-import { HealthBadge, RiskCell, ScoreCell, VelocityCell, CloseDateCell, HEALTH_BORDER, RISK_BORDER, TerminalStageBadge } from "./cells";
+import { HealthBadge, RiskCell, ScoreCell, VelocityCell, CloseDateCell, LastActivityCell, HEALTH_BORDER, RISK_BORDER, TerminalStageBadge } from "./cells";
 import type { Health, RosterRow } from "./model/roster-types";
 
 // Card view used at mobile + tablet widths (the table would force horizontal
@@ -36,11 +36,12 @@ export function RosterCardList({ rows }: { rows: RosterRow[] }) {
               Risk <RiskCell score={deal.riskScore} level={deal.riskLevel} />
             </span>
             <span className="inline-flex items-center gap-1">
-              Score <ScoreCell score={deal.score} />
+              Score <ScoreCell score={deal.score} delta={deal.scoreDelta} />
             </span>
             <span className="inline-flex items-center gap-1">
               <VelocityCell bucket={deal.velocity} delta={deal.deltaDays} />
             </span>
+            <LastActivityCell days={deal.daysSinceLastActivity} />
             <span className="inline-flex items-center gap-1">
               Close <CloseDateCell iso={deal.expectedCloseDate} />
             </span>

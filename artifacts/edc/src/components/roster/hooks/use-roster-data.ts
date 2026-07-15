@@ -33,8 +33,10 @@ export function useRosterData(params: { state: DealState; search: string }) {
       return {
         ...d,
         score: e?.score ?? null,
+        scoreDelta: e?.scoreDelta ?? null,
         gatesPct: e?.gatesPct ?? 0,
         daysInStage: e?.daysInStage ?? null,
+        daysSinceLastActivity: e?.daysSinceLastActivity ?? null,
         benchmarkDays: e?.benchmarkDays ?? null,
         deltaDays: e?.deltaDays ?? null,
         riskScore: e?.riskScore ?? null,

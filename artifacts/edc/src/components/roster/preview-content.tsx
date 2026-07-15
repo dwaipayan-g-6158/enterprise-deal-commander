@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatCurrency } from "@/components/cockpit/use-invalidate";
 import { shortDate } from "@/components/dashboard/widgets/_shared";
-import { HealthBadge, ScoreCell, VelocityCell } from "./cells";
+import { HealthBadge, ScoreCell, VelocityCell, LastActivityCell } from "./cells";
 import { useDealPreview } from "./hooks/use-deal-preview";
 import type { RosterRow } from "./model/roster-types";
 
@@ -57,13 +57,16 @@ export function PreviewContent({
           </Stat>
           <Stat label="Stage">{row.salesStage}</Stat>
           <Stat label="Score">
-            <ScoreCell score={row.score} />
+            <ScoreCell score={row.score} delta={row.scoreDelta} />
           </Stat>
           <Stat label="Gates">{row.gatesPct}%</Stat>
           <Stat label="Velocity">
             <VelocityCell bucket={row.velocity} delta={row.deltaDays} />
           </Stat>
           <Stat label="Close">{shortDate(row.expectedCloseDate) ?? "—"}</Stat>
+          <Stat label="Last activity">
+            <LastActivityCell days={row.daysSinceLastActivity} />
+          </Stat>
         </div>
       </div>
 
