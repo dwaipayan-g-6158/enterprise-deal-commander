@@ -6,6 +6,7 @@
   "scripts": {
     "hello": "tsx ./src/hello.ts",
     "backfill:transitions": "tsx ./src/backfill-pipeline-transitions.ts",
+    "build-single": "tsx ./src/build-single.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
