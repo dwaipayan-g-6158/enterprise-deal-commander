@@ -8,6 +8,7 @@ import type {
   RiskLevelBoundaries,
   HealthWeights,
 } from "@workspace/engine";
+import { DEFAULT_SCORING_WEIGHTS } from "@workspace/engine";
 import { DEFAULT_PORTFOLIO_CONFIG, type PortfolioMetricsConfig } from "./portfolio-metrics";
 
 /** Read a numeric tunable from the merged thresholds, falling back when absent/non-numeric. */
@@ -70,4 +71,26 @@ export function derivePortfolioConfig(thresholds: EngineThresholds): PortfolioMe
     clusterMinShare: num(thresholds, "portfolio_cluster_min_share", DEFAULT_PORTFOLIO_CONFIG.clusterMinShare),
     clusterMinDeals: num(thresholds, "portfolio_cluster_min_deals", DEFAULT_PORTFOLIO_CONFIG.clusterMinDeals),
   };
+}
+
+/**
+ * Merge calibrated scoring weights (from `scoring_model_weights`, stored as
+ * fractions of 1 — see Task 2's seed) over the engine's default weights
+ * (which are on a 0-100 scale — see DEFAULT_SCORING_WEIGHTS). Only known
+ * factor ids are honored; anything else is ignored so a stray/misspelled row
+ * can never silently vanish a factor from scoring.
+ */
+export function mergeScoringWeights(
+  rows: { featureId: string; calibratedWeight: number }[],
+): Record<string, number> {
+  const scaledDefaults: Record<string, number> = Object.fromEntries(
+    Object.entries(DEFAULT_SCORING_WEIGHTS).map(([id, w]) => [id, w / 100]),
+  );
+  const merged: Record<string, number> = { ...scaledDefaults };
+  for (const row of rows) {
+    if (row.featureId in merged && Number.isFinite(row.calibratedWeight)) {
+      merged[row.featureId] = row.calibratedWeight;
+    }
+  }
+  return merged;
 }

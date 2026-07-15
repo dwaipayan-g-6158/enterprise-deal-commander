@@ -3,6 +3,7 @@ import {
   computePredictiveScore,
   sigmoid,
   TOTAL_SCORING_WEIGHT,
+  DEFAULT_SCORING_WEIGHTS,
   type ScoringInput,
 } from "./scoring";
 import { runPipelineSimulation, dealProbability } from "./simulation";
@@ -75,6 +76,42 @@ describe("predictive scoring", () => {
     expect(high.confidence).toBe("HIGH");
     const low = computePredictiveScore({ ...baseScoringInput, daysToClose: null });
     expect(low.confidence).toBe("LOW");
+  });
+
+  it("DEFAULT_SCORING_WEIGHTS mirrors the 8 FACTOR defaults and sums to 100", () => {
+    expect(DEFAULT_SCORING_WEIGHTS).toEqual({
+      gate_momentum: 25,
+      stage_velocity: 15,
+      services_attachment: 10,
+      executive_alignment: 15,
+      blocker_load: 10,
+      deal_size_confidence: 5,
+      close_pressure: 10,
+      historical_win_rate: 10,
+    });
+    expect(Object.values(DEFAULT_SCORING_WEIGHTS).reduce((a, b) => a + b, 0)).toBe(100);
+  });
+
+  it("an explicit weights override changes which factor dominates the score", () => {
+    // All weight on gate_momentum (progress 95%); every other factor's weight is 0.
+    const allOnGateMomentum = { ...DEFAULT_SCORING_WEIGHTS };
+    for (const k of Object.keys(allOnGateMomentum)) allOnGateMomentum[k] = 0;
+    allOnGateMomentum.gate_momentum = 100;
+
+    const highProgress = computePredictiveScore(
+      { ...baseScoringInput, progressPct: 95 },
+      {},
+      allOnGateMomentum,
+    );
+    const lowProgress = computePredictiveScore(
+      { ...baseScoringInput, progressPct: 5 },
+      {},
+      allOnGateMomentum,
+    );
+    expect(highProgress.score).toBeGreaterThan(lowProgress.score);
+    // With no weights passed, the default FACTORS weights are used (unchanged behavior).
+    const defaultWeighted = computePredictiveScore(baseScoringInput);
+    expect(defaultWeighted.breakdown.find((b) => b.featureId === "gate_momentum")?.weight).toBe(25);
   });
 });
 

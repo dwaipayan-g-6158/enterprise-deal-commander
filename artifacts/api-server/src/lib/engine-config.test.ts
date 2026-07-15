@@ -5,6 +5,7 @@ import {
   deriveRiskBoundaries,
   deriveHealthWeights,
   derivePortfolioConfig,
+  mergeScoringWeights,
 } from "./engine-config";
 import type { EngineThresholds, HealthWeights } from "@workspace/engine";
 import { DEFAULT_PORTFOLIO_CONFIG } from "./portfolio-metrics";
@@ -149,5 +150,32 @@ describe("derivePortfolioConfig", () => {
 
   it("defaults to DEFAULT_PORTFOLIO_CONFIG when thresholds are empty", () => {
     expect(derivePortfolioConfig(asThresholds({}))).toEqual(DEFAULT_PORTFOLIO_CONFIG);
+  });
+});
+
+describe("mergeScoringWeights", () => {
+  it("overrides only the factors present in the calibrated rows, leaving the rest at default", () => {
+    const merged = mergeScoringWeights([
+      { featureId: "gate_momentum", calibratedWeight: 0.4 },
+      { featureId: "stage_velocity", calibratedWeight: 0.05 },
+    ]);
+    expect(merged.gate_momentum).toBe(0.4);
+    expect(merged.stage_velocity).toBe(0.05);
+    // Untouched factors keep their scaled default (fraction-of-1, see Step 7).
+    expect(merged.executive_alignment).toBeCloseTo(0.15, 4);
+  });
+
+  it("ignores rows with an unknown featureId or a non-finite weight", () => {
+    const merged = mergeScoringWeights([
+      { featureId: "not_a_real_factor", calibratedWeight: 0.9 },
+      { featureId: "blocker_load", calibratedWeight: Number.NaN },
+    ]);
+    expect(merged.not_a_real_factor).toBeUndefined();
+    expect(merged.blocker_load).toBeCloseTo(0.1, 4);
+  });
+
+  it("returns the full default set (scaled to fractions of 1) when given no rows", () => {
+    const merged = mergeScoringWeights([]);
+    expect(Object.values(merged).reduce((a, b) => a + b, 0)).toBeCloseTo(1, 4);
   });
 });

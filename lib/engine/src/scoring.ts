@@ -144,6 +144,11 @@ const FACTORS: Factor[] = [
   },
 ];
 
+/** Default weight per factor id, keyed for override lookups. Sums to 100 — see TOTAL_SCORING_WEIGHT. */
+export const DEFAULT_SCORING_WEIGHTS: Record<string, number> = Object.fromEntries(
+  FACTORS.map((f) => [f.id, f.weight]),
+);
+
 function clamp01(n: number): number {
   return Math.max(0, Math.min(1, n));
 }
@@ -151,26 +156,28 @@ function clamp01(n: number): number {
 export function computePredictiveScore(
   input: ScoringInput,
   context: ScoringContext = {},
+  weights?: Record<string, number>,
 ): PredictiveScore {
   let weightedSum = 0;
   let totalWeight = 0;
   const breakdown: ScoreFactorResult[] = [];
 
   for (const f of FACTORS) {
+    const w = weights?.[f.id] ?? f.weight;
     const raw = clamp01(f.extract(input, context));
-    const contribution = raw * f.weight;
+    const contribution = raw * w;
     weightedSum += contribution;
-    totalWeight += f.weight;
+    totalWeight += w;
     breakdown.push({
       featureId: f.id,
       description: f.description,
       rawScore: Math.round(raw * 100),
-      weight: f.weight,
+      weight: w,
       contribution: Math.round(contribution),
     });
   }
 
-  const score = Math.round((weightedSum / totalWeight) * 100);
+  const score = totalWeight > 0 ? Math.round((weightedSum / totalWeight) * 100) : 0;
 
   const dataPoints = [
     input.daysToClose != null,

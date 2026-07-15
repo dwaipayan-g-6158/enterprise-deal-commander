@@ -1,4 +1,4 @@
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, isNull, desc } from "drizzle-orm";
 import {
   db,
   enterpriseDeals,
@@ -9,12 +9,15 @@ import {
   blockerSeverities,
   dealScores,
   dealMemory,
+  scoringModelWeights,
 } from "@workspace/db";
 import {
   computePredictiveScore,
   type ScoringInput,
   type ScoringContext,
 } from "@workspace/engine";
+import { cache, CacheKeys, CacheTtl } from "./cache";
+import { mergeScoringWeights } from "./engine-config";
 
 // Predictive deal scoring (PRD F3). Scores are computed from current deal state
 // and PERSISTED to `deal_scores` (append-only history); the roster / analytics
@@ -36,6 +39,31 @@ export async function historicalContext(): Promise<ScoringContext> {
   const tcvs = won.map((w) => Number(w.tcv) || 0).filter((n) => n > 0);
   const avgWonTCV = tcvs.length ? tcvs.reduce((a, b) => a + b, 0) / tcvs.length : null;
   return { avgWonTCV };
+}
+
+/**
+ * Calibrated scoring weights, latest row per feature, merged over the engine
+ * defaults. Cached under the `lookup:` tier like thresholds/FX — the cache
+ * middleware drops it on any settings mutation.
+ */
+export async function getScoringWeights(): Promise<Record<string, number>> {
+  return cache.wrap(`${CacheKeys.lookupPrefix}scoring-weights`, CacheTtl.lookup, async () => {
+    const rows = await db
+      .select({
+        featureId: scoringModelWeights.featureId,
+        calibratedWeight: scoringModelWeights.calibratedWeight,
+        calibrationDate: scoringModelWeights.calibrationDate,
+      })
+      .from(scoringModelWeights)
+      .orderBy(desc(scoringModelWeights.calibrationDate));
+    const latest = new Map<string, number>();
+    for (const r of rows) {
+      if (!latest.has(r.featureId)) latest.set(r.featureId, Number(r.calibratedWeight));
+    }
+    return mergeScoringWeights(
+      [...latest.entries()].map(([featureId, calibratedWeight]) => ({ featureId, calibratedWeight })),
+    );
+  });
 }
 
 export async function buildScoringInput(dealId: string): Promise<ScoringInput | null> {
@@ -109,11 +137,13 @@ export interface PersistedScore {
 export async function scoreDeal(
   dealId: string,
   ctx?: ScoringContext,
+  weights?: Record<string, number>,
 ): Promise<PersistedScore | null> {
   const input = await buildScoringInput(dealId);
   if (!input) return null;
   const context = ctx ?? (await historicalContext());
-  const score = computePredictiveScore(input, context);
+  const w = weights ?? (await getScoringWeights());
+  const score = computePredictiveScore(input, context, w);
   await db.insert(dealScores).values({
     dealId,
     score: score.score,
@@ -127,9 +157,10 @@ export async function scoreDeal(
 export async function rescoreActiveDeals(): Promise<number> {
   const deals = await db.select({ id: enterpriseDeals.id }).from(enterpriseDeals).where(activeFilter);
   const ctx = await historicalContext();
+  const weights = await getScoringWeights();
   let count = 0;
   for (const d of deals) {
-    if (await scoreDeal(d.id, ctx)) count++;
+    if (await scoreDeal(d.id, ctx, weights)) count++;
   }
   return count;
 }
