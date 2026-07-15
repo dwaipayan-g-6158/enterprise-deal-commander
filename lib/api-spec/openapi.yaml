@@ -1834,6 +1834,7 @@ components:
         expectedCloseDate: { type: ["string", "null"] }
         landedAt: { type: ["string", "null"] }
         winProbabilityPct: { type: ["integer", "null"] }
+        committed: { type: boolean }
         servicesRevenue: { type: number }
         servicesTierId: { type: integer }
         servicesTier: { type: string }
@@ -1901,6 +1902,7 @@ components:
         expected_close_date: { type: ["string", "null"] }
         landed_at: { type: ["string", "null"] }
         win_probability_pct: { type: ["integer", "null"] }
+        committed: { type: boolean }
         services_revenue: { type: number, minimum: 0 }
         services_tier_id: { type: integer }
         manager_strategic_blueprint: { type: ["string", "null"] }
@@ -1942,6 +1944,7 @@ components:
         expected_close_date: { type: ["string", "null"] }
         landed_at: { type: ["string", "null"] }
         win_probability_pct: { type: ["integer", "null"] }
+        committed: { type: boolean }
         services_revenue: { type: number, minimum: 0 }
         services_tier_id: { type: integer }
         manager_strategic_blueprint: { type: ["string", "null"] }

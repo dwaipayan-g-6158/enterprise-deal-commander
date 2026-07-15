@@ -1,7 +1,12 @@
 import { describe, it, expect } from "vitest";
 import type { PipelineStage } from "@workspace/api-client-react";
-import { buildBoard, isAtRisk, moveIntent, extractGuardrail, terminalOutcome, toBoardStage } from "./board";
+import { buildBoard, isAtRisk, moveIntent, extractGuardrail, terminalOutcome, toBoardStage, type BoardColumn } from "./board";
 import type { RosterRow } from "./roster-types";
+
+/** Ids of the rows in a column's section with the given key ([] if absent). */
+function secRows(col: BoardColumn, key: string): string[] {
+  return (col.sections.find((s) => s.key === key)?.rows ?? []).map((r) => r.id);
+}
 
 let seq = 0;
 function row(p: Partial<RosterRow> = {}): RosterRow {
@@ -89,7 +94,7 @@ describe("buildBoard", () => {
     expect(cols.every((c) => c.dealCount === 0 && c.totalTCV === 0)).toBe(true);
   });
 
-  it("groups rows by salesStageId and splits at-risk / on-track", () => {
+  it("bands by risk (default): At Risk above On Track", () => {
     const rows = [
       row({ id: "a", salesStageId: 1, riskLevel: "HIGH", normalizedTCV: 100 }),
       row({ id: "b", salesStageId: 1, riskLevel: "LOW", normalizedTCV: 200 }),
@@ -97,14 +102,17 @@ describe("buildBoard", () => {
     ];
     const cols = buildBoard(rows, STAGES);
     const discovery = cols.find((c) => c.stage.id === 1)!;
-    expect(discovery.atRisk.map((r) => r.id)).toEqual(["a"]);
-    expect(discovery.onTrack.map((r) => r.id)).toEqual(["b"]);
+    expect(discovery.sections.map((s) => s.label)).toEqual(["At Risk", "On Track"]);
+    expect(secRows(discovery, "atRisk")).toEqual(["a"]);
+    expect(secRows(discovery, "onTrack")).toEqual(["b"]);
     expect(discovery.dealCount).toBe(2);
     expect(discovery.totalTCV).toBe(300);
 
     const validation = cols.find((c) => c.stage.id === 2)!;
-    expect(validation.atRisk.map((r) => r.id)).toEqual(["c"]);
-    expect(validation.dealCount).toBe(1);
+    expect(secRows(validation, "atRisk")).toEqual(["c"]);
+    // Single band → header-less.
+    expect(validation.sections).toHaveLength(1);
+    expect(validation.sections[0].label).toBeNull();
   });
 
   it("preserves incoming order within a section", () => {
@@ -114,7 +122,37 @@ describe("buildBoard", () => {
       row({ id: "x3", salesStageId: 1, riskLevel: "LOW" }),
     ];
     const col = buildBoard(rows, STAGES).find((c) => c.stage.id === 1)!;
-    expect(col.onTrack.map((r) => r.id)).toEqual(["x1", "x2", "x3"]);
+    expect(col.sections[0].rows.map((r) => r.id)).toEqual(["x1", "x2", "x3"]);
+  });
+
+  it("bands by health into Red/Yellow/Green, omitting empty bands", () => {
+    const rows = [
+      row({ id: "r", salesStageId: 1, healthStatus: "RED" }),
+      row({ id: "g", salesStageId: 1, healthStatus: "GREEN" }),
+    ];
+    const col = buildBoard(rows, STAGES, "health").find((c) => c.stage.id === 1)!;
+    expect(col.sections.map((s) => s.label)).toEqual(["Red", "Green"]); // no Yellow band
+    expect(secRows(col, "red")).toEqual(["r"]);
+    expect(secRows(col, "green")).toEqual(["g"]);
+  });
+
+  it("bands by committed into Committed/The Rest", () => {
+    const rows = [
+      row({ id: "c1", salesStageId: 1, committed: true }),
+      row({ id: "r1", salesStageId: 1, committed: false }),
+    ];
+    const col = buildBoard(rows, STAGES, "committed").find((c) => c.stage.id === 1)!;
+    expect(col.sections.map((s) => s.label)).toEqual(["Committed", "The Rest"]);
+    expect(secRows(col, "committed")).toEqual(["c1"]);
+    expect(secRows(col, "rest")).toEqual(["r1"]);
+  });
+
+  it("bandBy none yields a single unlabeled section", () => {
+    const rows = [row({ salesStageId: 1, riskLevel: "HIGH" }), row({ salesStageId: 1, riskLevel: "LOW" })];
+    const col = buildBoard(rows, STAGES, "none").find((c) => c.stage.id === 1)!;
+    expect(col.sections).toHaveLength(1);
+    expect(col.sections[0].label).toBeNull();
+    expect(col.sections[0].rows).toHaveLength(2);
   });
 
   it("sums normalizedTCV, not calculatedTCV", () => {

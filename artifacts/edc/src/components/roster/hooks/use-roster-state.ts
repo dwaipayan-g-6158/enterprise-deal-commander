@@ -12,6 +12,7 @@ import {
   type SortSpec,
   type ViewMode,
 } from "../model/roster-types";
+import type { BandBy } from "../model/board";
 import { decodeRosterUrl, encodeRosterUrl } from "../model/roster-url";
 
 // Persisted (localStorage) — versioned keys so the shape can evolve safely.
@@ -19,6 +20,7 @@ const DENSITY_KEY = "edc.roster.density.v1";
 const COLUMNS_KEY = "edc.roster.columns.v1";
 const VIEWS_KEY = "edc.roster.customViews.v1";
 const VIEWMODE_KEY = "edc.roster.viewMode.v1";
+const BOARDBAND_KEY = "edc.roster.boardBand.v1";
 
 const DEFAULT_LAYOUT: ColumnLayout = {
   visible: DEFAULT_VISIBLE,
@@ -105,6 +107,8 @@ export function useRosterState() {
   // View mode (table vs board) is presentation, not part of the shareable view —
   // it lives in localStorage like density/columns and is meaningful only at lg+.
   const [viewMode, setViewMode] = useLocalStorageState<ViewMode>(VIEWMODE_KEY, "table", { version: 1 });
+  // Board-only: how each stage column bands its cards (risk / health / committed / none).
+  const [boardBand, setBoardBand] = useLocalStorageState<BandBy>(BOARDBAND_KEY, "risk", { version: 1 });
 
   return {
     // URL view
@@ -125,6 +129,8 @@ export function useRosterState() {
     setCustomViews,
     viewMode,
     setViewMode,
+    boardBand,
+    setBoardBand,
   };
 }
 

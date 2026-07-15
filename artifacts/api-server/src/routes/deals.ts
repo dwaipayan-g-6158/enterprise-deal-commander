@@ -255,6 +255,7 @@ router.post("/deals", async (req: Request, res: Response) => {
         expectedCloseDate: body.expected_close_date ?? null,
         landedAt: body.landed_at ?? new Date().toISOString().slice(0, 10),
         winProbabilityPct: body.win_probability_pct ?? null,
+        committed: body.committed ?? false,
         servicesRevenue: String(body.services_revenue),
         servicesTierId: body.services_tier_id,
         managerStrategicBlueprint: body.manager_strategic_blueprint ?? null,
@@ -398,6 +399,10 @@ const updateDealHandler = async (req: Request, res: Response) => {
   }
   if (body.win_probability_pct !== undefined) {
     updates.winProbabilityPct = body.win_probability_pct ?? null;
+  }
+  if (body.committed !== undefined) {
+    track("committed", existing.committed, body.committed);
+    updates.committed = body.committed;
   }
   if (body.services_revenue !== undefined) {
     track("services_revenue", existing.servicesRevenue, body.services_revenue);

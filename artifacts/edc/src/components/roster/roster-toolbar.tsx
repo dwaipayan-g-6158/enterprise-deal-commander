@@ -14,6 +14,7 @@ import { MoreFiltersPanel } from "./more-filters-panel";
 import { ColumnCustomizer } from "./column-customizer";
 import { DensityToggle } from "./density-toggle";
 import { VELOCITY_FILTER_OPTIONS, VELOCITY_LABEL } from "./model/velocity";
+import type { BandBy } from "./model/board";
 import type {
   ColumnLayout,
   Density,
@@ -30,6 +31,13 @@ const GROUP_OPTIONS: { value: GroupBy; label: string }[] = [
   { value: "salesStage", label: "Group: Stage" },
   { value: "healthStatus", label: "Group: Health" },
   { value: "accountManager", label: "Group: Account Mgr" },
+];
+
+const BAND_OPTIONS: { value: BandBy; label: string }[] = [
+  { value: "risk", label: "Band: Risk" },
+  { value: "health", label: "Band: Health" },
+  { value: "committed", label: "Band: Committed" },
+  { value: "none", label: "Band: None" },
 ];
 
 const HEALTH_OPTIONS: FilterOption[] = [
@@ -57,6 +65,8 @@ export function RosterToolbar({
   setColumnLayout,
   viewMode,
   setViewMode,
+  boardBand,
+  setBoardBand,
 }: {
   filters: RosterFilters;
   setFilters: (patch: Partial<RosterFilters>) => void;
@@ -74,6 +84,8 @@ export function RosterToolbar({
   setColumnLayout: (next: ColumnLayout) => void;
   viewMode: ViewMode;
   setViewMode: (m: ViewMode) => void;
+  boardBand: BandBy;
+  setBoardBand: (b: BandBy) => void;
 }) {
   const isBoard = viewMode === "board";
   return (
@@ -121,8 +133,21 @@ export function RosterToolbar({
       />
       <MoreFiltersPanel filters={filters} setFilters={setFilters} amOptions={amOptions} tlOptions={tlOptions} tagOptions={tagOptions} />
 
-      {/* Grouping only applies to the table; the board groups by stage inherently. */}
-      {!isBoard && (
+      {/* Grouping applies to the table; the board bands each stage column instead. */}
+      {isBoard ? (
+        <Select value={boardBand} onValueChange={(v) => setBoardBand(v as BandBy)}>
+          <SelectTrigger className="w-[160px]" aria-label="Band board columns">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {BAND_OPTIONS.map((o) => (
+              <SelectItem key={o.value} value={o.value}>
+                {o.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      ) : (
         <Select value={group} onValueChange={(v) => setGroup(v as GroupBy)}>
           <SelectTrigger className="w-[150px]" aria-label="Group rows">
             <SelectValue />

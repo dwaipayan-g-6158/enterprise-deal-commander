@@ -92,6 +92,7 @@ export function encodeRosterUrl(view: RosterView, viewId?: string | null): strin
   if (f.tags.length) p.set("tags", csv(f.tags));
   if (f.hasBlockers != null) p.set("blk", f.hasBlockers ? "1" : "0");
   if (f.hasCompetitors != null) p.set("cmp", f.hasCompetitors ? "1" : "0");
+  if (f.committed != null) p.set("cmt", f.committed ? "1" : "0");
 
   const sortStr = encodeSort(view.sort);
   const defaultSortStr = encodeSort(DEFAULT_SORT);
@@ -126,6 +127,7 @@ export function decodeRosterUrl(search: string): { view: RosterView; viewId: str
     tags: splitCsv(p.get("tags")),
     hasBlockers: parseBool(p.get("blk")),
     hasCompetitors: parseBool(p.get("cmp")),
+    committed: parseBool(p.get("cmt")),
   };
 
   const sort = decodeSort(p.get("so"));

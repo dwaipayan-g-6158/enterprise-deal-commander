@@ -56,6 +56,13 @@ describe("computeDerivedRows — filtering", () => {
     expect(computeDerivedRows(rows, viewWith({ velocity: ["STALLED"] }), NOW).matchedCount).toBe(1);
   });
 
+  it("filters by committed (tri-state)", () => {
+    const rows = [row({ committed: true }), row({ committed: false }), row({ committed: true })];
+    expect(computeDerivedRows(rows, viewWith({ committed: true }), NOW).matchedCount).toBe(2);
+    expect(computeDerivedRows(rows, viewWith({ committed: false }), NOW).matchedCount).toBe(1);
+    expect(computeDerivedRows(rows, viewWith({ committed: null }), NOW).matchedCount).toBe(3);
+  });
+
   it("filters by TCV range using normalizedTCV", () => {
     const rows = [row({ normalizedTCV: 50 }), row({ normalizedTCV: 150 }), row({ normalizedTCV: 250 })];
     const out = computeDerivedRows(rows, viewWith({ tcvMin: 100, tcvMax: 200 }), NOW);

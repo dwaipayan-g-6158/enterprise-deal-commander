@@ -31,6 +31,7 @@ export interface Deal {
   landedAt?: string | null;
   /** @nullable */
   winProbabilityPct?: number | null;
+  committed?: boolean;
   servicesRevenue: number;
   servicesTierId?: number;
   servicesTier?: string;

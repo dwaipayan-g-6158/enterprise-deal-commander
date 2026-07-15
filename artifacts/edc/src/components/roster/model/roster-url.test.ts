@@ -24,6 +24,7 @@ describe("encode/decode round-trip", () => {
         closePreset: "30d",
         accountManager: ["Dana"],
         hasCompetitors: true,
+        committed: false,
       },
       sort: [
         { key: "calculatedTCV", dir: "desc" },

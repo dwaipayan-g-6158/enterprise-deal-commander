@@ -82,6 +82,8 @@ export default function Deals() {
     setCustomViews,
     viewMode,
     setViewMode,
+    boardBand,
+    setBoardBand,
   } = useRosterState();
   const filters = view.filters;
 
@@ -314,6 +316,8 @@ export default function Deals() {
         setColumnLayout={setColumnLayout}
         viewMode={viewMode}
         setViewMode={setViewMode}
+        boardBand={boardBand}
+        setBoardBand={setBoardBand}
       />
 
       <FilterChips
@@ -391,6 +395,7 @@ export default function Deals() {
                 stages={stagesData?.data ?? []}
                 readOnly={filters.state !== "active"}
                 stageFilter={filters.stage}
+                bandBy={boardBand}
                 onCardClick={(row) => setPreviewDealId(row.id)}
                 onRequestClose={(row: RosterRow, stage: BoardStage) => setPendingClose({ row, toStage: stage })}
                 rowActions={rowActions}

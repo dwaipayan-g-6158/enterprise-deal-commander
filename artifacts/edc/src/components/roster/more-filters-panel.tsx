@@ -31,6 +31,12 @@ const COMPETITOR_OPTIONS = [
   { value: "no", label: "No competitor" },
 ];
 
+const COMMITTED_OPTIONS = [
+  { value: "any", label: "Any" },
+  { value: "yes", label: "Committed" },
+  { value: "no", label: "Not committed" },
+];
+
 export function countMoreFilters(f: RosterFilters): number {
   let n = 0;
   if (f.tcvMin != null || f.tcvMax != null) n++;
@@ -39,6 +45,7 @@ export function countMoreFilters(f: RosterFilters): number {
   if (f.accountManager.length) n++;
   if (f.technicalLead.length) n++;
   if (f.hasCompetitors != null) n++;
+  if (f.committed != null) n++;
   if (f.tags.length) n++;
   return n;
 }
@@ -95,6 +102,7 @@ export function MoreFiltersPanel({
 }) {
   const count = countMoreFilters(filters);
   const competitorValue = filters.hasCompetitors == null ? "any" : filters.hasCompetitors ? "yes" : "no";
+  const committedValue = filters.committed == null ? "any" : filters.committed ? "yes" : "no";
 
   return (
     <Popover>
@@ -191,6 +199,25 @@ export function MoreFiltersPanel({
         </div>
 
         <div className="space-y-2">
+          <Label>Committed</Label>
+          <Select
+            value={committedValue}
+            onValueChange={(v) => setFilters({ committed: v === "any" ? null : v === "yes" })}
+          >
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {COMMITTED_OPTIONS.map((o) => (
+                <SelectItem key={o.value} value={o.value}>
+                  {o.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="space-y-2">
           <Label>Account Manager</Label>
           <CheckboxList options={amOptions} selected={filters.accountManager} onChange={(v) => setFilters({ accountManager: v })} />
         </div>
@@ -220,6 +247,7 @@ export function MoreFiltersPanel({
                 accountManager: [],
                 technicalLead: [],
                 hasCompetitors: null,
+                committed: null,
                 tags: [],
               })
             }

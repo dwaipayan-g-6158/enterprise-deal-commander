@@ -59,7 +59,7 @@ export function BoardColumn({
   onDropDeal: (dealId: string, stage: BoardStage) => void;
   onTerminalDrop: (dealId: string) => void;
 }) {
-  const { stage, atRisk, onTrack, dealCount, totalTCV } = column;
+  const { stage, sections, dealCount, totalTCV } = column;
   const terminal = stage.terminal !== null;
   const droppable = !terminal && !readOnly; // plain move target
   const closable = terminal && !readOnly; // close-out target (won/lost)
@@ -95,8 +95,6 @@ export function BoardColumn({
       onDragEnd={onDragEnd}
     />
   );
-
-  const hasRiskSplit = atRisk.length > 0;
 
   return (
     <div
@@ -159,10 +157,9 @@ export function BoardColumn({
             {isOver && closable ? "Drop to close" : isOver && droppable ? "Drop to move here" : "No deals"}
           </div>
         ) : (
-          <>
-            <SectionCards label={hasRiskSplit ? "At Risk" : null} rows={atRisk} render={renderCard} />
-            <SectionCards label={hasRiskSplit ? "On Track" : null} rows={onTrack} render={renderCard} />
-          </>
+          sections.map((section) => (
+            <SectionCards key={section.key} label={section.label} rows={section.rows} render={renderCard} />
+          ))
         )}
       </div>
     </div>

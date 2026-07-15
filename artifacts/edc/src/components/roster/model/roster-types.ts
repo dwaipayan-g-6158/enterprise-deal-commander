@@ -95,6 +95,7 @@ export interface RosterFilters {
   tags: string[];
   hasBlockers: boolean | null;
   hasCompetitors: boolean | null;
+  committed: boolean | null;
 }
 
 export interface RosterView {
@@ -136,6 +137,7 @@ export const DEFAULT_FILTERS: RosterFilters = {
   tags: [],
   hasBlockers: null,
   hasCompetitors: null,
+  committed: null,
 };
 
 export const DEFAULT_SORT: SortSpec[] = [{ key: "calculatedTCV", dir: "desc" }];

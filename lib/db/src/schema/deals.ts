@@ -57,6 +57,9 @@ export const enterpriseDeals = pgTable(
     // backdatable. Falls back to createdAt where consumed (analytics, risk age).
     landedAt: date("landed_at", { mode: "string" }),
     winProbabilityPct: smallint("win_probability_pct"),
+    // Manual forecast-commit flag (Vivun "Committed" vs "The Rest"). Independent
+    // of the risk-derived health banding.
+    committed: boolean("committed").notNull().default(false),
     servicesRevenue: numeric("services_revenue", { precision: 15, scale: 2 })
       .notNull()
       .default("0"),

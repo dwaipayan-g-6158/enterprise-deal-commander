@@ -91,6 +91,7 @@ export interface Deal {
   landedAt?: string | null;
   /** @nullable */
   winProbabilityPct?: number | null;
+  committed?: boolean;
   servicesRevenue: number;
   servicesTierId?: number;
   servicesTier?: string;
@@ -174,6 +175,7 @@ export interface DealInput {
   landed_at?: string | null;
   /** @nullable */
   win_probability_pct?: number | null;
+  committed?: boolean;
   /** @minimum 0 */
   services_revenue: number;
   services_tier_id: number;
@@ -236,6 +238,7 @@ export interface DealUpdate {
   landed_at?: string | null;
   /** @nullable */
   win_probability_pct?: number | null;
+  committed?: boolean;
   /** @minimum 0 */
   services_revenue?: number;
   services_tier_id?: number;

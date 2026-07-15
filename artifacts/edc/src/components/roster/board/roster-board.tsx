@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import type { PipelineStage } from "@workspace/api-client-react";
-import { buildBoard, type BoardStage } from "../model/board";
+import { buildBoard, type BandBy, type BoardStage } from "../model/board";
 import type { RowActions } from "../row-context-menu";
 import type { RosterRow } from "../model/roster-types";
 import { BoardColumn } from "./board-column";
@@ -15,6 +15,7 @@ export function RosterBoard({
   stages,
   readOnly,
   stageFilter,
+  bandBy,
   onCardClick,
   onRequestClose,
   rowActions,
@@ -25,6 +26,7 @@ export function RosterBoard({
   readOnly: boolean;
   /** filters.stage — stage names; when non-empty, only these columns render. */
   stageFilter: string[];
+  bandBy: BandBy;
   onCardClick: (row: RosterRow) => void;
   onRequestClose: (row: RosterRow, stage: BoardStage) => void;
   rowActions: RowActions;
@@ -33,11 +35,11 @@ export function RosterBoard({
   const [dragActive, setDragActive] = useState(false);
 
   const columns = useMemo(() => {
-    const all = buildBoard(rows, stages);
+    const all = buildBoard(rows, stages, bandBy);
     if (stageFilter.length === 0) return all;
     const allow = new Set(stageFilter);
     return all.filter((c) => allow.has(c.stage.name));
-  }, [rows, stages, stageFilter]);
+  }, [rows, stages, stageFilter, bandBy]);
 
   // Non-terminal stages power the "Move to stage" context submenu.
   const moveStages = useMemo<BoardStage[]>(

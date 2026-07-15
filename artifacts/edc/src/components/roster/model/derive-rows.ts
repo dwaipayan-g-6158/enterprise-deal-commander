@@ -66,6 +66,9 @@ function passesFilters(row: RosterRow, view: RosterView, now: number): boolean {
   if (f.hasCompetitors === true && row.competitorId == null) return false;
   if (f.hasCompetitors === false && row.competitorId != null) return false;
 
+  if (f.committed === true && row.committed !== true) return false;
+  if (f.committed === false && row.committed === true) return false;
+
   // Tags now ride along on the deal list payload, so we filter by them here:
   // a row matches if it carries at least one of the selected tag ids (OR).
   if (f.tags.length) {

@@ -1,5 +1,6 @@
 import { memo } from "react";
 import { Link } from "wouter";
+import { Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatCurrency } from "@/components/cockpit/use-invalidate";
 import {
@@ -97,6 +98,14 @@ export const BoardCard = memo(function BoardCard({
             {row.dealName}
           </Link>
           <TerminalStageBadge stage={row.salesStage} />
+          {row.committed && (
+            <span
+              title="Committed"
+              className="inline-flex items-center gap-0.5 rounded-sm bg-emerald-500/15 px-1 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-700 dark:text-emerald-400"
+            >
+              <Check className="h-3 w-3" aria-hidden /> Committed
+            </span>
+          )}
         </div>
         <p className="mt-1.5 font-mono text-lg font-bold tabular-nums">
           {formatCurrency(row.calculatedTCV ?? 0, row.dealCurrency)}

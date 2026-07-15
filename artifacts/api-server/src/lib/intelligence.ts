@@ -675,6 +675,7 @@ export async function serializeDeal(dealId: string) {
     expectedCloseDate: deal.expectedCloseDate,
     landedAt: deal.landedAt,
     winProbabilityPct: deal.winProbabilityPct,
+    committed: deal.committed,
     servicesRevenue: Number(deal.servicesRevenue),
     servicesTierId: deal.servicesTierId,
     servicesTier,

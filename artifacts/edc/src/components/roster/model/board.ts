@@ -25,25 +25,65 @@ export interface BoardStage {
   terminal: "won" | "lost" | null;
 }
 
+/** How a column's cards are banded into sections (Vivun's GROUP BY analog). */
+export type BandBy = "none" | "risk" | "health" | "committed";
+
+export interface BoardSection {
+  key: string;
+  /** null → render without a header (single-band columns). */
+  label: string | null;
+  rows: RosterRow[];
+}
+
 export interface BoardColumn {
   stage: BoardStage;
-  /** Deals flagged at risk, shown on top (EDC's analog of Vivun's COMMITTED band). */
-  atRisk: RosterRow[];
-  /** Everything else, shown below. */
-  onTrack: RosterRow[];
+  /** Ordered, non-empty bands of the column's deals. */
+  sections: BoardSection[];
   dealCount: number;
   /** Sum of normalizedTCV across the column (cross-currency comparable). */
   totalTCV: number;
 }
 
 /**
- * At-risk predicate for the column split. The enrichment `riskLevel` is the
- * source of truth (HIGH is the top band per classifyRisk). When enrichment
- * hasn't landed yet, fall back to the legacy 3-state health (RED ⇒ HIGH), the
- * same convention healthToRiskLevel encodes.
+ * At-risk predicate for the risk band. The enrichment `riskLevel` is the source
+ * of truth (HIGH is the top band per classifyRisk). When enrichment hasn't
+ * landed yet, fall back to the legacy 3-state health (RED ⇒ HIGH), the same
+ * convention healthToRiskLevel encodes.
  */
 export function isAtRisk(row: RosterRow): boolean {
   return row.riskLevel === "HIGH" || (row.riskLevel == null && row.healthStatus === "RED");
+}
+
+interface BandDef {
+  key: string;
+  label: string;
+  match: (row: RosterRow) => boolean;
+}
+
+// Ordered band definitions per mode. Rows are assigned to the first matching
+// band, so the trailing catch-all bands ("On Track"/"The Rest") absorb the rest.
+function bandsFor(bandBy: BandBy): BandDef[] {
+  switch (bandBy) {
+    case "risk":
+      return [
+        { key: "atRisk", label: "At Risk", match: isAtRisk },
+        { key: "onTrack", label: "On Track", match: () => true },
+      ];
+    case "health":
+      return [
+        { key: "red", label: "Red", match: (r) => r.healthStatus === "RED" },
+        { key: "yellow", label: "Yellow", match: (r) => r.healthStatus === "YELLOW" },
+        { key: "green", label: "Green", match: () => true },
+      ];
+    case "committed":
+      return [
+        { key: "committed", label: "Committed", match: (r) => r.committed === true },
+        { key: "rest", label: "The Rest", match: () => true },
+      ];
+    case "none":
+    default:
+      return [{ key: "all", label: "", match: () => true }];
+  }
 }
 
 export function toBoardStage(stage: PipelineStage): BoardStage {
@@ -56,25 +96,38 @@ export function toBoardStage(stage: PipelineStage): BoardStage {
 }
 
 /**
- * Group the flat, pre-filtered/sorted rows into one column per pipeline stage.
- * Every stage yields a column (empty ones included), ordered by sortOrder. Rows
- * keep their incoming order within each section (the active roster sort). Rows
- * whose salesStageId isn't in the lookup are dropped defensively.
+ * Group the flat, pre-filtered/sorted rows into one column per pipeline stage,
+ * each split into bands per `bandBy`. Every stage yields a column (empty ones
+ * included), ordered by sortOrder. Empty bands are dropped; a column with a
+ * single remaining band renders it header-less. Rows keep their incoming order
+ * within each band (the active roster sort). Rows whose salesStageId isn't in
+ * the lookup are dropped defensively.
  */
-export function buildBoard(rows: RosterRow[], stages: PipelineStage[]): BoardColumn[] {
+export function buildBoard(rows: RosterRow[], stages: PipelineStage[], bandBy: BandBy = "risk"): BoardColumn[] {
   const ordered = [...stages].sort((a, b) => a.sortOrder - b.sortOrder);
-  const columns = new Map<number, BoardColumn>();
+  const bands = bandsFor(bandBy);
+  const columns = new Map<number, { stage: BoardStage; buckets: RosterRow[][]; dealCount: number; totalTCV: number }>();
   for (const s of ordered) {
-    columns.set(s.id, { stage: toBoardStage(s), atRisk: [], onTrack: [], dealCount: 0, totalTCV: 0 });
+    columns.set(s.id, { stage: toBoardStage(s), buckets: bands.map(() => []), dealCount: 0, totalTCV: 0 });
   }
   for (const row of rows) {
     const col = columns.get(row.salesStageId);
     if (!col) continue; // unknown stage — defensive
-    (isAtRisk(row) ? col.atRisk : col.onTrack).push(row);
+    let idx = bands.findIndex((b) => b.match(row));
+    if (idx < 0) idx = bands.length - 1;
+    col.buckets[idx].push(row);
     col.dealCount += 1;
     col.totalTCV += row.normalizedTCV ?? 0;
   }
-  return ordered.map((s) => columns.get(s.id)!);
+  return ordered.map((s) => {
+    const col = columns.get(s.id)!;
+    const sections: BoardSection[] = bands
+      .map((b, i) => ({ key: b.key, label: b.label || null, rows: col.buckets[i] }))
+      .filter((sec) => sec.rows.length > 0);
+    // A single remaining band needs no header.
+    if (sections.length === 1) sections[0] = { ...sections[0], label: null };
+    return { stage: col.stage, sections, dealCount: col.dealCount, totalTCV: col.totalTCV };
+  });
 }
 
 export type MoveIntent = "same" | "forward" | "backward";

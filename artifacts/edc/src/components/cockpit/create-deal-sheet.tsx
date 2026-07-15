@@ -28,6 +28,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { DatePicker } from "@/components/ui/date-picker";
 import { Combobox, MultiCombobox } from "@/components/ui/combobox";
@@ -55,6 +56,7 @@ interface FormState {
   expected_close_date: string;
   landed_at: string;
   win_probability_pct: number | "";
+  committed: boolean;
   manager_strategic_blueprint: string;
   speaker_notes: string;
   competitor_id: number | "";
@@ -112,6 +114,7 @@ export function CreateDealSheet({
     expected_close_date: "",
     landed_at: new Date().toISOString().slice(0, 10),
     win_probability_pct: "",
+    committed: false,
     manager_strategic_blueprint: "",
     speaker_notes: "",
     competitor_id: "",
@@ -193,6 +196,7 @@ export function CreateDealSheet({
       landed_at: values.landed_at || null,
       win_probability_pct:
         values.win_probability_pct === "" ? null : Number(values.win_probability_pct),
+      committed: values.committed,
       manager_strategic_blueprint: values.manager_strategic_blueprint || null,
       speaker_notes: values.speaker_notes || null,
       competitor_id: values.competitor_id === "" ? null : Number(values.competitor_id),
@@ -348,6 +352,18 @@ export function CreateDealSheet({
               <Label>Win %</Label>
               <Input type="number" min={0} max={100} {...register("win_probability_pct", { valueAsNumber: true })} />
             </div>
+          </div>
+
+          <div className="flex items-center justify-between rounded-md border p-3">
+            <div className="space-y-0.5">
+              <Label htmlFor="create-committed">Committed</Label>
+              <p className="text-xs text-muted-foreground">Include in the committed forecast band.</p>
+            </div>
+            <Switch
+              id="create-committed"
+              checked={watch("committed")}
+              onCheckedChange={(v) => setValue("committed", v, { shouldDirty: true })}
+            />
           </div>
 
           <div className="grid grid-cols-2 gap-4">
