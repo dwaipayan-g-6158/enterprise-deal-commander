@@ -37,11 +37,10 @@ import {
   type IntelligenceOutput,
   type StakeholderInput,
   type CompetitorInput,
-  type RiskV2Weights,
-  type RiskLevelBoundaries,
 } from "@workspace/engine";
 import { cache, CacheKeys, CacheTtl } from "./cache";
 import { competitorWinRates } from "./competitive";
+import { deriveRiskWeights, deriveRiskBoundaries } from "./engine-config";
 
 export const DEFAULT_THRESHOLDS: EngineThresholds = {
   elephant_tcv_threshold: 250000,
@@ -72,30 +71,6 @@ export function toISO(value: Date | string | null | undefined): string | null {
   return value.toISOString();
 }
 
-/** Read a numeric tunable from the merged thresholds, falling back when absent/non-numeric. */
-function num(
-  thresholds: EngineThresholds,
-  key: string,
-  fallback: number,
-): number {
-  const v = thresholds[key];
-  const n = typeof v === "number" ? v : Number(v);
-  return Number.isFinite(n) ? n : fallback;
-}
-
-/** Derive the v2 risk dimension weights from the merged thresholds (Task B4 rows). */
-function deriveRiskWeights(thresholds: EngineThresholds): RiskV2Weights {
-  return {
-    technical: num(thresholds, "risk_weight_technical", 0.2),
-    commercial: num(thresholds, "risk_weight_commercial", 0.15),
-    stakeholder: 0.15,
-    temporal: 0.15,
-    financial: 0.1,
-    competitive: 0.1,
-    engagement: 0.15,
-  };
-}
-
 /**
  * Map a stored stakeholder sentiment to the engine literal. The stored values
  * (per the stakeholders-panel SENTIMENTS list and the schema's "Neutral"
@@ -111,15 +86,6 @@ const SENTIMENT_LITERALS = new Set([
 ]);
 function mapSentiment(stored: string): string {
   return SENTIMENT_LITERALS.has(stored) ? stored : "Neutral";
-}
-
-/** Derive the v2 risk-level boundaries from the merged thresholds (Task B4 rows). */
-function deriveRiskBoundaries(thresholds: EngineThresholds): RiskLevelBoundaries {
-  return {
-    lowMax: num(thresholds, "risk_level_low_max", 25),
-    moderateMax: num(thresholds, "risk_level_moderate_max", 50),
-    elevatedMax: num(thresholds, "risk_level_elevated_max", 75),
-  };
 }
 
 /**
