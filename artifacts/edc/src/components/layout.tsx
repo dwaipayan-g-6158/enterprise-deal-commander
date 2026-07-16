@@ -37,7 +37,9 @@ function SidebarBody({ location, user, onNavigate, onLogout }: {
       <div className="p-6 border-b border-border flex items-center gap-3">
         <EdcLogoMark size={52} animated={true} className="shrink-0" />
         <div className="min-w-0">
-          <h1 className="text-sm font-bold tracking-tight text-foreground leading-snug">Enterprise Deal Commander</h1>
+          <Link href="/" onClick={onNavigate}>
+            <h1 className="text-sm font-bold tracking-tight text-foreground leading-snug cursor-pointer hover:text-primary transition-colors">Enterprise Deal Commander</h1>
+          </Link>
           <p className="text-[10px] text-muted-foreground mt-1 uppercase tracking-widest font-mono">Commander Console</p>
         </div>
       </div>

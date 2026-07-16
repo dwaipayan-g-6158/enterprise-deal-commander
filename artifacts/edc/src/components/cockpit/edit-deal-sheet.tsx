@@ -47,6 +47,7 @@ import { GuardrailNotice } from "./risk/guardrail-notice";
 interface FormState {
   deal_name: string;
   account_name: string;
+  crm_record_url: string;
   account_manager: string;
   technical_lead: string;
   sales_stage_id: number;
@@ -117,6 +118,7 @@ export function EditDealSheet({
     defaultValues: {
       deal_name: deal.dealName,
       account_name: deal.accountName,
+      crm_record_url: deal.crmRecordUrl ?? "",
       account_manager: deal.accountManager,
       technical_lead: deal.technicalLead,
       sales_stage_id: deal.salesStageId,
@@ -168,6 +170,7 @@ export function EditDealSheet({
     const data: Record<string, unknown> = {
       deal_name: values.deal_name,
       account_name: values.account_name,
+      crm_record_url: values.crm_record_url.trim() || null,
       account_manager: values.account_manager,
       technical_lead: values.technical_lead,
       sales_stage_id: Number(values.sales_stage_id),
@@ -325,6 +328,14 @@ export function EditDealSheet({
           <div className="grid gap-2">
             <Label>Account Name</Label>
             <Input {...register("account_name", { required: true })} />
+          </div>
+          <div className="grid gap-2">
+            <Label>Zoho CRM Link</Label>
+            <Input
+              type="url"
+              {...register("crm_record_url")}
+              placeholder="https://crm.zoho.com/crm/org.../tab/Deals/..."
+            />
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div className="grid gap-2">
