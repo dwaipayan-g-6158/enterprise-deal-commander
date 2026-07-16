@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo, type ReactNode } from "react";
 import {
   useGetDeal,
   useGetDealIntelligence,
@@ -18,6 +18,7 @@ import {
   Sparkles,
   AlertCircle,
   MoreHorizontal,
+  ExternalLink,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -39,6 +40,12 @@ import { BriefingMode } from "@/components/cockpit/briefing-mode";
 import { RiskSimulator } from "@/components/cockpit/risk-simulator";
 import { DealTrajectory } from "@/components/cockpit/deal-trajectory";
 import { AccountNavigationArray } from "@/components/cockpit/account-navigation-array";
+import {
+  groupDeals,
+  visualOrder,
+  groupForDeal,
+  type StripGroupId,
+} from "@/components/cockpit/deal-strip-model";
 import { ScorePanel } from "@/components/cockpit/v2/score-panel";
 import { CompetitivePanel } from "@/components/cockpit/v2/competitive-panel";
 import { StakeholdersPanel } from "@/components/cockpit/v2/stakeholders-panel";
@@ -112,8 +119,19 @@ export default function DealCockpit() {
   const gatesSaveRef = useRef<(() => Promise<void>) | null>(null);
   const formDirtyRef = useRef(false);
 
-  const sortedDeals = [...(allDeals?.data ?? [])].sort(
-    (a, b) => (b.calculatedTCV ?? 0) - (a.calculatedTCV ?? 0),
+  // The deal strip groups deals into Open / Closed stacks; the fanned group
+  // auto-derives from the deal being viewed until the user clicks a pile, and
+  // the override resets whenever the active deal changes.
+  const [manualExpanded, setManualExpanded] = useState<StripGroupId | null>(null);
+  useEffect(() => setManualExpanded(null), [id]);
+
+  const groups = useMemo(() => groupDeals(allDeals?.data ?? []), [allDeals]);
+  const expandedGroup: StripGroupId = manualExpanded ?? groupForDeal(groups, id) ?? "open";
+  // Arrow-key nav walks exactly the fanned group's visible order, so the strip
+  // and the keyboard shortcut never disagree.
+  const navOrder = useMemo(
+    () => visualOrder(groups, expandedGroup),
+    [groups, expandedGroup],
   );
 
   // Warn on full page unload while the edit form has unsaved changes.
@@ -158,29 +176,45 @@ export default function DealCockpit() {
 
       if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
         e.preventDefault();
-        const idx = sortedDeals.findIndex((d) => d.id === id);
+        const idx = navOrder.findIndex((d) => d.id === id);
         if (idx === -1) return;
         const nextIdx = e.key === "ArrowLeft" ? idx - 1 : idx + 1;
-        if (nextIdx < 0 || nextIdx >= sortedDeals.length) return;
+        if (nextIdx < 0 || nextIdx >= navOrder.length) return;
         if (
           formDirtyRef.current &&
           !window.confirm("You have unsaved changes. Leave anyway?")
         )
           return;
-        navigate(`/deals/${sortedDeals[nextIdx].id}`);
+        navigate(`/deals/${navOrder[nextIdx].id}`);
       }
     };
 
     document.addEventListener("keydown", handler);
     return () => document.removeEventListener("keydown", handler);
-  }, [briefingOpen, id, navigate, sortedDeals]);
+  }, [briefingOpen, id, navigate, navOrder]);
 
   const deal = dealResponse?.data;
   const intel = intelligenceResponse?.data;
 
-  if (isLoadingDeal || isLoadingIntel) return <CockpitSkeleton />;
+  // Every branch renders inside this shell so the deal strip stays mounted
+  // while a newly selected deal loads — early-returning a bare skeleton
+  // unmounted the strip, blanking the screen and replaying its entrance on
+  // every deal switch. Identical element positions across branches let React
+  // keep the strip instance; only the body below swaps.
+  const shell = (body: ReactNode) => (
+    <div className="flex flex-col h-full">
+      <AccountNavigationArray
+        activeDealId={id}
+        expandedGroup={expandedGroup}
+        onExpandGroup={setManualExpanded}
+      />
+      {body}
+    </div>
+  );
+
+  if (isLoadingDeal || isLoadingIntel) return shell(<CockpitSkeleton />);
   if (isErrorDeal || isErrorIntel) {
-    return (
+    return shell(
       <div className="p-8 max-w-md mx-auto mt-16 flex flex-col items-center gap-4 text-center">
         <AlertCircle className="h-10 w-10 text-destructive" />
         <p className="text-muted-foreground">Could not load this deal.</p>
@@ -193,10 +227,10 @@ export default function DealCockpit() {
         >
           Retry
         </Button>
-      </div>
+      </div>,
     );
   }
-  if (!deal || !intel) return <div className="p-8 text-destructive">Deal not found</div>;
+  if (!deal || !intel) return shell(<div className="p-8 text-destructive">Deal not found</div>);
 
   const redAlerts = alertCount(intel.governance.alerts);
   const managedCount = managedAlertCount(intel.governance.managedAlerts);
@@ -240,10 +274,8 @@ export default function DealCockpit() {
     }
   };
 
-  return (
-    <div className="flex flex-col h-full">
-      <AccountNavigationArray activeDealId={id} />
-      <div className="p-8 max-w-[1600px] mx-auto space-y-6 w-full">
+  return shell(
+    <div className="p-8 max-w-[1600px] mx-auto space-y-6 w-full">
       {/* Header */}
       <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
         <div>
@@ -276,6 +308,13 @@ export default function DealCockpit() {
             <Button size="sm" onClick={() => setEditOpen(true)}>
               <Pencil className="h-4 w-4 mr-2" /> Edit
             </Button>
+            {deal.crmRecordUrl && (
+              <Button size="sm" variant="outline" asChild>
+                <a href={deal.crmRecordUrl} target="_blank" rel="noreferrer">
+                  <ExternalLink className="h-4 w-4 mr-2" /> Open in Zoho CRM
+                </a>
+              </Button>
+            )}
             <Button size="sm" variant="secondary" onClick={() => setBriefingOpen(true)}>
               <Presentation className="h-4 w-4 mr-2" /> Briefing
             </Button>
@@ -448,7 +487,6 @@ export default function DealCockpit() {
       <BatSignalDialog dealId={id} open={batOpen} onOpenChange={setBatOpen} />
       <RiskSimulator deal={deal} intel={intel} open={simOpen} onOpenChange={setSimOpen} />
       {briefingOpen && <BriefingMode deal={deal} intel={intel} onClose={() => setBriefingOpen(false)} />}
-      </div>
-    </div>
+    </div>,
   );
 }
