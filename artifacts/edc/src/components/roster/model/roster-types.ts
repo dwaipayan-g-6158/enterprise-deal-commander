@@ -7,6 +7,10 @@ export type { Deal };
 
 export type Health = "GREEN" | "YELLOW" | "RED";
 export type DealState = "active" | "archived" | "deleted";
+/** Whether a deal's *pipeline stage* is terminal (Closed-Won/Closed-Lost), independent
+ * of `DealState` (archived/deleted). "open" (default) hides terminal-stage deals from
+ * the roster; "closed" shows only them; "all" applies no closure filter. */
+export type DealClosure = "open" | "closed" | "all";
 export type Density = "comfortable" | "compact" | "ultra";
 /** Desktop (lg+) roster presentation: classic table, Kanban board, or timeline. */
 export type ViewMode = "table" | "board" | "timeline";
@@ -81,6 +85,7 @@ export interface SortSpec {
 export interface RosterFilters {
   search: string;
   state: DealState;
+  closure: DealClosure;
   stage: string[];
   health: Health[];
   velocity: VelocityBucket[];
@@ -124,6 +129,7 @@ export interface ColumnLayout {
 export const DEFAULT_FILTERS: RosterFilters = {
   search: "",
   state: "active",
+  closure: "open",
   stage: [],
   health: [],
   velocity: [],

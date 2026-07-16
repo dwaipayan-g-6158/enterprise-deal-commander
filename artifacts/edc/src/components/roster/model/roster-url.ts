@@ -6,6 +6,7 @@ import {
   DEFAULT_FILTERS,
   DEFAULT_SORT,
   type ColumnId,
+  type DealClosure,
   type DealState,
   type GroupBy,
   type Health,
@@ -17,6 +18,7 @@ import {
 } from "./roster-types";
 
 const STATES: DealState[] = ["active", "archived", "deleted"];
+const CLOSURES: DealClosure[] = ["open", "closed", "all"];
 const HEALTHS: Health[] = ["GREEN", "YELLOW", "RED"];
 const VELOCITIES: VelocityBucket[] = ["FAST", "NORMAL", "SLOW", "STALLED", "NO_DATE"];
 const GROUPS: GroupBy[] = ["none", "salesStage", "healthStatus", "accountManager"];
@@ -79,6 +81,7 @@ export function encodeRosterUrl(view: RosterView, viewId?: string | null): strin
   if (viewId) p.set("view", viewId);
   if (f.search.trim()) p.set("q", f.search.trim());
   if (f.state !== "active") p.set("st", f.state);
+  if (f.closure && f.closure !== "open") p.set("cl", f.closure);
   if (f.stage.length) p.set("sg", csv(f.stage));
   if (f.health.length) p.set("h", csv(f.health));
   if (f.velocity.length) p.set("v", csv(f.velocity));
@@ -108,12 +111,14 @@ export function decodeRosterUrl(search: string): { view: RosterView; viewId: str
   const p = new URLSearchParams(search.startsWith("?") ? search.slice(1) : search);
 
   const state = p.get("st");
+  const closure = p.get("cl");
   const close = p.get("close");
   const group = p.get("g");
 
   const filters: RosterFilters = {
     search: p.get("q") ?? "",
     state: state && STATES.includes(state as DealState) ? (state as DealState) : "active",
+    closure: closure && CLOSURES.includes(closure as DealClosure) ? (closure as DealClosure) : "open",
     stage: splitCsv(p.get("sg")),
     health: intersect(splitCsv(p.get("h")), HEALTHS),
     velocity: intersect(splitCsv(p.get("v")), VELOCITIES),

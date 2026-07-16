@@ -12,6 +12,7 @@ export function SavedViewTabs({
   activeId,
   dirty,
   canSaveToActive,
+  counts,
   onSelect,
   onSaveToActive,
   onSaveAs,
@@ -21,6 +22,8 @@ export function SavedViewTabs({
   activeId: string | null;
   dirty: boolean;
   canSaveToActive: boolean;
+  /** Optional live counts keyed by view id, rendered as a small badge (e.g. `{ closed: 10 }`). */
+  counts?: Record<string, number>;
   onSelect: (sv: SavedView) => void;
   onSaveToActive: () => void;
   onSaveAs: () => void;
@@ -32,6 +35,7 @@ export function SavedViewTabs({
         <div className="flex items-center gap-1.5">
           {allViews.map((v) => {
             const active = v.id === activeId;
+            const count = counts?.[v.id];
             return (
               <button
                 key={v.id}
@@ -44,6 +48,16 @@ export function SavedViewTabs({
                 )}
               >
                 {v.name}
+                {count != null && (
+                  <span
+                    className={cn(
+                      "rounded-full px-1.5 text-xs font-medium leading-5",
+                      active ? "bg-primary-foreground/20" : "bg-muted-foreground/15 text-muted-foreground",
+                    )}
+                  >
+                    {count}
+                  </span>
+                )}
                 {active && dirty && <span className="h-1.5 w-1.5 rounded-full bg-amber-400" aria-label="modified" />}
               </button>
             );

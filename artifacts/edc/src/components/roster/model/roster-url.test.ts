@@ -61,6 +61,27 @@ describe("encode/decode round-trip", () => {
   });
 });
 
+describe("closure codec", () => {
+  it("omits the default (open) from the query string", () => {
+    expect(encodeRosterUrl(defaultView).includes("cl=")).toBe(false);
+  });
+
+  it("round-trips closed and all", () => {
+    const closed = encodeRosterUrl({ ...defaultView, filters: { ...DEFAULT_FILTERS, closure: "closed" } });
+    expect(closed).toBe("cl=closed");
+    expect(decodeRosterUrl(closed).view.filters.closure).toBe("closed");
+
+    const all = encodeRosterUrl({ ...defaultView, filters: { ...DEFAULT_FILTERS, closure: "all" } });
+    expect(all).toBe("cl=all");
+    expect(decodeRosterUrl(all).view.filters.closure).toBe("all");
+  });
+
+  it("falls back to open for a missing or invalid cl param", () => {
+    expect(decodeRosterUrl("").view.filters.closure).toBe("open");
+    expect(decodeRosterUrl("cl=bogus").view.filters.closure).toBe("open");
+  });
+});
+
 describe("sort codec", () => {
   it("uses a - prefix for desc", () => {
     expect(encodeSort([{ key: "calculatedTCV", dir: "desc" }])).toBe("-calculatedTCV");

@@ -92,6 +92,41 @@ describe("computeDerivedRows — filtering", () => {
   });
 });
 
+describe("computeDerivedRows — closure", () => {
+  const rows = [
+    row({ salesStage: "Discovery" }),
+    row({ salesStage: "Validation" }),
+    row({ salesStage: "Closed-Lost" }),
+    row({ salesStage: "Closed-Won" }),
+  ];
+
+  it("defaults to open, hiding both Closed-Won and Closed-Lost", () => {
+    const out = computeDerivedRows(rows, viewWith({}), NOW);
+    expect(out.matchedCount).toBe(2);
+    expect(out.flat.map((r) => r.salesStage).sort()).toEqual(["Discovery", "Validation"]);
+  });
+
+  it("closure: closed keeps only terminal-stage deals", () => {
+    const out = computeDerivedRows(rows, viewWith({ closure: "closed" }), NOW);
+    expect(out.matchedCount).toBe(2);
+    expect(out.flat.map((r) => r.salesStage).sort()).toEqual(["Closed-Lost", "Closed-Won"]);
+  });
+
+  it("closure: all keeps every stage", () => {
+    const out = computeDerivedRows(rows, viewWith({ closure: "all" }), NOW);
+    expect(out.matchedCount).toBe(4);
+  });
+
+  it("treats a missing closure field (pre-existing saved view) as open", () => {
+    const view = viewWith({});
+    // Simulate a saved view persisted before this field existed.
+    delete (view.filters as { closure?: unknown }).closure;
+    const out = computeDerivedRows(rows, view, NOW);
+    expect(out.matchedCount).toBe(2);
+    expect(out.flat.map((r) => r.salesStage).sort()).toEqual(["Discovery", "Validation"]);
+  });
+});
+
 describe("computeDerivedRows — sorting", () => {
   it("sorts by TCV desc by default", () => {
     const rows = [row({ calculatedTCV: 10 }), row({ calculatedTCV: 30 }), row({ calculatedTCV: 20 })];

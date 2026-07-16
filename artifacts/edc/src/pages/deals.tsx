@@ -45,7 +45,7 @@ import { PreviewPanel } from "@/components/roster/preview-panel";
 import { LossAutopsySheet } from "@/components/autopsy/loss-autopsy-sheet";
 import { ToastAction } from "@/components/ui/toast";
 import type { RowActions } from "@/components/roster/row-context-menu";
-import type { BoardStage } from "@/components/roster/model/board";
+import { terminalOutcome, type BoardStage } from "@/components/roster/model/board";
 import { cn } from "@/lib/utils";
 import type { FilterOption } from "@/components/roster/multi-select-filter";
 import { COLUMNS } from "@/components/roster/model/roster-columns";
@@ -158,6 +158,10 @@ export default function Deals() {
   );
   const amOptions = useMemo<FilterOption[]>(() => distinctOptions(rows.map((r) => r.accountManager)), [rows]);
   const tlOptions = useMemo<FilterOption[]>(() => distinctOptions(rows.map((r) => r.technicalLead)), [rows]);
+
+  // Count of terminal-stage (Closed-Won/Closed-Lost) deals in the fetched set, regardless
+  // of the current closure filter — drives the "Closed" tab badge and the hidden-count hint.
+  const closedCount = useMemo(() => rows.filter((r) => terminalOutcome(r.salesStage) != null).length, [rows]);
   const { data: tagsData } = useListTags();
   const tagOptions = useMemo<FilterOption[]>(
     () => (tagsData?.data ?? []).map((t) => ({ value: t.id, label: t.tagName })),
@@ -184,7 +188,7 @@ export default function Deals() {
   // Clear selection whenever the result set's identity changes.
   useEffect(() => {
     setSelected(new Set());
-  }, [filters.state, filters.search, filters.health.join(","), filters.velocity.join(",")]);
+  }, [filters.state, filters.closure, filters.search, filters.health.join(","), filters.velocity.join(",")]);
 
   const flatIds = derived.flat.map((r) => r.id);
   const allSelected = flatIds.length > 0 && flatIds.every((id) => selected.has(id));
@@ -265,9 +269,11 @@ export default function Deals() {
 
   const emptyMessage = hasActiveFilters
     ? "No deals match your filters."
-    : filters.state === "active"
-      ? "No active deals yet."
-      : `No ${filters.state} deals.`;
+    : (filters.closure ?? "open") === "closed"
+      ? "No closed deals yet."
+      : filters.state === "active"
+        ? "No active deals yet."
+        : `No ${filters.state} deals.`;
 
   return (
     <div
@@ -294,6 +300,7 @@ export default function Deals() {
         activeId={viewId}
         dirty={savedViews.dirty}
         canSaveToActive={savedViews.canSaveToActive}
+        counts={{ closed: closedCount }}
         onSelect={selectSavedView}
         onSaveToActive={() => savedViews.activeView && savedViews.saveToView(savedViews.activeView.id)}
         onSaveAs={() => setSaveOpen(true)}
@@ -465,11 +472,25 @@ export default function Deals() {
       )}
 
       {!isLoading && !isError && derived.flat.length > 0 && (
-        <p className="text-xs text-muted-foreground">
-          {derived.matchedCount === total
-            ? `${total} deal${total === 1 ? "" : "s"}`
-            : `${derived.matchedCount} of ${total} deals`}
-          {isFetching ? " · updating…" : ""}
+        <p className="text-xs text-muted-foreground flex flex-wrap items-center gap-1">
+          <span>
+            {derived.matchedCount === total
+              ? `${total} deal${total === 1 ? "" : "s"}`
+              : `${derived.matchedCount} of ${total} deals`}
+            {isFetching ? " · updating…" : ""}
+          </span>
+          {(filters.closure ?? "open") === "open" && closedCount > 0 && (
+            <>
+              <span>· {closedCount} closed hidden</span>
+              <button
+                type="button"
+                onClick={() => setFilters({ closure: "all" })}
+                className="text-primary underline underline-offset-2 hover:no-underline cursor-pointer"
+              >
+                Show
+              </button>
+            </>
+          )}
         </p>
       )}
 

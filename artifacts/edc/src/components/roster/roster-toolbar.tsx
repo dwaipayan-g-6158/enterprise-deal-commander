@@ -17,6 +17,7 @@ import { VELOCITY_FILTER_OPTIONS, VELOCITY_LABEL } from "./model/velocity";
 import type { BandBy } from "./model/board";
 import type {
   ColumnLayout,
+  DealClosure,
   Density,
   DealState,
   GroupBy,
@@ -47,6 +48,12 @@ const HEALTH_OPTIONS: FilterOption[] = [
 ];
 
 const VELOCITY_OPTIONS: FilterOption[] = VELOCITY_FILTER_OPTIONS.map((v) => ({ value: v, label: VELOCITY_LABEL[v] }));
+
+const CLOSURE_OPTIONS: { value: DealClosure; label: string }[] = [
+  { value: "open", label: "Open" },
+  { value: "closed", label: "Closed" },
+  { value: "all", label: "All" },
+];
 
 export function RosterToolbar({
   filters,
@@ -188,6 +195,21 @@ export function RosterToolbar({
         </ToggleGroup>
         {/* Column layout only makes sense for the table. */}
         {isTable && <ColumnCustomizer layout={columnLayout} onChange={setColumnLayout} />}
+        <Select
+          value={filters.closure ?? "open"}
+          onValueChange={(v) => setFilters({ closure: v as DealClosure })}
+        >
+          <SelectTrigger className="w-[110px]" aria-label="Show open, closed, or all deals">
+            <SelectValue placeholder="Show" />
+          </SelectTrigger>
+          <SelectContent>
+            {CLOSURE_OPTIONS.map((o) => (
+              <SelectItem key={o.value} value={o.value}>
+                {o.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
         <Select value={filters.state} onValueChange={(v) => setFilters({ state: v as DealState })}>
           <SelectTrigger className="w-[130px]">
             <SelectValue placeholder="State" />

@@ -48,6 +48,12 @@ export const BUILTIN_VIEWS: SavedView[] = [
     builtIn: true,
     view: view({}, { group: "salesStage", sort: [{ key: "calculatedTCV", dir: "desc" }] }),
   },
+  {
+    id: "closed",
+    name: "Closed",
+    builtIn: true,
+    view: view({ closure: "closed" }, { group: "salesStage", sort: [{ key: "calculatedTCV", dir: "desc" }] }),
+  },
 ];
 
 export const BUILTIN_VIEW_IDS = new Set(BUILTIN_VIEWS.map((v) => v.id));

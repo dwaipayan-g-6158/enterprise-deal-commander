@@ -2,6 +2,7 @@
 // `now`-injected so it is fully node-testable. Search + state are handled
 // server-side (passed to useListDeals); everything else is client-side because
 // the active set is small (10-50 deals) and fully materialized.
+import { terminalOutcome } from "./board";
 import { COLUMNS, getComparator } from "./roster-columns";
 import type { GroupBy, RosterRow, RosterView, SortSpec } from "./roster-types";
 
@@ -45,8 +46,18 @@ function closeWithin(iso: string | null | undefined, preset: RosterView["filters
   }
 }
 
+function passesClosure(row: RosterRow, closure: RosterView["filters"]["closure"]): boolean {
+  // Defensive default: saved views / URLs written before this field existed have no
+  // `closure` key at all, and should behave exactly as before (open only).
+  const mode = closure ?? "open";
+  if (mode === "all") return true;
+  const isTerminal = terminalOutcome(row.salesStage) != null;
+  return mode === "closed" ? isTerminal : !isTerminal;
+}
+
 function passesFilters(row: RosterRow, view: RosterView, now: number): boolean {
   const f = view.filters;
+  if (!passesClosure(row, f.closure)) return false;
   if (f.stage.length && !f.stage.includes(row.salesStage)) return false;
   if (f.health.length && !f.health.includes(row.healthStatus as never)) return false;
   if (f.velocity.length && !f.velocity.includes(row.velocity)) return false;
