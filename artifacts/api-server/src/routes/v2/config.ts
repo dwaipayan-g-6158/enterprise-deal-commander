@@ -1,5 +1,5 @@
 import { Router, type IRouter, type Request, type Response } from "express";
-import { and, asc, desc, eq, gt, sql } from "drizzle-orm";
+import { and, asc, desc, eq, sql } from "drizzle-orm";
 import {
   db,
   enterpriseDeals,
@@ -17,6 +17,7 @@ import {
   customRiskPatterns,
   customPatternConditions,
   pipelineTargets,
+  scoringModelWeights,
 } from "@workspace/db";
 import {
   computeRampTCV,
@@ -30,10 +31,9 @@ import {
   UpdatePlaybookBody,
   DeletePlaybookParams,
   GetDealPlaybookParams,
-  CompletePlaybookStepParams,
-  CompletePlaybookStepBody,
-  SkipPlaybookStepParams,
-  SkipPlaybookStepBody,
+  SetPlaybookStepStateParams,
+  SetPlaybookStepStateBody,
+  ReopenPlaybookStepParams,
   GetPricingScheduleParams,
   UpdatePricingScheduleParams,
   UpdatePricingScheduleBody,
@@ -47,10 +47,14 @@ import {
   DeleteCustomPatternParams,
   TestCustomPatternBody,
   UpsertPipelineTargetBody,
+  UpdateScoringWeightsBody,
 } from "@workspace/api-zod";
 import { getActor } from "../../lib/auth";
 import { notFound } from "../../lib/http";
 import { logSettingsChange } from "../../lib/settings-audit";
+import { emitDealEvent } from "../../lib/events";
+import { getPlaybookSignals } from "../../lib/playbook-signals";
+import { cache, CacheKeys } from "../../lib/cache";
 
 const router: IRouter = Router();
 
@@ -220,51 +224,54 @@ router.get("/deals/:dealId/playbook", async (req: Request, res: Response) => {
     assignment = created;
   }
   const playbook = await playbookWithSteps(assignment.playbookId);
-  const completions = await db
-    .select()
-    .from(playbookStepCompletions)
-    .where(eq(playbookStepCompletions.assignmentId, assignment.id));
+  const signals = await getPlaybookSignals(dealId);
   res.json({
     data: {
       assignmentId: assignment.id,
       status: assignment.status,
       currentStepId: assignment.currentStepId,
       playbook,
-      completedStepIds: completions.map((c) => c.stepId),
+      // Per-step action state keyed by stepId (completed | skipped | blocked),
+      // plus progress + overdue so the panel can render each state distinctly.
+      stepStates: signals.stepStates,
+      overdueStepIds: signals.overdueStepIds,
+      progressPct: signals.progressPct,
+      adherencePct: signals.adherencePct,
     },
   });
 });
 
-async function advanceStep(assignmentId: string, stepId: string) {
+// Recompute the assignment pointer + status after any step action. currentStepId
+// = first step not yet completed-or-skipped (highlight only — steps are freely
+// actionable out of order); status = "Completed" once every step is terminal.
+async function recomputeAssignment(assignmentId: string) {
   const [assignment] = await db
     .select()
     .from(dealPlaybookAssignments)
     .where(eq(dealPlaybookAssignments.id, assignmentId))
     .limit(1);
   if (!assignment) return;
-  const [current] = await db
-    .select()
+  const steps = await db
+    .select({ id: playbookSteps.id })
     .from(playbookSteps)
-    .where(eq(playbookSteps.id, stepId))
-    .limit(1);
-  if (!current) return;
-  const [next] = await db
+    .where(eq(playbookSteps.playbookId, assignment.playbookId))
+    .orderBy(asc(playbookSteps.stepOrder));
+  const completions = await db
     .select()
-    .from(playbookSteps)
-    .where(
-      and(
-        eq(playbookSteps.playbookId, assignment.playbookId),
-        gt(playbookSteps.stepOrder, current.stepOrder),
-      ),
-    )
-    .orderBy(asc(playbookSteps.stepOrder))
-    .limit(1);
+    .from(playbookStepCompletions)
+    .where(eq(playbookStepCompletions.assignmentId, assignmentId));
+  const terminal = new Set(
+    completions
+      .filter((c) => c.status === "completed" || c.status === "skipped")
+      .map((c) => c.stepId),
+  );
+  const next = steps.find((s) => !terminal.has(s.id));
   if (next) {
     await db
       .update(dealPlaybookAssignments)
-      .set({ currentStepId: next.id })
+      .set({ currentStepId: next.id, status: "Active", completedAt: null })
       .where(eq(dealPlaybookAssignments.id, assignmentId));
-  } else {
+  } else if (steps.length > 0) {
     await db
       .update(dealPlaybookAssignments)
       .set({ status: "Completed", completedAt: new Date(), currentStepId: null })
@@ -272,35 +279,78 @@ async function advanceStep(assignmentId: string, stepId: string) {
   }
 }
 
+async function dealIdForAssignment(assignmentId: string): Promise<string | null> {
+  const [a] = await db
+    .select({ dealId: dealPlaybookAssignments.dealId })
+    .from(dealPlaybookAssignments)
+    .where(eq(dealPlaybookAssignments.id, assignmentId))
+    .limit(1);
+  return a?.dealId ?? null;
+}
+
+// Set a step's action state (completed | skipped | blocked) with an optional note.
+// Steps are freely actionable in any order. Upserts one ledger row per step.
 router.post(
-  "/playbook-assignments/:assignmentId/steps/:stepId/complete",
+  "/playbook-assignments/:assignmentId/steps/:stepId/state",
   async (req: Request, res: Response) => {
-    const { assignmentId, stepId } = CompletePlaybookStepParams.parse(req.params);
-    const b = CompletePlaybookStepBody.parse(req.body ?? {});
+    const { assignmentId, stepId } = SetPlaybookStepStateParams.parse(req.params);
+    const b = SetPlaybookStepStateBody.parse(req.body ?? {});
+    const actor = getActor(req);
+    await db
+      .delete(playbookStepCompletions)
+      .where(
+        and(
+          eq(playbookStepCompletions.assignmentId, assignmentId),
+          eq(playbookStepCompletions.stepId, stepId),
+        ),
+      );
     await db.insert(playbookStepCompletions).values({
       assignmentId,
       stepId,
-      notes: b.notes ?? null,
-      skipped: false,
+      status: b.status,
+      skipped: b.status === "skipped",
+      notes: b.note ?? null,
+      skipReason: b.status === "skipped" ? (b.note ?? null) : null,
     });
-    await advanceStep(assignmentId, stepId);
-    res.json({ data: { completed: true } });
+    await recomputeAssignment(assignmentId);
+    const dealId = await dealIdForAssignment(assignmentId);
+    if (dealId)
+      emitDealEvent("playbook.step_changed", {
+        dealId,
+        actor: actor.displayName,
+        assignmentId,
+        stepId,
+        action: b.status,
+      });
+    res.json({ data: { status: b.status } });
   },
 );
 
-router.post(
-  "/playbook-assignments/:assignmentId/steps/:stepId/skip",
+// Reopen a step — remove its action so it returns to "not started".
+router.delete(
+  "/playbook-assignments/:assignmentId/steps/:stepId/state",
   async (req: Request, res: Response) => {
-    const { assignmentId, stepId } = SkipPlaybookStepParams.parse(req.params);
-    const b = SkipPlaybookStepBody.parse(req.body ?? {});
-    await db.insert(playbookStepCompletions).values({
-      assignmentId,
-      stepId,
-      skipped: true,
-      skipReason: b.skip_reason ?? null,
-    });
-    await advanceStep(assignmentId, stepId);
-    res.json({ data: { skipped: true } });
+    const { assignmentId, stepId } = ReopenPlaybookStepParams.parse(req.params);
+    const actor = getActor(req);
+    await db
+      .delete(playbookStepCompletions)
+      .where(
+        and(
+          eq(playbookStepCompletions.assignmentId, assignmentId),
+          eq(playbookStepCompletions.stepId, stepId),
+        ),
+      );
+    await recomputeAssignment(assignmentId);
+    const dealId = await dealIdForAssignment(assignmentId);
+    if (dealId)
+      emitDealEvent("playbook.step_changed", {
+        dealId,
+        actor: actor.displayName,
+        assignmentId,
+        stepId,
+        action: "reopened",
+      });
+    res.json({ data: { reopened: true } });
   },
 );
 
@@ -727,6 +777,57 @@ router.put("/config/targets", async (req: Request, res: Response) => {
       targetValue: Number(row.targetValue),
     },
   });
+});
+
+/* --------------------------------------- Predictive-score weights (config) */
+
+// GET /v2/config/scoring-weights — latest calibrated weight per factor (fractions
+// of 1.0). The predictive score's playbook_adherence and 8 other factors.
+router.get("/config/scoring-weights", async (_req: Request, res: Response) => {
+  const rows = await db
+    .select({
+      featureId: scoringModelWeights.featureId,
+      calibratedWeight: scoringModelWeights.calibratedWeight,
+      calibrationDate: scoringModelWeights.calibrationDate,
+    })
+    .from(scoringModelWeights)
+    .orderBy(desc(scoringModelWeights.calibrationDate));
+  const latest = new Map<string, number>();
+  for (const r of rows) {
+    if (!latest.has(r.featureId)) latest.set(r.featureId, Number(r.calibratedWeight));
+  }
+  res.json({
+    data: [...latest.entries()].map(([featureId, weight]) => ({ featureId, weight })),
+  });
+});
+
+// PUT /v2/config/scoring-weights — append a new calibration row per supplied
+// factor (append-only history; latest wins). Weights are fractions of 1.0.
+router.put("/config/scoring-weights", async (req: Request, res: Response) => {
+  const body = UpdateScoringWeightsBody.parse(req.body);
+  const actor = getActor(req);
+  const today = new Date().toISOString().slice(0, 10);
+  for (const w of body.weights) {
+    await db.insert(scoringModelWeights).values({
+      featureId: w.feature_id,
+      calibratedWeight: String(w.weight),
+      sampleSize: 0,
+      calibrationDate: today,
+    });
+    await logSettingsChange({
+      module: "scoring_model_weights",
+      settingKey: w.feature_id,
+      entityId: w.feature_id,
+      action: "update",
+      oldValue: null,
+      newValue: w.weight,
+      dataType: "number",
+      actor: actor.username,
+    });
+  }
+  // Drop the cached merged weights so the next score picks up the new values.
+  cache.invalidatePrefix(CacheKeys.lookupPrefix);
+  res.json({ data: { updated: body.weights.length } });
 });
 
 export default router;

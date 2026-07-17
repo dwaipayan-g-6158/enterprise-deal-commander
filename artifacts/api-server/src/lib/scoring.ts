@@ -18,6 +18,7 @@ import {
 } from "@workspace/engine";
 import { cache, CacheKeys, CacheTtl } from "./cache";
 import { mergeScoringWeights } from "./engine-config";
+import { getPlaybookSignals } from "./playbook-signals";
 
 // Predictive deal scoring (PRD F3). Scores are computed from current deal state
 // and PERSISTED to `deal_scores` (append-only history); the roster / analytics
@@ -106,6 +107,8 @@ export async function buildScoringInput(dealId: string): Promise<ScoringInput | 
   const productRevenue = Number(deal.productRevenue) || 0;
   const servicesRevenue = Number(deal.servicesRevenue) || 0;
 
+  const playbook = await getPlaybookSignals(dealId);
+
   return {
     progressPct,
     daysInStage: daysBetween(deal.stageEnteredAt),
@@ -120,6 +123,11 @@ export async function buildScoringInput(dealId: string): Promise<ScoringInput | 
       ? daysBetween(new Date(), new Date(deal.expectedCloseDate))
       : null,
     profileKey: `${deal.stageName ?? deal.salesStageId}|${deal.pricingModel ?? deal.pricingModelId}`,
+    // Playbook execution — undefined adherence (no active playbook) leaves the
+    // playbook_adherence factor at a neutral 0.5.
+    playbookAdherencePct: playbook.adherencePct ?? undefined,
+    playbookCriticalGaps: playbook.criticalGaps,
+    playbookOverdueCount: playbook.overdueCount,
   };
 }
 

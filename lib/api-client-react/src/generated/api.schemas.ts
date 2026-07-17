@@ -1753,11 +1753,33 @@ export interface PlaybookInput {
   steps?: PlaybookStepInput[];
 }
 
-export interface PlaybookStepActionInput {
+export type PlaybookStepStateInputStatus = typeof PlaybookStepStateInputStatus[keyof typeof PlaybookStepStateInputStatus];
+
+
+export const PlaybookStepStateInputStatus = {
+  completed: 'completed',
+  skipped: 'skipped',
+  blocked: 'blocked',
+} as const;
+
+export interface PlaybookStepStateInput {
+  status: PlaybookStepStateInputStatus;
   /** @nullable */
-  notes?: string | null;
-  /** @nullable */
-  skip_reason?: string | null;
+  note?: string | null;
+}
+
+export interface ScoringWeight {
+  featureId: string;
+  weight: number;
+}
+
+export type ScoringWeightsUpdateWeightsItem = {
+  feature_id: string;
+  weight: number;
+};
+
+export interface ScoringWeightsUpdate {
+  weights: ScoringWeightsUpdateWeightsItem[];
 }
 
 export interface PlaybookListResponse {
@@ -2197,5 +2219,9 @@ export type ListPipelineTargets200 = {
 
 export type UpsertPipelineTarget200 = {
   data?: PipelineTarget;
+};
+
+export type ListScoringWeights200 = {
+  data?: ScoringWeight[];
 };
 

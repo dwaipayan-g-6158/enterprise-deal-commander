@@ -31,6 +31,10 @@ function summarize(event: DealEvent): string {
       return `Health changed ${event.fromStatus ?? "—"} → ${event.toStatus}`;
     case "deal.autopsy_captured":
       return `Completed loss autopsy (quality ${event.qualityScore})`;
+    case "playbook.step_changed":
+      return event.action === "reopened"
+        ? "Reopened a playbook step"
+        : `Playbook step marked ${event.action}`;
   }
 }
 
@@ -44,6 +48,8 @@ function entityOf(event: DealEvent): { entityType: string; entityId: string | nu
       return { entityType: "blocker", entityId: event.blockerId };
     case "health.changed":
       return { entityType: "health", entityId: null };
+    case "playbook.step_changed":
+      return { entityType: "playbook", entityId: event.stepId };
     default:
       return { entityType: "deal", entityId: null };
   }

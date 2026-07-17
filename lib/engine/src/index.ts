@@ -165,6 +165,11 @@ export interface ProcessContext {
   velocityBenchmarkDays?: number | null;
   riskWeights?: RiskV2Weights;
   riskBoundaries?: RiskLevelBoundaries;
+  // Playbook execution signals (optional — assembled server-side from the edc_v2
+  // playbook engine; absent for the Risk Simulator and deals with no playbook, in
+  // which case they default to 0 and the PLAYBOOK_EXECUTION_GAP pattern stays quiet).
+  playbookCriticalGaps?: number; // critical steps that were skipped OR blocked
+  playbookOverdueCount?: number; // steps past their expected-duration deadline
 }
 
 export interface ExplanationInput {
@@ -217,6 +222,8 @@ interface DealContext {
   complianceDriver: string | null;
   estimatedLogSources: number | null;
   hasLog360: boolean;
+  playbookCriticalGaps: number;
+  playbookOverdueCount: number;
 }
 
 interface BlockersContext {
@@ -852,6 +859,40 @@ export const riskPatterns: RiskPattern[] = [
         "Re-scope the licensing to the log-source/EPS volume, or confirm the environment is smaller than estimated.",
     }),
   },
+  {
+    // Playbook execution risk — a critical stage-play was skipped/blocked, or a
+    // step has slipped past its expected-duration deadline. Advisory (YELLOW):
+    // enriches risk + health, never blocks stage advancement.
+    code: "PLAYBOOK_EXECUTION_GAP",
+    severity: "YELLOW",
+    weight: 55,
+    evaluate: (deal) =>
+      deal.playbookCriticalGaps > 0 || deal.playbookOverdueCount > 0,
+    formatMessage: (deal) => {
+      const parts: string[] = [];
+      if (deal.playbookCriticalGaps > 0)
+        parts.push(
+          `${deal.playbookCriticalGaps} critical playbook step${deal.playbookCriticalGaps === 1 ? "" : "s"} skipped or blocked`,
+        );
+      if (deal.playbookOverdueCount > 0)
+        parts.push(
+          `${deal.playbookOverdueCount} playbook step${deal.playbookOverdueCount === 1 ? "" : "s"} overdue`,
+        );
+      return (
+        `PLAYBOOK EXECUTION GAP: ${parts.join(" and ")}. The stage play is not being ` +
+        `run to plan — a leading indicator of a deal that stalls or slips at the next gate.`
+      );
+    },
+    explain: (deal) => ({
+      inputs: [
+        { label: "Critical steps skipped/blocked", value: deal.playbookCriticalGaps },
+        { label: "Overdue steps", value: deal.playbookOverdueCount },
+      ],
+      thresholdsUsed: [],
+      clearsWhen:
+        "Complete (or re-open and finish) the skipped/blocked critical steps and clear the overdue steps in the deal's playbook.",
+    }),
+  },
 ];
 
 /**
@@ -1143,6 +1184,8 @@ export function processDealIntelligence(
     complianceDriver: deal.compliance_driver ?? null,
     estimatedLogSources,
     hasLog360,
+    playbookCriticalGaps: ctx.playbookCriticalGaps ?? 0,
+    playbookOverdueCount: ctx.playbookOverdueCount ?? 0,
   };
 
   // F2 provenance: default vs tuned

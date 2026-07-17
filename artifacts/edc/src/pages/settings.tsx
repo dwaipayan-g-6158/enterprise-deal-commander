@@ -15,6 +15,7 @@ import {
 } from "@/components/settings/v2-panels";
 import { TeamSettings } from "@/components/settings/team-settings";
 import { TargetsSettings } from "@/components/settings/targets-settings";
+import { ScoringWeightsSettings } from "@/components/settings/scoring-weights-settings";
 
 export default function Settings() {
   const { data: response, isLoading } = useListEngineThresholds();
@@ -68,6 +69,7 @@ export default function Settings() {
       <Tabs defaultValue="thresholds" className="w-full">
         <TabsList>
           <TabsTrigger value="thresholds">Thresholds</TabsTrigger>
+          <TabsTrigger value="weights">Score Weights</TabsTrigger>
           <TabsTrigger value="patterns">Custom Patterns</TabsTrigger>
           <TabsTrigger value="alerts">Smart Alerts</TabsTrigger>
           <TabsTrigger value="webhooks">Webhooks</TabsTrigger>
@@ -115,6 +117,9 @@ export default function Settings() {
       </Card>
         </TabsContent>
 
+        <TabsContent value="weights" className="pt-4">
+          <ScoringWeightsSettings />
+        </TabsContent>
         <TabsContent value="patterns" className="pt-4">
           <CustomPatternsSettings />
         </TabsContent>

@@ -5,6 +5,7 @@ import {
   getDealGates,
   assembleDealIntelligence,
 } from "../intelligence";
+import { getPlaybookSignals } from "../playbook-signals";
 import { logger } from "../logger";
 
 /**
@@ -45,6 +46,7 @@ export async function captureSnapshot(
   }
   const gates = await getDealGates(dealId);
   const intel = await assembleDealIntelligence(dealId);
+  const playbook = await getPlaybookSignals(dealId);
 
   const governance = intel
     ? {
@@ -65,7 +67,17 @@ export async function captureSnapshot(
     salesStage: deal.salesStage,
     calculatedTcv: String(deal.calculatedTCV ?? 0),
     normalizedTcv: String(deal.normalizedTCV ?? 0),
-    payload: { deal, gates, governance },
+    payload: {
+      deal,
+      gates,
+      governance,
+      playbook: {
+        adherencePct: playbook.adherencePct,
+        progressPct: playbook.progressPct,
+        criticalGaps: playbook.criticalGaps,
+        overdueCount: playbook.overdueCount,
+      },
+    },
     createdBy: actor,
   });
   return true;

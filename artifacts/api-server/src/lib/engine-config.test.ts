@@ -167,7 +167,7 @@ describe("mergeScoringWeights", () => {
     expect(merged.gate_momentum).toBe(40);
     expect(merged.stage_velocity).toBe(5);
     // Untouched factors keep their native-scale default.
-    expect(merged.executive_alignment).toBe(15);
+    expect(merged.executive_alignment).toBe(13);
   });
 
   it("ignores rows with an unknown featureId or a non-finite weight", () => {
@@ -176,7 +176,7 @@ describe("mergeScoringWeights", () => {
       { featureId: "blocker_load", calibratedWeight: Number.NaN },
     ]);
     expect(merged.not_a_real_factor).toBeUndefined();
-    expect(merged.blocker_load).toBe(10);
+    expect(merged.blocker_load).toBe(9);
   });
 
   it("returns the full default set (native 0-100 scale) when given no rows", () => {

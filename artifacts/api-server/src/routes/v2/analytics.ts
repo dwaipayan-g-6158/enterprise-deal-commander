@@ -409,10 +409,19 @@ router.get("/analytics/next-actions", async (_req: Request, res: Response) => {
       .where(eq(playbookSteps.playbookId, a.playbookId))
       .orderBy(asc(playbookSteps.stepOrder));
     const completions = await db
-      .select({ stepId: playbookStepCompletions.stepId })
+      .select({
+        stepId: playbookStepCompletions.stepId,
+        status: playbookStepCompletions.status,
+      })
       .from(playbookStepCompletions)
       .where(eq(playbookStepCompletions.assignmentId, a.assignmentId));
-    const doneIds = new Set(completions.map((c) => c.stepId));
+    // Completed/skipped are terminal; a blocked step still needs attention, so it
+    // surfaces as the next open action.
+    const doneIds = new Set(
+      completions
+        .filter((c) => c.status === "completed" || c.status === "skipped")
+        .map((c) => c.stepId),
+    );
     const next = steps.find((s) => !doneIds.has(s.id));
     if (next) {
       playbookStepsOut.push({
@@ -1082,12 +1091,21 @@ router.get("/analytics/deals/:dealId/trajectory", async (req: Request, res: Resp
     return Math.round((100 * completed) / gates.length);
   };
 
+  // Playbook adherence % from the snapshot payload (added 2026-07); null on older
+  // snapshots taken before playbooks fed the trajectory.
+  const playbookPctOf = (payload: Record<string, unknown> | null): number | null => {
+    const pb = (payload as { playbook?: { adherencePct?: unknown } } | null)?.playbook;
+    const pct = pb?.adherencePct;
+    return typeof pct === "number" ? pct : null;
+  };
+
   interface SnapPoint {
     at: string;
     health: string | null;
     stage: string | null;
     tcv: number | null;
     gatePct: number | null;
+    playbookPct: number | null;
   }
   const snapshots: SnapPoint[] = snapRows.map((r) => ({
     at: toISO(r.snapshotAt) ?? new Date().toISOString(),
@@ -1095,6 +1113,7 @@ router.get("/analytics/deals/:dealId/trajectory", async (req: Request, res: Resp
     stage: r.salesStage ?? null,
     tcv: r.calculatedTcv != null ? Number(r.calculatedTcv) : null,
     gatePct: gatePctOf(r.payload),
+    playbookPct: playbookPctOf(r.payload),
   }));
 
   const scores = scoreRows.map((r) => ({
@@ -1126,6 +1145,7 @@ router.get("/analytics/deals/:dealId/trajectory", async (req: Request, res: Resp
   let curHealth: string | null = null;
   let curStage: string | null = null;
   let curTcv: number | null = null;
+  let curPlaybookPct: number | null = null;
   const points = timestamps.map((at) => {
     if (scoreByAt.has(at)) curScore = scoreByAt.get(at) ?? curScore;
     const snap = snapByAt.get(at);
@@ -1134,6 +1154,7 @@ router.get("/analytics/deals/:dealId/trajectory", async (req: Request, res: Resp
       if (snap.health != null) curHealth = snap.health;
       if (snap.stage != null) curStage = snap.stage;
       if (snap.tcv != null) curTcv = snap.tcv;
+      if (snap.playbookPct != null) curPlaybookPct = snap.playbookPct;
     }
     return {
       at,
@@ -1142,6 +1163,7 @@ router.get("/analytics/deals/:dealId/trajectory", async (req: Request, res: Resp
       health: curHealth,
       stage: curStage,
       tcv: curTcv,
+      playbookPct: curPlaybookPct,
     };
   });
 

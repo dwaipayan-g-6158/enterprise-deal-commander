@@ -41,6 +41,7 @@ import {
 import { cache, CacheKeys, CacheTtl } from "./cache";
 import { competitorWinRates } from "./competitive";
 import { deriveRiskWeights, deriveRiskBoundaries, deriveHealthWeights, derivePortfolioConfig } from "./engine-config";
+import { getPlaybookSignals } from "./playbook-signals";
 
 export const DEFAULT_THRESHOLDS: EngineThresholds = {
   elephant_tcv_threshold: 250000,
@@ -516,6 +517,9 @@ export async function assembleDealIntelligence(dealId: string) {
   const riskWeights = deriveRiskWeights(thresholds);
   const riskBoundaries = deriveRiskBoundaries(thresholds);
 
+  // Playbook execution signals feed the PLAYBOOK_EXECUTION_GAP risk pattern.
+  const playbookSignals = await getPlaybookSignals(deal.id);
+
   const rawDeal: RawDeal = {
     id: deal.id,
     deal_name: deal.dealName,
@@ -575,6 +579,8 @@ export async function assembleDealIntelligence(dealId: string) {
       velocityBenchmarkDays,
       riskWeights,
       riskBoundaries,
+      playbookCriticalGaps: playbookSignals.criticalGaps,
+      playbookOverdueCount: playbookSignals.overdueCount,
     },
   );
 

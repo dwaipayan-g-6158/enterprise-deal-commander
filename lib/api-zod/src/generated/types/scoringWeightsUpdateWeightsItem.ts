@@ -6,9 +6,7 @@
  * OpenAPI spec version: 1.0.0
  */
 
-export interface PlaybookStepActionInput {
-  /** @nullable */
-  notes?: string | null;
-  /** @nullable */
-  skip_reason?: string | null;
-}
+export type ScoringWeightsUpdateWeightsItem = {
+  feature_id: string;
+  weight: number;
+};

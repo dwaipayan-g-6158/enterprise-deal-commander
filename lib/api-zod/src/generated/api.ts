@@ -2587,32 +2587,27 @@ export const GetDealPlaybookResponse = zod.object({
 })
 
 
-export const CompletePlaybookStepParams = zod.object({
+export const SetPlaybookStepStateParams = zod.object({
   "assignmentId": zod.coerce.string(),
   "stepId": zod.coerce.string()
 })
 
-export const CompletePlaybookStepBody = zod.object({
-  "notes": zod.string().nullish(),
-  "skip_reason": zod.string().nullish()
+export const SetPlaybookStepStateBody = zod.object({
+  "status": zod.enum(['completed', 'skipped', 'blocked']),
+  "note": zod.string().nullish()
 })
 
-export const CompletePlaybookStepResponse = zod.object({
+export const SetPlaybookStepStateResponse = zod.object({
   "data": zod.record(zod.string(), zod.unknown())
 })
 
 
-export const SkipPlaybookStepParams = zod.object({
+export const ReopenPlaybookStepParams = zod.object({
   "assignmentId": zod.coerce.string(),
   "stepId": zod.coerce.string()
 })
 
-export const SkipPlaybookStepBody = zod.object({
-  "notes": zod.string().nullish(),
-  "skip_reason": zod.string().nullish()
-})
-
-export const SkipPlaybookStepResponse = zod.object({
+export const ReopenPlaybookStepResponse = zod.object({
   "data": zod.record(zod.string(), zod.unknown())
 })
 
@@ -3092,6 +3087,26 @@ export const UpsertPipelineTargetResponse = zod.object({
   "periodStart": zod.coerce.date(),
   "targetValue": zod.number()
 }).optional()
+})
+
+
+export const ListScoringWeightsResponse = zod.object({
+  "data": zod.array(zod.object({
+  "featureId": zod.string(),
+  "weight": zod.number()
+})).optional()
+})
+
+
+export const UpdateScoringWeightsBody = zod.object({
+  "weights": zod.array(zod.object({
+  "feature_id": zod.string(),
+  "weight": zod.number()
+}))
+})
+
+export const UpdateScoringWeightsResponse = zod.object({
+  "data": zod.record(zod.string(), zod.unknown())
 })
 
 

@@ -176,6 +176,13 @@ export const PATTERN_DIMENSION_MAP: Record<string, PatternMapEntry> = {
     ],
     isStageGuardrail: false,
   },
+  PLAYBOOK_EXECUTION_GAP: {
+    amplifications: [
+      { dimension: "Engagement Vitality", boost: 20 },
+      { dimension: "Temporal Pressure", boost: 10 },
+    ],
+    isStageGuardrail: false,
+  },
 };
 
 // ── Risk-level classification ────────────────────────────────────────────────

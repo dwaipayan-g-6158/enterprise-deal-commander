@@ -112,13 +112,13 @@ describe("PATTERN_DIMENSION_MAP", () => {
     expect(dims).toContain("Technical Readiness");
   });
 
-  it("covers all 15 real pattern codes", () => {
+  it("covers all 16 real pattern codes", () => {
     const codes = [
       "PREMATURE_COMMERCIAL", "UNPROTECTED_ELEPHANT", "MISSING_STRUCTURAL_ANCHOR",
       "PHANTOM_CHAMPION", "GHOST_PIPELINE", "DISCOUNT_TRAP", "STALLED_VALIDATION",
       "CLOSE_DATE_PRESSURE", "UNRESOLVED_CRITICAL_BLOCKERS", "NO_CLOSE_DATE",
       "SLOW_MOTION_COLLISION", "LOW_ATTACH_ELEPHANT", "COMPETITIVE_DISPLACEMENT_STALL",
-      "POC_DEATH_MARCH", "SIEM_UNDERSCOPED",
+      "POC_DEATH_MARCH", "SIEM_UNDERSCOPED", "PLAYBOOK_EXECUTION_GAP",
     ];
     for (const c of codes) {
       expect(PATTERN_DIMENSION_MAP[c], `missing map entry for ${c}`).toBeDefined();

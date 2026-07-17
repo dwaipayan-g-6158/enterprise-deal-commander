@@ -103,6 +103,7 @@ import type {
   ListPipelineTargets200,
   ListPortfolioActivityParams,
   ListScenariosParams,
+  ListScoringWeights200,
   ListSettingsChangeLogParams,
   LoginInput,
   LossArchetypeListResponse,
@@ -120,7 +121,7 @@ import type {
   PlaybookInput,
   PlaybookListResponse,
   PlaybookResponse,
-  PlaybookStepActionInput,
+  PlaybookStepStateInput,
   PortfolioAnalysisResponse,
   PricingModelListResponse,
   PricingScheduleInput,
@@ -135,6 +136,7 @@ import type {
   ScenarioInput,
   ScenarioListResponse,
   ScenarioResponse,
+  ScoringWeightsUpdate,
   SearchDealMemoryParams,
   ServicesTierListResponse,
   SettingsChangeLogEntryResponse,
@@ -8698,37 +8700,37 @@ export function useGetDealPlaybook<TData = Awaited<ReturnType<typeof getDealPlay
 
 
 
-export const getCompletePlaybookStepUrl = (assignmentId: string,
+export const getSetPlaybookStepStateUrl = (assignmentId: string,
     stepId: string,) => {
 
 
 
 
-  return `/api/v2/playbook-assignments/${assignmentId}/steps/${stepId}/complete`
+  return `/api/v2/playbook-assignments/${assignmentId}/steps/${stepId}/state`
 }
 
-export const completePlaybookStep = async (assignmentId: string,
+export const setPlaybookStepState = async (assignmentId: string,
     stepId: string,
-    playbookStepActionInput?: PlaybookStepActionInput, options?: RequestInit): Promise<GenericDataResponse> => {
+    playbookStepStateInput: PlaybookStepStateInput, options?: RequestInit): Promise<GenericDataResponse> => {
 
-  return customFetch<GenericDataResponse>(getCompletePlaybookStepUrl(assignmentId,stepId),
+  return customFetch<GenericDataResponse>(getSetPlaybookStepStateUrl(assignmentId,stepId),
   {
     ...options,
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...options?.headers },
     body: JSON.stringify(
-      playbookStepActionInput,)
+      playbookStepStateInput,)
   }
 );}
 
 
 
 
-export const getCompletePlaybookStepMutationOptions = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof completePlaybookStep>>, TError,{assignmentId: string;stepId: string;data?: BodyType<PlaybookStepActionInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof completePlaybookStep>>, TError,{assignmentId: string;stepId: string;data?: BodyType<PlaybookStepActionInput>}, TContext> => {
+export const getSetPlaybookStepStateMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof setPlaybookStepState>>, TError,{assignmentId: string;stepId: string;data: BodyType<PlaybookStepStateInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof setPlaybookStepState>>, TError,{assignmentId: string;stepId: string;data: BodyType<PlaybookStepStateInput>}, TContext> => {
 
-const mutationKey = ['completePlaybookStep'];
+const mutationKey = ['setPlaybookStepState'];
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -8738,10 +8740,10 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof completePlaybookStep>>, {assignmentId: string;stepId: string;data?: BodyType<PlaybookStepActionInput>}> = (props) => {
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof setPlaybookStepState>>, {assignmentId: string;stepId: string;data: BodyType<PlaybookStepStateInput>}> = (props) => {
           const {assignmentId,stepId,data} = props ?? {};
 
-          return  completePlaybookStep(assignmentId,stepId,data,requestOptions)
+          return  setPlaybookStepState(assignmentId,stepId,data,requestOptions)
         }
 
 
@@ -8751,52 +8753,50 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
   return  { mutationFn, ...mutationOptions }}
 
-    export type CompletePlaybookStepMutationResult = NonNullable<Awaited<ReturnType<typeof completePlaybookStep>>>
-    export type CompletePlaybookStepMutationBody = BodyType<PlaybookStepActionInput> | undefined
-    export type CompletePlaybookStepMutationError = ErrorType<unknown>
+    export type SetPlaybookStepStateMutationResult = NonNullable<Awaited<ReturnType<typeof setPlaybookStepState>>>
+    export type SetPlaybookStepStateMutationBody = BodyType<PlaybookStepStateInput>
+    export type SetPlaybookStepStateMutationError = ErrorType<unknown>
 
-    export const useCompletePlaybookStep = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof completePlaybookStep>>, TError,{assignmentId: string;stepId: string;data?: BodyType<PlaybookStepActionInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+    export const useSetPlaybookStepState = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof setPlaybookStepState>>, TError,{assignmentId: string;stepId: string;data: BodyType<PlaybookStepStateInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
  ): UseMutationResult<
-        Awaited<ReturnType<typeof completePlaybookStep>>,
+        Awaited<ReturnType<typeof setPlaybookStepState>>,
         TError,
-        {assignmentId: string;stepId: string;data?: BodyType<PlaybookStepActionInput>},
+        {assignmentId: string;stepId: string;data: BodyType<PlaybookStepStateInput>},
         TContext
       > => {
-      return useMutation(getCompletePlaybookStepMutationOptions(options));
+      return useMutation(getSetPlaybookStepStateMutationOptions(options));
     }
 
-export const getSkipPlaybookStepUrl = (assignmentId: string,
+export const getReopenPlaybookStepUrl = (assignmentId: string,
     stepId: string,) => {
 
 
 
 
-  return `/api/v2/playbook-assignments/${assignmentId}/steps/${stepId}/skip`
+  return `/api/v2/playbook-assignments/${assignmentId}/steps/${stepId}/state`
 }
 
-export const skipPlaybookStep = async (assignmentId: string,
-    stepId: string,
-    playbookStepActionInput?: PlaybookStepActionInput, options?: RequestInit): Promise<GenericDataResponse> => {
+export const reopenPlaybookStep = async (assignmentId: string,
+    stepId: string, options?: RequestInit): Promise<GenericDataResponse> => {
 
-  return customFetch<GenericDataResponse>(getSkipPlaybookStepUrl(assignmentId,stepId),
+  return customFetch<GenericDataResponse>(getReopenPlaybookStepUrl(assignmentId,stepId),
   {
     ...options,
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...options?.headers },
-    body: JSON.stringify(
-      playbookStepActionInput,)
+    method: 'DELETE'
+
+
   }
 );}
 
 
 
 
-export const getSkipPlaybookStepMutationOptions = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof skipPlaybookStep>>, TError,{assignmentId: string;stepId: string;data?: BodyType<PlaybookStepActionInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof skipPlaybookStep>>, TError,{assignmentId: string;stepId: string;data?: BodyType<PlaybookStepActionInput>}, TContext> => {
+export const getReopenPlaybookStepMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof reopenPlaybookStep>>, TError,{assignmentId: string;stepId: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof reopenPlaybookStep>>, TError,{assignmentId: string;stepId: string}, TContext> => {
 
-const mutationKey = ['skipPlaybookStep'];
+const mutationKey = ['reopenPlaybookStep'];
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -8806,10 +8806,10 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof skipPlaybookStep>>, {assignmentId: string;stepId: string;data?: BodyType<PlaybookStepActionInput>}> = (props) => {
-          const {assignmentId,stepId,data} = props ?? {};
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof reopenPlaybookStep>>, {assignmentId: string;stepId: string}> = (props) => {
+          const {assignmentId,stepId} = props ?? {};
 
-          return  skipPlaybookStep(assignmentId,stepId,data,requestOptions)
+          return  reopenPlaybookStep(assignmentId,stepId,requestOptions)
         }
 
 
@@ -8819,19 +8819,19 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
   return  { mutationFn, ...mutationOptions }}
 
-    export type SkipPlaybookStepMutationResult = NonNullable<Awaited<ReturnType<typeof skipPlaybookStep>>>
-    export type SkipPlaybookStepMutationBody = BodyType<PlaybookStepActionInput> | undefined
-    export type SkipPlaybookStepMutationError = ErrorType<unknown>
+    export type ReopenPlaybookStepMutationResult = NonNullable<Awaited<ReturnType<typeof reopenPlaybookStep>>>
 
-    export const useSkipPlaybookStep = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof skipPlaybookStep>>, TError,{assignmentId: string;stepId: string;data?: BodyType<PlaybookStepActionInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+    export type ReopenPlaybookStepMutationError = ErrorType<unknown>
+
+    export const useReopenPlaybookStep = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof reopenPlaybookStep>>, TError,{assignmentId: string;stepId: string}, TContext>, request?: SecondParameter<typeof customFetch>}
  ): UseMutationResult<
-        Awaited<ReturnType<typeof skipPlaybookStep>>,
+        Awaited<ReturnType<typeof reopenPlaybookStep>>,
         TError,
-        {assignmentId: string;stepId: string;data?: BodyType<PlaybookStepActionInput>},
+        {assignmentId: string;stepId: string},
         TContext
       > => {
-      return useMutation(getSkipPlaybookStepMutationOptions(options));
+      return useMutation(getReopenPlaybookStepMutationOptions(options));
     }
 
 export const getGetPricingScheduleUrl = (dealId: string,) => {
@@ -11196,5 +11196,141 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
         TContext
       > => {
       return useMutation(getUpsertPipelineTargetMutationOptions(options));
+    }
+
+export const getListScoringWeightsUrl = () => {
+
+
+
+
+  return `/api/v2/config/scoring-weights`
+}
+
+export const listScoringWeights = async ( options?: RequestInit): Promise<ListScoringWeights200> => {
+
+  return customFetch<ListScoringWeights200>(getListScoringWeightsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListScoringWeightsQueryKey = () => {
+    return [
+    `/api/v2/config/scoring-weights`
+    ] as const;
+    }
+
+
+export const getListScoringWeightsQueryOptions = <TData = Awaited<ReturnType<typeof listScoringWeights>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listScoringWeights>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListScoringWeightsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listScoringWeights>>> = ({ signal }) => listScoringWeights({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listScoringWeights>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListScoringWeightsQueryResult = NonNullable<Awaited<ReturnType<typeof listScoringWeights>>>
+export type ListScoringWeightsQueryError = ErrorType<unknown>
+
+
+
+export function useListScoringWeights<TData = Awaited<ReturnType<typeof listScoringWeights>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listScoringWeights>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListScoringWeightsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getUpdateScoringWeightsUrl = () => {
+
+
+
+
+  return `/api/v2/config/scoring-weights`
+}
+
+export const updateScoringWeights = async (scoringWeightsUpdate: ScoringWeightsUpdate, options?: RequestInit): Promise<GenericDataResponse> => {
+
+  return customFetch<GenericDataResponse>(getUpdateScoringWeightsUrl(),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      scoringWeightsUpdate,)
+  }
+);}
+
+
+
+
+export const getUpdateScoringWeightsMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateScoringWeights>>, TError,{data: BodyType<ScoringWeightsUpdate>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateScoringWeights>>, TError,{data: BodyType<ScoringWeightsUpdate>}, TContext> => {
+
+const mutationKey = ['updateScoringWeights'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateScoringWeights>>, {data: BodyType<ScoringWeightsUpdate>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  updateScoringWeights(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateScoringWeightsMutationResult = NonNullable<Awaited<ReturnType<typeof updateScoringWeights>>>
+    export type UpdateScoringWeightsMutationBody = BodyType<ScoringWeightsUpdate>
+    export type UpdateScoringWeightsMutationError = ErrorType<unknown>
+
+    export const useUpdateScoringWeights = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateScoringWeights>>, TError,{data: BodyType<ScoringWeightsUpdate>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateScoringWeights>>,
+        TError,
+        {data: BodyType<ScoringWeightsUpdate>},
+        TContext
+      > => {
+      return useMutation(getUpdateScoringWeightsMutationOptions(options));
     }
 

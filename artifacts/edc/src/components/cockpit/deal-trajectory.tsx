@@ -43,6 +43,7 @@ interface TrajectoryPoint {
   health: Health;
   stage: string | null;
   tcv: number | null;
+  playbookPct: number | null;
 }
 
 interface StageChange {
@@ -61,7 +62,7 @@ interface ChartRow extends TrajectoryPoint {
   t: number;
 }
 
-type Metric = "score" | "gate" | "tcv";
+type Metric = "score" | "gate" | "tcv" | "playbook";
 
 // ---- Health label + the dot color used inside the chart/tooltip --------------
 const HEALTH_LABEL: Record<NonNullable<Health>, string> = {
@@ -89,18 +90,21 @@ const METRIC_COLOR: Record<Metric, string> = {
   score: "hsl(var(--chart-1))", // indigo
   gate: "hsl(var(--chart-1))", // indigo
   tcv: "hsl(var(--chart-2))", // emerald
+  playbook: "hsl(var(--chart-4))", // amber/violet
 };
 
 const METRIC_LABEL: Record<Metric, string> = {
   score: "Score",
   gate: "Gate %",
   tcv: "TCV",
+  playbook: "Playbook %",
 };
 
 const chartConfig: ChartConfig = {
   score: { label: "Score", color: "hsl(var(--chart-1))" },
   gate: { label: "Gate %", color: "hsl(var(--chart-1))" },
   tcv: { label: "TCV", color: "hsl(var(--chart-2))" },
+  playbook: { label: "Playbook %", color: "hsl(var(--chart-4))" },
 };
 
 // ---- Date helpers ------------------------------------------------------------
@@ -317,6 +321,10 @@ function TrajectoryTooltip({ active, payload }: TooltipProps) {
           label="Gate %"
           value={row.gatePct != null ? `${row.gatePct.toFixed(0)}%` : "—"}
         />
+        <TooltipRow
+          label="Playbook %"
+          value={row.playbookPct != null ? `${row.playbookPct.toFixed(0)}%` : "—"}
+        />
         <div className="flex items-center justify-between gap-3">
           <span className="text-muted-foreground">Health</span>
           <span className="flex items-center gap-1.5 font-medium">
@@ -467,7 +475,13 @@ function makeEndpointLayer(
   valueFmt: (v: number) => string,
 ) {
   const dataKey: keyof ChartRow =
-    metric === "gate" ? "gatePct" : metric === "tcv" ? "tcv" : "score";
+    metric === "gate"
+      ? "gatePct"
+      : metric === "tcv"
+        ? "tcv"
+        : metric === "playbook"
+          ? "playbookPct"
+          : "score";
 
   // last row with a non-null value for this metric
   let endRow: ChartRow | undefined;
@@ -516,7 +530,13 @@ function HeroChart({ metric, rows }: { metric: Metric; rows: ChartRow[] }) {
   const color = METRIC_COLOR[metric];
   const gradientId = `traj-grad-${metric}`;
   const dataKey: keyof ChartRow =
-    metric === "gate" ? "gatePct" : metric === "tcv" ? "tcv" : "score";
+    metric === "gate"
+      ? "gatePct"
+      : metric === "tcv"
+        ? "tcv"
+        : metric === "playbook"
+          ? "playbookPct"
+          : "score";
 
   // Y domain: 0–100 for score/gate; data-driven padded domain for TCV.
   const isTcv = metric === "tcv";
@@ -529,7 +549,11 @@ function HeroChart({ metric, rows }: { metric: Metric; rows: ChartRow[] }) {
     : [0, 100];
 
   const valueFmt = (v: number) =>
-    isTcv ? compactCurrency(v) : metric === "gate" ? `${v.toFixed(0)}%` : v.toFixed(0);
+    isTcv
+      ? compactCurrency(v)
+      : metric === "gate" || metric === "playbook"
+        ? `${v.toFixed(0)}%`
+        : v.toFixed(0);
 
   const EndpointLayer = React.useMemo(
     () => makeEndpointLayer(metric, rows, valueFmt),
@@ -697,7 +721,7 @@ function TrajectoryHeaderBar({
         {showTabs && (
           <Tabs value={metric} onValueChange={(val) => setMetric(val as Metric)}>
             <TabsList className="h-8">
-              {(["score", "gate", "tcv"] as const).map((m) => (
+              {(["score", "gate", "tcv", "playbook"] as const).map((m) => (
                 <TabsTrigger key={m} value={m} className="text-xs">
                   {METRIC_LABEL[m]}
                 </TabsTrigger>

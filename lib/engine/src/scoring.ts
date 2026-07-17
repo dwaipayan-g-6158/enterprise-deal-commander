@@ -22,6 +22,16 @@ export interface ScoringInput {
   daysToClose: number | null;
   /** Deal profile key for historical win-rate lookup (e.g. "Commercial|Multi-Year"). */
   profileKey: string;
+  // Playbook execution (optional — populated server-side from the edc_v2 playbook
+  // engine). When there is no active assignment these are undefined and the
+  // playbook_adherence factor returns a neutral score, so deals without a playbook
+  // and non-DB callers (Risk Simulator) are neither rewarded nor penalised.
+  /** Completed (non-skipped, non-blocked) steps / total steps, 0–100. */
+  playbookAdherencePct?: number;
+  /** Critical steps that were skipped OR blocked. */
+  playbookCriticalGaps?: number;
+  /** Steps past their expected-duration deadline. */
+  playbookOverdueCount?: number;
 }
 
 export interface ScoringContext {
@@ -65,13 +75,13 @@ const FACTORS: Factor[] = [
   {
     id: "gate_momentum",
     description: "Technical validation progress",
-    weight: 25,
+    weight: 22,
     extract: (d) => sigmoid(clamp01(d.progressPct / 100)),
   },
   {
     id: "stage_velocity",
     description: "Pace vs. stage benchmark",
-    weight: 15,
+    weight: 13,
     extract: (d, c) => {
       if (!c.stageBenchmarkDays || c.stageBenchmarkDays <= 0) return 0.5;
       const ratio = d.daysInStage / c.stageBenchmarkDays;
@@ -97,13 +107,13 @@ const FACTORS: Factor[] = [
   {
     id: "executive_alignment",
     description: "Executive champion sign-off",
-    weight: 15,
+    weight: 13,
     extract: (d) => (d.ctoSignedOff ? 1.0 : d.executiveAgreed ? 0.7 : 0.15),
   },
   {
     id: "blocker_load",
     description: "Unresolved blocker burden",
-    weight: 10,
+    weight: 9,
     extract: (d) => {
       if (d.highBlockerCount >= 3) return 0.0;
       if (d.highBlockerCount >= 1) return 0.3;
@@ -139,8 +149,26 @@ const FACTORS: Factor[] = [
   {
     id: "historical_win_rate",
     description: "Baseline win rate for deal profile",
-    weight: 10,
+    weight: 8,
     extract: (d, c) => c.winRateByProfile?.[d.profileKey] ?? 0.3,
+  },
+  {
+    id: "playbook_adherence",
+    description: "Stage playbook executed to plan",
+    weight: 10,
+    extract: (d) => {
+      // No active playbook → neutral (neither reward nor penalise).
+      if (d.playbookAdherencePct == null) return 0.5;
+      const adherence = clamp01(d.playbookAdherencePct / 100);
+      // Blend with a floor so an early-stage playbook isn't over-penalised, then
+      // subtract execution-risk penalties for skipped/blocked-critical + overdue steps.
+      const base = 0.4 + 0.6 * adherence; // 0% → 0.4, 100% → 1.0
+      const penalty = Math.min(
+        0.5,
+        (d.playbookCriticalGaps ?? 0) * 0.2 + (d.playbookOverdueCount ?? 0) * 0.1,
+      );
+      return clamp01(base - penalty);
+    },
   },
 ];
 

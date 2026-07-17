@@ -1461,26 +1461,24 @@ paths:
         - { name: dealId, in: path, required: true, schema: { type: string } }
       responses:
         "200": { description: Active playbook, content: { application/json: { schema: { $ref: "#/components/schemas/GenericDataResponse" } } } }
-  /v2/playbook-assignments/{assignmentId}/steps/{stepId}/complete:
+  /v2/playbook-assignments/{assignmentId}/steps/{stepId}/state:
     post:
-      operationId: completePlaybookStep
+      operationId: setPlaybookStepState
       tags: [v2intel]
       parameters:
         - { name: assignmentId, in: path, required: true, schema: { type: string } }
         - { name: stepId, in: path, required: true, schema: { type: string } }
-      requestBody: { required: false, content: { application/json: { schema: { $ref: "#/components/schemas/PlaybookStepActionInput" } } } }
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/PlaybookStepStateInput" } } } }
       responses:
-        "200": { description: Completed, content: { application/json: { schema: { $ref: "#/components/schemas/GenericDataResponse" } } } }
-  /v2/playbook-assignments/{assignmentId}/steps/{stepId}/skip:
-    post:
-      operationId: skipPlaybookStep
+        "200": { description: Step state set, content: { application/json: { schema: { $ref: "#/components/schemas/GenericDataResponse" } } } }
+    delete:
+      operationId: reopenPlaybookStep
       tags: [v2intel]
       parameters:
         - { name: assignmentId, in: path, required: true, schema: { type: string } }
         - { name: stepId, in: path, required: true, schema: { type: string } }
-      requestBody: { required: false, content: { application/json: { schema: { $ref: "#/components/schemas/PlaybookStepActionInput" } } } }
       responses:
-        "200": { description: Skipped, content: { application/json: { schema: { $ref: "#/components/schemas/GenericDataResponse" } } } }
+        "200": { description: Step reopened, content: { application/json: { schema: { $ref: "#/components/schemas/GenericDataResponse" } } } }
 
   # --- F13 Ramp pricing + scenarios ---
   /v2/deals/{dealId}/pricing-schedule:
@@ -1769,6 +1767,35 @@ paths:
                 type: object
                 properties:
                   data: { $ref: "#/components/schemas/PipelineTarget" }
+  /v2/config/scoring-weights:
+    get:
+      operationId: listScoringWeights
+      tags: [config]
+      responses:
+        "200":
+          description: Latest calibrated weight per predictive-score factor
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/ScoringWeight" }
+    put:
+      operationId: updateScoringWeights
+      tags: [config]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ScoringWeightsUpdate" }
+      responses:
+        "200":
+          description: Weights updated
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/GenericDataResponse" }
 
 components:
   schemas:
@@ -3520,11 +3547,30 @@ components:
         is_active: { type: boolean }
         steps: { type: array, items: { $ref: "#/components/schemas/PlaybookStepInput" } }
       required: [playbook_name]
-    PlaybookStepActionInput:
+    PlaybookStepStateInput:
       type: object
       properties:
-        notes: { type: ["string", "null"] }
-        skip_reason: { type: ["string", "null"] }
+        status: { type: string, enum: [completed, skipped, blocked] }
+        note: { type: ["string", "null"] }
+      required: [status]
+    ScoringWeight:
+      type: object
+      properties:
+        featureId: { type: string }
+        weight: { type: number }
+      required: [featureId, weight]
+    ScoringWeightsUpdate:
+      type: object
+      properties:
+        weights:
+          type: array
+          items:
+            type: object
+            properties:
+              feature_id: { type: string }
+              weight: { type: number }
+            required: [feature_id, weight]
+      required: [weights]
     PlaybookListResponse:
       type: object
       properties:

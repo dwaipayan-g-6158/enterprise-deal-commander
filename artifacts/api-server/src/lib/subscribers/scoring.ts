@@ -12,6 +12,7 @@ const RESCORE_ON = new Set<string>([
   "gate.toggled",
   "blocker.created",
   "blocker.resolved",
+  "playbook.step_changed",
 ]);
 
 export function registerScoring(): () => void {

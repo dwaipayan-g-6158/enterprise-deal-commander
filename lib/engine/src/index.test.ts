@@ -363,9 +363,32 @@ describe("intelligence engine — 12 risk patterns", () => {
     expect(triggeredCodes(noEstimate)).not.toContain("SIEM_UNDERSCOPED");
   });
 
-  it("exports exactly the 15 pattern codes", () => {
-    expect(PATTERN_CODES).toHaveLength(15);
-    expect(new Set(PATTERN_CODES).size).toBe(15);
+  it("PLAYBOOK_EXECUTION_GAP fires on skipped/blocked-critical or overdue steps, else stays quiet", () => {
+    const deal = makeDeal();
+    // No playbook context → does not fire (keeps the clean baseline clean).
+    expect(triggeredCodes(deal, [], [], DEFAULTS, {})).not.toContain(
+      "PLAYBOOK_EXECUTION_GAP",
+    );
+    expect(
+      triggeredCodes(deal, [], [], DEFAULTS, { playbookCriticalGaps: 1 }),
+    ).toContain("PLAYBOOK_EXECUTION_GAP");
+    expect(
+      triggeredCodes(deal, [], [], DEFAULTS, { playbookOverdueCount: 2 }),
+    ).toContain("PLAYBOOK_EXECUTION_GAP");
+    // Advisory only — YELLOW, never a RED that would block stage advancement.
+    const out = processDealIntelligence(deal, [], [], DEFAULTS, {
+      playbookCriticalGaps: 3,
+      playbookOverdueCount: 3,
+    });
+    const alert = out.governance.alerts.find(
+      (a) => a.code === "PLAYBOOK_EXECUTION_GAP",
+    );
+    expect(alert?.severity).toBe("YELLOW");
+  });
+
+  it("exports exactly the 16 pattern codes", () => {
+    expect(PATTERN_CODES).toHaveLength(16);
+    expect(new Set(PATTERN_CODES).size).toBe(16);
   });
 });
 

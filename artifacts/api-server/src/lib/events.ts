@@ -52,6 +52,11 @@ export type DealEventPayloads = {
   "deal.autopsy_captured": DealEventBase & {
     qualityScore: number;
   };
+  "playbook.step_changed": DealEventBase & {
+    assignmentId: string;
+    stepId: string;
+    action: "completed" | "skipped" | "blocked" | "reopened";
+  };
 };
 
 export type DealEventType = keyof DealEventPayloads;

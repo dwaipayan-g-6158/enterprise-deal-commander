@@ -46,7 +46,7 @@ describe("predictive scoring", () => {
     const r = computePredictiveScore(baseScoringInput);
     expect(r.score).toBeGreaterThanOrEqual(0);
     expect(r.score).toBeLessThanOrEqual(100);
-    expect(r.breakdown).toHaveLength(8);
+    expect(r.breakdown).toHaveLength(9);
   });
 
   it("scores a strong deal higher than a weak deal", () => {
@@ -78,16 +78,17 @@ describe("predictive scoring", () => {
     expect(low.confidence).toBe("LOW");
   });
 
-  it("DEFAULT_SCORING_WEIGHTS mirrors the 8 FACTOR defaults and sums to 100", () => {
+  it("DEFAULT_SCORING_WEIGHTS mirrors the 9 FACTOR defaults and sums to 100", () => {
     expect(DEFAULT_SCORING_WEIGHTS).toEqual({
-      gate_momentum: 25,
-      stage_velocity: 15,
+      gate_momentum: 22,
+      stage_velocity: 13,
       services_attachment: 10,
-      executive_alignment: 15,
-      blocker_load: 10,
+      executive_alignment: 13,
+      blocker_load: 9,
       deal_size_confidence: 5,
       close_pressure: 10,
-      historical_win_rate: 10,
+      historical_win_rate: 8,
+      playbook_adherence: 10,
     });
     expect(Object.values(DEFAULT_SCORING_WEIGHTS).reduce((a, b) => a + b, 0)).toBe(100);
   });
@@ -111,7 +112,27 @@ describe("predictive scoring", () => {
     expect(highProgress.score).toBeGreaterThan(lowProgress.score);
     // With no weights passed, the default FACTORS weights are used (unchanged behavior).
     const defaultWeighted = computePredictiveScore(baseScoringInput);
-    expect(defaultWeighted.breakdown.find((b) => b.featureId === "gate_momentum")?.weight).toBe(25);
+    expect(defaultWeighted.breakdown.find((b) => b.featureId === "gate_momentum")?.weight).toBe(22);
+  });
+
+  it("playbook_adherence is neutral without a playbook, rewards adherence, and penalises gaps", () => {
+    const neutral = computePredictiveScore(baseScoringInput); // no playbook fields
+    const adhering = computePredictiveScore({
+      ...baseScoringInput,
+      playbookAdherencePct: 100,
+    });
+    const gapped = computePredictiveScore({
+      ...baseScoringInput,
+      playbookAdherencePct: 100,
+      playbookCriticalGaps: 2,
+      playbookOverdueCount: 1,
+    });
+    expect(adhering.score).toBeGreaterThan(neutral.score);
+    expect(gapped.score).toBeLessThan(adhering.score);
+    // The neutral (no-playbook) case leaves the factor at 0.5 raw.
+    expect(
+      neutral.breakdown.find((b) => b.featureId === "playbook_adherence")?.rawScore,
+    ).toBe(50);
   });
 });
 

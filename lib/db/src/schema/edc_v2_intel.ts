@@ -324,6 +324,10 @@ export const playbookStepCompletions = edcV2.table("playbook_step_completions", 
   notes: text("notes"),
   skipped: boolean("skipped").notNull().default(false),
   skipReason: text("skip_reason"),
+  // Explicit action state. "skipped" boolean is kept in sync (status="skipped" ⇒ skipped=true)
+  // for back-compat; new code reads status. "blocked" is a step the rep flagged as stuck — it is
+  // NOT a terminal completion (excluded from progress) and feeds the risk engine as an execution gap.
+  status: varchar("status", { length: 20 }).notNull().default("completed"),
 });
 
 /* ----------------------------------------- F13 Ramp Pricing & Financial Scenarios */

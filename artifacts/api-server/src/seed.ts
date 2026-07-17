@@ -294,6 +294,7 @@ async function seedLookups() {
       { parameterKey: "suite_bundle_min_components", parameterValue: "3", dataType: "number", description: "À-la-carte components in one suite at or above which a bundle upsell is recommended" },
       { parameterKey: "poc_max_validation_days", parameterValue: "30", dataType: "number", description: "Days a PoC can sit in Validation without locked criteria before POC_DEATH_MARCH fires" },
       { parameterKey: "siem_high_volume_log_sources", parameterValue: "500", dataType: "number", description: "Estimated log sources at or above which an undersized Log360 deal fires SIEM_UNDERSCOPED" },
+      { parameterKey: "playbook_overdue_grace_days", parameterValue: "3", dataType: "number", description: "Grace days added to a playbook step's expected-duration deadline before it counts as overdue (feeds PLAYBOOK_EXECUTION_GAP + the playbook_adherence score factor)" },
       // Deal Revival watch: which Closed-Lost deals are worth re-engaging
       { parameterKey: "revival_min_win_back", parameterValue: "3", dataType: "number", description: "Minimum win-back potential (1-5) for a Lost deal to be a revival candidate" },
       { parameterKey: "revival_cooloff_days", parameterValue: "60", dataType: "number", description: "Days a Lost deal must age before it surfaces as a revival candidate" },
@@ -345,14 +346,15 @@ async function seedLookups() {
   // Guarded by a presence check (scoring model weights have no unique constraint on featureId,
   // so onConflictDoNothing cannot dedupe by featureId).
   const scoringWeightDefaults: { featureId: string; calibratedWeight: string }[] = [
-    { featureId: "gate_momentum", calibratedWeight: "0.2500" },
-    { featureId: "stage_velocity", calibratedWeight: "0.1500" },
+    { featureId: "gate_momentum", calibratedWeight: "0.2200" },
+    { featureId: "stage_velocity", calibratedWeight: "0.1300" },
     { featureId: "services_attachment", calibratedWeight: "0.1000" },
-    { featureId: "executive_alignment", calibratedWeight: "0.1500" },
-    { featureId: "blocker_load", calibratedWeight: "0.1000" },
+    { featureId: "executive_alignment", calibratedWeight: "0.1300" },
+    { featureId: "blocker_load", calibratedWeight: "0.0900" },
     { featureId: "deal_size_confidence", calibratedWeight: "0.0500" },
     { featureId: "close_pressure", calibratedWeight: "0.1000" },
-    { featureId: "historical_win_rate", calibratedWeight: "0.1000" },
+    { featureId: "historical_win_rate", calibratedWeight: "0.0800" },
+    { featureId: "playbook_adherence", calibratedWeight: "0.1000" },
   ];
   const existingScoringWeights = await db.select({ id: scoringModelWeights.id }).from(scoringModelWeights).limit(1);
   if (existingScoringWeights.length === 0) {
@@ -439,6 +441,18 @@ async function seedPlaybooks() {
     }[];
   }[] = [
     {
+      playbookName: "Discovery / Qualification Playbook",
+      description:
+        "Qualify hard and confirm a champion before investing SE and deal resources.",
+      applicableStage: "Discovery",
+      steps: [
+        { stepOrder: 1, stepName: "MEDDPICC qualification scored", recommendedAction: "Complete a MEDDPICC qualification (metrics, economic buyer, decision criteria/process, paper process, pain, champion, competition) and record the score.", expectedDurationDays: 3, isCritical: true },
+        { stepOrder: 2, stepName: "Champion validated", recommendedAction: "Confirm a named internal advocate with power, access, and willingness to sell on your behalf.", expectedDurationDays: 3, isCritical: true },
+        { stepOrder: 3, stepName: "Economic buyer identified & engaged", recommendedAction: "Identify who controls budget/final authority and confirm direct engagement has occurred.", expectedDurationDays: 4, isCritical: false },
+        { stepOrder: 4, stepName: "Technical decision criteria mapped", recommendedAction: "Document the prospect's technical requirements, evaluation criteria, and scoring rubric.", expectedDurationDays: 4, isCritical: false },
+      ],
+    },
+    {
       playbookName: "POC / Evaluation Playbook",
       description:
         "Drive a proof-of-concept to a clean go/no-go with locked success criteria.",
@@ -447,8 +461,10 @@ async function seedPlaybooks() {
         { stepOrder: 1, stepName: "Lock success criteria", recommendedAction: "Run a success-criteria workshop and get written sign-off on the PoC exit criteria (Gate 1).", expectedDurationDays: 3, isCritical: true },
         { stepOrder: 2, stepName: "Secure executive sponsor", recommendedAction: "Confirm an executive sponsor agrees on the evaluation criteria and timeline.", expectedDurationDays: 5, isCritical: true },
         { stepOrder: 3, stepName: "Demonstrate core workflow", recommendedAction: "Validate the primary use-case workflows in the customer's environment.", expectedDurationDays: 7, isCritical: false },
-        { stepOrder: 4, stepName: "Run performance / scale test", recommendedAction: "Stress the platform under production-representative load and capture the results.", expectedDurationDays: 5, isCritical: false },
-        { stepOrder: 5, stepName: "Go/no-go decision", recommendedAction: "Hold a decision review against the locked criteria and set the next-stage plan.", expectedDurationDays: 2, isCritical: true },
+        { stepOrder: 4, stepName: "Demo delivered & feedback captured", recommendedAction: "Deliver a formal demo and capture structured feedback from all stakeholders.", expectedDurationDays: 3, isCritical: false },
+        { stepOrder: 5, stepName: "Architecture review & sign-off", recommendedAction: "Run a technical architecture review with the prospect's infra/DevOps team (deployment design, integrations, data flows, scalability) and capture documented sign-off.", expectedDurationDays: 5, isCritical: false },
+        { stepOrder: 6, stepName: "Run performance / scale test", recommendedAction: "Stress the platform under production-representative load and capture the results.", expectedDurationDays: 5, isCritical: false },
+        { stepOrder: 7, stepName: "Go/no-go decision", recommendedAction: "Hold a decision review against the locked criteria and set the next-stage plan.", expectedDurationDays: 2, isCritical: true },
       ],
     },
     {
@@ -459,8 +475,10 @@ async function seedPlaybooks() {
       steps: [
         { stepOrder: 1, stepName: "Confirm technical win", recommendedAction: "Verify Gate 3 (performance) is passed before opening commercial discussions.", expectedDurationDays: 2, isCritical: true },
         { stepOrder: 2, stepName: "Build services-attached business case", recommendedAction: "Draft a Professional Services / Premium Support SOW to protect the deployment.", expectedDurationDays: 4, isCritical: false },
-        { stepOrder: 3, stepName: "Present pricing & anchor value", recommendedAction: "Walk the customer through the value-anchored pricing model and ROI.", expectedDurationDays: 3, isCritical: false },
-        { stepOrder: 4, stepName: "Lock mutual close plan", recommendedAction: "Agree a mutual action plan with a hard decision date and procurement owners.", expectedDurationDays: 3, isCritical: true },
+        { stepOrder: 3, stepName: "Business case / ROI delivered", recommendedAction: "Deliver a quantified business case showing the prospect's expected return, savings, or revenue impact.", expectedDurationDays: 4, isCritical: false },
+        { stepOrder: 4, stepName: "Present pricing & anchor value", recommendedAction: "Walk the customer through the value-anchored pricing model and ROI.", expectedDurationDays: 3, isCritical: false },
+        { stepOrder: 5, stepName: "Formal proposal / price quote delivered", recommendedAction: "Deliver the official pricing document: SKU breakdown, discount justification, term length, and payment schedule.", expectedDurationDays: 2, isCritical: true },
+        { stepOrder: 6, stepName: "Lock mutual close plan", recommendedAction: "Agree a mutual action plan with a hard decision date and procurement owners.", expectedDurationDays: 3, isCritical: true },
       ],
     },
     {
@@ -469,8 +487,22 @@ async function seedPlaybooks() {
       applicableStage: "Procurement",
       steps: [
         { stepOrder: 1, stepName: "Submit security questionnaire", recommendedAction: "Provide the completed security questionnaire and architecture docs to InfoSec.", expectedDurationDays: 5, isCritical: false },
-        { stepOrder: 2, stepName: "Resolve legal redlines", recommendedAction: "Work counsel through liability, data-processing, and SLA redlines.", expectedDurationDays: 7, isCritical: true },
-        { stepOrder: 3, stepName: "Obtain final sign-off", recommendedAction: "Secure CTO/VP Engineering and procurement sign-off for execution.", expectedDurationDays: 3, isCritical: true },
+        { stepOrder: 2, stepName: "NDA, DPA & compliance evidence provided", recommendedAction: "Ensure NDA and (for personal/regulated data) a DPA are signed, and deliver required compliance evidence (SOC 2, ISO 27001, HIPAA BAA) for InfoSec acceptance.", expectedDurationDays: 4, isCritical: false },
+        { stepOrder: 3, stepName: "Resolve legal redlines", recommendedAction: "Work counsel through liability, data-processing, and SLA redlines.", expectedDurationDays: 7, isCritical: true },
+        { stepOrder: 4, stepName: "Vendor registration / procurement onboarding", recommendedAction: "Complete vendor registration in the buyer's procurement system (Ariba/Coupa/Oracle) so a PO can be issued.", expectedDurationDays: 5, isCritical: false },
+        { stepOrder: 5, stepName: "Purchase order received", recommendedAction: "Confirm a formal PO matching the order form/quote has been received.", expectedDurationDays: 3, isCritical: true },
+        { stepOrder: 6, stepName: "Obtain final sign-off", recommendedAction: "Secure CTO/VP Engineering and procurement sign-off for execution.", expectedDurationDays: 3, isCritical: true },
+      ],
+    },
+    {
+      playbookName: "Onboarding / Handoff Playbook",
+      description:
+        "Convert a signed deal into a clean sales-to-delivery handoff and a confirmed go-live.",
+      applicableStage: "Closed-Won",
+      steps: [
+        { stepOrder: 1, stepName: "Customer success handoff prepared", recommendedAction: "Complete a structured sales-to-CS handoff: deal context, key contacts, technical requirements, promised deliverables.", expectedDurationDays: 3, isCritical: true },
+        { stepOrder: 2, stepName: "Onboarding kickoff scheduled", recommendedAction: "Calendar the implementation kickoff with the right attendees from both sides.", expectedDurationDays: 2, isCritical: false },
+        { stepOrder: 3, stepName: "Go-live date confirmed", recommendedAction: "Confirm the go-live date explicitly with the customer, not just inferred from a timeline.", expectedDurationDays: 3, isCritical: false },
       ],
     },
   ];
