@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   useListDealCompetitors,
@@ -6,6 +5,8 @@ import {
   useAddDealCompetitor,
   useUpdateDealCompetitor,
   useDeleteDealCompetitor,
+  useCreateCompetitor,
+  getListCompetitorsQueryKey,
 } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -17,8 +18,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Combobox } from "@/components/ui/combobox";
 import { useToast } from "@/hooks/use-toast";
-import { Trash2, Plus, Swords } from "lucide-react";
+import { Trash2, Swords } from "lucide-react";
 import { Empty, EmptyHeader, EmptyMedia, EmptyTitle, EmptyDescription } from "@/components/ui/empty";
 
 const STATUSES = ["Active", "Displaced", "Lost To", "Won Against"];
@@ -29,7 +31,13 @@ const statusColor: Record<string, string> = {
   "Lost To": "bg-destructive text-white",
 };
 
-export function CompetitivePanel({ dealId }: { dealId: string }) {
+export function CompetitivePanel({
+  dealId,
+  incumbentId,
+}: {
+  dealId: string;
+  incumbentId?: number | null;
+}) {
   const { toast } = useToast();
   const qc = useQueryClient();
   const list = useListDealCompetitors(dealId);
@@ -37,22 +45,39 @@ export function CompetitivePanel({ dealId }: { dealId: string }) {
   const add = useAddDealCompetitor();
   const update = useUpdateDealCompetitor();
   const del = useDeleteDealCompetitor();
-  const [selected, setSelected] = useState<string>("");
+  const createCompetitor = useCreateCompetitor();
 
   const competitors = list.data?.data ?? [];
   const catalog = lookup.data?.data ?? [];
+  const catalogOptions = catalog.map((c) => ({ value: String(c.id), label: c.name }));
   const invalidate = () => qc.invalidateQueries({ queryKey: list.queryKey });
 
-  const addCompetitor = async () => {
-    if (!selected) return;
+  const addCompetitor = async (competitorId: string) => {
     try {
-      await add.mutateAsync({ dealId, data: { competitor_id: Number(selected), status: "Active" } as never });
+      await add.mutateAsync({ dealId, data: { competitor_id: Number(competitorId), status: "Active" } as never });
       await invalidate();
-      setSelected("");
       toast({ title: "Competitor added" });
     } catch {
       toast({ title: "Failed (already tracked?)", variant: "destructive" });
     }
+  };
+
+  const handleCreateCompetitor = async (name: string) => {
+    try {
+      const res = await createCompetitor.mutateAsync({ data: { name } });
+      await qc.invalidateQueries({ queryKey: getListCompetitorsQueryKey() });
+      const created = res?.data;
+      if (created) {
+        return { value: String(created.id), label: created.name };
+      }
+    } catch {
+      toast({
+        title: "Could not add competitor",
+        description: "Try a different name.",
+        variant: "destructive",
+      });
+    }
+    return undefined;
   };
 
   const setStatus = async (id: string, competitorId: number, status: string) => {
@@ -77,7 +102,12 @@ export function CompetitivePanel({ dealId }: { dealId: string }) {
         )}
         {competitors.map((c) => (
           <div key={c.id} className="flex items-center gap-3 rounded-md border p-3">
-            <span className="flex-1 font-medium">{c.competitorName ?? `#${c.competitorId}`}</span>
+            <span className="flex-1 font-medium flex items-center gap-2">
+              {c.competitorName ?? `#${c.competitorId}`}
+              {incumbentId != null && c.competitorId === incumbentId && (
+                <Badge variant="secondary">Incumbent</Badge>
+              )}
+            </span>
             <Select value={c.status} onValueChange={(v) => setStatus(c.id, c.competitorId, v)}>
               <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
               <SelectContent>{STATUSES.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
@@ -88,17 +118,15 @@ export function CompetitivePanel({ dealId }: { dealId: string }) {
             </Button>
           </div>
         ))}
-        <div className="flex gap-2">
-          <Select value={selected} onValueChange={setSelected}>
-            <SelectTrigger className="flex-1"><SelectValue placeholder="Add competitor..." /></SelectTrigger>
-            <SelectContent>
-              {catalog.map((c) => <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>)}
-            </SelectContent>
-          </Select>
-          <Button onClick={addCompetitor} disabled={!selected || add.isPending}>
-            <Plus className="h-4 w-4 mr-1" /> Add
-          </Button>
-        </div>
+        <Combobox
+          options={catalogOptions}
+          value=""
+          onChange={addCompetitor}
+          onCreate={handleCreateCompetitor}
+          placeholder="Add competitor..."
+          emptyText="No competitors found."
+          disabled={add.isPending}
+        />
       </CardContent>
     </Card>
   );

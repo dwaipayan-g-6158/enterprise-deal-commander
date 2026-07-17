@@ -7,6 +7,7 @@ import {
   getListCrossSellsQueryKey,
   getListAuditQueryKey,
   getListChangesQueryKey,
+  getListDealCompetitorsQueryKey,
 } from "@workspace/api-client-react";
 
 export function useCockpitInvalidate(dealId: string) {
@@ -20,6 +21,10 @@ export function useCockpitInvalidate(dealId: string) {
       qc.invalidateQueries({ queryKey: getListCrossSellsQueryKey(dealId) }),
       qc.invalidateQueries({ queryKey: getListAuditQueryKey(dealId) }),
       qc.invalidateQueries({ queryKey: getListChangesQueryKey(dealId) }),
+      // The New Deal / Edit Deal "Incumbent / Competitor" field auto-seeds the
+      // Competitive Landscape (see seedIncumbentCompetitor in routes/deals.ts) —
+      // invalidate its list so an incumbent change reflects there immediately.
+      qc.invalidateQueries({ queryKey: getListDealCompetitorsQueryKey(dealId) }),
     ]);
   };
 }

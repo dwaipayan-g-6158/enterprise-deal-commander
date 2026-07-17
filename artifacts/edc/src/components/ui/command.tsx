@@ -61,10 +61,18 @@ CommandInput.displayName = CommandPrimitive.Input.displayName
 const CommandList = React.forwardRef<
   React.ElementRef<typeof CommandPrimitive.List>,
   React.ComponentPropsWithoutRef<typeof CommandPrimitive.List>
->(({ className, ...props }, ref) => (
+>(({ className, onWheel, ...props }, ref) => (
   <CommandPrimitive.List
     ref={ref}
     className={cn("max-h-[300px] overflow-y-auto overflow-x-hidden", className)}
+    onWheel={(e) => {
+      // Stop the wheel event from reaching react-remove-scroll's document-level
+      // listener: when this list is portaled outside a modal Dialog/Sheet's
+      // content (e.g. Popover inside Sheet), that listener treats it as
+      // "outside the lock" and cancels native scroll on it entirely.
+      e.stopPropagation()
+      onWheel?.(e)
+    }}
     {...props}
   />
 ))

@@ -263,7 +263,7 @@ export default function DealCockpit() {
       case "blockers": return <BlockersPanel dealId={id} />;
       case "playbook": return <PlaybookPanel dealId={id} />;
       case "score": return <ScorePanel dealId={id} />;
-      case "competitive": return <CompetitivePanel dealId={id} />;
+      case "competitive": return <CompetitivePanel dealId={id} incumbentId={deal.competitorId} />;
       case "stakeholders": return <StakeholdersPanel dealId={id} />;
       case "pricing": return <PricingPanel dealId={id} currency={deal.dealCurrency} />;
       case "crosssell": return <CrossSellPanel dealId={id} />;

@@ -14,6 +14,7 @@ import {
   dealBlockers,
   dealTags,
   tagDefinitions,
+  dealCompetitors,
 } from "@workspace/db";
 import {
   ListDealsQueryParams,
@@ -209,6 +210,21 @@ async function replaceComplianceDrivers(dealId: string, driverIds: number[]) {
   }
 }
 
+// Mirror the deal's single "incumbent" FK into the Competitive Landscape
+// (edc_v2.deal_competitors) so it doesn't have to be re-added by hand. Additive
+// only — never removes a landscape row, including when the incumbent changes.
+// Idempotent via the deal_competitor_uq (deal_id, competitor_id) constraint.
+async function seedIncumbentCompetitor(
+  dealId: string,
+  competitorId: number | null | undefined,
+) {
+  if (!competitorId) return;
+  await db
+    .insert(dealCompetitors)
+    .values({ dealId, competitorId, status: "Active" })
+    .onConflictDoNothing();
+}
+
 async function seedGatesForDeal(dealId: string) {
   const defs = await db
     .select({ gateCode: gateDefinitions.gateCode })
@@ -285,6 +301,7 @@ router.post("/deals", async (req: Request, res: Response) => {
   if (body.compliance_driver_ids && body.compliance_driver_ids.length > 0) {
     await replaceComplianceDrivers(created.id, body.compliance_driver_ids);
   }
+  await seedIncumbentCompetitor(created.id, body.competitor_id);
   await writeAudit({
     dealId: created.id,
     entityType: "deal",
@@ -537,6 +554,9 @@ const updateDealHandler = async (req: Request, res: Response) => {
   }
   if (body.compliance_driver_ids !== undefined) {
     await replaceComplianceDrivers(id, body.compliance_driver_ids);
+  }
+  if (body.competitor_id !== undefined) {
+    await seedIncumbentCompetitor(id, body.competitor_id);
   }
   if (audits.length > 0) await writeAudit(audits);
 

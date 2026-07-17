@@ -18,6 +18,7 @@ async function buildAll() {
     entryPoints: [
       path.resolve(artifactDir, "src/index.ts"),
       path.resolve(artifactDir, "src/seed.ts"),
+      path.resolve(artifactDir, "src/scripts/backfill-incumbent-competitors.ts"),
     ],
     platform: "node",
     bundle: true,
