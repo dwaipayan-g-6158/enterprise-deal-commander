@@ -30,7 +30,8 @@ import {
   UpdatePlaybookParams,
   UpdatePlaybookBody,
   DeletePlaybookParams,
-  GetDealPlaybookParams,
+  GetPlaybookJourneyParams,
+  StartDealPlaybookParams,
   SetPlaybookStepStateParams,
   SetPlaybookStepStateBody,
   ReopenPlaybookStepParams,
@@ -53,7 +54,7 @@ import { getActor } from "../../lib/auth";
 import { notFound } from "../../lib/http";
 import { logSettingsChange } from "../../lib/settings-audit";
 import { emitDealEvent } from "../../lib/events";
-import { getPlaybookSignals } from "../../lib/playbook-signals";
+import { getPlaybookJourney, startPlaybookForDeal } from "../../lib/playbook-signals";
 import { cache, CacheKeys } from "../../lib/cache";
 
 const router: IRouter = Router();
@@ -164,81 +165,66 @@ router.delete("/playbooks/:id", async (req: Request, res: Response) => {
   res.json({ message: "Playbook deleted" });
 });
 
-// Auto-assign-if-missing: when a deal sitting in a stage has no active
-// assignment but its current stage has a configured playbook, create the
-// assignment (currentStepId = first step) and return it. Mirrors the on-stage-
-// change auto-assign in subscribers/playbook-engine.ts so deals that were
-// already in a stage before playbooks existed still pick one up. Returns the
-// new assignment row, or null when no playbook targets the stage.
-async function autoAssignPlaybookIfMissing(dealId: string) {
+// Lazy backfill: when a deal sitting in a stage has no assignment yet for that
+// stage's configured playbook, create one on first read (currentStepId = first
+// step). Mirrors the on-stage-change auto-assign in
+// subscribers/playbook-engine.ts so deals that were already in a stage before
+// playbooks existed (or a deal created directly into a stage, with no
+// stage_changed event ever firing) still pick one up. Guarded per (deal,
+// playbook) via startPlaybookForDeal — a no-op once the assignment exists.
+async function autoAssignCurrentStagePlaybook(dealId: string): Promise<void> {
   const [deal] = await db
     .select({ stageName: pipelineStages.stageName })
     .from(enterpriseDeals)
     .innerJoin(pipelineStages, eq(enterpriseDeals.salesStageId, pipelineStages.id))
     .where(eq(enterpriseDeals.id, dealId))
     .limit(1);
-  if (!deal?.stageName) return null;
+  if (!deal?.stageName) return;
 
   const [playbook] = await db
     .select()
     .from(playbooks)
-    .where(
-      and(eq(playbooks.applicableStage, deal.stageName), eq(playbooks.isActive, true)),
-    )
+    .where(and(eq(playbooks.applicableStage, deal.stageName), eq(playbooks.isActive, true)))
     .limit(1);
-  if (!playbook) return null;
+  if (!playbook) return;
 
-  const [firstStep] = await db
-    .select({ id: playbookSteps.id })
-    .from(playbookSteps)
-    .where(eq(playbookSteps.playbookId, playbook.id))
-    .orderBy(asc(playbookSteps.stepOrder))
-    .limit(1);
-
-  const [created] = await db
-    .insert(dealPlaybookAssignments)
-    .values({
-      dealId,
-      playbookId: playbook.id,
-      currentStepId: firstStep?.id ?? null,
-    })
-    .returning();
-  return created;
+  const { assignment, created } = await startPlaybookForDeal(dealId, playbook.id);
+  if (!created) return;
+  emitDealEvent("playbook.assigned", {
+    dealId,
+    actor: "system",
+    assignmentId: assignment.id,
+    playbookId: playbook.id,
+  });
 }
 
-router.get("/deals/:dealId/playbook", async (req: Request, res: Response) => {
-  const { dealId } = GetDealPlaybookParams.parse(req.params);
-  let [assignment] = await db
-    .select()
-    .from(dealPlaybookAssignments)
-    .where(
-      and(eq(dealPlaybookAssignments.dealId, dealId), eq(dealPlaybookAssignments.status, "Active")),
-    )
-    .limit(1);
-  if (!assignment) {
-    const created = await autoAssignPlaybookIfMissing(dealId);
-    if (!created) {
-      res.json({ data: null });
-      return;
-    }
-    assignment = created;
-  }
-  const playbook = await playbookWithSteps(assignment.playbookId);
-  const signals = await getPlaybookSignals(dealId);
-  res.json({
-    data: {
+// GET /v2/deals/{dealId}/playbook-journey — the full stage-by-stage picture:
+// one entry per stage that has a configured playbook (Discovery → Closed-Won),
+// each not_started / active / completed. Replaces the old singular
+// GET .../playbook, which only ever showed one playbook at a time.
+router.get("/deals/:dealId/playbook-journey", async (req: Request, res: Response) => {
+  const { dealId } = GetPlaybookJourneyParams.parse(req.params);
+  await autoAssignCurrentStagePlaybook(dealId);
+  const journey = await getPlaybookJourney(dealId);
+  res.json({ data: { journey } });
+});
+
+// POST /v2/deals/{dealId}/playbooks/{playbookId}/start — manual start of any
+// stage's playbook (idempotent: returns the existing assignment if already
+// started). Lets a Commander pre-work an upcoming stage or backfill a gap.
+router.post("/deals/:dealId/playbooks/:playbookId/start", async (req: Request, res: Response) => {
+  const { dealId, playbookId } = StartDealPlaybookParams.parse(req.params);
+  const actor = getActor(req);
+  const { assignment, created } = await startPlaybookForDeal(dealId, playbookId);
+  if (created) {
+    emitDealEvent("playbook.assigned", {
+      dealId,
+      actor: actor.displayName,
       assignmentId: assignment.id,
-      status: assignment.status,
-      currentStepId: assignment.currentStepId,
-      playbook,
-      // Per-step action state keyed by stepId (completed | skipped | blocked),
-      // plus progress + overdue so the panel can render each state distinctly.
-      stepStates: signals.stepStates,
-      overdueStepIds: signals.overdueStepIds,
-      progressPct: signals.progressPct,
-      adherencePct: signals.adherencePct,
-    },
-  });
+      playbookId,
+    });
+  }
+  res.json({ data: { assignmentId: assignment.id, created } });
 });
 
 // Recompute the assignment pointer + status after any step action. currentStepId

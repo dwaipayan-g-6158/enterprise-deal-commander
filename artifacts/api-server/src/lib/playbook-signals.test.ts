@@ -1,5 +1,5 @@
 import { describe, it, expect, afterAll } from "vitest";
-import { inArray } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import {
   db,
   pool,
@@ -12,7 +12,7 @@ import {
   dealPlaybookAssignments,
   playbookStepCompletions,
 } from "@workspace/db";
-import { getPlaybookSignals } from "./playbook-signals";
+import { getPlaybookSignals, getPlaybookJourney, startPlaybookForDeal } from "./playbook-signals";
 
 // Integration test for the playbook signal derivation that feeds the predictive
 // score, the risk engine, and the trajectory. Exercises the real DB.
@@ -116,5 +116,159 @@ describe("getPlaybookSignals", () => {
     expect(signals.criticalGaps).toBe(2); // S2 skipped-critical + S3 blocked-critical
     // Non-terminal steps past their deadline: S3 (blocked) + S4 (open).
     expect(signals.overdueCount).toBe(2);
+  });
+
+  it("sums adherence, critical gaps, and overdue across every assignment the deal has", async () => {
+    const dealId = await createDeal();
+
+    // Playbook 1: 2 steps, both completed.
+    const [pb1] = await db
+      .insert(playbooks)
+      .values({
+        playbookName: `Agg PB1 ${Date.now()}`,
+        applicableStage: "Vitest-Agg-Stage-1",
+        createdBy: "vitest",
+      })
+      .returning({ id: playbooks.id });
+    createdPlaybookIds.push(pb1.id);
+    const steps1 = await db
+      .insert(playbookSteps)
+      .values([
+        { playbookId: pb1.id, stepOrder: 1, stepName: "P1S1", recommendedAction: "a", isCritical: true },
+        { playbookId: pb1.id, stepOrder: 2, stepName: "P1S2", recommendedAction: "a", isCritical: false },
+      ])
+      .returning({ id: playbookSteps.id });
+    const [a1] = await db
+      .insert(dealPlaybookAssignments)
+      .values({ dealId, playbookId: pb1.id, currentStepId: null })
+      .returning({ id: dealPlaybookAssignments.id });
+    await db.insert(playbookStepCompletions).values([
+      { assignmentId: a1.id, stepId: steps1[0].id, status: "completed", skipped: false },
+      { assignmentId: a1.id, stepId: steps1[1].id, status: "completed", skipped: false },
+    ]);
+
+    // Playbook 2: assigned 30 days ago — one skipped-critical step, one left
+    // open past its deadline.
+    const [pb2] = await db
+      .insert(playbooks)
+      .values({
+        playbookName: `Agg PB2 ${Date.now()}`,
+        applicableStage: "Vitest-Agg-Stage-2",
+        createdBy: "vitest",
+      })
+      .returning({ id: playbooks.id });
+    createdPlaybookIds.push(pb2.id);
+    const steps2 = await db
+      .insert(playbookSteps)
+      .values([
+        { playbookId: pb2.id, stepOrder: 1, stepName: "P2S1", recommendedAction: "a", expectedDurationDays: 1, isCritical: true },
+        { playbookId: pb2.id, stepOrder: 2, stepName: "P2S2", recommendedAction: "a", expectedDurationDays: 1, isCritical: false },
+      ])
+      .returning({ id: playbookSteps.id });
+    const [a2] = await db
+      .insert(dealPlaybookAssignments)
+      .values({
+        dealId,
+        playbookId: pb2.id,
+        currentStepId: null,
+        assignedAt: new Date(Date.now() - 30 * DAY_MS),
+      })
+      .returning({ id: dealPlaybookAssignments.id });
+    await db.insert(playbookStepCompletions).values([
+      { assignmentId: a2.id, stepId: steps2[0].id, status: "skipped", skipped: true },
+      // steps2[1] left open -> overdue
+    ]);
+
+    const signals = await getPlaybookSignals(dealId);
+    expect(signals.hasPlaybook).toBe(true);
+    expect(signals.totalSteps).toBe(4); // 2 (pb1) + 2 (pb2)
+    expect(signals.completedCount).toBe(2); // both from pb1
+    expect(signals.adherencePct).toBe(50); // 2/4
+    expect(signals.progressPct).toBe(75); // (2 completed + 1 skipped) / 4
+    expect(signals.criticalGaps).toBe(1); // P2S1 skipped-critical
+    expect(signals.overdueCount).toBe(1); // P2S2 open + overdue
+  });
+});
+
+describe("getPlaybookJourney + startPlaybookForDeal", () => {
+  it("classifies not_started / active / completed per stage playbook", async () => {
+    const dealId = await createDeal();
+
+    const [pbA] = await db
+      .insert(playbooks)
+      .values({
+        playbookName: `Journey A ${Date.now()}`,
+        applicableStage: "Vitest-Journey-Stage-A",
+        createdBy: "vitest",
+      })
+      .returning({ id: playbooks.id });
+    createdPlaybookIds.push(pbA.id);
+    const [pbB] = await db
+      .insert(playbooks)
+      .values({
+        playbookName: `Journey B ${Date.now()}`,
+        applicableStage: "Vitest-Journey-Stage-B",
+        createdBy: "vitest",
+      })
+      .returning({ id: playbooks.id });
+    createdPlaybookIds.push(pbB.id);
+
+    const stepsA = await db
+      .insert(playbookSteps)
+      .values([
+        { playbookId: pbA.id, stepOrder: 1, stepName: "A1", recommendedAction: "a", isCritical: false },
+        { playbookId: pbA.id, stepOrder: 2, stepName: "A2", recommendedAction: "a", isCritical: false },
+      ])
+      .returning({ id: playbookSteps.id });
+    await db.insert(playbookSteps).values([
+      { playbookId: pbB.id, stepOrder: 1, stepName: "B1", recommendedAction: "a", isCritical: false },
+    ]);
+
+    // pbA has no assignment yet -> not_started, but its step catalog is still visible.
+    let journey = await getPlaybookJourney(dealId);
+    let entryA = journey.find((e) => e.playbookId === pbA.id)!;
+    expect(entryA.status).toBe("not_started");
+    expect(entryA.totalSteps).toBe(2);
+    expect(entryA.assignmentId).toBeNull();
+
+    // Manual start is idempotent.
+    const { assignment, created } = await startPlaybookForDeal(dealId, pbA.id);
+    expect(created).toBe(true);
+    const { assignment: again, created: createdAgain } = await startPlaybookForDeal(dealId, pbA.id);
+    expect(createdAgain).toBe(false);
+    expect(again.id).toBe(assignment.id);
+
+    journey = await getPlaybookJourney(dealId);
+    entryA = journey.find((e) => e.playbookId === pbA.id)!;
+    expect(entryA.status).toBe("active");
+    expect(entryA.assignmentId).toBe(assignment.id);
+
+    // Complete both steps (progress reflects it immediately; "completed"
+    // classification depends on the assignment's status column, which only
+    // the route layer's recomputeAssignment flips).
+    await db.insert(playbookStepCompletions).values([
+      { assignmentId: assignment.id, stepId: stepsA[0].id, status: "completed", skipped: false },
+      { assignmentId: assignment.id, stepId: stepsA[1].id, status: "completed", skipped: false },
+    ]);
+    journey = await getPlaybookJourney(dealId);
+    entryA = journey.find((e) => e.playbookId === pbA.id)!;
+    expect(entryA.completedCount).toBe(2);
+    expect(entryA.progressPct).toBe(100);
+    expect(entryA.adherencePct).toBe(100);
+    expect(entryA.status).toBe("active");
+
+    await db
+      .update(dealPlaybookAssignments)
+      .set({ status: "Completed", completedAt: new Date() })
+      .where(eq(dealPlaybookAssignments.id, assignment.id));
+    journey = await getPlaybookJourney(dealId);
+    entryA = journey.find((e) => e.playbookId === pbA.id)!;
+    expect(entryA.status).toBe("completed");
+
+    // pbB was never touched.
+    const entryB = journey.find((e) => e.playbookId === pbB.id)!;
+    expect(entryB.status).toBe("not_started");
+    expect(entryB.totalSteps).toBe(1);
+    expect(entryB.assignmentId).toBeNull();
   });
 });

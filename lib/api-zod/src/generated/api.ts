@@ -2578,11 +2578,21 @@ export const DeletePlaybookResponse = zod.object({
 })
 
 
-export const GetDealPlaybookParams = zod.object({
+export const GetPlaybookJourneyParams = zod.object({
   "dealId": zod.coerce.string()
 })
 
-export const GetDealPlaybookResponse = zod.object({
+export const GetPlaybookJourneyResponse = zod.object({
+  "data": zod.record(zod.string(), zod.unknown())
+})
+
+
+export const StartDealPlaybookParams = zod.object({
+  "dealId": zod.coerce.string(),
+  "playbookId": zod.coerce.string()
+})
+
+export const StartDealPlaybookResponse = zod.object({
   "data": zod.record(zod.string(), zod.unknown())
 })
 

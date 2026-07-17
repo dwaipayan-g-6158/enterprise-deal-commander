@@ -57,6 +57,10 @@ export type DealEventPayloads = {
     stepId: string;
     action: "completed" | "skipped" | "blocked" | "reopened";
   };
+  "playbook.assigned": DealEventBase & {
+    assignmentId: string;
+    playbookId: string;
+  };
 };
 
 export type DealEventType = keyof DealEventPayloads;

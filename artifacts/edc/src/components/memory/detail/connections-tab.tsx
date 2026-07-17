@@ -1,4 +1,4 @@
-import { useGetSimilarDeals, useGetDealPlaybook } from "@workspace/api-client-react";
+import { useGetSimilarDeals, useGetPlaybookJourney } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Link } from "wouter";
@@ -10,11 +10,20 @@ interface MemoryDetail {
   competitorsFaced?: string[] | null;
 }
 
+interface JourneyEntry {
+  playbookId: string;
+  playbookName: string;
+  applicableStage: string | null;
+  assignmentId: string | null;
+  status: "not_started" | "active" | "completed";
+}
+
 export function ConnectionsTab({ memory: m }: { memory: MemoryDetail }) {
   const { data: similarData } = useGetSimilarDeals(m.dealId);
-  const { data: playbookData } = useGetDealPlaybook(m.dealId);
+  const { data: journeyData } = useGetPlaybookJourney(m.dealId);
   const similar = (similarData?.data ?? []).filter((s) => s.id !== m.id);
-  const playbook = playbookData?.data as { playbook: { playbookName: string } | null; status: string } | null | undefined;
+  const journey = (journeyData?.data as { journey: JourneyEntry[] } | undefined)?.journey ?? [];
+  const playbooksUsed = journey.filter((e) => e.assignmentId);
 
   return (
     <div className="space-y-4">
@@ -28,10 +37,17 @@ export function ConnectionsTab({ memory: m }: { memory: MemoryDetail }) {
       )}
 
       <Card>
-        <CardHeader><CardTitle className="text-lg">Playbook Used</CardTitle></CardHeader>
-        <CardContent>
-          {playbook?.playbook ? (
-            <p className="text-sm">{playbook.playbook.playbookName} — <span className="text-muted-foreground">{playbook.status}</span></p>
+        <CardHeader><CardTitle className="text-lg">Playbooks Used</CardTitle></CardHeader>
+        <CardContent className="space-y-1.5">
+          {playbooksUsed.length > 0 ? (
+            playbooksUsed.map((p) => (
+              <p key={p.playbookId} className="text-sm">
+                {p.playbookName}
+                {p.applicableStage && <span className="text-muted-foreground"> ({p.applicableStage})</span>}
+                {" — "}
+                <span className="text-muted-foreground">{p.status === "completed" ? "Completed" : "In progress"}</span>
+              </p>
+            ))
           ) : (
             <p className="text-sm text-muted-foreground">No playbook was assigned to this deal.</p>
           )}

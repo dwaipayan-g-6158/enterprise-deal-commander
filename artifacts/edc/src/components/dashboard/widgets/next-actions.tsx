@@ -16,6 +16,7 @@ interface Decision {
 interface PlaybookStep {
   dealId: string;
   dealName: string;
+  playbookName: string;
   action: string;
   stepOrder: number;
   totalSteps: number;
@@ -94,10 +95,10 @@ export function NextActions() {
               <Group icon={<BookOpen className="h-3.5 w-3.5" />} label="Playbook steps" tone="text-primary">
                 {d.playbookSteps.slice(0, 2).map((x) => (
                   <Item
-                    key={`${x.dealId}-${x.stepOrder}`}
+                    key={`${x.dealId}-${x.playbookName}-${x.stepOrder}`}
                     onClick={() => navigate(`/deals/${x.dealId}`)}
                     title={`${x.dealName}: ${x.action}`}
-                    meta={`Step ${x.stepOrder} of ${x.totalSteps}`}
+                    meta={`${x.playbookName} · Step ${x.stepOrder} of ${x.totalSteps}`}
                   />
                 ))}
               </Group>

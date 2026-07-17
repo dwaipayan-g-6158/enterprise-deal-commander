@@ -18,6 +18,7 @@ import {
   gateDefinitions,
   dealDecisions,
   dealPlaybookAssignments,
+  playbooks,
   playbookSteps,
   playbookStepCompletions,
   dealSnapshots,
@@ -383,21 +384,26 @@ router.get("/analytics/next-actions", async (_req: Request, res: Response) => {
   overdue.sort(byDue);
   dueThisWeek.sort(byDue);
 
-  // Next open playbook step per active assignment.
+  // Next open playbook step per active assignment. A deal can now legitimately
+  // hold 2+ concurrent assignments (one per stage it has touched on its
+  // journey), so each row carries the playbook name to stay disambiguated.
   const assignments = await db
     .select({
       assignmentId: dealPlaybookAssignments.id,
       dealId: dealPlaybookAssignments.dealId,
       dealName: enterpriseDeals.dealName,
       playbookId: dealPlaybookAssignments.playbookId,
+      playbookName: playbooks.playbookName,
     })
     .from(dealPlaybookAssignments)
     .innerJoin(enterpriseDeals, eq(dealPlaybookAssignments.dealId, enterpriseDeals.id))
+    .innerJoin(playbooks, eq(dealPlaybookAssignments.playbookId, playbooks.id))
     .where(and(activeFilter, eq(dealPlaybookAssignments.status, "Active")));
 
   const playbookStepsOut: {
     dealId: string;
     dealName: string;
+    playbookName: string;
     action: string;
     stepOrder: number;
     totalSteps: number;
@@ -427,6 +433,7 @@ router.get("/analytics/next-actions", async (_req: Request, res: Response) => {
       playbookStepsOut.push({
         dealId: a.dealId,
         dealName: a.dealName,
+        playbookName: a.playbookName,
         action: next.stepName,
         stepOrder: next.stepOrder,
         totalSteps: steps.length,

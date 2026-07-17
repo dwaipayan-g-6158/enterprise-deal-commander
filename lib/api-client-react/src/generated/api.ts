@@ -8629,17 +8629,17 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
       return useMutation(getDeletePlaybookMutationOptions(options));
     }
 
-export const getGetDealPlaybookUrl = (dealId: string,) => {
+export const getGetPlaybookJourneyUrl = (dealId: string,) => {
 
 
 
 
-  return `/api/v2/deals/${dealId}/playbook`
+  return `/api/v2/deals/${dealId}/playbook-journey`
 }
 
-export const getDealPlaybook = async (dealId: string, options?: RequestInit): Promise<GenericDataResponse> => {
+export const getPlaybookJourney = async (dealId: string, options?: RequestInit): Promise<GenericDataResponse> => {
 
-  return customFetch<GenericDataResponse>(getGetDealPlaybookUrl(dealId),
+  return customFetch<GenericDataResponse>(getGetPlaybookJourneyUrl(dealId),
   {
     ...options,
     method: 'GET'
@@ -8652,42 +8652,42 @@ export const getDealPlaybook = async (dealId: string, options?: RequestInit): Pr
 
 
 
-export const getGetDealPlaybookQueryKey = (dealId: string,) => {
+export const getGetPlaybookJourneyQueryKey = (dealId: string,) => {
     return [
-    `/api/v2/deals/${dealId}/playbook`
+    `/api/v2/deals/${dealId}/playbook-journey`
     ] as const;
     }
 
 
-export const getGetDealPlaybookQueryOptions = <TData = Awaited<ReturnType<typeof getDealPlaybook>>, TError = ErrorType<unknown>>(dealId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getDealPlaybook>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+export const getGetPlaybookJourneyQueryOptions = <TData = Awaited<ReturnType<typeof getPlaybookJourney>>, TError = ErrorType<unknown>>(dealId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getPlaybookJourney>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
 
-  const queryKey =  queryOptions?.queryKey ?? getGetDealPlaybookQueryKey(dealId);
+  const queryKey =  queryOptions?.queryKey ?? getGetPlaybookJourneyQueryKey(dealId);
 
 
 
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof getDealPlaybook>>> = ({ signal }) => getDealPlaybook(dealId, { signal, ...requestOptions });
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getPlaybookJourney>>> = ({ signal }) => getPlaybookJourney(dealId, { signal, ...requestOptions });
 
 
 
 
 
-   return  { queryKey, queryFn, enabled: !!(dealId), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getDealPlaybook>>, TError, TData> & { queryKey: QueryKey }
+   return  { queryKey, queryFn, enabled: !!(dealId), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getPlaybookJourney>>, TError, TData> & { queryKey: QueryKey }
 }
 
-export type GetDealPlaybookQueryResult = NonNullable<Awaited<ReturnType<typeof getDealPlaybook>>>
-export type GetDealPlaybookQueryError = ErrorType<unknown>
+export type GetPlaybookJourneyQueryResult = NonNullable<Awaited<ReturnType<typeof getPlaybookJourney>>>
+export type GetPlaybookJourneyQueryError = ErrorType<unknown>
 
 
 
-export function useGetDealPlaybook<TData = Awaited<ReturnType<typeof getDealPlaybook>>, TError = ErrorType<unknown>>(
- dealId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getDealPlaybook>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+export function useGetPlaybookJourney<TData = Awaited<ReturnType<typeof getPlaybookJourney>>, TError = ErrorType<unknown>>(
+ dealId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getPlaybookJourney>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
-  const queryOptions = getGetDealPlaybookQueryOptions(dealId,options)
+  const queryOptions = getGetPlaybookJourneyQueryOptions(dealId,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 
@@ -8699,6 +8699,72 @@ export function useGetDealPlaybook<TData = Awaited<ReturnType<typeof getDealPlay
 
 
 
+
+export const getStartDealPlaybookUrl = (dealId: string,
+    playbookId: string,) => {
+
+
+
+
+  return `/api/v2/deals/${dealId}/playbooks/${playbookId}/start`
+}
+
+export const startDealPlaybook = async (dealId: string,
+    playbookId: string, options?: RequestInit): Promise<GenericDataResponse> => {
+
+  return customFetch<GenericDataResponse>(getStartDealPlaybookUrl(dealId,playbookId),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+export const getStartDealPlaybookMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof startDealPlaybook>>, TError,{dealId: string;playbookId: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof startDealPlaybook>>, TError,{dealId: string;playbookId: string}, TContext> => {
+
+const mutationKey = ['startDealPlaybook'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof startDealPlaybook>>, {dealId: string;playbookId: string}> = (props) => {
+          const {dealId,playbookId} = props ?? {};
+
+          return  startDealPlaybook(dealId,playbookId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type StartDealPlaybookMutationResult = NonNullable<Awaited<ReturnType<typeof startDealPlaybook>>>
+
+    export type StartDealPlaybookMutationError = ErrorType<unknown>
+
+    export const useStartDealPlaybook = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof startDealPlaybook>>, TError,{dealId: string;playbookId: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof startDealPlaybook>>,
+        TError,
+        {dealId: string;playbookId: string},
+        TContext
+      > => {
+      return useMutation(getStartDealPlaybookMutationOptions(options));
+    }
 
 export const getSetPlaybookStepStateUrl = (assignmentId: string,
     stepId: string,) => {

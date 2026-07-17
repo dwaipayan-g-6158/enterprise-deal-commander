@@ -1453,14 +1453,23 @@ paths:
         - { name: id, in: path, required: true, schema: { type: string } }
       responses:
         "200": { description: Deleted, content: { application/json: { schema: { $ref: "#/components/schemas/MessageResponse" } } } }
-  /v2/deals/{dealId}/playbook:
+  /v2/deals/{dealId}/playbook-journey:
     get:
-      operationId: getDealPlaybook
+      operationId: getPlaybookJourney
       tags: [v2intel]
       parameters:
         - { name: dealId, in: path, required: true, schema: { type: string } }
       responses:
-        "200": { description: Active playbook, content: { application/json: { schema: { $ref: "#/components/schemas/GenericDataResponse" } } } }
+        "200": { description: Full stage-by-stage playbook journey, content: { application/json: { schema: { $ref: "#/components/schemas/GenericDataResponse" } } } }
+  /v2/deals/{dealId}/playbooks/{playbookId}/start:
+    post:
+      operationId: startDealPlaybook
+      tags: [v2intel]
+      parameters:
+        - { name: dealId, in: path, required: true, schema: { type: string } }
+        - { name: playbookId, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: Playbook started (idempotent), content: { application/json: { schema: { $ref: "#/components/schemas/GenericDataResponse" } } } }
   /v2/playbook-assignments/{assignmentId}/steps/{stepId}/state:
     post:
       operationId: setPlaybookStepState

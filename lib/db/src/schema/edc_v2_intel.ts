@@ -298,19 +298,28 @@ export const playbookSteps = edcV2.table(
   (t) => [unique("playbook_step_order_uq").on(t.playbookId, t.stepOrder)],
 );
 
-export const dealPlaybookAssignments = edcV2.table("deal_playbook_assignments", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  dealId: uuid("deal_id")
-    .notNull()
-    .references(() => enterpriseDeals.id, { onDelete: "cascade" }),
-  playbookId: uuid("playbook_id")
-    .notNull()
-    .references(() => playbooks.id),
-  currentStepId: uuid("current_step_id").references(() => playbookSteps.id),
-  status: varchar("status", { length: 20 }).notNull().default("Active"),
-  assignedAt: timestamp("assigned_at", { withTimezone: true }).notNull().defaultNow(),
-  completedAt: timestamp("completed_at", { withTimezone: true }),
-});
+// One assignment per (deal, playbook), ever — a deal's "journey" is the set of
+// stage playbooks it has touched, each tracked by its own assignment row. The
+// auto-assign paths (subscribers/playbook-engine.ts, autoAssignPlaybookIfMissing
+// in routes/v2/config.ts) guard against re-creating an existing (deal,
+// playbook) pair; this constraint makes that an enforced DB invariant too.
+export const dealPlaybookAssignments = edcV2.table(
+  "deal_playbook_assignments",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    dealId: uuid("deal_id")
+      .notNull()
+      .references(() => enterpriseDeals.id, { onDelete: "cascade" }),
+    playbookId: uuid("playbook_id")
+      .notNull()
+      .references(() => playbooks.id),
+    currentStepId: uuid("current_step_id").references(() => playbookSteps.id),
+    status: varchar("status", { length: 20 }).notNull().default("Active"),
+    assignedAt: timestamp("assigned_at", { withTimezone: true }).notNull().defaultNow(),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+  },
+  (t) => [unique("deal_playbook_assignment_uq").on(t.dealId, t.playbookId)],
+);
 
 export const playbookStepCompletions = edcV2.table("playbook_step_completions", {
   id: uuid("id").primaryKey().defaultRandom(),

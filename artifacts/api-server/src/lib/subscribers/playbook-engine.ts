@@ -1,18 +1,14 @@
-import { and, asc, eq } from "drizzle-orm";
-import {
-  db,
-  pipelineStages,
-  playbooks,
-  playbookSteps,
-  dealPlaybookAssignments,
-} from "@workspace/db";
-import { dealEvents } from "../events";
+import { and, eq } from "drizzle-orm";
+import { db, pipelineStages, playbooks } from "@workspace/db";
+import { dealEvents, emitDealEvent } from "../events";
+import { startPlaybookForDeal } from "../playbook-signals";
 import { logger } from "../logger";
 
 /**
  * Automated Playbook Engine (V2 F11). On a stage change, if a playbook targets
- * the new stage and the deal has no active assignment, auto-assign it with the
- * pointer set to the first step.
+ * the new stage, auto-assign it — guarded per (deal, playbook), not per deal,
+ * so a deal keeps every earlier-stage assignment as it advances through its
+ * journey instead of getting stuck on whichever playbook it picked up first.
  */
 async function stageName(stageId: number): Promise<string | null> {
   const rows = await db
@@ -29,18 +25,6 @@ export function registerPlaybookEngine(): () => void {
     const name = await stageName(event.toStageId);
     if (!name) return;
 
-    const existing = await db
-      .select({ id: dealPlaybookAssignments.id })
-      .from(dealPlaybookAssignments)
-      .where(
-        and(
-          eq(dealPlaybookAssignments.dealId, event.dealId),
-          eq(dealPlaybookAssignments.status, "Active"),
-        ),
-      )
-      .limit(1);
-    if (existing.length > 0) return;
-
     const candidates = await db
       .select()
       .from(playbooks)
@@ -49,21 +33,18 @@ export function registerPlaybookEngine(): () => void {
     const playbook = candidates[0];
     if (!playbook) return;
 
-    const firstStep = await db
-      .select({ id: playbookSteps.id })
-      .from(playbookSteps)
-      .where(eq(playbookSteps.playbookId, playbook.id))
-      .orderBy(asc(playbookSteps.stepOrder))
-      .limit(1);
+    const { assignment, created } = await startPlaybookForDeal(event.dealId, playbook.id);
+    if (!created) return;
 
-    await db.insert(dealPlaybookAssignments).values({
-      dealId: event.dealId,
-      playbookId: playbook.id,
-      currentStepId: firstStep[0]?.id ?? null,
-    });
     logger.info(
       { dealId: event.dealId, playbookId: playbook.id, stage: name },
       "Playbook auto-assigned on stage change",
     );
+    emitDealEvent("playbook.assigned", {
+      dealId: event.dealId,
+      actor: event.actor,
+      assignmentId: assignment.id,
+      playbookId: playbook.id,
+    });
   });
 }

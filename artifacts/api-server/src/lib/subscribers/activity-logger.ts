@@ -35,6 +35,8 @@ function summarize(event: DealEvent): string {
       return event.action === "reopened"
         ? "Reopened a playbook step"
         : `Playbook step marked ${event.action}`;
+    case "playbook.assigned":
+      return "Playbook started";
   }
 }
 
@@ -50,6 +52,8 @@ function entityOf(event: DealEvent): { entityType: string; entityId: string | nu
       return { entityType: "health", entityId: null };
     case "playbook.step_changed":
       return { entityType: "playbook", entityId: event.stepId };
+    case "playbook.assigned":
+      return { entityType: "playbook", entityId: event.assignmentId };
     default:
       return { entityType: "deal", entityId: null };
   }
