@@ -171,7 +171,7 @@ All v2 routes require authentication.
 
 | Method | Path | Description |
 |---|---|---|
-| GET | `/api/v2/deals/{dealId}/score` | Predictive close-probability score for a deal. |
+| GET | `/api/v2/deals/{dealId}/score` | Predictive close-probability score for a deal (recomputed live). One of its 9 factors is `playbook_adherence`. |
 | POST | `/api/v2/scores/recalculate` | Recompute scores. |
 
 ### Analytics
@@ -241,9 +241,9 @@ All v2 routes require authentication.
 |---|---|---|
 | GET / POST | `/api/v2/playbooks` | List / create playbooks. |
 | PUT / DELETE | `/api/v2/playbooks/{id}` | Update / delete a playbook. |
-| GET | `/api/v2/deals/{dealId}/playbook` | The playbook assigned to a deal. |
-| POST | `/api/v2/playbook-assignments/{assignmentId}/steps/{stepId}/complete` | Complete a step. |
-| POST | `/api/v2/playbook-assignments/{assignmentId}/steps/{stepId}/skip` | Skip a step. |
+| GET | `/api/v2/deals/{dealId}/playbook` | The playbook assigned to a deal, with per-step state (completed/skipped/blocked), progress %, and overdue steps. |
+| POST | `/api/v2/playbook-assignments/{assignmentId}/steps/{stepId}/state` | Set a step's state — `{ status: completed \| skipped \| blocked, note? }`. Steps are actionable in any order. |
+| DELETE | `/api/v2/playbook-assignments/{assignmentId}/steps/{stepId}/state` | Reopen a step (undo its action). |
 
 ### Financial modeling
 
@@ -297,6 +297,7 @@ All v2 routes require authentication.
 |---|---|---|
 | POST | `/api/v2/nlc/parse` | Parse a natural-language command. |
 | GET / PUT | `/api/v2/config/targets` | Read / set pipeline targets. |
+| GET / PUT | `/api/v2/config/scoring-weights` | Read / tune predictive-score factor weights (fractions of 1.0). |
 
 ---
 

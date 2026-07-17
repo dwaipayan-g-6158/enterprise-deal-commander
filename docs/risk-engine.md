@@ -7,7 +7,7 @@ result on the server and in the browser Risk Simulator.
 
 - [Two layers of one system](#two-layers-of-one-system)
 - [Entry point](#entry-point)
-- [Layer A — the 15 named risk patterns](#layer-a--the-15-named-risk-patterns)
+- [Layer A — the 16 named risk patterns](#layer-a--the-16-named-risk-patterns)
 - [Glass-box explanations (F2)](#glass-box-explanations-f2)
 - [Dispositions & managed risk (F3)](#dispositions--managed-risk-f3)
 - [Layer B — Risk Engine v2 (7 dimensions)](#layer-b--risk-engine-v2-7-dimensions)
@@ -30,7 +30,7 @@ A firing pattern **amplifies** its corresponding dimension, and the composite le
 the deal's health color. Named RED patterns *also* independently gate stage advancement.
 
 > **Doc note:** the repo's `CLAUDE.md` describes a "12-pattern" engine — that phrasing predates
-> the current code, which defines **15** patterns (12 governance + 3 IAM/SIEM) plus Risk Engine
+> the current code, which defines **16** patterns (12 governance + 3 IAM/SIEM + 1 playbook) plus Risk Engine
 > v2. This document reflects the code.
 
 ## Entry point
@@ -46,7 +46,7 @@ opportunity recommendations. The output object includes `financials`, `technical
 `governance` (health + alerts + managed alerts), `recommendations`, and `risk` (composite +
 dimensions + drivers + recommended actions).
 
-## Layer A — the 15 named risk patterns
+## Layer A — the 16 named risk patterns
 
 Each pattern has a stable `code`, a base `severity`, a `weight` (used for ordering, ties broken
 after severity), an `evaluate` predicate, a `formatMessage`, and an `explain`. Patterns are sorted
@@ -69,8 +69,11 @@ RED-first, then by descending weight. `PATTERN_CODES` exports the full list.
 | 13 | `LOW_ATTACH_ELEPHANT` | YELLOW | 45 | Large deal with a cross-sell attach rate at/below `low_attach_rate_threshold`. |
 | 14 | `UNRESOLVED_CRITICAL_BLOCKERS` | YELLOW | 40 | One or more high-severity blockers remain unresolved. |
 | 15 | `NO_CLOSE_DATE` | YELLOW | 30 | Advanced past Discovery (and not closed) with no expected close date. |
+| 16 | `PLAYBOOK_EXECUTION_GAP` | YELLOW | 55 | A critical stage-playbook step was skipped or blocked, or a step is overdue vs its expected duration (+ `playbook_overdue_grace_days`). Advisory — amplifies Engagement Vitality + Temporal Pressure but does not gate stage advancement. |
 
-Patterns 1–3, 6–8, 11, 14–15 are the original governance set; 4/5/13 add momentum and cross-sell
+Pattern 16 (`PLAYBOOK_EXECUTION_GAP`) is the newest: it wires the `edc_v2` Playbook engine into risk
+(its inputs — skipped/blocked-critical and overdue step counts — are assembled server-side in
+`intelligence.ts` and passed to the pure engine). Patterns 1–3, 6–8, 11, 14–15 are the original governance set; 4/5/13 add momentum and cross-sell
 logic; 4/9/12 (`COMPETITIVE_DISPLACEMENT_STALL`, `POC_DEATH_MARCH`, `SIEM_UNDERSCOPED`) are the
 IAM/SIEM-specific additions.
 

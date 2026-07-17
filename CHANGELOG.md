@@ -14,12 +14,22 @@ and the project aims to follow [Semantic Versioning](https://semver.org/spec/v2.
 ## [Unreleased]
 
 ### Added
+- **Playbook Intelligence.** The Validation → Playbook tab is now a live intelligence signal (see [`docs/changes/2026-07-17-playbook-intelligence.md`](./docs/changes/2026-07-17-playbook-intelligence.md)):
+  - Robust per-step controls — **complete / skip / block / reopen**, per-step notes, and out-of-order actioning (steps are no longer a forced sequence).
+  - New **`playbook_adherence`** predictive-score factor (the 9th; the other 8 were rebalanced to keep the sum at 100), tunable from a new Settings **Score Weights** panel.
+  - New YELLOW **`PLAYBOOK_EXECUTION_GAP`** risk pattern (16th) — fires on skipped/blocked-critical or overdue steps; raises risk + governance health without blocking stage advancement.
+  - A **`playbook.step_changed`** event re-scores, snapshots, recomputes health, and logs activity; the deal cockpit (Score / Alerts / Trajectory) updates live. The trajectory gains a **Playbook %** metric.
+  - Seeded playbook catalog expanded to **5 playbooks / 26 steps** (adds Discovery/Qualification and Closed-Won onboarding playbooks).
 - **Deal Roster & Kanban.** Roster page with a Kanban board (drag-to-move stages with `409` override handling), timeline view, forecast flags, next-best-action, and score-trend arrows.
 - **Deal-revival watch** and a **product-gap register** feeding roster enrichment.
 - Single-origin hosting: the built SPA is served directly from the Express API process.
 
 ### Changed
 - Engine tuning weights (predictive scoring, portfolio risk, pipeline health, risk dimensions) are now read from configuration instead of hardcoded values.
+- Predictive score now has **9 factors** and the risk engine **16 patterns** (was 8 / 15).
+
+### Fixed
+- Playbook: a **skipped** step no longer renders the same green checkmark as a **completed** one — completed, skipped, and blocked steps are now visually distinct.
 
 ## [0.6.0] — Settings backend foundation (inferred)
 
