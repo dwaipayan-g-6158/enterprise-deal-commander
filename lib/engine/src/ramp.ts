@@ -24,6 +24,23 @@ export function yearNetRevenue(year: PricingYear): number {
   return year.productRevenue * (1 - discount / 100) + year.servicesRevenue;
 }
 
+/**
+ * Flat (V1) TCV — no per-year schedule, just a single product/services figure
+ * amortized over the contract term. Shared by `computeRampTCV`'s fallback path
+ * and by `processDealIntelligence`'s own `calculatedTCV`, so both the header
+ * TCV and any client-side preview of a would-be change (e.g. the Commercial
+ * Worksheet's "Apply to Deal" confirmation) are guaranteed to agree.
+ */
+export function calculateFlatTCV(input: FlatPricingInput): number {
+  const base = Number(input.productRevenue) || 0;
+  const services = Number(input.servicesRevenue) || 0;
+  const term = Number(input.contractTermYears) || 1;
+  if (input.pricingModel === "Multi-Year Committed") {
+    return base * term + services;
+  }
+  return base + services;
+}
+
 export function computeRampTCV(
   schedule: PricingYear[],
   fallback: FlatPricingInput,
@@ -31,11 +48,5 @@ export function computeRampTCV(
   if (schedule.length > 0) {
     return schedule.reduce((sum, y) => sum + yearNetRevenue(y), 0);
   }
-  const base = Number(fallback.productRevenue) || 0;
-  const services = Number(fallback.servicesRevenue) || 0;
-  const term = Number(fallback.contractTermYears) || 1;
-  if (fallback.pricingModel === "Multi-Year Committed") {
-    return base * term + services;
-  }
-  return base + services;
+  return calculateFlatTCV(fallback);
 }
