@@ -53,7 +53,7 @@ export function NarrativeTab({ memory: m }: { memory: MemoryDetail }) {
       });
       toast({ title: "Saved" });
     } catch {
-      toast({ title: "Could not save", variant: "destructive" });
+      toast({ title: "Could not save", description: "Your narrative and lessons couldn't be saved. Give it another try.", variant: "destructive" });
     }
   };
 

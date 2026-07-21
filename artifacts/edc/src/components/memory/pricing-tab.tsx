@@ -73,7 +73,7 @@ export function PricingTab() {
           </div>
 
           {!bench || bench.sampleSize === 0 ? (
-            <p className="text-sm text-muted-foreground">No archived deals match these filters.</p>
+            <p className="text-sm text-muted-foreground">Nothing matched those filters. Try adjusting them.</p>
           ) : (
             <>
               <p className="text-xs text-muted-foreground">Sample size: {bench.sampleSize} archived deal{bench.sampleSize === 1 ? "" : "s"}</p>
