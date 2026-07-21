@@ -17,8 +17,8 @@ export {
   ListDealSnapshotsParams,
 } from "./generated/api";
 
-// Same TS2308 ambiguity, but for request-body schemas: Orval emits a zod
-// request-body schema in generated/api.ts AND a TS interface of the same
-// name in generated/types/ for these two operations' bodies. Re-export the
-// zod (runtime) version as authoritative, same pattern as above.
+// Same TS2308 ambiguity, but for component schemas — request bodies or
+// response payloads — that Orval also emits as a same-named TS interface
+// in generated/types/. Re-export the zod (runtime) version as authoritative,
+// same pattern as above.
 export { RollbackSettingsChangeBody, ImportSettingsConfigBody, DashboardVisitResponse } from "./generated/api";

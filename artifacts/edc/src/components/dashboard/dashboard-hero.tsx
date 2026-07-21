@@ -74,7 +74,10 @@ export function DashboardHero() {
   });
   const closeThisWeekValueRaw = closingThisWeek.reduce((sum, d) => sum + tcv(d), 0);
   const activeValidationValueRaw = validationDeals.reduce((sum, d) => sum + tcv(d), 0);
-  const recentPhaseAdvanceCount = recentActivity.filter((e) => e.eventType === "stage_changed").length;
+  const recentPhaseAdvanceCount = recentActivity.filter((e) => e.eventType === "deal.stage_changed").length;
+  // Proxy for "exactly one step remaining": the highest-TCV deal currently in the
+  // Procurement stage (the last stage before Closed-Won/Lost). Not a literal
+  // gate-count check — a Procurement deal can still have redlines open.
   const oneStepDeal = [...procurementDeals].sort((a, b) => tcv(b) - tcv(a))[0];
 
   const name = me?.displayName;
