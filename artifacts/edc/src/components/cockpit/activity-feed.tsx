@@ -16,7 +16,7 @@ export function ActivityFeed({ dealId }: { dealId: string }) {
         </CardHeader>
         <CardContent>
           {changeList.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No changes recorded.</p>
+            <p className="text-sm text-muted-foreground">No changes recorded yet. This deal's been steady.</p>
           ) : (
             <ul className="space-y-3">
               {changeList.map((c, idx) => (
@@ -38,7 +38,7 @@ export function ActivityFeed({ dealId }: { dealId: string }) {
         </CardHeader>
         <CardContent>
           {auditList.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No audit entries.</p>
+            <p className="text-sm text-muted-foreground">No audit entries yet. Clean record so far.</p>
           ) : (
             <ul className="space-y-3">
               {auditList.map((a) => (

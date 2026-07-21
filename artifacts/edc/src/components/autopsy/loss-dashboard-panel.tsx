@@ -114,7 +114,7 @@ export function LossDashboardPanel() {
         </CardHeader>
         <CardContent className="space-y-3">
           {data.compositionByCategory.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No losses recorded yet.</p>
+            <p className="text-sm text-muted-foreground">No losses recorded yet. That's a healthy pipeline.</p>
           ) : (
             data.compositionByCategory.map((c) => (
               <div key={c.category}>

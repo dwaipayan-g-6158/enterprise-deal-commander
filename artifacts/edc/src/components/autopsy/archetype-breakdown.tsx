@@ -45,7 +45,7 @@ export function ArchetypeBreakdown() {
         <div className="p-8 text-center text-muted-foreground">Analyzing losses...</div>
       ) : !data || data.byArchetype.length === 0 ? (
         <Card>
-          <CardContent className="p-8 text-center text-muted-foreground">No autopsy data available.</CardContent>
+          <CardContent className="p-8 text-center text-muted-foreground">No autopsy data yet. All quiet on this front.</CardContent>
         </Card>
       ) : (
         <div className="grid gap-6">

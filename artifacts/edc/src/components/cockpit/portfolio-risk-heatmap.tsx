@@ -38,7 +38,7 @@ const cellKey = (person: string, product: string) => `${person}${SEP}${product}`
 /** Drill-down deal list (kept local to avoid coupling to ProductMixSection). */
 function DealList({ deals, currency }: { deals: ProductMixDeal[]; currency: string }) {
   if (deals.length === 0) {
-    return <p className="px-3 py-2 text-xs text-muted-foreground">No deals.</p>;
+    return <p className="px-3 py-2 text-xs text-muted-foreground">Clear — no deals at this intersection.</p>;
   }
   return (
     <ul className="divide-y divide-border">

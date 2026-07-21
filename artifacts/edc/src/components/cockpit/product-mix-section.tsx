@@ -42,7 +42,7 @@ function compactUSD(n: number): string {
 function DealList({ deals }: { deals: ProductMixDeal[] }) {
   if (deals.length === 0) {
     return (
-      <p className="px-3 py-2 text-xs text-muted-foreground">No deals.</p>
+      <p className="px-3 py-2 text-xs text-muted-foreground">Nothing here yet.</p>
     );
   }
   return (
@@ -83,7 +83,7 @@ export function ProductMixSection() {
     return (
       <Card className="xl:col-span-2">
         <CardContent className="p-6 text-sm text-muted-foreground">
-          {isLoading ? "Loading product mix…" : "No product-mix data."}
+          {isLoading ? "Loading product mix…" : "Product mix will appear here once deals are active."}
         </CardContent>
       </Card>
     );
@@ -110,7 +110,7 @@ export function ProductMixSection() {
         </CardHeader>
         <CardContent className="space-y-1.5">
           {mix.pipelineBySuite.length === 0 && (
-            <p className="text-sm text-muted-foreground">No suite activity yet.</p>
+            <p className="text-sm text-muted-foreground">No suite activity yet. Add a deal to get things moving.</p>
           )}
           {mix.pipelineBySuite.map((s) => {
             const accent = accentFor(s.suite);
