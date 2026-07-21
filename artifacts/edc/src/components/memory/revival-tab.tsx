@@ -24,7 +24,7 @@ export function RevivalTab() {
   }
 
   if (isError) {
-    return <p className="text-sm text-muted-foreground">Could not load revival candidates.</p>;
+    return <p className="text-sm text-muted-foreground">Something went wrong loading revival candidates. Try refreshing the page.</p>;
   }
 
   if (candidates.length === 0) {

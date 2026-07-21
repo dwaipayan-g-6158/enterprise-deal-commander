@@ -141,7 +141,7 @@ export function BlockersPanel({ dealId }: { dealId: string }) {
         <Card>
           <CardContent className="p-8 text-center text-muted-foreground flex flex-col items-center">
             <CheckCircle className="w-8 h-8 text-emerald-500 mb-2" />
-            <p>No blockers logged.</p>
+            <p>All clear — no blockers logged.</p>
           </CardContent>
         </Card>
       ) : (

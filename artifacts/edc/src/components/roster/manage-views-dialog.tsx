@@ -31,7 +31,7 @@ export function ManageViewsDialog({
           <DialogDescription>Rename or delete your custom views. Built-in views can't be changed.</DialogDescription>
         </DialogHeader>
         {views.length === 0 ? (
-          <p className="text-sm text-muted-foreground py-4 text-center">No custom views yet.</p>
+          <p className="text-sm text-muted-foreground py-4 text-center">No custom views yet. Save one and it'll show up here.</p>
         ) : (
           <div className="space-y-2 max-h-80 overflow-y-auto">
             {views.map((v) => (

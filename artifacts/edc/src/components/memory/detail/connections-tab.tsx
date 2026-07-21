@@ -49,7 +49,7 @@ export function ConnectionsTab({ memory: m }: { memory: MemoryDetail }) {
               </p>
             ))
           ) : (
-            <p className="text-sm text-muted-foreground">No playbook was assigned to this deal.</p>
+            <p className="text-sm text-muted-foreground">This deal ran without a playbook.</p>
           )}
         </CardContent>
       </Card>
@@ -57,7 +57,7 @@ export function ConnectionsTab({ memory: m }: { memory: MemoryDetail }) {
       <Card>
         <CardHeader><CardTitle className="text-lg">Similar Archived Deals</CardTitle></CardHeader>
         <CardContent className="space-y-2">
-          {similar.length === 0 && <p className="text-sm text-muted-foreground">No similar deals found.</p>}
+          {similar.length === 0 && <p className="text-sm text-muted-foreground">Nothing similar in the archive yet.</p>}
           {similar.map((s) => (
             <div key={s.id} className="flex items-center justify-between text-sm">
               <Link href={`/memory/${s.id}`} className="hover:underline">{s.dealName} · {s.accountName}</Link>

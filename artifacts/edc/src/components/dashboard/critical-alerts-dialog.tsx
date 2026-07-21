@@ -100,7 +100,7 @@ export function CriticalAlertsDialog({
         <div className="max-h-[60vh] space-y-3 overflow-y-auto pr-1">
           {alerts.length === 0 ? (
             <p className="py-8 text-center text-sm text-muted-foreground">
-              No critical alerts currently active.
+              Nothing critical right now. Enjoy the calm.
             </p>
           ) : (
             alerts.map((item, i) => (

@@ -76,7 +76,7 @@ export function StakeholdersPanel({ dealId }: { dealId: string }) {
       setForm({ ...form, name: "", title: "" });
       toast({ title: "Stakeholder added" });
     } catch {
-      toast({ title: "Failed to add", variant: "destructive" });
+      toast({ title: "Couldn't add the stakeholder", description: "Give it another try.", variant: "destructive" });
     }
   };
 

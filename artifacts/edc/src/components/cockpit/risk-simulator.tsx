@@ -338,7 +338,7 @@ export function RiskSimulator({
                 Simulated posture ({result.governance.alerts.length})
               </p>
               {result.governance.alerts.length === 0 ? (
-                <p className="text-sm text-emerald-500">No active risk patterns.</p>
+                <p className="text-sm text-emerald-500">All clear in this simulation.</p>
               ) : (
                 result.governance.alerts.map((a) => (
                   <div key={a.code} className="flex items-start gap-2 text-sm">

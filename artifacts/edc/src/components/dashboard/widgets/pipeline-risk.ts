@@ -86,7 +86,7 @@ export function buildInsight(
   avgScore: number | null,
 ): string {
   const total = ALL_LEVELS.reduce((s, l) => s + buckets[l].count, 0);
-  if (total === 0) return "No scored deals in the active pipeline.";
+  if (total === 0) return "Nothing scored in the active pipeline yet.";
 
   // Find the top high-end bucket (HIGH first, then ELEVATED)
   const highCount = buckets.HIGH.count + buckets.ELEVATED.count;

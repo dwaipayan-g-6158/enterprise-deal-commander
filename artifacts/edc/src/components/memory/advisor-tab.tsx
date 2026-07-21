@@ -20,7 +20,7 @@ const CONFIDENCE_LABEL: Record<AdvisorAnswer["confidence"], string> = {
   high: "High confidence",
   medium: "Medium confidence",
   low: "Low confidence",
-  none: "No data",
+  none: "Nothing found",
 };
 
 const CONFIDENCE_CLASS: Record<AdvisorAnswer["confidence"], string> = {

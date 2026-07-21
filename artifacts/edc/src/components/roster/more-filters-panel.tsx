@@ -72,7 +72,7 @@ function CheckboxList({
     else next.add(value);
     onChange([...next]);
   };
-  if (options.length === 0) return <p className="text-xs text-muted-foreground">No options.</p>;
+  if (options.length === 0) return <p className="text-xs text-muted-foreground">Nothing to filter by yet.</p>;
   return (
     <ScrollArea className="h-28 rounded-md border">
       <div className="p-2 space-y-1.5">

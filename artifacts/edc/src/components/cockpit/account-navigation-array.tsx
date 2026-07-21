@@ -157,7 +157,7 @@ export function AccountNavigationArray({ activeDealId, expandedGroup, onExpandGr
                 {openCount > 0 ? (
                   groups.open.map((deal, i) => renderCard(deal, i))
                 ) : (
-                  <span className="px-3 text-sm text-muted-foreground">No open deals</span>
+                  <span className="px-3 text-sm text-muted-foreground">Nothing open right now</span>
                 )}
               </motion.div>
             ) : (
@@ -187,7 +187,7 @@ export function AccountNavigationArray({ activeDealId, expandedGroup, onExpandGr
                 className="flex items-center gap-1"
               >
                 {closedCount === 0 ? (
-                  <span className="px-3 text-sm text-muted-foreground">No closed deals yet</span>
+                  <span className="px-3 text-sm text-muted-foreground">Nothing closed yet — early days</span>
                 ) : (
                   <ClosedClusters
                     won={groups.won}

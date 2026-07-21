@@ -24,7 +24,7 @@ export function ProductGapsPanel() {
     );
   }
   if (isError) {
-    return <p className="text-sm text-muted-foreground">Could not load product gaps.</p>;
+    return <p className="text-sm text-muted-foreground">Could not load product gaps. Try refreshing the page.</p>;
   }
   if (clusters.length === 0) {
     return (

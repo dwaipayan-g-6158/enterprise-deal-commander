@@ -88,7 +88,7 @@ export function PortfolioSummaryCards({ summary }: { summary: PortfolioSummary }
               {cluster.code} · ×{cluster.lift.toFixed(1)} lift · {(cluster.share * 100).toFixed(0)}% of deals
             </span>
           ) : (
-            "No pattern concentrates above threshold"
+            "No dominant cluster — risk is well spread"
           )
         }
       />

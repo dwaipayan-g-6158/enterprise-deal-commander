@@ -57,7 +57,7 @@ export function AnalyticsOverview() {
         <div>
           <h1 className="text-3xl font-bold">Pipeline Analytics</h1>
           <p className="text-muted-foreground">
-            {pipe ? `${money(pipe.totalTcv)} across ${pipe.activeDeals} active deals` : "Loading..."}
+            {pipe ? `${money(pipe.totalTcv)} across ${pipe.activeDeals} active deals` : "Crunching the pipeline…"}
           </p>
         </div>
         <div className="flex gap-2">

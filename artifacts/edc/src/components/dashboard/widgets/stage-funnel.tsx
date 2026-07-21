@@ -47,7 +47,7 @@ export function StageFunnel({ reportingCurrency, onSelectStage }: Props) {
       </CardHeader>
       <CardContent className="space-y-3">
         {stages.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No active deals.</p>
+          <p className="text-sm text-muted-foreground">Your pipeline's empty. Add a deal and the stages fill in.</p>
         ) : (
           <>
             <div className="space-y-2.5">

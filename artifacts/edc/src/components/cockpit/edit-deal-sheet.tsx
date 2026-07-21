@@ -345,7 +345,7 @@ export function EditDealSheet({
                 value={watch("account_manager") || ""}
                 onChange={(v) => setValue("account_manager", v, { shouldDirty: true })}
                 placeholder="Select account manager"
-                emptyText="No team members found."
+                emptyText="No matching teammates."
               />
             </div>
             <div className="grid gap-2">
@@ -355,7 +355,7 @@ export function EditDealSheet({
                 value={watch("technical_lead") || ""}
                 onChange={(v) => setValue("technical_lead", v, { shouldDirty: true })}
                 placeholder="Select technical lead"
-                emptyText="No team members found."
+                emptyText="No matching teammates."
               />
             </div>
           </div>
@@ -478,7 +478,7 @@ export function EditDealSheet({
                 value={driverIds.map(String)}
                 onChange={(vals) => setDriverIds(vals.map(Number))}
                 placeholder="Select drivers"
-                emptyText="No compliance drivers found."
+                emptyText="No matching compliance drivers."
                 onCreate={handleCreateDriver}
               />
             </div>
@@ -492,7 +492,7 @@ export function EditDealSheet({
                 value={watch("competitor_id") ? String(watch("competitor_id")) : ""}
                 onChange={(v) => setValue("competitor_id", v ? Number(v) : "", { shouldDirty: true })}
                 placeholder="None"
-                emptyText="No competitors found."
+                emptyText="No matching competitors."
                 onCreate={handleCreateCompetitor}
               />
             </div>

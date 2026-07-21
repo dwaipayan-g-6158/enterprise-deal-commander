@@ -379,7 +379,7 @@ function AgendaManager({
             <div className="space-y-1 pr-2">
               {candidates.length === 0 ? (
                 <p className="px-2 py-3 text-xs text-muted-foreground text-center">
-                  {search.trim() ? "No matching deals." : "All deals are in the agenda."}
+                  {search.trim() ? "Nothing matched that search. Try a different name." : "All deals are in the agenda."}
                 </p>
               ) : (
                 candidates.map((d) => (
@@ -584,7 +584,7 @@ function BriefingDealContent({ deal, intel }: { deal: Deal; intel: Intelligence 
           {alerts.length === 0 ? (
             <div className="flex items-center gap-2 text-emerald-500">
               <CheckCircle className="h-5 w-5" />
-              <span className="text-lg">No active risk patterns.</span>
+              <span className="text-lg">All clear — nothing to flag for this deal.</span>
             </div>
           ) : (
             <div className="space-y-3">

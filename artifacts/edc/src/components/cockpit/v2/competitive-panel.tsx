@@ -124,7 +124,7 @@ export function CompetitivePanel({
           onChange={addCompetitor}
           onCreate={handleCreateCompetitor}
           placeholder="Add competitor..."
-          emptyText="No competitors found."
+          emptyText="No matching competitors."
           disabled={add.isPending}
         />
       </CardContent>

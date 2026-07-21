@@ -68,7 +68,7 @@ export function CloseTimeline({ reportingCurrency }: { reportingCurrency: string
       </CardHeader>
       <CardContent>
         {months.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No deals with a close date set.</p>
+          <p className="text-sm text-muted-foreground">Nothing on the calendar yet.</p>
         ) : (
           <>
             <div className="overflow-x-auto pb-1">

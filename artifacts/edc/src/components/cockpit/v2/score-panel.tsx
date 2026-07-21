@@ -28,7 +28,7 @@ export function ScorePanel({ dealId }: { dealId: string }) {
   const score = data?.data;
 
   if (isLoading) return <Skeleton className="h-64 w-full" />;
-  if (!score) return <p className="text-muted-foreground">No score available.</p>;
+  if (!score) return <p className="text-muted-foreground">No score yet — check back once there's more deal data to work with.</p>;
 
   const breakdown = (score.breakdown ?? []) as unknown as Factor[];
   const sorted = [...breakdown].sort((a, b) => b.contribution - a.contribution);
@@ -92,7 +92,7 @@ export function ScorePanel({ dealId }: { dealId: string }) {
 
             {sorted.length === 0 ? (
               <p className="text-sm text-muted-foreground py-2">
-                No contributing factors.
+                No contributing factors yet.
               </p>
             ) : (
               <>

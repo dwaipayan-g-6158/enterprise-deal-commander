@@ -271,7 +271,7 @@ export function RiskGovernance({ dealId, alerts, managedAlerts = [], risk }: { d
       <Card>
         <CardContent className="p-8 text-center text-muted-foreground flex flex-col items-center">
           <CheckCircle className="w-8 h-8 text-emerald-500 mb-2" />
-          <p>No active risk patterns detected.</p>
+          <p>Nothing critical right now. Enjoy the calm.</p>
         </CardContent>
       </Card>
     );
@@ -280,7 +280,7 @@ export function RiskGovernance({ dealId, alerts, managedAlerts = [], risk }: { d
     <div className="space-y-4">
       {risk ? <RiskScoreCard risk={risk} /> : null}
       {alerts.length === 0 ? (
-        <p className="text-sm text-muted-foreground">No active risk patterns.</p>
+        <p className="text-sm text-muted-foreground">All clear — nothing to flag.</p>
       ) : (
         alerts.map((alert) => (
           <AlertCard key={alert.code} dealId={dealId} alert={alert} />

@@ -54,7 +54,7 @@ function ProtectedRoute({ component: Component, ...rest }: any) {
   }, [offline, isLoading, isError, user, setLocation]);
 
   if (!offline) {
-    if (isLoading) return <div className="min-h-screen flex items-center justify-center bg-background">Loading...</div>;
+    if (isLoading) return <div className="min-h-screen flex items-center justify-center bg-background">Warming up…</div>;
     if (isError || !user) return null;
   }
 

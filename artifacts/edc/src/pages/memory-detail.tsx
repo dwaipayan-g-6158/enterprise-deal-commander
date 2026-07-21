@@ -34,7 +34,7 @@ export default function MemoryDetail() {
       </div>
     );
   }
-  if (!m) return <div className="p-8 text-destructive">Memory record not found</div>;
+  if (!m) return <div className="p-8 text-destructive">We couldn't find that deal record. Head back to Deal Memory and try another one.</div>;
 
   return (
     <div className="p-8 max-w-[1200px] mx-auto space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">

@@ -93,7 +93,7 @@ export function PreviewContent({
         {isLoading ? (
           <Skeleton className="h-16 w-full" />
         ) : alerts.length === 0 ? (
-          <p className="text-xs text-muted-foreground">No active risk alerts.</p>
+          <p className="text-xs text-muted-foreground">No risk flags on this deal. Looking healthy.</p>
         ) : (
           <ul className="space-y-1.5">
             {alerts.slice(0, variant === "panel" ? 5 : 3).map((a) => (

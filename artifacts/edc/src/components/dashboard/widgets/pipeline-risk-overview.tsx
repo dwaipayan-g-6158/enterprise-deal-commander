@@ -65,7 +65,7 @@ export function PipelineRiskOverview({ reportingCurrency }: Props) {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <p className="text-sm text-muted-foreground">Unable to load risk data.</p>
+          <p className="text-sm text-muted-foreground">Risk data didn't load. Try refreshing the page.</p>
         </CardContent>
       </Card>
     );
@@ -82,7 +82,7 @@ export function PipelineRiskOverview({ reportingCurrency }: Props) {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <p className="text-sm text-muted-foreground">No active deals to assess.</p>
+          <p className="text-sm text-muted-foreground">Nothing to assess yet.</p>
         </CardContent>
       </Card>
     );
@@ -92,7 +92,7 @@ export function PipelineRiskOverview({ reportingCurrency }: Props) {
   const avgLevel = avgScore != null ? classifyRisk(avgScore) : null;
   const avgText = avgScore != null ? Math.round(avgScore).toString() : "—";
   const avgColor = avgLevel ? RISK_LEVEL_CLASS[avgLevel].text : "text-muted-foreground";
-  const avgLabel = avgLevel ? RISK_LEVEL_LABEL[avgLevel] : "No data";
+  const avgLabel = avgLevel ? RISK_LEVEL_LABEL[avgLevel] : "Not scored";
 
   const maxCount = Math.max(1, ...LEVEL_ORDER.map((l) => buckets[l].count));
 

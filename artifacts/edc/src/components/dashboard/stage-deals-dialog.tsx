@@ -72,7 +72,7 @@ export function StageDealsDialog({
             </div>
           ) : deals.length === 0 ? (
             <p className="py-8 text-center text-sm text-muted-foreground">
-              No active deals in this stage.
+              Nothing in this stage right now.
             </p>
           ) : (
             <ul className="divide-y">
