@@ -8,4 +8,7 @@ export const commanders = pgTable("commanders", {
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
+  lastDashboardVisitAt: timestamp("last_dashboard_visit_at", {
+    withTimezone: true,
+  }),
 });
