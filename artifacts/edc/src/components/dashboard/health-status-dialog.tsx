@@ -117,7 +117,7 @@ export function HealthStatusDialog({
             </div>
           ) : deals.length === 0 ? (
             <p className="py-8 text-center text-sm text-muted-foreground">
-              No {HEALTH_META[selected].label.toLowerCase()} deals.
+              Nothing in the {HEALTH_META[selected].label.toLowerCase()} bucket right now.
             </p>
           ) : (
             <ul className="divide-y">

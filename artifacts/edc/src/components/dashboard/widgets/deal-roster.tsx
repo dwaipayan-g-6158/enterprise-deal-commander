@@ -57,7 +57,7 @@ export function DealRoster({ reportingCurrency }: { reportingCurrency: string })
         {isLoading ? (
           <Skeleton className="h-56 w-full" />
         ) : deals.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No active deals.</p>
+          <p className="text-sm text-muted-foreground">Nothing on the roster right now.</p>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">

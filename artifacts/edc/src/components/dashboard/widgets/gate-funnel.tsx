@@ -40,7 +40,7 @@ export function GateFunnel() {
         {isLoading ? (
           <Skeleton className="h-48 w-full" />
         ) : gates.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No gate data across active deals yet.</p>
+          <p className="text-sm text-muted-foreground">Nothing logged across the gates yet.</p>
         ) : (
           <>
             <div className="space-y-2">
