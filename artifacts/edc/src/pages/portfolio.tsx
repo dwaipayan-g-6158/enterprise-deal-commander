@@ -11,11 +11,11 @@ export default function Portfolio() {
   const { data: response, isLoading } = useGetPortfolioAnalysis();
   const data = response?.data;
 
-  if (isLoading) return <div className="p-8">Loading analysis...</div>;
-  if (!data) return <div className="p-8">No analysis available.</div>;
+  if (isLoading) return <div className="p-8">Correlating risk patterns…</div>;
+  if (!data) return <div className="p-8">No portfolio analysis to show yet.</div>;
 
   const renderCorrelations = (correlations: any[]) => {
-    if (!correlations || correlations.length === 0) return <span className="text-muted-foreground text-xs">No significant correlations</span>;
+    if (!correlations || correlations.length === 0) return <span className="text-muted-foreground text-xs">Nothing stands out</span>;
     return (
       <div className="flex flex-wrap gap-2">
         {correlations.map(corr => (

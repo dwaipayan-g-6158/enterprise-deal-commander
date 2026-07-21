@@ -97,7 +97,7 @@ export function ScoringWeightsSettings() {
         </div>
 
         {rows.length === 0 && (
-          <p className="text-sm text-muted-foreground">No scoring weights configured.</p>
+          <p className="text-sm text-muted-foreground">Nothing to tune yet — scoring factors will show up here once they're configured.</p>
         )}
 
         {rows.map((r) => (
