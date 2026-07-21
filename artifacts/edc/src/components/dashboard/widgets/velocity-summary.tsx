@@ -50,7 +50,7 @@ export function VelocitySummary() {
         {isLoading ? (
           <Skeleton className="h-40 w-full" />
         ) : deals.length === 0 ? (
-          <p className="text-sm text-muted-foreground">Nothing to measure yet.</p>
+          <p className="text-sm text-muted-foreground">No deals to clock yet — velocity shows once you're moving.</p>
         ) : (
           <table className="w-full text-sm">
             <tbody>

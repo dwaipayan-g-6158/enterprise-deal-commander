@@ -273,7 +273,7 @@ export default function Deals() {
       ? "No closed deals yet. Your first win will show up here."
       : filters.state === "active"
         ? "Your active pipeline is empty. Time to find the next opportunity."
-        : `No ${filters.state} deals yet. Everything's still in the active pipeline.`;
+        : `No ${filters.state} deals yet.`;
 
   return (
     <div

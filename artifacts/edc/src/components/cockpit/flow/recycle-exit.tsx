@@ -69,7 +69,7 @@ export function RecycleExit() {
   if (query.isError) {
     return (
       <div className="bg-card border border-border rounded-lg p-6 text-sm text-destructive">
-        We couldn't load recycle and exit data. Nothing else on this page is affected.
+        We couldn't load recycle and exit data.
       </div>
     );
   }

@@ -25,7 +25,7 @@ export function ConversionMatrix() {
   if (query.isError) {
     return (
       <div className="bg-card border border-border rounded-lg p-6 text-sm text-destructive">
-        We couldn't load the conversion matrix. Nothing else on this page is affected.
+        We couldn't load the conversion matrix.
       </div>
     );
   }

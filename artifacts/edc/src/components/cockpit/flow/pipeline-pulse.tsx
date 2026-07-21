@@ -16,7 +16,7 @@ export function PipelinePulse() {
   const query = useFlowHealthScore();
   const data = query.data?.data as HealthScoreData | undefined;
 
-  if (query.isError) return <div className="bg-card border border-border rounded-lg p-6 text-sm text-destructive">We couldn't load pipeline health. Nothing else on this page is affected.</div>;
+  if (query.isError) return <div className="bg-card border border-border rounded-lg p-6 text-sm text-destructive">We couldn't load pipeline health.</div>;
 
   if (query.isLoading || !data) {
     return <div className="bg-card border border-border rounded-lg p-6 h-64 animate-pulse" />;

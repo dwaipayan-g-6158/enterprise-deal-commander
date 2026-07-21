@@ -110,7 +110,7 @@ export function HistoryPanel({ dealId }: { dealId: string }) {
           <CardContent>
             {events.length === 0 ? (
               <p className="text-sm text-muted-foreground">
-                It's quiet here. No activity recorded yet.
+                It's quiet here. Activity will show up as this deal moves.
               </p>
             ) : (
               <ul className="space-y-3">

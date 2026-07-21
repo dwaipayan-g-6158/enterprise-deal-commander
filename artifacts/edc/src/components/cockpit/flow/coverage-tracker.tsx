@@ -24,7 +24,7 @@ export function CoverageTracker() {
   const query = useFlowCoverage();
   const data = query.data?.data as CoverageData | undefined;
 
-  if (query.isError) return <div className="text-sm text-destructive">We couldn't load coverage data. Nothing else on this page is affected.</div>;
+  if (query.isError) return <div className="text-sm text-destructive">We couldn't load coverage data.</div>;
 
   if (query.isLoading) {
     return (
