@@ -238,7 +238,7 @@ export default function DealCockpit() {
     return shell(
       <div className="p-8 max-w-md mx-auto mt-16 flex flex-col items-center gap-4 text-center">
         <AlertCircle className="h-10 w-10 text-destructive" />
-        <p className="text-muted-foreground">Could not load this deal.</p>
+        <p className="text-muted-foreground">This deal didn't load.</p>
         <Button
           variant="outline"
           onClick={() => {

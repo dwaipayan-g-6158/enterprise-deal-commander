@@ -828,7 +828,7 @@ export function DealTrajectory({ dealId }: { dealId: string }) {
     headline = <Skeleton className="h-[22px] w-64 max-w-full" />;
   } else if (isError) {
     headline = (
-      <span className="text-muted-foreground">Could not load deal trajectory.</span>
+      <span className="text-muted-foreground">This deal's trajectory didn't load.</span>
     );
   } else if (isSparse) {
     headline = "Awaiting history — not enough snapshots to chart a trend yet.";

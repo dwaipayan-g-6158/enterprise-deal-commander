@@ -139,7 +139,7 @@ export function SnapshotViewer({
         ) : isError || !snapshot ? (
           <div className="flex flex-col items-center gap-3 py-12 text-center">
             <AlertCircle className="h-8 w-8 text-destructive" />
-            <p className="text-muted-foreground">Could not load this snapshot.</p>
+            <p className="text-muted-foreground">This snapshot didn't load.</p>
           </div>
         ) : (
           <ScrollArea className="flex-1 -mx-6 px-6">
@@ -221,7 +221,7 @@ export function SnapshotViewer({
                 </div>
                 {gates.length === 0 ? (
                   <p className="text-sm text-muted-foreground">
-                    No gates captured in this snapshot.
+                    No gates were tracked at this point in time.
                   </p>
                 ) : (
                   <div className="grid sm:grid-cols-2 gap-x-6 gap-y-1 rounded-lg border p-4">
@@ -257,7 +257,7 @@ export function SnapshotViewer({
                 </div>
                 {alerts.length === 0 ? (
                   <p className="text-sm text-muted-foreground">
-                    No active risk alerts at this point in time.
+                    All clear at this point in time.
                   </p>
                 ) : (
                   <div className="flex flex-wrap gap-2">
