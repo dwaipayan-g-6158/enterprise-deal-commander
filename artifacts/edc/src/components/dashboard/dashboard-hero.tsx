@@ -8,14 +8,13 @@ import {
   getListPortfolioActivityQueryKey,
   useGetNextActions,
 } from "@workspace/api-client-react";
-import { compactCurrency, relativeTime } from "@/components/dashboard/widgets/_shared";
+import { compactCurrency } from "@/components/dashboard/widgets/_shared";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getTimeBand } from "@/lib/greetings/time-bands";
 import { selectGreeting, type GreetingContext, type GreetingPool } from "@/lib/greetings/select-greeting";
 import GREETING_POOL from "@/lib/greetings/greeting-pool.json";
 import { readShownHistory, recordShown } from "@/lib/greetings/shown-history";
 import { defaultStore } from "@/lib/storage";
-import { readRecentDeals } from "@/lib/recent-deals";
 
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
 const SEVEN_DAYS_MS = 7 * ONE_DAY_MS;
@@ -135,7 +134,6 @@ export function DashboardHero() {
     headline = h;
     subline = rest.join(" ");
   }
-  const recentDeals = readRecentDeals(defaultStore);
   const mostRecentDealId = welcomeBackActivity[0]?.dealId;
 
   return (
@@ -171,23 +169,6 @@ export function DashboardHero() {
               Continue where you left off →
             </button>
           )}
-        </div>
-      )}
-
-      {recentDeals.length > 0 && (
-        <div className="flex gap-3 overflow-x-auto pb-1">
-          {recentDeals.map((d) => (
-            <button
-              key={d.dealId}
-              type="button"
-              onClick={() => navigate(`/deals/${d.dealId}`)}
-              className="shrink-0 min-w-[220px] rounded-lg border bg-card p-3 text-left transition-colors hover:border-primary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            >
-              <p className="text-sm font-medium truncate">{d.dealName}</p>
-              <p className="text-xs text-muted-foreground">{d.stageName}</p>
-              <p className="text-xs text-muted-foreground">{relativeTime(d.visitedAt)}</p>
-            </button>
-          ))}
         </div>
       )}
     </div>

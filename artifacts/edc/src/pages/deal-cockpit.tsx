@@ -62,8 +62,6 @@ import {
   type RiskLevel,
 } from "@/components/cockpit/risk/risk-model";
 import { cn } from "@/lib/utils";
-import { recordDealVisit } from "@/lib/recent-deals";
-import { defaultStore } from "@/lib/storage";
 
 function CockpitSkeleton() {
   return (
@@ -126,25 +124,6 @@ export default function DealCockpit() {
   // the override resets whenever the active deal changes.
   const [manualExpanded, setManualExpanded] = useState<StripGroupId | null>(null);
   useEffect(() => setManualExpanded(null), [id]);
-
-  // Records this visit for the dashboard's "Continue Working" list. Guarded
-  // by ref (not just the dep array) so a background refetch of deal/intel
-  // data doesn't keep bumping visitedAt back to "just now" indefinitely.
-  const recentDealsTouchedRef = useRef<string | null>(null);
-  useEffect(() => {
-    if (!dealResponse?.data || !intelligenceResponse?.data) return;
-    if (recentDealsTouchedRef.current === id) return;
-    recentDealsTouchedRef.current = id;
-    recordDealVisit(
-      defaultStore,
-      {
-        dealId: id,
-        dealName: dealResponse.data.dealName,
-        stageName: intelligenceResponse.data.salesStage,
-      },
-      new Date(),
-    );
-  }, [id, dealResponse?.data, intelligenceResponse?.data]);
 
   const groups = useMemo(() => groupDeals(allDeals?.data ?? []), [allDeals]);
   const expandedGroup: StripGroupId = manualExpanded ?? groupForDeal(groups, id) ?? "open";
