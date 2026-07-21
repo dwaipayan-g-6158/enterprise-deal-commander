@@ -22,7 +22,7 @@ const SEVEN_DAYS_MS = 7 * ONE_DAY_MS;
 
 export function DashboardHero() {
   const [, navigate] = useLocation();
-  const { data: me } = useGetMe();
+  const { data: me, isLoading: isLoadingMe } = useGetMe();
   const dashboardVisit = useDashboardVisit();
   const touched = useRef(false);
   const [previousVisitAt, setPreviousVisitAt] = useState<string | null | undefined>(undefined);
@@ -42,7 +42,7 @@ export function DashboardHero() {
   // millisecond precision would mint a brand-new query key every render and
   // trigger a continuous refetch loop against /api/v2/activity.
   const [since24h] = useState(() => new Date(Date.now() - ONE_DAY_MS).toISOString());
-  const { data: recentActivityWrapper } = useListPortfolioActivity({
+  const { data: recentActivityWrapper, isLoading: isLoadingRecentActivity } = useListPortfolioActivity({
     since: since24h,
     limit: 50,
   });
@@ -55,10 +55,10 @@ export function DashboardHero() {
   });
   const welcomeBackActivity = welcomeBackWrapper?.data ?? [];
 
-  const { data: activeDealsWrapper } = useListDeals({ state: "active", limit: 500 });
+  const { data: activeDealsWrapper, isLoading: isLoadingDeals } = useListDeals({ state: "active", limit: 500 });
   const activeDeals = activeDealsWrapper?.data ?? [];
 
-  const { data: nextActionsWrapper } = useGetNextActions();
+  const { data: nextActionsWrapper, isLoading: isLoadingNextActions } = useGetNextActions();
   const overdueActionCount =
     (nextActionsWrapper?.data as { overdue?: unknown[] } | undefined)?.overdue?.length ?? 0;
 
@@ -92,15 +92,21 @@ export function DashboardHero() {
   };
 
   // Freeze the greeting selection the first time the data it depends on has
-  // actually resolved. `selectGreeting` draws on un-memoized Math.random(),
-  // and activeDeals/nextActions/recentActivity each resolve asynchronously
-  // after mount — recomputing on every render would let the headline change
-  // (and recordShown fire) more than once per real visit. Lock it once and
-  // reuse the same choice for the life of the mount.
+  // actually settled (succeeded OR failed). `selectGreeting` draws on
+  // un-memoized Math.random(), and activeDeals/nextActions/recentActivity/me
+  // each resolve asynchronously after mount — recomputing on every render
+  // would let the headline change (and recordShown fire) more than once per
+  // real visit. Gate on `isLoading` rather than `data !== undefined`: the
+  // QueryClient is configured with `retry: false` (see App.tsx), so on a
+  // query error `data` stays `undefined` forever (no prior successful fetch
+  // to fall back to) while `isLoading` still flips to `false` once the
+  // failed request settles. Gating on `data !== undefined` would leave the
+  // greeting stuck on its Skeleton placeholder permanently after a single
+  // transient failure of any of these queries; gating on `isLoading` treats
+  // "settled with an error" as ready, and the `context` fields below already
+  // degrade gracefully (`?? []` / `?? 0`) when a wrapper's `data` is missing.
   const dataReady =
-    activeDealsWrapper !== undefined &&
-    nextActionsWrapper !== undefined &&
-    recentActivityWrapper !== undefined;
+    !isLoadingDeals && !isLoadingNextActions && !isLoadingRecentActivity && !isLoadingMe;
   const lockedGreetingRef = useRef<{ id: string; text: string } | null>(null);
   if (dataReady && lockedGreetingRef.current === null) {
     const now = new Date();
