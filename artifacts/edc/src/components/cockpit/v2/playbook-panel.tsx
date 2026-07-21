@@ -317,9 +317,9 @@ export function PlaybookPanel({ dealId }: { dealId: string }) {
               <EmptyMedia variant="icon">
                 <BookOpen />
               </EmptyMedia>
-              <EmptyTitle>No Playbooks Configured</EmptyTitle>
+              <EmptyTitle>No playbooks yet</EmptyTitle>
               <EmptyDescription>
-                No playbooks are configured for this deal's stages yet.
+                Playbooks kick in automatically as this deal moves through its stages. Nothing to do here for now.
               </EmptyDescription>
             </EmptyHeader>
           </Empty>

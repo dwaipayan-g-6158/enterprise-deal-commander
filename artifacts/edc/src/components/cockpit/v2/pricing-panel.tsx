@@ -348,7 +348,7 @@ export function PricingPanel({
         description: `Ramp TCV ${formatCurrency(localTcv, currency)}`,
       });
     } catch {
-      toast({ title: "Save failed", variant: "destructive" });
+      toast({ title: "Couldn't save the pricing schedule", description: "Your changes didn't go through. Give it another try.", variant: "destructive" });
     }
   };
 
