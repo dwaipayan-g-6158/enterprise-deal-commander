@@ -102,6 +102,15 @@ Four surfaces, direct string edits only (no new components), reusing each file's
 - Backend test for `/dashboard-visit`: first call → `previousVisitAt: null`; second call → returns the first call's stamped timestamp.
 - No new frontend component tests (matches this repo's existing thin frontend-test convention) — verified live instead via chrome-devtools MCP: load dashboard, confirm hero renders correctly, visit a deal and confirm it appears in Continue Working on return to dashboard, spot-check the four rewritten empty states.
 
+## Mobile / PWA Considerations
+
+The app is already an installable PWA (`vite-plugin-pwa`, full manifest, Workbox service worker caching GET `/api/v1|v2/*` reads via StaleWhileRevalidate) with a single responsive dashboard layout (`use-mobile.tsx` / `use-media-query.ts` / `layout.tsx`) — the earlier dedicated `/m` mobile page is retired (`/m` now redirects to `/`). This slice adds no new PWA infrastructure; it fits the new surfaces into the existing one:
+
+- `<DashboardHero />` uses the same responsive breakpoints as the rest of the dashboard: Greeting/Welcome Back Memory stack full-width on narrow viewports; Continue Working renders as a horizontally-scrollable strip rather than wrapping.
+- All touch targets (Continue Working links, "Continue to X →") sized for touch (≥44px), not dependent on hover states.
+- `POST /v1/auth/dashboard-visit` is a mutation, so it's untouched by the Workbox GET-only caching rule; it fails soft when offline (same as the rest of the error handling above) rather than blocking the page.
+- No new icons or manifest entries needed — reuses the existing PWA shell as-is.
+
 ## Backlog (explicitly deferred, not part of this slice)
 
 From the Human Touch Layer PRD, everything not listed under "In scope" above: Daily Mission (4.3, ~covered by NextActions), Intelligent Insight Banner (4.4, ~covered by MemoryInsights), Professional Quotes (4.5), Productivity Streak (4.6), Achievement System (4.7), Adaptive Dashboard (4.8), full app-wide Human Messages sweep (4.9 beyond the 4 named surfaces), Weather Awareness (4.11), Personalized Profile Presence/Focus Mode (4.12), Weekly Review (4.13), Celebration Moments (4.14), remaining Smart Empty States (4.15 beyond the 4 named surfaces), Motivational Progress Indicators (4.16), AI Observations (4.17, ~covered by MemoryInsights), Personality Messages rotation (4.19), End-of-Day Reflection (4.20), Ambient Background Changes (4.21), Seasonal & Personal Touches (4.22), Intelligent Recommendations (4.23, ~covered by NextActions).
