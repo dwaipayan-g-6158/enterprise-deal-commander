@@ -25,7 +25,7 @@ export function RosterTimeline({
   if (columns.length === 0) {
     return (
       <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
-        No deals to place on the timeline.
+        It's quiet on the timeline. Let's change that.
       </div>
     );
   }

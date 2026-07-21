@@ -68,7 +68,7 @@ export function MultiSelectFilter({
         <Command>
           {searchable && options.length > 6 && <CommandInput placeholder={`Search ${label.toLowerCase()}…`} />}
           <CommandList>
-            <CommandEmpty>No options.</CommandEmpty>
+            <CommandEmpty>Nothing here yet.</CommandEmpty>
             <CommandGroup>
               {options.map((opt) => {
                 const isSelected = selectedSet.has(opt.value);

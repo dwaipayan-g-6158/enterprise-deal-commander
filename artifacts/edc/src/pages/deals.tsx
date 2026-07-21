@@ -273,7 +273,7 @@ export default function Deals() {
       ? "No closed deals yet. Your first win will show up here."
       : filters.state === "active"
         ? "Your active pipeline is empty. Time to find the next opportunity."
-        : `No ${filters.state} deals.`;
+        : `No ${filters.state} deals yet. Everything's still in the active pipeline.`;
 
   return (
     <div
@@ -373,7 +373,7 @@ export default function Deals() {
         <Card className="py-12">
           <div className="flex flex-col items-center gap-3 text-center">
             <AlertCircle className="h-8 w-8 text-destructive" />
-            <p className="text-sm text-muted-foreground">Could not load deals.</p>
+            <p className="text-sm text-muted-foreground">Couldn't load deals. Give it another try.</p>
             <Button size="sm" variant="outline" onClick={() => refetch()}>
               Retry
             </Button>
