@@ -21,4 +21,4 @@ export {
 // request-body schema in generated/api.ts AND a TS interface of the same
 // name in generated/types/ for these two operations' bodies. Re-export the
 // zod (runtime) version as authoritative, same pattern as above.
-export { RollbackSettingsChangeBody, ImportSettingsConfigBody } from "./generated/api";
+export { RollbackSettingsChangeBody, ImportSettingsConfigBody, DashboardVisitResponse } from "./generated/api";

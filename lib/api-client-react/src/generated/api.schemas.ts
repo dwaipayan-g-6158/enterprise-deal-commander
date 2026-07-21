@@ -44,6 +44,12 @@ export interface AuthUser {
   id: string;
   email: string;
   role: string;
+  displayName: string;
+}
+
+export interface DashboardVisitResponse {
+  /** @nullable */
+  previousVisitAt: string | null;
 }
 
 export interface CrossSell {

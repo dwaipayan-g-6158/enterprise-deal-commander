@@ -102,6 +102,24 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+  /v1/auth/dashboard-visit:
+    post:
+      operationId: dashboardVisit
+      tags: [auth]
+      summary: Record a dashboard visit, returning the previous visit timestamp
+      responses:
+        "200":
+          description: Previous visit timestamp (null on first-ever visit)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardVisitResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 
   # ============ DEALS ============
   /v1/deals:
@@ -1860,7 +1878,13 @@ components:
         id: { type: string }
         email: { type: string }
         role: { type: string }
-      required: [id, email, role]
+        displayName: { type: string }
+      required: [id, email, role, displayName]
+    DashboardVisitResponse:
+      type: object
+      properties:
+        previousVisitAt: { type: ["string", "null"] }
+      required: [previousVisitAt]
 
     Deal:
       type: object

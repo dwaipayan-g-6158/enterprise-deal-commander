@@ -51,6 +51,7 @@ import type {
   CustomPatternInput,
   CustomPatternListResponse,
   CustomPatternResponse,
+  DashboardVisitResponse,
   DealCompetitorInput,
   DealCompetitorListResponse,
   DealCompetitorResponse,
@@ -469,6 +470,76 @@ export function useGetMe<TData = Awaited<ReturnType<typeof getMe>>, TError = Err
 
 
 
+
+export const getDashboardVisitUrl = () => {
+
+
+
+
+  return `/api/v1/auth/dashboard-visit`
+}
+
+/**
+ * @summary Record a dashboard visit, returning the previous visit timestamp
+ */
+export const dashboardVisit = async ( options?: RequestInit): Promise<DashboardVisitResponse> => {
+
+  return customFetch<DashboardVisitResponse>(getDashboardVisitUrl(),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+export const getDashboardVisitMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof dashboardVisit>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof dashboardVisit>>, TError,void, TContext> => {
+
+const mutationKey = ['dashboardVisit'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof dashboardVisit>>, void> = () => {
+
+
+          return  dashboardVisit(requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DashboardVisitMutationResult = NonNullable<Awaited<ReturnType<typeof dashboardVisit>>>
+
+    export type DashboardVisitMutationError = ErrorType<ErrorResponse>
+
+    /**
+ * @summary Record a dashboard visit, returning the previous visit timestamp
+ */
+export const useDashboardVisit = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof dashboardVisit>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof dashboardVisit>>,
+        TError,
+        void,
+        TContext
+      > => {
+      return useMutation(getDashboardVisitMutationOptions(options));
+    }
 
 export const getListDealsUrl = (params?: ListDealsParams,) => {
   const normalizedParams = new URLSearchParams();
