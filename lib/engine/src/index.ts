@@ -15,6 +15,7 @@ import {
   scoreEngagementVitality,
 } from "./dimensions";
 import { computeUnifiedRisk } from "./risk-v2";
+import { calculateFlatTCV } from "./ramp";
 import type {
   DimensionFnResult,
   DimensionScore,
@@ -1017,12 +1018,12 @@ export function processDealIntelligence(
     String(deal.services_revenue || 0),
   );
 
-  let calculatedTCV: number;
-  if (deal.pricing_model === "Multi-Year Committed") {
-    calculatedTCV = baseProductRevenue * termYears + attachedServicesRevenue;
-  } else {
-    calculatedTCV = baseProductRevenue + attachedServicesRevenue;
-  }
+  const calculatedTCV = calculateFlatTCV({
+    productRevenue: baseProductRevenue,
+    servicesRevenue: attachedServicesRevenue,
+    contractTermYears: termYears,
+    pricingModel: deal.pricing_model,
+  });
 
   // F1: currency normalization
   const reportingCurrency =

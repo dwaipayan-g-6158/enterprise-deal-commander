@@ -69,6 +69,7 @@ export * from './customPatternConditionsItem';
 export * from './customPatternInput';
 export * from './customPatternListResponse';
 export * from './customPatternResponse';
+export * from './dashboardVisitResponse';
 export * from './dataQualityNote';
 export * from './deal';
 export * from './dealCompetitor';

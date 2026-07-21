@@ -89,7 +89,7 @@ export function CriticalAlertsFeed({
             })}
           </div>
         ) : (
-          <p className="text-sm text-muted-foreground">No critical alerts currently active.</p>
+          <p className="text-sm text-muted-foreground">Nothing critical right now. Enjoy the calm.</p>
         )}
       </CardContent>
     </Card>

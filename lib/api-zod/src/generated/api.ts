@@ -43,7 +43,16 @@ export const LogoutResponse = zod.object({
 export const GetMeResponse = zod.object({
   "id": zod.string(),
   "email": zod.string(),
-  "role": zod.string()
+  "role": zod.string(),
+  "displayName": zod.string()
+})
+
+
+/**
+ * @summary Record a dashboard visit, returning the previous visit timestamp
+ */
+export const DashboardVisitResponse = zod.object({
+  "previousVisitAt": zod.string().nullable()
 })
 
 

@@ -6,9 +6,7 @@
  * OpenAPI spec version: 1.0.0
  */
 
-export interface AuthUser {
-  id: string;
-  email: string;
-  role: string;
-  displayName: string;
+export interface DashboardVisitResponse {
+  /** @nullable */
+  previousVisitAt: string | null;
 }

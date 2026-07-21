@@ -27,6 +27,7 @@ import { SimulationBand } from "@/components/dashboard/widgets/simulation-band";
 import { MemoryInsights } from "@/components/dashboard/widgets/memory-insights";
 import { PipelineRiskOverview } from "@/components/dashboard/widgets/pipeline-risk-overview";
 import { relativeTime, type Health } from "@/components/dashboard/widgets/_shared";
+import { DashboardHero } from "@/components/dashboard/dashboard-hero";
 
 type OpenDialog = null | "tcv" | "alerts" | "stale" | "health" | "stage";
 
@@ -98,10 +99,7 @@ export default function Dashboard() {
 
   return (
     <div className="p-8 max-w-[1600px] mx-auto space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight text-foreground">Portfolio Command Center</h1>
-        <p className="text-muted-foreground mt-2">Continuous intelligence and risk monitoring</p>
-      </div>
+      <DashboardHero />
 
       {/* Row 1 — Pipeline Vital Signs */}
       <VitalSignsBar
@@ -179,7 +177,7 @@ export default function Dashboard() {
                 ))}
               </ul>
             ) : (
-              <p className="text-sm text-muted-foreground">No recent activity yet.</p>
+              <p className="text-sm text-muted-foreground">It's quiet in here. Let's change that.</p>
             )}
           </CardContent>
         </Card>

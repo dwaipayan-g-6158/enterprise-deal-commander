@@ -20,8 +20,21 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import { Trash2, Plus, ShieldAlert, Users } from "lucide-react";
 import { Empty, EmptyHeader, EmptyMedia, EmptyTitle, EmptyDescription } from "@/components/ui/empty";
+import { InfoTooltip } from "@/components/ui/info-tooltip";
 
-const ROLES = ["Economic Buyer", "Technical Evaluator", "Champion", "End User", "Blocker", "Influencer", "Legal", "Procurement"];
+const ROLE_INFO: { name: string; description: string }[] = [
+  { name: "Economic Buyer", description: "Controls the budget and gives final financial sign-off on the purchase." },
+  { name: "Technical Evaluator", description: "The person hands-on with testing, PoC, integrations. Often Presales, Security Engineer, or IT Admin." },
+  { name: "Champion", description: "Internal advocate who actively sells your solution on your behalf and drives momentum." },
+  { name: "End User", description: "Day-to-day user of the product whose experience shapes adoption and renewal." },
+  { name: "Blocker", description: "Resists or can veto the deal — must be neutralized or won over." },
+  { name: "Influencer", description: "Shapes opinions internally, often from a technical or business angle. Could be a trusted architect or manager." },
+  { name: "Legal", description: "Reviews contract terms, liability, and data-protection clauses before signature." },
+  { name: "Procurement/Commercial Contact", description: "Handles contract negotiation, pricing approval, or vendor onboarding." },
+  { name: "Compliance/Security Contact", description: "Ensures the solution meets audit, risk, and governance standards." },
+  { name: "IT Operations Contact", description: "Important if deployment, maintenance, or integration needs are involved." },
+];
+const ROLES = ROLE_INFO.map((r) => r.name);
 const SENTIMENTS = ["Champion", "Supportive", "Neutral", "Skeptical", "Hostile"];
 const INFLUENCE = ["High", "Medium", "Low"];
 
@@ -120,18 +133,38 @@ export function StakeholdersPanel({ dealId }: { dealId: string }) {
             <Input placeholder="Title" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} />
           </div>
           <div className="grid grid-cols-3 gap-2">
-            <Select value={form.role_type} onValueChange={(v) => setForm({ ...form, role_type: v })}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>{ROLES.map((r) => <SelectItem key={r} value={r}>{r}</SelectItem>)}</SelectContent>
-            </Select>
-            <Select value={form.influence_level} onValueChange={(v) => setForm({ ...form, influence_level: v })}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>{INFLUENCE.map((r) => <SelectItem key={r} value={r}>{r}</SelectItem>)}</SelectContent>
-            </Select>
-            <Select value={form.sentiment} onValueChange={(v) => setForm({ ...form, sentiment: v })}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>{SENTIMENTS.map((r) => <SelectItem key={r} value={r}>{r}</SelectItem>)}</SelectContent>
-            </Select>
+            <div className="space-y-1">
+              <label className="flex items-center gap-1 text-xs text-muted-foreground">
+                Role
+                <InfoTooltip>
+                  <ul className="space-y-1">
+                    {ROLE_INFO.map((r) => (
+                      <li key={r.name}>
+                        <span className="font-medium">{r.name}</span> — {r.description}
+                      </li>
+                    ))}
+                  </ul>
+                </InfoTooltip>
+              </label>
+              <Select value={form.role_type} onValueChange={(v) => setForm({ ...form, role_type: v })}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>{ROLES.map((r) => <SelectItem key={r} value={r}>{r}</SelectItem>)}</SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs text-muted-foreground">Influence</label>
+              <Select value={form.influence_level} onValueChange={(v) => setForm({ ...form, influence_level: v })}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>{INFLUENCE.map((r) => <SelectItem key={r} value={r}>{r}</SelectItem>)}</SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs text-muted-foreground">Sentiment</label>
+              <Select value={form.sentiment} onValueChange={(v) => setForm({ ...form, sentiment: v })}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>{SENTIMENTS.map((r) => <SelectItem key={r} value={r}>{r}</SelectItem>)}</SelectContent>
+              </Select>
+            </div>
           </div>
           <div className="flex items-center justify-between">
             <label className="flex items-center gap-2 text-sm">

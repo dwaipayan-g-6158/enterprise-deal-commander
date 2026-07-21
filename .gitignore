@@ -51,6 +51,9 @@ Thumbs.db
 # subagent-driven-development scratch
 .superpowers/
 
+# git worktrees (superpowers:using-git-worktrees)
+.worktrees/
+
 # Secrets and local env
 .env
 .env.*

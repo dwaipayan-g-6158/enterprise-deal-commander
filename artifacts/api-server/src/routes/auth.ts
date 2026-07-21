@@ -1,12 +1,13 @@
 import { Router, type IRouter, type Request, type Response } from "express";
 import bcrypt from "bcryptjs";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { db, commanders } from "@workspace/db";
 import {
   LoginBody,
   LoginResponse,
   LogoutResponse,
   GetMeResponse,
+  DashboardVisitResponse,
 } from "@workspace/api-zod";
 import {
   issueSession,
@@ -59,8 +60,36 @@ router.get("/auth/me", requireAuth, (req: Request, res: Response) => {
       id: actor.id,
       email: actor.username,
       role: "commander",
+      displayName: actor.displayName,
     }),
   );
 });
+
+router.post(
+  "/auth/dashboard-visit",
+  requireAuth,
+  async (req: Request, res: Response) => {
+    const actor = getActor(req);
+    const result = await db.execute(sql`
+      WITH prev AS (
+        SELECT last_dashboard_visit_at FROM commanders WHERE id = ${actor.id}
+      )
+      UPDATE commanders
+      SET last_dashboard_visit_at = now()
+      WHERE id = ${actor.id}
+      RETURNING (SELECT last_dashboard_visit_at FROM prev) AS previous_visit_at
+    `);
+    const list = Array.isArray(result)
+      ? result
+      : ((result as { rows: unknown[] }).rows ?? []);
+    const row = list[0] as
+      | { previous_visit_at: string | Date | null }
+      | undefined;
+    const previousVisitAt = row?.previous_visit_at
+      ? new Date(row.previous_visit_at).toISOString()
+      : null;
+    res.json(DashboardVisitResponse.parse({ previousVisitAt }));
+  },
+);
 
 export default router;
