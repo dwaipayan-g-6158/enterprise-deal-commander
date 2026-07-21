@@ -225,7 +225,7 @@ export function AutopsyForm({
             value={watch("winning_competitor_id") ? String(watch("winning_competitor_id")) : ""}
             onChange={(v) => setValue("winning_competitor_id", v ? Number(v) : "", { shouldDirty: true })}
             placeholder="None"
-            emptyText="No competitors found."
+            emptyText="No matching competitors."
           />
         </div>
         <div className="grid gap-2">

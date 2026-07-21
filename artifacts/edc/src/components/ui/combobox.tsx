@@ -47,7 +47,7 @@ function Combobox({
   value,
   onChange,
   placeholder = "Select an option",
-  emptyText = "No results found.",
+  emptyText = "No matches found.",
   onCreate,
   disabled,
 }: ComboboxProps) {
@@ -151,7 +151,7 @@ function MultiCombobox({
   value,
   onChange,
   placeholder = "Select options",
-  emptyText = "No results found.",
+  emptyText = "No matches found.",
   onCreate,
   disabled,
 }: MultiComboboxProps) {

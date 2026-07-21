@@ -90,7 +90,7 @@ export function CommandPalette() {
         onValueChange={setQuery}
       />
       <CommandList>
-        <CommandEmpty>No results found.</CommandEmpty>
+        <CommandEmpty>No matches found.</CommandEmpty>
 
         {nlcConditions.length > 0 && (
           <>
