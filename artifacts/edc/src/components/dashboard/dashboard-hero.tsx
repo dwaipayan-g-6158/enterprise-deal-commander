@@ -9,6 +9,7 @@ import {
   useGetNextActions,
 } from "@workspace/api-client-react";
 import { compactCurrency, relativeTime } from "@/components/dashboard/widgets/_shared";
+import { Skeleton } from "@/components/ui/skeleton";
 import { getTimeBand } from "@/lib/greetings/time-bands";
 import { selectGreeting, type GreetingContext, type GreetingPool } from "@/lib/greetings/select-greeting";
 import GREETING_POOL from "@/lib/greetings/greeting-pool.json";
@@ -37,7 +38,10 @@ export function DashboardHero() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const since24h = new Date(Date.now() - ONE_DAY_MS).toISOString();
+  // Computed once per mount, not on every render — otherwise this timestamp's
+  // millisecond precision would mint a brand-new query key every render and
+  // trigger a continuous refetch loop against /api/v2/activity.
+  const [since24h] = useState(() => new Date(Date.now() - ONE_DAY_MS).toISOString());
   const { data: recentActivityWrapper } = useListPortfolioActivity({
     since: since24h,
     limit: 50,
@@ -87,28 +91,57 @@ export function DashboardHero() {
     oneStepFromCloseDealName: oneStepDeal?.dealName,
   };
 
-  const now = new Date();
-  const band = getTimeBand(now);
-  const shownHistory = readShownHistory(defaultStore, now);
-  const greeting = selectGreeting(GREETING_POOL as GreetingPool, band, context, shownHistory);
+  // Freeze the greeting selection the first time the data it depends on has
+  // actually resolved. `selectGreeting` draws on un-memoized Math.random(),
+  // and activeDeals/nextActions/recentActivity each resolve asynchronously
+  // after mount — recomputing on every render would let the headline change
+  // (and recordShown fire) more than once per real visit. Lock it once and
+  // reuse the same choice for the life of the mount.
+  const dataReady =
+    activeDealsWrapper !== undefined &&
+    nextActionsWrapper !== undefined &&
+    recentActivityWrapper !== undefined;
+  const lockedGreetingRef = useRef<{ id: string; text: string } | null>(null);
+  if (dataReady && lockedGreetingRef.current === null) {
+    const now = new Date();
+    const band = getTimeBand(now);
+    const shownHistory = readShownHistory(defaultStore, now);
+    const greeting = selectGreeting(GREETING_POOL as GreetingPool, band, context, shownHistory);
+    lockedGreetingRef.current = { id: greeting.id, text: greeting.text };
+  }
+  const lockedGreeting = lockedGreetingRef.current;
+  const lockedGreetingId = lockedGreeting?.id;
 
   useEffect(() => {
-    recordShown(defaultStore, greeting.id, now);
-    // Records once per greeting id shown; re-running every render would defeat dedup.
+    if (!lockedGreetingId) return;
+    recordShown(defaultStore, lockedGreetingId, new Date());
+    // Fires exactly once per mount, the moment the locked greeting id is set.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [greeting.id]);
+  }, [lockedGreetingId]);
 
-  const [headline, ...rest] = greeting.text.split("\n");
-  const subline = rest.join(" ");
+  let headline = "";
+  let subline = "";
+  if (lockedGreeting) {
+    const [h, ...rest] = lockedGreeting.text.split("\n");
+    headline = h;
+    subline = rest.join(" ");
+  }
   const recentDeals = readRecentDeals(defaultStore);
   const mostRecentDealId = welcomeBackActivity[0]?.dealId;
 
   return (
     <div className="space-y-4">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight text-foreground">{headline}</h1>
-        {subline && <p className="text-muted-foreground mt-2">{subline}</p>}
-      </div>
+      {lockedGreeting ? (
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight text-foreground">{headline}</h1>
+          {subline && <p className="text-muted-foreground mt-2">{subline}</p>}
+        </div>
+      ) : (
+        <div className="space-y-2">
+          <Skeleton className="h-9 w-[320px]" />
+          <Skeleton className="h-5 w-[420px]" />
+        </div>
+      )}
 
       {welcomeBackEnabled && welcomeBackActivity.length > 0 && (
         <div className="rounded-lg border bg-muted/20 p-4 space-y-2">
@@ -124,7 +157,7 @@ export function DashboardHero() {
             <button
               type="button"
               onClick={() => navigate(`/deals/${mostRecentDealId}`)}
-              className="text-sm font-medium text-primary hover:underline cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm"
+              className="inline-flex items-center min-h-[44px] py-2 text-sm font-medium text-primary hover:underline cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm"
             >
               Continue where you left off →
             </button>
