@@ -162,7 +162,7 @@ describe("buildInsight", () => {
 
   it("returns empty pipeline message when no buckets populated", () => {
     const empty = bucketDealsByLevel([]);
-    expect(buildInsight(empty, null)).toBe("No scored deals in the active pipeline.");
+    expect(buildInsight(empty, null)).toBe("Nothing scored in the active pipeline yet.");
   });
 
   it("returns all-low message when only LOW deals are present", () => {
