@@ -154,7 +154,7 @@ export function BoardColumn({
       <div className="flex-1 space-y-3 overflow-y-auto p-2 max-h-[calc(100vh-19rem)]">
         {dealCount === 0 ? (
           <div className="flex h-24 items-center justify-center rounded-md border border-dashed text-xs text-muted-foreground">
-            {isOver && closable ? "Drop to close" : isOver && droppable ? "Drop to move here" : "No deals"}
+            {isOver && closable ? "Drop to close" : isOver && droppable ? "Drop to move here" : "All clear"}
           </div>
         ) : (
           sections.map((section) => (

@@ -268,11 +268,11 @@ export default function Deals() {
     filters.search.trim() !== "" || filters.health.length > 0 || filters.velocity.length > 0;
 
   const emptyMessage = hasActiveFilters
-    ? "No deals match your filters."
+    ? "Nothing matched those filters. Try adjusting them."
     : (filters.closure ?? "open") === "closed"
-      ? "No closed deals yet."
+      ? "No closed deals yet. Your first win will show up here."
       : filters.state === "active"
-        ? "No active deals yet."
+        ? "Your active pipeline is empty. Time to find the next opportunity."
         : `No ${filters.state} deals.`;
 
   return (

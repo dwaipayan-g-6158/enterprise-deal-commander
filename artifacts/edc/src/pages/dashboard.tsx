@@ -177,7 +177,7 @@ export default function Dashboard() {
                 ))}
               </ul>
             ) : (
-              <p className="text-sm text-muted-foreground">No recent activity yet.</p>
+              <p className="text-sm text-muted-foreground">It's quiet in here. Let's change that.</p>
             )}
           </CardContent>
         </Card>
