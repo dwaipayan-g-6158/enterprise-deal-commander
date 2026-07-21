@@ -21,6 +21,7 @@ import type {
 
 import type {
   ActivityListResponse,
+  Ad360FeatureListResponse,
   AskDealMemoryParams,
   AuditListResponse,
   AuthUser,
@@ -3330,6 +3331,83 @@ export function useListProductCatalog<TData = Awaited<ReturnType<typeof listProd
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getListProductCatalogQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getListAd360FeaturesUrl = () => {
+
+
+
+
+  return `/api/v1/lookups/ad360-features`
+}
+
+/**
+ * @summary Predefined AD360 Enterprise platform-customization pick-list
+ */
+export const listAd360Features = async ( options?: RequestInit): Promise<Ad360FeatureListResponse> => {
+
+  return customFetch<Ad360FeatureListResponse>(getListAd360FeaturesUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListAd360FeaturesQueryKey = () => {
+    return [
+    `/api/v1/lookups/ad360-features`
+    ] as const;
+    }
+
+
+export const getListAd360FeaturesQueryOptions = <TData = Awaited<ReturnType<typeof listAd360Features>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listAd360Features>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListAd360FeaturesQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listAd360Features>>> = ({ signal }) => listAd360Features({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listAd360Features>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListAd360FeaturesQueryResult = NonNullable<Awaited<ReturnType<typeof listAd360Features>>>
+export type ListAd360FeaturesQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Predefined AD360 Enterprise platform-customization pick-list
+ */
+
+export function useListAd360Features<TData = Awaited<ReturnType<typeof listAd360Features>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listAd360Features>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListAd360FeaturesQueryOptions(options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

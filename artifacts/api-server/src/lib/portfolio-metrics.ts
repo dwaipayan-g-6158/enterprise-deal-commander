@@ -39,6 +39,8 @@ export interface MetricsRecord {
   activeAlertCodes: string[];
   /** Active + managed alert codes (parity with the existing correlation tables). */
   alertCodes: string[];
+  /** True if any active (unmanaged) alert on this deal is RED severity. */
+  hasActiveRedAlert: boolean;
   products: string[];
   stalled: boolean;
 }
@@ -193,7 +195,17 @@ export function diversificationIndex(cells: RiskCell[]): number {
   return clamp(1 - hhi, 0, 1);
 }
 
-/** Codes that are concentrated in at least one sufficiently large group. */
+/**
+ * Codes that are concentrated in at least one sufficiently large
+ * manager/lead/product group (lift + share + dealCount all clear their
+ * thresholds). Not currently wired into `computePortfolioAnalysis` — with
+ * few account managers/products, in-group share rarely diverges enough from
+ * the portfolio-wide share to clear the lift bar, so this stayed empty even
+ * when a real cluster existed (see `recurringActiveCodes`, which
+ * `correlatedExposureTcv` uses instead). Kept exported and tested as the
+ * literal group-concentration signal `pickHighestCorrelationCluster` still
+ * reports on ("Top Correlation Cluster").
+ */
 export function significantCodes(
   groups: GroupCorrelation[],
   config: PortfolioMetricsConfig = DEFAULT_PORTFOLIO_CONFIG,
@@ -211,9 +223,37 @@ export function significantCodes(
 }
 
 /**
+ * Alert codes carried as an *active* (unmanaged) alert by at least
+ * `clusterMinDeals` deals. Unlike `significantCodes` — which needs a
+ * manager/lead/product group to be both large and disproportionately
+ * concentrated (lift/share) — this only requires the same failure mode to
+ * recur across several deals, so it still surfaces a real cluster in a
+ * single-operator portfolio where account-manager/product axes rarely
+ * partition deals enough to produce lift >= 1.5. Used by
+ * `correlatedExposureTcv`, which also reads `activeAlertCodes`, so detection
+ * and the dollar sum are computed on the same (active-only) basis.
+ */
+export function recurringActiveCodes(
+  records: MetricsRecord[],
+  config: PortfolioMetricsConfig = DEFAULT_PORTFOLIO_CONFIG,
+): Set<string> {
+  const counts = new Map<string, number>();
+  for (const r of records) {
+    for (const code of new Set(r.activeAlertCodes)) {
+      counts.set(code, (counts.get(code) ?? 0) + 1);
+    }
+  }
+  const codes = new Set<string>();
+  for (const [code, count] of counts) {
+    if (count >= config.clusterMinDeals) codes.add(code);
+  }
+  return codes;
+}
+
+/**
  * Total TCV of deals participating in a significant correlation cluster — i.e.
- * carrying at least one active alert code flagged by `significantCodes`. This
- * stands in for the PRD's p-value participation test, which needs richer
+ * carrying at least one active alert code flagged by `recurringActiveCodes`.
+ * This stands in for the PRD's p-value participation test, which needs richer
  * history than the cockpit currently retains.
  */
 export function correlatedExposureTcv(

@@ -5,6 +5,7 @@ import {
   diversificationIndex,
   correlatedExposureTcv,
   significantCodes,
+  recurringActiveCodes,
   pickHighestCorrelationCluster,
   type MetricsRecord,
   type GroupCorrelation,
@@ -26,6 +27,7 @@ function rec(over: Partial<MetricsRecord> = {}): MetricsRecord {
     maxActiveAlertWeight: 0,
     activeAlertCodes: [],
     alertCodes: [],
+    hasActiveRedAlert: false,
     products: ["AD360"],
     stalled: false,
     ...over,
@@ -165,6 +167,55 @@ describe("significantCodes + correlatedExposureTcv", () => {
       rec({ dealId: "c", tcv: 25_000, activeAlertCodes: [] }),
     ];
     expect(correlatedExposureTcv(records, codes)).toBe(100_000);
+  });
+
+  it("returns 0 when the code set is empty", () => {
+    const records = [rec({ tcv: 100_000, activeAlertCodes: ["STALLED_VALIDATION"] })];
+    expect(correlatedExposureTcv(records, new Set())).toBe(0);
+  });
+});
+
+describe("recurringActiveCodes", () => {
+  it("flags a code carried as an active alert by >= clusterMinDeals deals, even with a single manager/product", () => {
+    // All deals share one account manager and product, so no group axis can
+    // ever produce lift >= 1.5 here (share ~= globalShare) — this is exactly
+    // the single-operator case significantCodes cannot surface.
+    const records = [
+      rec({ dealId: "a", accountManager: "Alice", products: ["AD360"], activeAlertCodes: ["STALLED_VALIDATION"] }),
+      rec({ dealId: "b", accountManager: "Alice", products: ["AD360"], activeAlertCodes: ["STALLED_VALIDATION"] }),
+      rec({ dealId: "c", accountManager: "Alice", products: ["AD360"], activeAlertCodes: ["STALLED_VALIDATION"] }),
+    ];
+    expect([...recurringActiveCodes(records)]).toEqual(["STALLED_VALIDATION"]);
+  });
+
+  it("excludes codes that recur fewer than clusterMinDeals times", () => {
+    const records = [
+      rec({ dealId: "a", activeAlertCodes: ["DISCOUNT_SPIRAL"] }),
+      rec({ dealId: "b", activeAlertCodes: ["DISCOUNT_SPIRAL"] }),
+    ];
+    expect(recurringActiveCodes(records).size).toBe(0);
+  });
+
+  it("ignores codes that are only managed (dispositioned), not active", () => {
+    // Same code recurs 3x, but only via alertCodes (active+managed) — never
+    // as an active alert — so it must not count as a recurring active code.
+    const records = [
+      rec({ dealId: "a", activeAlertCodes: [], alertCodes: ["STALLED_VALIDATION"] }),
+      rec({ dealId: "b", activeAlertCodes: [], alertCodes: ["STALLED_VALIDATION"] }),
+      rec({ dealId: "c", activeAlertCodes: [], alertCodes: ["STALLED_VALIDATION"] }),
+    ];
+    expect(recurringActiveCodes(records).size).toBe(0);
+  });
+
+  it("feeds correlatedExposureTcv with a non-zero sum for a recurring active code", () => {
+    const records = [
+      rec({ dealId: "a", tcv: 100_000, activeAlertCodes: ["STALLED_VALIDATION"] }),
+      rec({ dealId: "b", tcv: 50_000, activeAlertCodes: ["STALLED_VALIDATION"] }),
+      rec({ dealId: "c", tcv: 25_000, activeAlertCodes: ["STALLED_VALIDATION"] }),
+      rec({ dealId: "d", tcv: 10_000, activeAlertCodes: [] }),
+    ];
+    const codes = recurringActiveCodes(records);
+    expect(correlatedExposureTcv(records, codes)).toBe(175_000);
   });
 });
 

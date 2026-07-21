@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Activity } from "lucide-react";
+import { formatNum } from "@/lib/format";
 
 interface TopPattern {
   code: string;
@@ -72,12 +73,12 @@ export function LossDashboardPanel() {
           </CardHeader>
           <CardContent>
             <p className={`text-4xl font-bold font-mono tabular-nums ${pulseColor(data.lossPulse)}`}>
-              {data.lossPulse ?? "—"}
+              {data.lossPulse != null ? formatNum(data.lossPulse) : "—"}
             </p>
             <p className="text-xs text-muted-foreground mt-2">
-              Autopsy completeness {data.lossPulseComponents.autopsyCompletenessPct}%
-              {data.lossPulseComponents.avgQualityScore != null && ` · Avg quality ${data.lossPulseComponents.avgQualityScore}`}
-              {data.lossPulseComponents.lossRatePct != null && ` · Loss rate ${data.lossPulseComponents.lossRatePct}%`}
+              Autopsy completeness {formatNum(data.lossPulseComponents.autopsyCompletenessPct)}%
+              {data.lossPulseComponents.avgQualityScore != null && ` · Avg quality ${formatNum(data.lossPulseComponents.avgQualityScore)}`}
+              {data.lossPulseComponents.lossRatePct != null && ` · Loss rate ${formatNum(data.lossPulseComponents.lossRatePct)}%`}
             </p>
           </CardContent>
         </Card>
@@ -156,7 +157,7 @@ export function LossDashboardPanel() {
                     <TableCell>
                       <div className="flex items-center gap-2">
                         <Progress value={p.share * 100} className="h-2 w-24" />
-                        <span className="font-mono text-xs text-muted-foreground">{(p.share * 100).toFixed(0)}%</span>
+                        <span className="font-mono text-xs text-muted-foreground">{formatNum(p.share * 100)}%</span>
                       </div>
                     </TableCell>
                   </TableRow>

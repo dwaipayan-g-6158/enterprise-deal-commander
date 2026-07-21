@@ -34,7 +34,9 @@ import {
   computeSankeyFlows,
   computeRecycleExit,
   computeCoverage,
-  computeHealthScore,
+  scoreHealthAbsolute,
+  DEFAULT_HEALTH_BENCHMARKS,
+  computeTransitionBreakdown,
   computePatternLethality,
   scoreLossRisk,
   type StageDef,
@@ -1292,7 +1294,16 @@ router.get("/analytics/flow/conversion-matrix", async (req: Request, res: Respon
 router.get("/analytics/flow/sankey", async (req: Request, res: Response) => {
   const mode = req.query.mode === "value" ? "value" : "count";
   const [stages, transitions] = await Promise.all([loadFlowStages(), loadTransitions()]);
-  res.json({ data: computeSankeyFlows(transitions, stages, mode) });
+  res.json({
+    data: {
+      ...computeSankeyFlows(transitions, stages, mode),
+      // The Sankey only ever shows forward progression (self-loops and
+      // regressions are filtered client-side). `breakdown` accounts for every
+      // transition — advances, recycles, and both exit outcomes — so the
+      // widget can show the full picture alongside the diagram.
+      breakdown: computeTransitionBreakdown(transitions),
+    },
+  });
 });
 
 router.get("/analytics/flow/recycle", async (_req: Request, res: Response) => {
@@ -1332,17 +1343,52 @@ router.get("/analytics/flow/health-score", async (_req: Request, res: Response) 
   const avgResidence =
     daysWithStage.reduce((s, t) => s + (t.daysInFromStage ?? 0), 0) /
     Math.max(1, daysWithStage.length);
+
+  // Overdue share: fraction of currently-open deals running past 1.5x their
+  // stage's median residence — the same SLOW threshold /analytics/velocity
+  // uses, so "age" here means the same thing a viewer sees on the Velocity
+  // widget. This replaces the previous agingScore, which just re-read
+  // avgResidence under a second label (identical to velocityIndex) and so
+  // contributed no independent signal to the composite.
+  const stageAgeRows = await db
+    .select({ stageEnteredAt: enterpriseDeals.stageEnteredAt, stageName: pipelineStages.stageName })
+    .from(enterpriseDeals)
+    .leftJoin(pipelineStages, eq(enterpriseDeals.salesStageId, pipelineStages.id))
+    .where(activeFilter);
+  const daysByStage = new Map<string, number[]>();
+  const dealAges = stageAgeRows.map((r) => {
+    const key = r.stageName ?? "?";
+    const days = daysBetween(r.stageEnteredAt);
+    daysByStage.set(key, [...(daysByStage.get(key) ?? []), days]);
+    return { key, days };
+  });
+  const median = (xs: number[]) => {
+    const s = [...xs].sort((a, b) => a - b);
+    return s.length ? s[Math.floor(s.length / 2)] : 0;
+  };
+  const overdueCount = dealAges.filter(
+    ({ key, days }) => days > median(daysByStage.get(key) ?? [days]) * 1.5,
+  ).length;
+  const overdueShare = dealAges.length > 0 ? overdueCount / dealAges.length : 0;
+
+  // generationRatio: computeCoverage returns netNew===null in two distinct
+  // situations that must be scored differently — no quarterly target
+  // configured at all (coverage.total is also null; exclude the dimension),
+  // vs. the coverage gap already fully backfilled by weighted pipeline (a
+  // GOOD outcome that should score as fully covered, not be dropped).
+  const noTargetSet = coverage.total == null;
+  const generationRatio = noTargetSet ? null : (coverage.netNew ?? 1);
+
   const inputs = {
     coverageQualified: coverage.qualified,
     velocityIndex: Math.round(avgResidence),
     winRate,
-    generationRatio: coverage.netNew,
-    agingScore: Math.round(avgResidence),
+    generationRatio,
+    agingScore: overdueShare,
     retentionRate: 1 - recycle.overallRecycleRate / 100,
   };
-  const history = { coverage: [], velocity: [], conversion: [], generation: [], age: [], attrition: [] };
   const weights = await getHealthWeights();
-  res.json({ data: { ...computeHealthScore(inputs, history, weights), coverage } });
+  res.json({ data: { ...scoreHealthAbsolute(inputs, DEFAULT_HEALTH_BENCHMARKS, weights), coverage } });
 });
 
 void sql;

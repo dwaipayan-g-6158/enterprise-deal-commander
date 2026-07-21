@@ -5,6 +5,7 @@ import {
   enterpriseDeals,
   dealTechnicalGates,
   dealProductInterests,
+  dealAd360Features,
   dealComplianceDrivers,
   gateDefinitions,
   pipelineStages,
@@ -197,6 +198,20 @@ async function replaceProductInterests(dealId: string, productIds: string[]) {
   }
 }
 
+// Replace the deal's selected AD360 Enterprise platform-customization features,
+// mirroring the product-interest / cross-sell replace-set semantics.
+async function replaceAd360Features(dealId: string, featureIds: number[]) {
+  await db
+    .delete(dealAd360Features)
+    .where(eq(dealAd360Features.dealId, dealId));
+  if (featureIds.length > 0) {
+    await db
+      .insert(dealAd360Features)
+      .values(featureIds.map((featureId) => ({ dealId, featureId })))
+      .onConflictDoNothing();
+  }
+}
+
 // Replace the deal's additional compliance drivers (beyond the primary driver).
 async function replaceComplianceDrivers(dealId: string, driverIds: number[]) {
   await db
@@ -280,6 +295,8 @@ router.post("/deals", async (req: Request, res: Response) => {
         competitorId: body.competitor_id ?? null,
         complianceDriverId: derivedComplianceDriverId,
         estimatedLogSources: body.estimated_log_sources ?? null,
+        ad360SeatCount: body.ad360_seat_count ?? null,
+        ad360FeatureNotes: body.ad360_feature_notes ?? null,
       })
       .returning({ id: enterpriseDeals.id });
     created = inserted[0];
@@ -300,6 +317,9 @@ router.post("/deals", async (req: Request, res: Response) => {
   }
   if (body.compliance_driver_ids && body.compliance_driver_ids.length > 0) {
     await replaceComplianceDrivers(created.id, body.compliance_driver_ids);
+  }
+  if (body.ad360_feature_ids && body.ad360_feature_ids.length > 0) {
+    await replaceAd360Features(created.id, body.ad360_feature_ids);
   }
   await seedIncumbentCompetitor(created.id, body.competitor_id);
   await writeAudit({
@@ -472,6 +492,18 @@ const updateDealHandler = async (req: Request, res: Response) => {
     );
     updates.estimatedLogSources = body.estimated_log_sources ?? null;
   }
+  if (body.ad360_seat_count !== undefined) {
+    track("ad360_seat_count", existing.ad360SeatCount, body.ad360_seat_count);
+    updates.ad360SeatCount = body.ad360_seat_count ?? null;
+  }
+  if (body.ad360_feature_notes !== undefined) {
+    track(
+      "ad360_feature_notes",
+      existing.ad360FeatureNotes,
+      body.ad360_feature_notes,
+    );
+    updates.ad360FeatureNotes = body.ad360_feature_notes ?? null;
+  }
 
   // Stage guardrail: block advancing the sales stage past active unmanaged RED
   // risk patterns unless a valid override reason is supplied. Backward stage
@@ -554,6 +586,16 @@ const updateDealHandler = async (req: Request, res: Response) => {
   }
   if (body.compliance_driver_ids !== undefined) {
     await replaceComplianceDrivers(id, body.compliance_driver_ids);
+  }
+  if (body.ad360_feature_ids !== undefined) {
+    await replaceAd360Features(id, body.ad360_feature_ids);
+    audits.push({
+      dealId: id,
+      entityType: "ad360_feature",
+      fieldChanged: "selected_features",
+      newValue: String(body.ad360_feature_ids.length),
+      changedBy: actor.displayName,
+    });
   }
   if (body.competitor_id !== undefined) {
     await seedIncumbentCompetitor(id, body.competitor_id);

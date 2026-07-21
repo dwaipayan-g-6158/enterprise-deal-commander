@@ -6,6 +6,7 @@ import {
   pricingModels,
   servicesTiers,
   productCatalog,
+  ad360Features,
   gateDefinitions,
   blockerCategories,
   blockerSeverities,
@@ -23,6 +24,7 @@ import {
   ListPricingModelsResponse,
   ListServicesTiersResponse,
   ListProductCatalogResponse,
+  ListAd360FeaturesResponse,
   ListGateDefinitionsResponse,
   ListBlockerCategoriesResponse,
   ListBlockerSeveritiesResponse,
@@ -101,6 +103,22 @@ router.get("/lookups/product-catalog", async (_req: Request, res: Response) => {
     suite: r.suite,
   }));
   res.json(ListProductCatalogResponse.parse({ data }));
+});
+
+// Predefined AD360 Enterprise platform-customization pick-list.
+router.get("/lookups/ad360-features", async (_req: Request, res: Response) => {
+  const rows = await db
+    .select()
+    .from(ad360Features)
+    .where(eq(ad360Features.isActive, true))
+    .orderBy(asc(ad360Features.sortOrder), asc(ad360Features.label));
+  const data = rows.map((r) => ({
+    id: r.id,
+    code: r.code,
+    label: r.label,
+    description: r.description,
+  }));
+  res.json(ListAd360FeaturesResponse.parse({ data }));
 });
 
 router.get("/lookups/competitors", async (_req: Request, res: Response) => {

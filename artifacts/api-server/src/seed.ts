@@ -7,6 +7,7 @@ import {
   pricingModels,
   servicesTiers,
   productCatalog,
+  ad360Features,
   blockerCategories,
   blockerSeverities,
   lossArchetypes,
@@ -138,6 +139,25 @@ async function seedLookups() {
       { code: "CLOUD_SECURITY_PLUS", productName: "Cloud Security Plus", productCategory: "Cloud Log", suite: "Log360" },
       { code: "LOG360_CLOUD", productName: "Log360 Cloud", productCategory: "Cloud SIEM", suite: "Log360" },
       { code: "IDENTITY360", productName: "Identity360", productCategory: "Identity Platform", suite: "AD360" },
+      // User-based licensed AD360 bundle SKU — see lib/engine/src/index.ts
+      // (deliberately excluded from SUITE_MEMBERS; treated as a platform SKU
+      // like IDENTITY360/LOG360_CLOUD, not an à-la-carte component).
+      { code: "AD360_ENTERPRISE", productName: "AD360 Enterprise", productCategory: "Integrated IAM Suite", suite: "AD360" },
+    ])
+    .onConflictDoNothing();
+
+  // Predefined AD360 Enterprise platform-customization pick-list. Selected
+  // per deal via deal_ad360_features; free-text "other" notes live on
+  // enterprise_deals.ad360_feature_notes.
+  await db
+    .insert(ad360Features)
+    .values([
+      { code: "CUSTOM_WORKFLOWS", label: "Custom Workflows", sortOrder: 1 },
+      { code: "SSO_SAML", label: "SSO / SAML", sortOrder: 2 },
+      { code: "API_AUTOMATION", label: "API & Automation", sortOrder: 3 },
+      { code: "CUSTOM_REPORTS", label: "Custom Reports", sortOrder: 4 },
+      { code: "WHITE_LABELING", label: "White-Labeling", sortOrder: 5 },
+      { code: "ROLE_BASED_DELEGATION", label: "Role-Based Delegation", sortOrder: 6 },
     ])
     .onConflictDoNothing();
 

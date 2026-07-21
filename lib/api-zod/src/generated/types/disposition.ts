@@ -15,6 +15,8 @@ export interface Disposition {
   rationale?: string | null;
   /** @nullable */
   snoozeUntilFieldChange?: string | null;
+  /** @nullable */
+  snoozeUntil?: string | null;
   createdBy: string;
   createdAt?: string;
 }

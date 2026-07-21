@@ -52,6 +52,14 @@ export interface DashboardVisitResponse {
   previousVisitAt: string | null;
 }
 
+export interface Ad360Feature {
+  id: number;
+  code: string;
+  label: string;
+  /** @nullable */
+  description?: string | null;
+}
+
 export interface CrossSell {
   productId: string;
   productName: string;
@@ -121,6 +129,11 @@ export interface Deal {
   complianceDeadline?: string | null;
   /** @nullable */
   estimatedLogSources?: number | null;
+  /** @nullable */
+  ad360SeatCount?: number | null;
+  /** @nullable */
+  ad360FeatureNotes?: string | null;
+  ad360Features?: Ad360Feature[];
   productsOfInterest?: CrossSell[];
   complianceDrivers?: ComplianceDriver[];
   calculatedTCV: number;
@@ -197,6 +210,17 @@ export interface DealInput {
   compliance_driver_id?: number | null;
   /** @nullable */
   estimated_log_sources?: number | null;
+  /**
+     * @minimum 0
+     * @nullable
+     */
+  ad360_seat_count?: number | null;
+  /**
+     * @maxLength 2000
+     * @nullable
+     */
+  ad360_feature_notes?: string | null;
+  ad360_feature_ids?: number[];
   product_interest_ids?: string[];
   compliance_driver_ids?: number[];
 }
@@ -265,6 +289,17 @@ export interface DealUpdate {
   compliance_driver_id?: number | null;
   /** @nullable */
   estimated_log_sources?: number | null;
+  /**
+     * @minimum 0
+     * @nullable
+     */
+  ad360_seat_count?: number | null;
+  /**
+     * @maxLength 2000
+     * @nullable
+     */
+  ad360_feature_notes?: string | null;
+  ad360_feature_ids?: number[];
   product_interest_ids?: string[];
   compliance_driver_ids?: number[];
   /**
@@ -439,6 +474,10 @@ export interface AlertDisposition {
   rationale?: string | null;
   /** @nullable */
   snoozeUntilFieldChange?: string | null;
+  /** @nullable */
+  snoozeUntil?: string | null;
+  createdBy?: string;
+  createdAt?: string;
 }
 
 export interface AlertIntervention {
@@ -1004,6 +1043,11 @@ export interface DispositionInput {
      * @maxLength 100
      */
   snooze_until_field_change?: string;
+  /**
+     * @minimum 1
+     * @maximum 365
+     */
+  snooze_duration_days?: number;
 }
 
 export interface Disposition {
@@ -1015,6 +1059,8 @@ export interface Disposition {
   rationale?: string | null;
   /** @nullable */
   snoozeUntilFieldChange?: string | null;
+  /** @nullable */
+  snoozeUntil?: string | null;
   createdBy: string;
   createdAt?: string;
 }
@@ -1115,6 +1161,10 @@ export interface Product {
 
 export interface ProductListResponse {
   data: Product[];
+}
+
+export interface Ad360FeatureListResponse {
+  data: Ad360Feature[];
 }
 
 export interface Competitor {

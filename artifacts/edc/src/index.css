@@ -196,3 +196,42 @@
     scroll-behavior: auto !important;
   }
 }
+
+/* Executive Briefing export — branded light-paper report.
+   `.edc-report` (briefing-mode.tsx) wraps <BriefingReport>; it is captured
+   verbatim by both html-to-image (PNG, via contentRef) and window.print()
+   (PDF). Force background/color-adjust so brand and health colors survive
+   PDF export instead of being dropped by the browser's default print
+   rendering. `.edc-report-frame` is the outer centering wrapper — it is
+   NOT captured by html-to-image (centering must stay off the captured
+   node itself; see the comment in briefing-mode.tsx), so print's margin
+   reset targets the frame, not `.edc-report`. */
+.edc-report,
+.edc-report * {
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
+@media print {
+  @page {
+    size: A4;
+    margin: 14mm;
+  }
+  html, body {
+    background: #ffffff !important;
+  }
+  /* BriefingMode portals to <body> and tags it with this class while
+     mounted (see the useEffect in briefing-mode.tsx). Hide the rest of the
+     app (the #root SPA shell — sidebar, cockpit page, everything) so only
+     the briefing report prints, not the surrounding dashboard chrome. */
+  body.edc-briefing-open > #root {
+    display: none !important;
+  }
+  .edc-report-frame {
+    margin: 0 !important;
+    max-width: 100% !important;
+  }
+  .edc-report {
+    box-shadow: none !important;
+  }
+}

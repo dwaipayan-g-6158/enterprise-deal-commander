@@ -102,6 +102,14 @@ export const ListDealsResponse = zod.object({
   "complianceDriverName": zod.string().nullish(),
   "complianceDeadline": zod.string().nullish(),
   "estimatedLogSources": zod.number().nullish(),
+  "ad360SeatCount": zod.number().nullish(),
+  "ad360FeatureNotes": zod.string().nullish(),
+  "ad360Features": zod.array(zod.object({
+  "id": zod.number(),
+  "code": zod.string(),
+  "label": zod.string(),
+  "description": zod.string().nullish()
+})).optional(),
   "productsOfInterest": zod.array(zod.object({
   "productId": zod.string(),
   "productName": zod.string(),
@@ -156,6 +164,10 @@ export const createDealBodyDealCurrencyMax = 3;
 
 export const createDealBodyServicesRevenueMin = 0;
 
+export const createDealBodyAd360SeatCountMin = 0;
+
+export const createDealBodyAd360FeatureNotesMax = 2000;
+
 
 
 export const CreateDealBody = zod.object({
@@ -181,6 +193,9 @@ export const CreateDealBody = zod.object({
   "competitor_id": zod.number().nullish(),
   "compliance_driver_id": zod.number().nullish(),
   "estimated_log_sources": zod.number().nullish(),
+  "ad360_seat_count": zod.number().min(createDealBodyAd360SeatCountMin).nullish(),
+  "ad360_feature_notes": zod.string().max(createDealBodyAd360FeatureNotesMax).nullish(),
+  "ad360_feature_ids": zod.array(zod.number()).optional(),
   "product_interest_ids": zod.array(zod.string()).optional(),
   "compliance_driver_ids": zod.array(zod.number()).optional()
 })
@@ -223,6 +238,14 @@ export const GetDealResponse = zod.object({
   "complianceDriverName": zod.string().nullish(),
   "complianceDeadline": zod.string().nullish(),
   "estimatedLogSources": zod.number().nullish(),
+  "ad360SeatCount": zod.number().nullish(),
+  "ad360FeatureNotes": zod.string().nullish(),
+  "ad360Features": zod.array(zod.object({
+  "id": zod.number(),
+  "code": zod.string(),
+  "label": zod.string(),
+  "description": zod.string().nullish()
+})).optional(),
   "productsOfInterest": zod.array(zod.object({
   "productId": zod.string(),
   "productName": zod.string(),
@@ -275,6 +298,10 @@ export const updateDealBodyServicesRevenueMin = 0;
 
 export const updateDealBodyLossReasonMax = 2000;
 
+export const updateDealBodyAd360SeatCountMin = 0;
+
+export const updateDealBodyAd360FeatureNotesMax = 2000;
+
 export const updateDealBodyOverrideReasonMin = 10;
 export const updateDealBodyOverrideReasonMax = 1000;
 
@@ -304,6 +331,9 @@ export const UpdateDealBody = zod.object({
   "competitor_id": zod.number().nullish(),
   "compliance_driver_id": zod.number().nullish(),
   "estimated_log_sources": zod.number().nullish(),
+  "ad360_seat_count": zod.number().min(updateDealBodyAd360SeatCountMin).nullish(),
+  "ad360_feature_notes": zod.string().max(updateDealBodyAd360FeatureNotesMax).nullish(),
+  "ad360_feature_ids": zod.array(zod.number()).optional(),
   "product_interest_ids": zod.array(zod.string()).optional(),
   "compliance_driver_ids": zod.array(zod.number()).optional(),
   "override_reason": zod.string().min(updateDealBodyOverrideReasonMin).max(updateDealBodyOverrideReasonMax).optional()
@@ -342,6 +372,14 @@ export const UpdateDealResponse = zod.object({
   "complianceDriverName": zod.string().nullish(),
   "complianceDeadline": zod.string().nullish(),
   "estimatedLogSources": zod.number().nullish(),
+  "ad360SeatCount": zod.number().nullish(),
+  "ad360FeatureNotes": zod.string().nullish(),
+  "ad360Features": zod.array(zod.object({
+  "id": zod.number(),
+  "code": zod.string(),
+  "label": zod.string(),
+  "description": zod.string().nullish()
+})).optional(),
   "productsOfInterest": zod.array(zod.object({
   "productId": zod.string(),
   "productName": zod.string(),
@@ -413,6 +451,14 @@ export const RestoreDealResponse = zod.object({
   "complianceDriverName": zod.string().nullish(),
   "complianceDeadline": zod.string().nullish(),
   "estimatedLogSources": zod.number().nullish(),
+  "ad360SeatCount": zod.number().nullish(),
+  "ad360FeatureNotes": zod.string().nullish(),
+  "ad360Features": zod.array(zod.object({
+  "id": zod.number(),
+  "code": zod.string(),
+  "label": zod.string(),
+  "description": zod.string().nullish()
+})).optional(),
   "productsOfInterest": zod.array(zod.object({
   "productId": zod.string(),
   "productName": zod.string(),
@@ -479,6 +525,14 @@ export const ArchiveDealResponse = zod.object({
   "complianceDriverName": zod.string().nullish(),
   "complianceDeadline": zod.string().nullish(),
   "estimatedLogSources": zod.number().nullish(),
+  "ad360SeatCount": zod.number().nullish(),
+  "ad360FeatureNotes": zod.string().nullish(),
+  "ad360Features": zod.array(zod.object({
+  "id": zod.number(),
+  "code": zod.string(),
+  "label": zod.string(),
+  "description": zod.string().nullish()
+})).optional(),
   "productsOfInterest": zod.array(zod.object({
   "productId": zod.string(),
   "productName": zod.string(),
@@ -811,7 +865,10 @@ export const GetDealIntelligenceResponse = zod.object({
   "disposition": zod.union([zod.object({
   "state": zod.enum(['acknowledge', 'accept', 'snooze']),
   "rationale": zod.string().nullish(),
-  "snoozeUntilFieldChange": zod.string().nullish()
+  "snoozeUntilFieldChange": zod.string().nullish(),
+  "snoozeUntil": zod.coerce.date().nullish(),
+  "createdBy": zod.string().optional(),
+  "createdAt": zod.coerce.date().optional()
 }),zod.null()]).optional(),
   "intervention": zod.union([zod.object({
   "checklistId": zod.number(),
@@ -838,7 +895,10 @@ export const GetDealIntelligenceResponse = zod.object({
   "disposition": zod.union([zod.object({
   "state": zod.enum(['acknowledge', 'accept', 'snooze']),
   "rationale": zod.string().nullish(),
-  "snoozeUntilFieldChange": zod.string().nullish()
+  "snoozeUntilFieldChange": zod.string().nullish(),
+  "snoozeUntil": zod.coerce.date().nullish(),
+  "createdBy": zod.string().optional(),
+  "createdAt": zod.coerce.date().optional()
 }),zod.null()]).optional(),
   "intervention": zod.union([zod.object({
   "checklistId": zod.number(),
@@ -947,7 +1007,10 @@ export const GetIntelligenceSummaryResponse = zod.object({
   "disposition": zod.union([zod.object({
   "state": zod.enum(['acknowledge', 'accept', 'snooze']),
   "rationale": zod.string().nullish(),
-  "snoozeUntilFieldChange": zod.string().nullish()
+  "snoozeUntilFieldChange": zod.string().nullish(),
+  "snoozeUntil": zod.coerce.date().nullish(),
+  "createdBy": zod.string().optional(),
+  "createdAt": zod.coerce.date().optional()
 }),zod.null()]).optional(),
   "intervention": zod.union([zod.object({
   "checklistId": zod.number(),
@@ -1377,12 +1440,15 @@ export const setDispositionBodyRationaleMax = 2000;
 
 export const setDispositionBodySnoozeUntilFieldChangeMax = 100;
 
+export const setDispositionBodySnoozeDurationDaysMax = 365;
+
 
 
 export const SetDispositionBody = zod.object({
   "disposition": zod.enum(['acknowledge', 'accept', 'snooze']),
   "rationale": zod.string().min(setDispositionBodyRationaleMin).max(setDispositionBodyRationaleMax).optional(),
-  "snooze_until_field_change": zod.string().min(1).max(setDispositionBodySnoozeUntilFieldChangeMax).optional()
+  "snooze_until_field_change": zod.string().min(1).max(setDispositionBodySnoozeUntilFieldChangeMax).optional(),
+  "snooze_duration_days": zod.number().min(1).max(setDispositionBodySnoozeDurationDaysMax).optional()
 })
 
 export const SetDispositionResponse = zod.object({
@@ -1393,6 +1459,7 @@ export const SetDispositionResponse = zod.object({
   "disposition": zod.string(),
   "rationale": zod.string().nullish(),
   "snoozeUntilFieldChange": zod.string().nullish(),
+  "snoozeUntil": zod.string().nullish(),
   "createdBy": zod.string(),
   "createdAt": zod.string().optional()
 })
@@ -1458,7 +1525,10 @@ export const GetSharedRiskCardResponse = zod.object({
   "disposition": zod.union([zod.object({
   "state": zod.enum(['acknowledge', 'accept', 'snooze']),
   "rationale": zod.string().nullish(),
-  "snoozeUntilFieldChange": zod.string().nullish()
+  "snoozeUntilFieldChange": zod.string().nullish(),
+  "snoozeUntil": zod.coerce.date().nullish(),
+  "createdBy": zod.string().optional(),
+  "createdAt": zod.coerce.date().optional()
 }),zod.null()]).optional(),
   "intervention": zod.union([zod.object({
   "checklistId": zod.number(),
@@ -1503,6 +1573,19 @@ export const ListProductCatalogResponse = zod.object({
   "productName": zod.string(),
   "productCategory": zod.string().nullish(),
   "suite": zod.string().nullish()
+}))
+})
+
+
+/**
+ * @summary Predefined AD360 Enterprise platform-customization pick-list
+ */
+export const ListAd360FeaturesResponse = zod.object({
+  "data": zod.array(zod.object({
+  "id": zod.number(),
+  "code": zod.string(),
+  "label": zod.string(),
+  "description": zod.string().nullish()
 }))
 })
 

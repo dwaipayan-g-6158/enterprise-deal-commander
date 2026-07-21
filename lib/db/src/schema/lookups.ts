@@ -77,6 +77,18 @@ export const productCatalog = pgTable("product_catalog", {
     .defaultNow(),
 });
 
+// Predefined platform-customization features selectable for AD360 Enterprise
+// (a user-based licensed bundle SKU in product_catalog). Pick-list only — the
+// free-text "other" notes field lives on enterprise_deals.ad360FeatureNotes.
+export const ad360Features = pgTable("ad360_features", {
+  id: serial("id").primaryKey(),
+  code: varchar("code", { length: 50 }).notNull().unique(),
+  label: varchar("label", { length: 120 }).notNull(),
+  description: text("description"),
+  sortOrder: smallint("sort_order").notNull().default(0),
+  isActive: boolean("is_active").notNull().default(true),
+});
+
 // Competitive landscape for IAM (AD360) and SIEM (Log360) displacement deals.
 export const competitors = pgTable("competitors", {
   id: serial("id").primaryKey(),

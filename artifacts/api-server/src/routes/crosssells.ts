@@ -36,6 +36,8 @@ async function listPitched(dealId: string) {
       productId: dealCrossSells.productId,
       productName: productCatalog.productName,
       productCategory: productCatalog.productCategory,
+      code: productCatalog.code,
+      suite: productCatalog.suite,
       isPitched: dealCrossSells.isPitched,
     })
     .from(dealCrossSells)
@@ -45,6 +47,8 @@ async function listPitched(dealId: string) {
     productId: r.productId,
     productName: r.productName,
     productCategory: r.productCategory ?? null,
+    code: r.code ?? null,
+    suite: r.suite ?? null,
     isPitched: r.isPitched,
   }));
 }

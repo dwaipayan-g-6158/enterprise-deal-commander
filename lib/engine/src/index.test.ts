@@ -441,6 +441,29 @@ describe("generateRecommendations — product intelligence", () => {
     const bundle = recs.find((r) => r.type === "SUITE_BUNDLE");
     expect(bundle?.suite).toBe("AD360");
   });
+
+  it("recommends Log360 expansion for an AD360 Enterprise anchor", () => {
+    const recs = generateRecommendations(["AD360_ENTERPRISE"], [], [], DEFAULTS);
+    const nbp = recs.find((r) => r.type === "NEXT_BEST_PRODUCT");
+    expect(nbp?.productCodes).toContain("EVENTLOG_ANALYZER");
+  });
+
+  it("suppresses the AD360 suite bundle when AD360 Enterprise is already owned", () => {
+    const recs = generateRecommendations(
+      ["AD360_ENTERPRISE", "ADMANAGER_PLUS", "ADAUDIT_PLUS", "ADSELFSERVICE_PLUS"],
+      [],
+      [],
+      DEFAULTS,
+    );
+    expect(
+      recs.some((r) => r.type === "SUITE_BUNDLE" && r.suite === "AD360"),
+    ).toBe(false);
+  });
+
+  it("suppresses the recovery gap when AD360 Enterprise is already owned", () => {
+    const recs = generateRecommendations(["AD360_ENTERPRISE"], [], [], DEFAULTS);
+    expect(recs.some((r) => r.type === "RECOVERY_GAP")).toBe(false);
+  });
 });
 
 describe("calculateOwnMomentum", () => {

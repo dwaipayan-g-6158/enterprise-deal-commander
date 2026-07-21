@@ -25,6 +25,7 @@ import {
   interventionChecklists,
   competitors,
   complianceDrivers,
+  ad360Features,
 } from "./lookups";
 
 export const enterpriseDeals = pgTable(
@@ -81,6 +82,11 @@ export const enterpriseDeals = pgTable(
     complianceDeadline: date("compliance_deadline", { mode: "string" }),
     // SIEM (Log360) sizing input — estimated log sources in the environment.
     estimatedLogSources: integer("estimated_log_sources"),
+    // AD360 Enterprise (a user-based licensed bundle SKU) licensing/customization
+    // context. Informational only — deliberately NOT wired into product/services
+    // revenue or TCV math. Selected feature ids live in dealAd360Features below.
+    ad360SeatCount: integer("ad360_seat_count"),
+    ad360FeatureNotes: text("ad360_feature_notes"),
     archivedAt: timestamp("archived_at", { withTimezone: true }),
     deletedAt: timestamp("deleted_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true })
@@ -178,6 +184,22 @@ export const dealProductInterests = pgTable(
   (t) => [primaryKey({ columns: [t.dealId, t.productId] })],
 );
 
+// Selected AD360 Enterprise platform-customization features (from the
+// ad360Features pick-list) for a deal. Pure membership set, same shape as
+// dealProductInterests; the free-text "other" notes live on enterpriseDeals.
+export const dealAd360Features = pgTable(
+  "deal_ad360_features",
+  {
+    dealId: uuid("deal_id")
+      .notNull()
+      .references(() => enterpriseDeals.id, { onDelete: "cascade" }),
+    featureId: integer("feature_id")
+      .notNull()
+      .references(() => ad360Features.id),
+  },
+  (t) => [primaryKey({ columns: [t.dealId, t.featureId] })],
+);
+
 export const dealBlockers = pgTable("deal_blockers", {
   id: uuid("id").primaryKey().defaultRandom(),
   dealId: uuid("deal_id")
@@ -229,6 +251,13 @@ export const dealAlertDispositions = pgTable(
     disposition: varchar("disposition", { length: 20 }).notNull(),
     rationale: text("rationale"),
     snoozeUntilFieldChange: text("snooze_until_field_change"),
+    // Absolute snooze expiry (duration-based). Paired with
+    // snoozeUntilFieldChange as "whichever comes first" — either the deadline
+    // passing or the watched field changing returns the risk to active.
+    snoozeUntil: timestamp("snooze_until", { withTimezone: true }),
+    // Stringified value of the watched field, captured at snooze time, so the
+    // read path can detect "the field changed" without a subscriber/cron.
+    snoozeFieldBaseline: text("snooze_field_baseline"),
     createdBy: varchar("created_by", { length: 255 }).notNull(),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()

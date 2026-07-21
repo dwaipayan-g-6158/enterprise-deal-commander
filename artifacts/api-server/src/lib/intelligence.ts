@@ -1,4 +1,4 @@
-import { and, asc, desc, eq } from "drizzle-orm";
+import { and, asc, desc, eq, inArray } from "drizzle-orm";
 import {
   db,
   enterpriseDeals,
@@ -12,6 +12,8 @@ import {
   dealTechnicalGates,
   dealCrossSells,
   dealProductInterests,
+  dealAd360Features,
+  ad360Features,
   dealComplianceDrivers,
   dealBlockers,
   dealAlertDispositions,
@@ -42,6 +44,7 @@ import { cache, CacheKeys, CacheTtl } from "./cache";
 import { competitorWinRates } from "./competitive";
 import { deriveRiskWeights, deriveRiskBoundaries, deriveHealthWeights, derivePortfolioConfig } from "./engine-config";
 import { getPlaybookSignals } from "./playbook-signals";
+import { snapshotFieldValue } from "./snooze-fields";
 
 export const DEFAULT_THRESHOLDS: EngineThresholds = {
   elephant_tcv_threshold: 250000,
@@ -260,6 +263,26 @@ export async function getProductsOfInterest(dealId: string) {
   }));
 }
 
+/**
+ * Selected AD360 Enterprise platform-customization features for a deal
+ * (informational only — not consumed by the engine; see PRODUCT_AFFINITY /
+ * generateRecommendations in @workspace/engine for how the product itself,
+ * by code, participates in recommendations).
+ */
+export async function getAd360Features(dealId: string) {
+  const rows = await db
+    .select({ feature: ad360Features })
+    .from(dealAd360Features)
+    .innerJoin(ad360Features, eq(dealAd360Features.featureId, ad360Features.id))
+    .where(eq(dealAd360Features.dealId, dealId));
+  return rows.map(({ feature }) => ({
+    id: feature.id,
+    code: feature.code,
+    label: feature.label,
+    description: feature.description ?? null,
+  }));
+}
+
 /** Additional compliance drivers (beyond the deal's primary driver). */
 export async function getExtraComplianceDrivers(dealId: string) {
   const rows = await db
@@ -413,11 +436,40 @@ export async function assembleDealIntelligence(dealId: string) {
     .select()
     .from(dealAlertDispositions)
     .where(eq(dealAlertDispositions.dealId, dealId));
-  const dispositions = dispositionRows.map((d) => ({
+
+  // Lazy snooze expiry (no cron/subscriber): a snooze lapses when the
+  // duration elapses OR the watched field's value no longer matches the
+  // snapshot taken at snooze time — whichever comes first. Expired rows are
+  // dropped from this read so the pattern reappears in `alerts` immediately,
+  // and best-effort deleted so they don't linger; if the delete fails, the
+  // same lapsed row is simply re-evaluated (and re-deleted) next read.
+  const now = new Date();
+  const expiredIds: string[] = [];
+  const liveDispositionRows = dispositionRows.filter((d) => {
+    if (d.disposition !== "snooze") return true;
+    const pastDuration = d.snoozeUntil != null && now >= d.snoozeUntil;
+    const fieldChanged =
+      d.snoozeFieldBaseline != null &&
+      d.snoozeUntilFieldChange != null &&
+      snapshotFieldValue(d.snoozeUntilFieldChange, deal) !== d.snoozeFieldBaseline;
+    const expired = pastDuration || fieldChanged;
+    if (expired) expiredIds.push(d.id);
+    return !expired;
+  });
+  if (expiredIds.length > 0) {
+    db.delete(dealAlertDispositions)
+      .where(inArray(dealAlertDispositions.id, expiredIds))
+      .catch(() => {});
+  }
+
+  const dispositions = liveDispositionRows.map((d) => ({
     pattern_code: d.patternCode,
     disposition: d.disposition as "acknowledge" | "accept" | "snooze",
     rationale: d.rationale,
     snooze_until_field_change: d.snoozeUntilFieldChange,
+    snooze_until: toISO(d.snoozeUntil),
+    created_by: d.createdBy,
+    created_at: toISO(d.createdAt),
   }));
 
   const auditRows = await db
@@ -655,6 +707,7 @@ export async function serializeDeal(dealId: string) {
   if (!dealRow) return null;
   const intel = await assembleDealIntelligence(dealId);
   const productsOfInterest = await getProductsOfInterest(dealId);
+  const selectedAd360Features = await getAd360Features(dealId);
   const extraDrivers = await getExtraComplianceDrivers(dealId);
   const { deal, salesStage, pricingModel, servicesTier } = dealRow;
   const complianceDriverList = [
@@ -695,6 +748,9 @@ export async function serializeDeal(dealId: string) {
     complianceDriverName: dealRow.complianceDriverName,
     complianceDeadline: deal.complianceDeadline,
     estimatedLogSources: deal.estimatedLogSources,
+    ad360SeatCount: deal.ad360SeatCount,
+    ad360FeatureNotes: deal.ad360FeatureNotes,
+    ad360Features: selectedAd360Features,
     productsOfInterest,
     complianceDrivers: complianceDriverList,
     calculatedTCV: intel?.financials.calculatedTCV ?? 0,

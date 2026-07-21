@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   useGetSnapshot,
   useGetDeal,
@@ -7,7 +8,7 @@ import {
   type Deal,
   type Intelligence,
 } from "@workspace/api-client-react";
-import { toPng } from "html-to-image";
+import { toBlob } from "html-to-image";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -20,9 +21,6 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   X,
-  CheckCircle,
-  AlertTriangle,
-  ShieldAlert,
   Printer,
   ImageDown,
   History,
@@ -41,8 +39,8 @@ import {
   Search,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { formatCurrency } from "./use-invalidate";
 import { useEngineContext, recomputeIntelligence } from "./engine-recompute";
+import { BriefingReport } from "./briefing-report";
 
 type QueueItem = {
   id: string;
@@ -173,7 +171,19 @@ export function BriefingMode({
     });
   };
 
-  return (
+  // Mark <body> while the briefing is mounted so print CSS (index.css) can
+  // hide the rest of the app (the #root SPA shell) and print only this
+  // portal's content. Needed because #root uses a fixed-viewport
+  // (h-screen/overflow-hidden) layout for its independently-scrolling
+  // sidebar/main panes — correct on screen, but it silently clips anything
+  // printed from inside it past one page's height. Portaling this component
+  // to <body> (below) sidesteps that shell entirely.
+  useEffect(() => {
+    document.body.classList.add("edc-briefing-open");
+    return () => document.body.classList.remove("edc-briefing-open");
+  }, []);
+
+  return createPortal(
     <div className="fixed inset-0 z-50 bg-background overflow-y-auto print:static print:overflow-visible">
       {/* Presenter control bar — never projected/printed */}
       <div className="max-w-5xl mx-auto px-8 py-6 flex items-center gap-3 flex-wrap print:hidden">
@@ -259,7 +269,8 @@ export function BriefingMode({
         fallbackName={activeItem.dealName}
         fallbackAccount={activeItem.accountName}
       />
-    </div>
+    </div>,
+    document.body,
   );
 }
 
@@ -428,13 +439,13 @@ function BriefingDealView({
 
   if (dealLoading || intelLoading || !deal || !intel) {
     return (
-      <div className="max-w-5xl mx-auto px-8 pb-12 pt-6 space-y-8">
+      <div className="mx-auto max-w-[820px] space-y-8 px-10 py-10">
         <div className="space-y-3">
           <Skeleton className="h-4 w-40" />
           <Skeleton className="h-12 w-96" />
           <Skeleton className="h-7 w-64" />
         </div>
-        <div className="grid grid-cols-3 gap-8">
+        <div className="grid grid-cols-3 gap-4">
           <Skeleton className="h-20 w-full" />
           <Skeleton className="h-20 w-full" />
           <Skeleton className="h-20 w-full" />
@@ -467,8 +478,7 @@ function BriefingDealContent({ deal, intel }: { deal: Deal; intel: Intelligence 
     return recomputeIntelligence(deal, intel, { gates }, ctx);
   }, [isHistorical, snapshot, deal, intel, ctx]);
 
-  const progressPercentage =
-    asOf?.technicalTrack.progressPercentage ?? intel.technicalTrack.progressPercentage;
+  const technicalTrack = asOf?.technicalTrack ?? intel.technicalTrack;
   const alerts = asOf?.governance.alerts ?? intel.governance.alerts;
 
   const handlePrint = () => window.print();
@@ -477,16 +487,25 @@ function BriefingDealContent({ deal, intel }: { deal: Deal; intel: Intelligence 
     if (!contentRef.current) return;
     setExporting(true);
     try {
-      const bg = getComputedStyle(document.body).backgroundColor || "#ffffff";
-      const dataUrl = await toPng(contentRef.current, {
+      // Always render on white "paper" — the report is theme-independent,
+      // never the live (possibly dark) app background.
+      const blob = await toBlob(contentRef.current, {
         cacheBust: true,
         pixelRatio: 2,
-        backgroundColor: bg,
+        backgroundColor: "#ffffff",
       });
+      if (!blob) throw new Error("toBlob returned null");
+      // A Blob object URL (not a data: URI) — large base64 data: URIs are
+      // handled inconsistently across browsers when clicked via a detached
+      // <a download>, sometimes saving with the wrong/missing extension.
+      const blobUrl = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.download = `briefing-${deal.dealName.replace(/\s+/g, "-").toLowerCase()}.png`;
-      link.href = dataUrl;
+      link.href = blobUrl;
+      document.body.appendChild(link);
       link.click();
+      link.remove();
+      URL.revokeObjectURL(blobUrl);
     } catch {
       toast({ title: "Could not export image", variant: "destructive" });
     } finally {
@@ -495,8 +514,6 @@ function BriefingDealContent({ deal, intel }: { deal: Deal; intel: Intelligence 
   };
 
   const health = asOf?.governance.healthStatus ?? deal.healthStatus;
-  const healthColor =
-    health === "RED" ? "text-destructive" : health === "YELLOW" ? "text-amber-500" : "text-emerald-500";
 
   return (
     <>
@@ -524,97 +541,38 @@ function BriefingDealContent({ deal, intel }: { deal: Deal; intel: Intelligence 
         </Button>
       </div>
 
-      <div ref={contentRef} className="max-w-5xl mx-auto px-8 pb-12 pt-6 bg-background">
-        <div className="mb-12">
-          <div>
-            <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground mb-2">
-              Executive Briefing
-            </p>
-            <h1 className="text-5xl font-bold tracking-tight">{deal.dealName}</h1>
-            <p className="text-2xl text-muted-foreground mt-2">{deal.accountName}</p>
-          </div>
+      {/*
+        The exported document. Everything both PNG (html-to-image, via
+        contentRef) and Print/PDF (window.print(), via the `.edc-report`
+        print rules in index.css) capture lives inside contentRef — it is
+        always a fixed white "paper" report, independent of the app's
+        light/dark theme. See BriefingReport for the actual content.
+
+        Centering lives on this OUTER frame, not on contentRef itself:
+        html-to-image bakes the captured node's own computed style (incl.
+        `margin-left`/`margin-right` from `mx-auto`) onto the clone it
+        rasterizes, but sizes the canvas to just that node's own width —
+        so a self-margined capture root renders shifted off-canvas (content
+        clipped on one side, blank space on the other). Keeping contentRef
+        margin-free avoids that; this wrapper is never itself captured.
+      */}
+      <div className="edc-report-frame mx-auto w-full max-w-[820px]">
+        <div
+          ref={contentRef}
+          className="edc-report rounded-sm border border-slate-200 bg-white px-14 py-10 shadow-xl print:shadow-none"
+        >
+          <BriefingReport
+            deal={deal}
+            intel={intel}
+            health={health}
+            technicalTrack={technicalTrack}
+            alerts={alerts}
+            isHistorical={isHistorical}
+            date={date}
+            snapshotAsOf={snapshot?.data?.asOf}
+            snapshotReconstructed={snapshot?.data?.reconstructed}
+          />
         </div>
-
-        <div className="grid grid-cols-3 gap-8 mb-12">
-          <div>
-            <p className="text-xs uppercase tracking-wider text-muted-foreground mb-2">Normalized TCV</p>
-            <p className="text-4xl font-bold font-mono">
-              {formatCurrency(intel.financials.normalizedTCV, intel.financials.reportingCurrency)}
-            </p>
-          </div>
-          <div>
-            <p className="text-xs uppercase tracking-wider text-muted-foreground mb-2">Health Status</p>
-            <p className={`text-4xl font-bold ${healthColor}`}>{health}</p>
-          </div>
-          <div>
-            <p className="text-xs uppercase tracking-wider text-muted-foreground mb-2">Technical Progress</p>
-            <p className="text-4xl font-bold font-mono">{progressPercentage}%</p>
-          </div>
-        </div>
-
-        {isHistorical && (
-          <div className="mb-12 rounded-md border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-700 dark:text-amber-300">
-            Showing technical validation and risk posture reconstructed as of{" "}
-            {new Date(date).toLocaleDateString()}. Deal economics and sales stage reflect current values.
-          </div>
-        )}
-
-        <div className="grid grid-cols-2 gap-8 mb-12">
-          <div>
-            <p className="text-xs uppercase tracking-wider text-muted-foreground mb-2">Sales Stage</p>
-            <p className="text-xl">{intel.salesStage}</p>
-            <p className="text-sm text-muted-foreground">{intel.daysInStage} days in stage</p>
-          </div>
-          <div>
-            <p className="text-xs uppercase tracking-wider text-muted-foreground mb-2">Team</p>
-            <p className="text-xl">{intel.team.accountManager}</p>
-            <p className="text-sm text-muted-foreground">Technical: {intel.team.technicalLead}</p>
-          </div>
-        </div>
-
-        {deal.managerStrategicBlueprint && (
-          <div className="mb-12">
-            <p className="text-xs uppercase tracking-wider text-muted-foreground mb-2">Strategic Blueprint</p>
-            <p className="text-lg leading-relaxed">{deal.managerStrategicBlueprint}</p>
-          </div>
-        )}
-
-        <div className="mb-12">
-          <p className="text-xs uppercase tracking-wider text-muted-foreground mb-4">Risk Posture</p>
-          {alerts.length === 0 ? (
-            <div className="flex items-center gap-2 text-emerald-500">
-              <CheckCircle className="h-5 w-5" />
-              <span className="text-lg">All clear — nothing to flag for this deal.</span>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {alerts.map((a) => (
-                <div key={a.code} className="flex items-start gap-3">
-                  {a.severity === "RED" ? (
-                    <ShieldAlert className="h-5 w-5 text-destructive shrink-0 mt-0.5" />
-                  ) : (
-                    <AlertTriangle className="h-5 w-5 text-amber-500 shrink-0 mt-0.5" />
-                  )}
-                  <div>
-                    <p className="text-lg">{a.message}</p>
-                    {a.disposition && (
-                      <Badge variant="outline" className="capitalize mt-1">
-                        {a.disposition.state}
-                      </Badge>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {snapshot?.data && (
-          <p className="text-xs text-muted-foreground">
-            Snapshot as of {new Date(snapshot.data.asOf).toLocaleString()}
-            {snapshot.data.reconstructed ? " (reconstructed)" : ""}
-          </p>
-        )}
       </div>
 
       {/* Presenter-private speaker notes — never projected, printed, or exported. */}

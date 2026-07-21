@@ -17,6 +17,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
@@ -28,10 +29,11 @@ import { useToast } from "@/hooks/use-toast";
 import {
   ShieldAlert,
   Check,
-  Clock,
+  AlarmClock,
   ExternalLink,
   Loader2,
 } from "lucide-react";
+import { SNOOZE_FIELDS } from "@/components/cockpit/risk/snooze-fields";
 
 interface CriticalAlert {
   dealId: string;
@@ -51,15 +53,7 @@ interface CriticalAlertsDialogProps {
   alerts: CriticalAlert[];
 }
 
-// Fields a snooze can watch for change. The backend stores the raw string; these
-// mirror the deal-input field names the engine re-evaluates against.
-const SNOOZE_FIELDS: { value: string; label: string }[] = [
-  { value: "sales_stage_id", label: "Sales stage changes" },
-  { value: "win_probability_pct", label: "Win probability changes" },
-  { value: "expected_close_date", label: "Expected close date changes" },
-  { value: "product_revenue", label: "Product revenue changes" },
-  { value: "services_revenue", label: "Services revenue changes" },
-];
+const SNOOZE_PRESETS = [7, 14, 30];
 
 export function CriticalAlertsDialog({
   open,
@@ -135,15 +129,19 @@ function AlertRow({
   const setDisposition = useSetDisposition();
   const [mode, setMode] = useState<"idle" | "accept" | "snooze">("idle");
   const [rationale, setRationale] = useState("");
+  const [snoozeDuration, setSnoozeDuration] = useState<number | "custom">(14);
+  const [snoozeCustomDays, setSnoozeCustomDays] = useState("14");
   const [snoozeField, setSnoozeField] = useState("");
 
   const pending = setDisposition.isPending;
+  const effectiveSnoozeDays = snoozeDuration === "custom" ? Number(snoozeCustomDays) : snoozeDuration;
+  const snoozeDaysValid = Number.isFinite(effectiveSnoozeDays) && effectiveSnoozeDays >= 1 && effectiveSnoozeDays <= 365;
 
   const run = async (
     data:
       | { disposition: "acknowledge" }
       | { disposition: "accept"; rationale: string }
-      | { disposition: "snooze"; snooze_until_field_change: string },
+      | { disposition: "snooze"; snooze_duration_days: number; snooze_until_field_change?: string },
     successMsg: string,
   ) => {
     try {
@@ -214,7 +212,7 @@ function AlertRow({
             disabled={pending}
             onClick={() => setMode("snooze")}
           >
-            <Clock className="h-3.5 w-3.5" />
+            <AlarmClock className="h-3.5 w-3.5" />
             Snooze
           </Button>
           <Button
@@ -267,29 +265,69 @@ function AlertRow({
       )}
 
       {mode === "snooze" && (
-        <div className="mt-3 space-y-2">
-          <Label>Snooze until this field changes</Label>
-          <Select value={snoozeField} onValueChange={setSnoozeField}>
-            <SelectTrigger>
-              <SelectValue placeholder="Select a field to watch" />
-            </SelectTrigger>
-            <SelectContent>
-              {SNOOZE_FIELDS.map((f) => (
-                <SelectItem key={f.value} value={f.value}>
-                  {f.label}
-                </SelectItem>
+        <div className="mt-3 space-y-3">
+          <div className="space-y-1.5">
+            <Label>Snooze for</Label>
+            <div className="flex gap-1.5">
+              {SNOOZE_PRESETS.map((d) => (
+                <Button
+                  key={d}
+                  type="button"
+                  size="sm"
+                  variant={snoozeDuration === d ? "default" : "outline"}
+                  className="h-7 flex-1 text-xs"
+                  onClick={() => setSnoozeDuration(d)}
+                >
+                  {d}d
+                </Button>
               ))}
-            </SelectContent>
-          </Select>
+              <Button
+                type="button"
+                size="sm"
+                variant={snoozeDuration === "custom" ? "default" : "outline"}
+                className="h-7 flex-1 text-xs"
+                onClick={() => setSnoozeDuration("custom")}
+              >
+                Custom
+              </Button>
+            </div>
+            {snoozeDuration === "custom" && (
+              <Input
+                type="number"
+                min={1}
+                max={365}
+                value={snoozeCustomDays}
+                onChange={(e) => setSnoozeCustomDays(e.target.value)}
+                placeholder="Days"
+                className="h-7 text-xs"
+              />
+            )}
+          </div>
+          <div className="space-y-1.5">
+            <Label>Also wake early if (optional)</Label>
+            <Select value={snoozeField} onValueChange={setSnoozeField}>
+              <SelectTrigger>
+                <SelectValue placeholder="No field selected" />
+              </SelectTrigger>
+              <SelectContent>
+                {SNOOZE_FIELDS.map((f) => (
+                  <SelectItem key={f.value} value={f.value}>
+                    {f.label} changes
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
           <div className="flex gap-2">
             <Button
               size="sm"
-              disabled={pending || !snoozeField}
+              disabled={pending || !snoozeDaysValid}
               onClick={() =>
                 run(
                   {
                     disposition: "snooze",
-                    snooze_until_field_change: snoozeField,
+                    snooze_duration_days: effectiveSnoozeDays,
+                    snooze_until_field_change: snoozeField || undefined,
                   },
                   "Alert snoozed",
                 )

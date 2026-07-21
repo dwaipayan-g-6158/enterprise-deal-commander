@@ -32,6 +32,7 @@ import {
   fullCurrency,
   type Health as Shared_Health,
 } from "@/components/dashboard/widgets/_shared";
+import { formatNum } from "@/lib/format";
 
 // ---- Local typed view of the loose analytics payload -------------------------
 type Health = "RED" | "YELLOW" | "GREEN" | null;
@@ -316,14 +317,14 @@ function TrajectoryTooltip({ active, payload }: TooltipProps) {
     <div className="grid min-w-[11rem] gap-1.5 rounded-lg border border-border/50 bg-background px-2.5 py-2 text-xs shadow-xl">
       <div className="font-medium">{fmtFull(row.t)}</div>
       <div className="grid gap-1">
-        <TooltipRow label="Score" value={row.score != null ? row.score.toFixed(0) : "—"} />
+        <TooltipRow label="Score" value={row.score != null ? formatNum(row.score) : "—"} />
         <TooltipRow
           label="Gate %"
-          value={row.gatePct != null ? `${row.gatePct.toFixed(0)}%` : "—"}
+          value={row.gatePct != null ? `${formatNum(row.gatePct)}%` : "—"}
         />
         <TooltipRow
           label="Playbook %"
-          value={row.playbookPct != null ? `${row.playbookPct.toFixed(0)}%` : "—"}
+          value={row.playbookPct != null ? `${formatNum(row.playbookPct)}%` : "—"}
         />
         <div className="flex items-center justify-between gap-3">
           <span className="text-muted-foreground">Health</span>
@@ -401,7 +402,7 @@ function KpiStrip({ summary }: { summary: Summary }) {
     <div className="my-3 grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-border bg-border sm:grid-cols-4">
       <KpiCell label="Close Score">
         <p className="mt-1 font-mono text-lg font-semibold leading-tight tracking-tight tabular-nums">
-          {score.last != null ? score.last.toFixed(0) : "—"}
+          {score.last != null ? formatNum(score.last) : "—"}
         </p>
         <div className="mt-1">
           {score.last != null && score.first != null ? (
@@ -430,7 +431,7 @@ function KpiStrip({ summary }: { summary: Summary }) {
 
       <KpiCell label="Gate Completion">
         <p className="mt-1 font-mono text-lg font-semibold leading-tight tracking-tight tabular-nums">
-          {gate.last != null ? `${gate.last.toFixed(0)}%` : "—"}
+          {gate.last != null ? `${formatNum(gate.last)}%` : "—"}
         </p>
         <div className="mt-1">
           {gate.last != null && gate.first != null ? (
@@ -438,7 +439,7 @@ function KpiStrip({ summary }: { summary: Summary }) {
               current={gate.last}
               baseline={gate.first}
               positiveIsGood
-              format={(n) => `${n.toFixed(0)}`}
+              format={(n) => formatNum(n)}
             />
           ) : (
             <span className="text-xs text-muted-foreground">—</span>
@@ -552,8 +553,8 @@ function HeroChart({ metric, rows }: { metric: Metric; rows: ChartRow[] }) {
     isTcv
       ? compactCurrency(v)
       : metric === "gate" || metric === "playbook"
-        ? `${v.toFixed(0)}%`
-        : v.toFixed(0);
+        ? `${formatNum(v)}%`
+        : formatNum(v);
 
   const EndpointLayer = React.useMemo(
     () => makeEndpointLayer(metric, rows, valueFmt),
@@ -753,7 +754,7 @@ function SparseBody({ point }: { point: TrajectoryPoint | undefined }) {
       <div className="grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-border bg-border sm:grid-cols-4">
         <KpiCell label="Close Score">
           <p className="mt-1 font-mono text-lg font-semibold leading-tight tabular-nums">
-            {point?.score != null ? point.score.toFixed(0) : "—"}
+            {point?.score != null ? formatNum(point.score) : "—"}
           </p>
         </KpiCell>
         <KpiCell label="Health">
@@ -770,7 +771,7 @@ function SparseBody({ point }: { point: TrajectoryPoint | undefined }) {
         </KpiCell>
         <KpiCell label="Gate Completion">
           <p className="mt-1 font-mono text-lg font-semibold leading-tight tabular-nums">
-            {point?.gatePct != null ? `${point.gatePct.toFixed(0)}%` : "—"}
+            {point?.gatePct != null ? `${formatNum(point.gatePct)}%` : "—"}
           </p>
         </KpiCell>
         <KpiCell label="Contract Value">

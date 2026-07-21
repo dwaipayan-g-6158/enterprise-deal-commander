@@ -1,4 +1,7 @@
+import { Link } from "wouter";
 import { useFlowCoverage } from "./use-flow";
+import { formatNum } from "@/lib/format";
+import { InfoTooltip } from "@/components/ui/info-tooltip";
 
 interface CoverageData {
   total: number | null;
@@ -9,12 +12,32 @@ interface CoverageData {
   caveats?: string[];
 }
 
-const RATIOS: { key: keyof CoverageData; label: string }[] = [
-  { key: "total", label: "Total" },
-  { key: "qualified", label: "Qualified" },
-  { key: "weighted", label: "Weighted" },
-  { key: "aiAdjusted", label: "AI-Adjusted" },
-  { key: "netNew", label: "Net-New" },
+const RATIOS: { key: keyof CoverageData; label: string; note: string }[] = [
+  {
+    key: "total",
+    label: "Total",
+    note: "All open pipeline value ÷ this period's revenue target — the rawest, most optimistic coverage read.",
+  },
+  {
+    key: "qualified",
+    label: "Qualified",
+    note: "Open value in every stage past Discovery ÷ target — excludes unvetted top-of-funnel deals.",
+  },
+  {
+    key: "weighted",
+    label: "Weighted",
+    note: "Σ(deal value × its win probability %) ÷ target. Deals without a win probability are excluded.",
+  },
+  {
+    key: "aiAdjusted",
+    label: "AI-Adjusted",
+    note: "Σ(deal value × AI-scored win probability) ÷ target, using the model score instead of the manually set win %. Unscored deals are excluded.",
+  },
+  {
+    key: "netNew",
+    label: "Net-New",
+    note: "Value landed this period ÷ the coverage gap still left after weighted pipeline. Blank when the gap is already covered — there's nothing left to backfill.",
+  },
 ];
 
 const tone = (r: number | null) =>
@@ -45,12 +68,23 @@ export function CoverageTracker() {
         const v = data?.[m.key] as number | null | undefined;
         return (
           <div key={m.key} className="bg-card border border-border rounded-lg p-4 shadow-sm">
-            <div className="text-xs text-muted-foreground uppercase tracking-wider">{m.label}</div>
+            <div className="flex items-center gap-1 text-xs text-muted-foreground uppercase tracking-wider">
+              <span>{m.label}</span>
+              <InfoTooltip>
+                {m.note} Read as a multiple of target: 3x+ is on track (green), 2-3x is tight (amber),
+                under 2x is at risk (red).
+              </InfoTooltip>
+            </div>
             <div className={`text-3xl font-bold font-mono mt-1 ${tone(v ?? null)}`}>
-              {v == null ? "—" : `${v.toFixed(2)}x`}
+              {v == null ? "—" : `${formatNum(v)}x`}
             </div>
             {noTarget && (
-              <div className="text-[11px] text-muted-foreground mt-1">Set a target</div>
+              <div className="text-[11px] text-muted-foreground mt-1">
+                No target set —{" "}
+                <Link href="/settings" className="underline hover:text-foreground">
+                  set one in Settings → Targets
+                </Link>
+              </div>
             )}
           </div>
         );

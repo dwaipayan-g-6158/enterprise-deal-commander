@@ -2,16 +2,15 @@ import { useState } from "react";
 import { cn } from "@/lib/utils";
 import {
   useSetDisposition,
-  useClearDisposition,
   useLaunchIntervention,
   useListInterventionChecklists,
   type Alert,
 } from "@workspace/api-client-react";
 import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
@@ -19,6 +18,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   Collapsible,
   CollapsibleContent,
@@ -34,19 +34,104 @@ import {
   Info,
   Shield,
   Check,
-  Clock,
+  AlarmClock,
   ShieldOff,
   Zap,
-  RotateCcw,
 } from "lucide-react";
 import { type DealRisk } from "./risk/risk-model";
 import { RiskScoreCard } from "./risk/risk-score-card";
+import { ManagedRisks } from "./risk/managed-risks";
+import { SNOOZE_FIELDS } from "./risk/snooze-fields";
 
-function AlertCard({ dealId, alert, isManaged = false }: { dealId: string; alert: Alert; isManaged?: boolean }) {
+const SNOOZE_PRESETS = [7, 14, 30];
+
+function SnoozePopover({ onConfirm, pending }: { onConfirm: (durationDays: number, field?: string) => void; pending: boolean }) {
+  const [open, setOpen] = useState(false);
+  const [duration, setDuration] = useState<number | "custom">(14);
+  const [customDays, setCustomDays] = useState("14");
+  const [field, setField] = useState<string>("");
+
+  const effectiveDays = duration === "custom" ? Number(customDays) : duration;
+  const valid = Number.isFinite(effectiveDays) && effectiveDays >= 1 && effectiveDays <= 365;
+
+  const confirm = () => {
+    if (!valid) return;
+    onConfirm(effectiveDays, field || undefined);
+    setOpen(false);
+  };
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button size="sm" variant="outline" disabled={pending} className="gap-1.5">
+          <AlarmClock className="h-3.5 w-3.5" /> Snooze
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent align="start" className="w-72 space-y-3">
+        <div className="space-y-1.5">
+          <Label className="text-xs">Snooze for</Label>
+          <div className="flex gap-1.5">
+            {SNOOZE_PRESETS.map((d) => (
+              <Button
+                key={d}
+                type="button"
+                size="sm"
+                variant={duration === d ? "default" : "outline"}
+                className="h-7 flex-1 text-xs"
+                onClick={() => setDuration(d)}
+              >
+                {d}d
+              </Button>
+            ))}
+            <Button
+              type="button"
+              size="sm"
+              variant={duration === "custom" ? "default" : "outline"}
+              className="h-7 flex-1 text-xs"
+              onClick={() => setDuration("custom")}
+            >
+              Custom
+            </Button>
+          </div>
+          {duration === "custom" && (
+            <Input
+              type="number"
+              min={1}
+              max={365}
+              value={customDays}
+              onChange={(e) => setCustomDays(e.target.value)}
+              placeholder="Days"
+              className="h-7 text-xs"
+            />
+          )}
+        </div>
+        <div className="space-y-1.5">
+          <Label className="text-xs">Also wake early if (optional)</Label>
+          <Select value={field} onValueChange={setField}>
+            <SelectTrigger className="h-8 text-xs">
+              <SelectValue placeholder="No field selected" />
+            </SelectTrigger>
+            <SelectContent>
+              {SNOOZE_FIELDS.map((f) => (
+                <SelectItem key={f.value} value={f.value}>
+                  {f.label} changes
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <Button size="sm" className="w-full" disabled={!valid || pending} onClick={confirm}>
+          Confirm snooze
+        </Button>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+function AlertCard({ dealId, alert }: { dealId: string; alert: Alert }) {
   const { toast } = useToast();
   const invalidate = useCockpitInvalidate(dealId);
   const setDisposition = useSetDisposition();
-  const clearDisposition = useClearDisposition();
   const launchIntervention = useLaunchIntervention();
   const { data: checklists } = useListInterventionChecklists();
 
@@ -54,17 +139,11 @@ function AlertCard({ dealId, alert, isManaged = false }: { dealId: string; alert
   const [showAccept, setShowAccept] = useState(false);
   const [checklistId, setChecklistId] = useState<string>("");
 
-  if (process.env.NODE_ENV !== "production" && isManaged && !alert.disposition) {
-    console.error(
-      `[AlertCard] isManaged=true but disposition is null for pattern "${alert.code}". Engine filter invariant broken.`,
-    );
-  }
-
   const relevantChecklists = checklists?.data.filter((c) => c.triggerPatternCode === alert.code) ?? [];
 
   const apply = async (
     disposition: "acknowledge" | "accept" | "snooze",
-    extra?: { rationale?: string; snooze_until_field_change?: string },
+    extra?: { rationale?: string; snooze_duration_days?: number; snooze_until_field_change?: string },
   ) => {
     try {
       await setDisposition.mutateAsync({
@@ -79,16 +158,6 @@ function AlertCard({ dealId, alert, isManaged = false }: { dealId: string; alert
     } catch (err: unknown) {
       const msg = (err as { data?: { error?: { message?: string } } })?.data?.error?.message;
       toast({ title: "Action failed", description: msg ?? "Could not record disposition.", variant: "destructive" });
-    }
-  };
-
-  const clear = async () => {
-    try {
-      await clearDisposition.mutateAsync({ dealId, patternCode: alert.code });
-      await invalidate();
-      toast({ title: "Disposition cleared", description: `${alert.code} returned to active.` });
-    } catch {
-      toast({ title: "Action failed", description: "Could not clear disposition.", variant: "destructive" });
     }
   };
 
@@ -115,7 +184,7 @@ function AlertCard({ dealId, alert, isManaged = false }: { dealId: string; alert
   return (
     <Card className={cn("border-l-4", isRed ? "border-l-destructive" : "border-l-amber-500")}>
       <CardContent className="p-4 space-y-3">
-        {/* Header: icon + code badge + severity + disposition */}
+        {/* Header: icon + code badge + severity */}
         <div className="flex gap-3">
           {isRed ? (
             <ShieldAlert className="w-5 h-5 text-destructive shrink-0 mt-0.5" />
@@ -130,11 +199,6 @@ function AlertCard({ dealId, alert, isManaged = false }: { dealId: string; alert
               <span className={cn("inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold", codeColorCls)}>
                 {alert.severity}
               </span>
-              {alert.disposition && (
-                <Badge variant="outline" className="capitalize text-[10px] h-5 py-0">
-                  {alert.disposition.state}
-                </Badge>
-              )}
             </div>
             <p className="text-sm leading-snug">{alert.message}</p>
             {alert.intervention && (
@@ -185,42 +249,31 @@ function AlertCard({ dealId, alert, isManaged = false }: { dealId: string; alert
 
         {/* Action buttons */}
         <div className="flex flex-wrap gap-2 pt-1">
-          {isManaged || alert.disposition ? (
-            <Button size="sm" variant="outline" onClick={clear} disabled={clearDisposition.isPending} className="gap-1.5">
-              <RotateCcw className="h-3.5 w-3.5" /> Clear Disposition
-            </Button>
-          ) : (
-            <>
-              <Button size="sm" variant="outline" onClick={() => apply("acknowledge")} disabled={setDisposition.isPending} className="gap-1.5">
-                <Check className="h-3.5 w-3.5" /> Acknowledge
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => apply("snooze", { snooze_until_field_change: "any" })}
-                disabled={setDisposition.isPending}
-                className="gap-1.5"
-              >
-                <Clock className="h-3.5 w-3.5" /> Snooze
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => setShowAccept((s) => !s)}
-                className={cn(
-                  "gap-1.5",
-                  isRed
-                    ? "border-destructive/40 text-destructive hover:bg-destructive/5 hover:border-destructive"
-                    : "border-amber-500/40 text-amber-600 dark:text-amber-400 hover:bg-amber-500/5 hover:border-amber-500",
-                )}
-              >
-                <ShieldOff className="h-3.5 w-3.5" /> Accept Risk
-              </Button>
-            </>
-          )}
+          <Button size="sm" variant="outline" onClick={() => apply("acknowledge")} disabled={setDisposition.isPending} className="gap-1.5">
+            <Check className="h-3.5 w-3.5" /> Acknowledge
+          </Button>
+          <SnoozePopover
+            pending={setDisposition.isPending}
+            onConfirm={(snooze_duration_days, snooze_until_field_change) =>
+              apply("snooze", { snooze_duration_days, snooze_until_field_change })
+            }
+          />
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => setShowAccept((s) => !s)}
+            className={cn(
+              "gap-1.5",
+              isRed
+                ? "border-destructive/40 text-destructive hover:bg-destructive/5 hover:border-destructive"
+                : "border-amber-500/40 text-amber-600 dark:text-amber-400 hover:bg-amber-500/5 hover:border-amber-500",
+            )}
+          >
+            <ShieldOff className="h-3.5 w-3.5" /> Accept Risk
+          </Button>
         </div>
 
-        {showAccept && !alert.disposition && (
+        {showAccept && (
           <div className="space-y-2 rounded-md border bg-muted/40 p-3">
             <Label className="text-xs">Rationale (required, min 10 chars)</Label>
             <Textarea
@@ -302,10 +355,8 @@ export function RiskGovernance({ dealId, alerts, managedAlerts = [], risk }: { d
             </button>
           </CollapsibleTrigger>
           <CollapsibleContent>
-            <div className="mt-2 space-y-3 opacity-65">
-              {managedAlerts.map((alert) => (
-                <AlertCard key={alert.code} dealId={dealId} alert={alert} isManaged />
-              ))}
+            <div className="mt-2">
+              <ManagedRisks dealId={dealId} managedAlerts={managedAlerts} />
             </div>
           </CollapsibleContent>
         </Collapsible>

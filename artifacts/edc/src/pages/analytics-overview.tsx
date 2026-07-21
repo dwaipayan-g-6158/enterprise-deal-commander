@@ -1,5 +1,6 @@
 import {
   useGetVelocityAnalytics,
+  useGetVelocityBenchmarks,
   useGetPipelineSimulation,
   useGetWinLossAnalytics,
   useGetCompetitiveAnalytics,
@@ -13,7 +14,17 @@ import { ForecastFan } from "@/components/cockpit/charts/forecast-fan";
 import { WinLossDonut } from "@/components/cockpit/charts/winloss-donut";
 import { useLocation } from "wouter";
 import { VelocityTriageTable } from "@/components/cockpit/velocity-triage";
+import { InfoTooltip } from "@/components/ui/info-tooltip";
 import { money } from "@/lib/format";
+
+interface VelocityBenchmark {
+  stageName: string;
+  p25: number;
+  median: number;
+  p75: number;
+  p90: number;
+  sampleSize: number;
+}
 
 interface VelocityDeal {
   id: string;
@@ -35,6 +46,7 @@ interface CompetitorRow {
 
 export function AnalyticsOverview() {
   const velocity = useGetVelocityAnalytics();
+  const velocityBenchmarks = useGetVelocityBenchmarks();
   const sim = useGetPipelineSimulation();
   const winLoss = useGetWinLossAnalytics();
   const competitive = useGetCompetitiveAnalytics();
@@ -50,6 +62,8 @@ export function AnalyticsOverview() {
     | undefined;
   const comps = ((competitive.data?.data as { competitors?: CompetitorRow[] })?.competitors ?? []) as CompetitorRow[];
   const pipe = pipeline.data?.data as { totalTcv: number; activeDeals: number } | undefined;
+  const vBenchmarks = ((velocityBenchmarks.data?.data as { benchmarks?: VelocityBenchmark[] })?.benchmarks ??
+    []) as VelocityBenchmark[];
 
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -154,7 +168,25 @@ export function AnalyticsOverview() {
       {/* Velocity triage */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-lg">Velocity — Most Overdue First</CardTitle>
+          <CardTitle className="text-lg flex items-center gap-1.5">
+            Velocity — Most Overdue First
+            <InfoTooltip>
+              Each deal's benchmark is the median days-in-stage across other open deals currently in
+              that same stage — not a fixed target. <strong>SLOW</strong> = running past 1.5× the
+              benchmark; <strong>FAST</strong> = under 0.5×. &quot;Overdue&quot; (Delta) = days in
+              stage minus the benchmark; the list sorts most-overdue first.
+            </InfoTooltip>
+          </CardTitle>
+          {vBenchmarks.length > 0 && (
+            <p className="text-xs text-muted-foreground flex flex-wrap gap-x-3 gap-y-1 pt-1">
+              <span className="uppercase tracking-wider">Stage medians:</span>
+              {vBenchmarks.map((b) => (
+                <span key={b.stageName}>
+                  {b.stageName} <span className="font-mono">{b.median}d</span>
+                </span>
+              ))}
+            </p>
+          )}
         </CardHeader>
         <CardContent>
           {vDeals.length > 0 ? (

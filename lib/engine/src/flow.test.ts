@@ -4,10 +4,13 @@ import {
   computeFunnel,
   computeConversionMatrix,
   computeSankeyFlows,
+  computeTransitionBreakdown,
   computeRecycleExit,
   computeCoverage,
   computeHealthScore,
+  scoreHealthAbsolute,
   DEFAULT_HEALTH_WEIGHTS,
+  DEFAULT_HEALTH_BENCHMARKS,
   type StageDef,
   type OpenDeal,
   type TransitionRec,
@@ -79,6 +82,44 @@ describe("computeConversionMatrix", () => {
     const m = computeConversionMatrix(transitions, STAGES, 30, now);
     expect(m[0].every((c) => c.n === 0)).toBe(true);
   });
+  it("classifies a move into Closed-Lost as 'loss', not 'forward' — regression guard", () => {
+    // Closed-Lost (id 6) has the HIGHEST sortOrder of any stage. Before the
+    // terminal-flag fix, "to.sortOrder > from.sortOrder" made every exit_lost
+    // transition read as "forward" (and render green in the UI).
+    const now = "2026-02-01T00:00:00Z";
+    const transitions: TransitionRec[] = [
+      { dealId: "a", fromStageId: 3, toStageId: 6, transitionType: "exit_lost", tcv: 0, daysInFromStage: 5, transitionedAt: "2026-01-10T00:00:00Z" },
+    ];
+    const m = computeConversionMatrix(transitions, STAGES, 90, now);
+    const cellToLost = m.find((row) => row[0]?.fromId === 3)!.find((c) => c.toId === 6)!;
+    expect(cellToLost.kind).toBe("loss");
+  });
+  it("classifies a move into Closed-Won as 'win'", () => {
+    const now = "2026-02-01T00:00:00Z";
+    const transitions: TransitionRec[] = [
+      { dealId: "a", fromStageId: 4, toStageId: 5, transitionType: "exit_won", tcv: 0, daysInFromStage: 5, transitionedAt: "2026-01-10T00:00:00Z" },
+    ];
+    const m = computeConversionMatrix(transitions, STAGES, 90, now);
+    const cellToWon = m.find((row) => row[0]?.fromId === 4)!.find((c) => c.toId === 5)!;
+    expect(cellToWon.kind).toBe("win");
+  });
+});
+
+describe("computeTransitionBreakdown", () => {
+  it("buckets transitions into advance/recycle/won/lost by count and value, excluding create", () => {
+    const transitions: TransitionRec[] = [
+      { dealId: "a", fromStageId: null, toStageId: 1, transitionType: "create", tcv: 100, daysInFromStage: null, transitionedAt: "2026-01-01T00:00:00Z" },
+      { dealId: "a", fromStageId: 1, toStageId: 2, transitionType: "forward", tcv: 100, daysInFromStage: 3, transitionedAt: "2026-01-04T00:00:00Z" },
+      { dealId: "b", fromStageId: 2, toStageId: 1, transitionType: "backward", tcv: 50, daysInFromStage: 2, transitionedAt: "2026-01-05T00:00:00Z" },
+      { dealId: "c", fromStageId: 4, toStageId: 5, transitionType: "exit_won", tcv: 300, daysInFromStage: 6, transitionedAt: "2026-01-06T00:00:00Z" },
+      { dealId: "d", fromStageId: 3, toStageId: 6, transitionType: "exit_lost", tcv: 200, daysInFromStage: 8, transitionedAt: "2026-01-07T00:00:00Z" },
+    ];
+    const b = computeTransitionBreakdown(transitions);
+    expect(b.advance).toEqual({ count: 1, value: 100 });
+    expect(b.recycle).toEqual({ count: 1, value: 50 });
+    expect(b.won).toEqual({ count: 1, value: 300 });
+    expect(b.lost).toEqual({ count: 1, value: 200 });
+  });
 });
 
 describe("computeSankeyFlows", () => {
@@ -119,6 +160,35 @@ describe("computeRecycleExit", () => {
     const r = computeRecycleExit(transitions, STAGES);
     expect(r.waterfall.find((w) => w.kind === "won")!.delta).toBe(-500);
     expect(r.waterfall.find((w) => w.kind === "created")!.delta).toBe(500);
+  });
+  it("reports 'still open' as the ending running total (created - won - lost), not a recycled marker", () => {
+    const transitions: TransitionRec[] = [
+      { dealId: "b", fromStageId: null, toStageId: 1, transitionType: "create", tcv: 1000, daysInFromStage: null, transitionedAt: "2026-01-01T00:00:00Z" },
+      { dealId: "b", fromStageId: 1, toStageId: 5, transitionType: "exit_won", tcv: 1000, daysInFromStage: 4, transitionedAt: "2026-01-05T00:00:00Z" },
+      { dealId: "c", fromStageId: null, toStageId: 1, transitionType: "create", tcv: 400, daysInFromStage: null, transitionedAt: "2026-01-02T00:00:00Z" },
+      { dealId: "c", fromStageId: 1, toStageId: 6, transitionType: "exit_lost", tcv: 400, daysInFromStage: 4, transitionedAt: "2026-01-06T00:00:00Z" },
+      { dealId: "d", fromStageId: null, toStageId: 1, transitionType: "create", tcv: 300, daysInFromStage: null, transitionedAt: "2026-01-03T00:00:00Z" },
+    ];
+    const r = computeRecycleExit(transitions, STAGES);
+    // created 1700, won 1000, lost 400 -> still open 300 (deal "d", never exited)
+    expect(r.waterfall.find((w) => w.kind === "ending")!.delta).toBe(300);
+    // Exactly 4 steps now (created/won/lost/ending) — recycling is reported
+    // separately via recycledDealCount/recycledValue, not as a 5th step.
+    expect(r.waterfall.map((w) => w.kind)).toEqual(["created", "won", "lost", "ending"]);
+  });
+  it("splits exit rate by stage into won vs lost, and reports recycled deal count/value", () => {
+    const transitions: TransitionRec[] = [
+      { dealId: "a", fromStageId: null, toStageId: 4, transitionType: "create", tcv: 100, daysInFromStage: null, transitionedAt: "2026-01-01T00:00:00Z" },
+      { dealId: "a", fromStageId: 4, toStageId: 5, transitionType: "exit_won", tcv: 100, daysInFromStage: 4, transitionedAt: "2026-01-05T00:00:00Z" },
+      { dealId: "b", fromStageId: null, toStageId: 4, transitionType: "create", tcv: 200, daysInFromStage: null, transitionedAt: "2026-01-01T00:00:00Z" },
+      { dealId: "b", fromStageId: 4, toStageId: 6, transitionType: "exit_lost", tcv: 200, daysInFromStage: 4, transitionedAt: "2026-01-05T00:00:00Z" },
+      { dealId: "c", fromStageId: 2, toStageId: 1, transitionType: "backward", tcv: 75, daysInFromStage: 2, transitionedAt: "2026-01-05T00:00:00Z" },
+    ];
+    const r = computeRecycleExit(transitions, STAGES);
+    expect(r.exitWonRateByStage[4]).toBe(50);
+    expect(r.exitLostRateByStage[4]).toBe(50);
+    expect(r.recycledDealCount).toBe(1);
+    expect(r.recycledValue).toBe(75);
   });
 });
 
@@ -175,5 +245,61 @@ describe("computeHealthScore", () => {
     const r = computeHealthScore(inputs, history);
     expect(r.subScores.coverage).toBeNull();
     expect(r.subScores.generation).toBeNull();
+  });
+});
+
+describe("scoreHealthAbsolute", () => {
+  it("scores every dimension against a fixed benchmark — no history needed, so it's never a flat 50", () => {
+    // This is the regression guard for the Pipeline Pulse bug: computeHealthScore
+    // percentile-ranks against history and returns 50 for every dimension when
+    // history is empty (see the "returns null coverage sub-score" case above,
+    // and computeHealthScore's own doc comment). scoreHealthAbsolute takes no
+    // history at all and must produce varied, deterministic scores immediately.
+    const inputs = {
+      coverageQualified: 3, // at/above the 3x ceiling -> 100
+      velocityIndex: 30, // at the 30-day floor -> 100
+      winRate: 0.2, // halfway to the 40% ceiling -> 50
+      generationRatio: 0.5, // halfway -> 50
+      agingScore: 0.25, // halfway to the 50% ceiling (lower is better) -> 50
+      retentionRate: 0.75, // halfway between 50% and 100% -> 50
+    };
+    const r = scoreHealthAbsolute(inputs, DEFAULT_HEALTH_BENCHMARKS, DEFAULT_HEALTH_WEIGHTS);
+    expect(r.subScores.coverage).toBe(100);
+    expect(r.subScores.velocity).toBe(100);
+    expect(r.subScores.conversion).toBe(50);
+    expect(r.subScores.generation).toBe(50);
+    expect(r.subScores.age).toBe(50);
+    expect(r.subScores.attrition).toBe(50);
+    // Weighted mean of [100,100,50,50,50,50] = 400/6 ≈ 66.67 -> rounds to 67.
+    expect(r.score).toBe(67);
+  });
+  it("clamps out-of-range values at the benchmark floor/ceiling", () => {
+    const inputs = {
+      coverageQualified: 10, // way above ceiling -> still 100, not >100
+      velocityIndex: 500, // way past the 120-day ceiling -> still 0, not negative
+      winRate: 0,
+      generationRatio: 0,
+      agingScore: 1,
+      retentionRate: 0,
+    };
+    const r = scoreHealthAbsolute(inputs);
+    expect(r.subScores.coverage).toBe(100);
+    expect(r.subScores.velocity).toBe(0);
+    expect(r.subScores.age).toBe(0);
+  });
+  it("excludes null dimensions and re-normalizes the remaining weights", () => {
+    const inputs = {
+      coverageQualified: null,
+      velocityIndex: 30,
+      winRate: 0.4,
+      generationRatio: null,
+      agingScore: 0,
+      retentionRate: 1,
+    };
+    const r = scoreHealthAbsolute(inputs);
+    expect(r.subScores.coverage).toBeNull();
+    expect(r.subScores.generation).toBeNull();
+    // velocity=100, conversion=100, age=100, attrition=100 -> mean of the 4 non-null = 100.
+    expect(r.score).toBe(100);
   });
 });

@@ -5,6 +5,7 @@
  * Enterprise Deal Commander (EDC) Phase 1 API
  * OpenAPI spec version: 1.0.0
  */
+import type { Ad360Feature } from './ad360Feature';
 import type { ComplianceDriver } from './complianceDriver';
 import type { CrossSell } from './crossSell';
 import type { Tag } from './tag';
@@ -55,6 +56,11 @@ export interface Deal {
   complianceDeadline?: string | null;
   /** @nullable */
   estimatedLogSources?: number | null;
+  /** @nullable */
+  ad360SeatCount?: number | null;
+  /** @nullable */
+  ad360FeatureNotes?: string | null;
+  ad360Features?: Ad360Feature[];
   productsOfInterest?: CrossSell[];
   complianceDrivers?: ComplianceDriver[];
   calculatedTCV: number;

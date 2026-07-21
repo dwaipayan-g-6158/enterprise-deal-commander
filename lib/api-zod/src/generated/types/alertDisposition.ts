@@ -13,4 +13,8 @@ export interface AlertDisposition {
   rationale?: string | null;
   /** @nullable */
   snoozeUntilFieldChange?: string | null;
+  /** @nullable */
+  snoozeUntil?: Date | null;
+  createdBy?: string;
+  createdAt?: Date;
 }

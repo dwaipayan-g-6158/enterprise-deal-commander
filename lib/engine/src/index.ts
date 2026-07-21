@@ -136,6 +136,9 @@ export interface RawDisposition {
   disposition: DispositionState;
   rationale?: string | null;
   snooze_until_field_change?: string | null;
+  snooze_until?: string | null;
+  created_by?: string | null;
+  created_at?: string | null;
 }
 
 export interface OwnMomentum {
@@ -197,6 +200,9 @@ export interface Alert {
     state: DispositionState;
     rationale: string | null;
     snoozeUntilFieldChange: string | null;
+    snoozeUntil: string | null;
+    createdBy: string | null;
+    createdAt: string | null;
   } | null;
 }
 
@@ -295,6 +301,10 @@ export const PRODUCT_AFFINITY: Record<string, string[]> = {
   EVENTLOG_ANALYZER: ["ADAUDIT_PLUS", "DATA_SECURITY_PLUS", "CLOUD_SECURITY_PLUS"],
   DATA_SECURITY_PLUS: ["EVENTLOG_ANALYZER", "CLOUD_SECURITY_PLUS"],
   CLOUD_SECURITY_PLUS: ["EVENTLOG_ANALYZER", "DATA_SECURITY_PLUS"],
+  // AD360 Enterprise is the full AD360 platform bundle (deliberately excluded
+  // from SUITE_MEMBERS.AD360 — see the suppression guards below); once owned,
+  // the natural expansion is into the SIEM/Log360 suite.
+  AD360_ENTERPRISE: ["EVENTLOG_ANALYZER", "DATA_SECURITY_PLUS"],
 };
 
 /** Compliance driver -> products that carry the strongest story (keyed by driver name). */
@@ -360,11 +370,17 @@ export function generateRecommendations(
     });
   }
 
-  // Recovery gap: AD/M365 footprint with no backup & recovery line.
+  // Recovery gap: AD/M365 footprint with no backup & recovery line. Suppressed
+  // when AD360 Enterprise (the full bundle) is owned — its coverage already
+  // includes recovery, so pitching RecoveryManager Plus on top is a false gap.
   const adFootprint = [...owned].some(
     (c) => SUITE_MEMBERS.AD360.includes(c) && c !== "RECOVERYMANAGER_PLUS",
   );
-  if (adFootprint && !owned.has("RECOVERYMANAGER_PLUS")) {
+  if (
+    adFootprint &&
+    !owned.has("RECOVERYMANAGER_PLUS") &&
+    !owned.has("AD360_ENTERPRISE")
+  ) {
     recs.push({
       type: "RECOVERY_GAP",
       productCodes: ["RECOVERYMANAGER_PLUS"],
@@ -377,6 +393,10 @@ export function generateRecommendations(
   // Suite-bundle upsell: enough à-la-carte components to justify the bundle.
   const minComp = Number(thresholds.suite_bundle_min_components) || 3;
   for (const suite of ["AD360", "LOG360"] as const) {
+    // Can't upsell a bundle the customer already holds — AD360 Enterprise IS
+    // the AD360 bundle (a platform SKU, like IDENTITY360/LOG360_CLOUD, not an
+    // à-la-carte component counted in SUITE_MEMBERS).
+    if (suite === "AD360" && owned.has("AD360_ENTERPRISE")) continue;
     const display = suite === "LOG360" ? "Log360" : "AD360";
     const ownedInSuite = SUITE_MEMBERS[suite].filter((c) => owned.has(c));
     if (ownedInSuite.length >= minComp) {
@@ -1266,6 +1286,9 @@ export function processDealIntelligence(
             state: disp.disposition,
             rationale: disp.rationale || null,
             snoozeUntilFieldChange: disp.snooze_until_field_change || null,
+            snoozeUntil: disp.snooze_until || null,
+            createdBy: disp.created_by || null,
+            createdAt: disp.created_at || null,
           }
         : null,
     };

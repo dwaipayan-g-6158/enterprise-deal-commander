@@ -9,8 +9,9 @@ import {
 } from "@workspace/api-zod";
 import { requireAuth, getActor } from "../lib/auth";
 import { badRequest, notFound } from "../lib/http";
-import { toISO } from "../lib/intelligence";
+import { toISO, getDealWithLookups } from "../lib/intelligence";
 import { writeAudit } from "../lib/audit";
+import { snapshotFieldValue } from "../lib/snooze-fields";
 
 const router: IRouter = Router();
 
@@ -40,8 +41,28 @@ router.put(
     if (body.disposition === "accept" && !body.rationale) {
       throw badRequest("Rationale is required to accept a risk");
     }
-    if (body.disposition === "snooze" && !body.snooze_until_field_change) {
-      throw badRequest("Snooze requires a field to watch");
+    if (body.disposition === "snooze" && !body.snooze_duration_days) {
+      throw badRequest("Snooze requires a duration");
+    }
+
+    // Snooze auto-expires on whichever comes first: the duration elapsing
+    // (snoozeUntil) or the watched field changing (snoozeFieldBaseline vs.
+    // its current value, compared lazily in intelligence.ts). Both are null
+    // for acknowledge/accept.
+    let snoozeUntil: Date | null = null;
+    let snoozeFieldBaseline: string | null = null;
+    if (body.disposition === "snooze") {
+      snoozeUntil = new Date(
+        Date.now() + body.snooze_duration_days! * 86_400_000,
+      );
+      if (body.snooze_until_field_change) {
+        const dealRow = await getDealWithLookups(dealId);
+        if (!dealRow) throw notFound("Deal not found");
+        snoozeFieldBaseline = snapshotFieldValue(
+          body.snooze_until_field_change,
+          dealRow.deal,
+        );
+      }
     }
 
     const values = {
@@ -50,6 +71,8 @@ router.put(
       disposition: body.disposition,
       rationale: body.rationale ?? null,
       snoozeUntilFieldChange: body.snooze_until_field_change ?? null,
+      snoozeUntil,
+      snoozeFieldBaseline,
       createdBy: actor.displayName,
     };
 
@@ -65,6 +88,8 @@ router.put(
           disposition: values.disposition,
           rationale: values.rationale,
           snoozeUntilFieldChange: values.snoozeUntilFieldChange,
+          snoozeUntil: values.snoozeUntil,
+          snoozeFieldBaseline: values.snoozeFieldBaseline,
           createdBy: values.createdBy,
         },
       })
@@ -88,6 +113,7 @@ router.put(
           disposition: row.disposition,
           rationale: row.rationale,
           snoozeUntilFieldChange: row.snoozeUntilFieldChange,
+          snoozeUntil: toISO(row.snoozeUntil),
           createdBy: row.createdBy,
           createdAt: toISO(row.createdAt) ?? undefined,
         },

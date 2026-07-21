@@ -774,6 +774,18 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ProductListResponse"
+  /v1/lookups/ad360-features:
+    get:
+      operationId: listAd360Features
+      tags: [lookups]
+      summary: Predefined AD360 Enterprise platform-customization pick-list
+      responses:
+        "200":
+          description: AD360 Enterprise customization features
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Ad360FeatureListResponse"
   /v1/lookups/competitors:
     get:
       operationId: listCompetitors
@@ -1920,6 +1932,11 @@ components:
         complianceDriverName: { type: ["string", "null"] }
         complianceDeadline: { type: ["string", "null"] }
         estimatedLogSources: { type: ["integer", "null"] }
+        ad360SeatCount: { type: ["integer", "null"] }
+        ad360FeatureNotes: { type: ["string", "null"] }
+        ad360Features:
+          type: array
+          items: { $ref: "#/components/schemas/Ad360Feature" }
         productsOfInterest:
           type: array
           items: { $ref: "#/components/schemas/CrossSell" }
@@ -1983,6 +2000,11 @@ components:
         competitor_id: { type: ["integer", "null"] }
         compliance_driver_id: { type: ["integer", "null"] }
         estimated_log_sources: { type: ["integer", "null"] }
+        ad360_seat_count: { type: ["integer", "null"], minimum: 0 }
+        ad360_feature_notes: { type: ["string", "null"], maxLength: 2000 }
+        ad360_feature_ids:
+          type: array
+          items: { type: integer }
         product_interest_ids:
           type: array
           items: { type: string }
@@ -2026,6 +2048,11 @@ components:
         competitor_id: { type: ["integer", "null"] }
         compliance_driver_id: { type: ["integer", "null"] }
         estimated_log_sources: { type: ["integer", "null"] }
+        ad360_seat_count: { type: ["integer", "null"], minimum: 0 }
+        ad360_feature_notes: { type: ["string", "null"], maxLength: 2000 }
+        ad360_feature_ids:
+          type: array
+          items: { type: integer }
         product_interest_ids:
           type: array
           items: { type: string }
@@ -2218,6 +2245,9 @@ components:
         state: { type: string, enum: [acknowledge, accept, snooze] }
         rationale: { type: ["string", "null"] }
         snoozeUntilFieldChange: { type: ["string", "null"] }
+        snoozeUntil: { type: ["string", "null"], format: date-time }
+        createdBy: { type: string }
+        createdAt: { type: string, format: date-time }
       required: [state]
     AlertIntervention:
       type: object
@@ -2847,6 +2877,7 @@ components:
         disposition: { type: string, enum: [acknowledge, accept, snooze] }
         rationale: { type: string, minLength: 10, maxLength: 2000 }
         snooze_until_field_change: { type: string, minLength: 1, maxLength: 100 }
+        snooze_duration_days: { type: integer, minimum: 1, maximum: 365 }
       required: [disposition]
     Disposition:
       type: object
@@ -2857,6 +2888,7 @@ components:
         disposition: { type: string }
         rationale: { type: ["string", "null"] }
         snoozeUntilFieldChange: { type: ["string", "null"] }
+        snoozeUntil: { type: ["string", "null"] }
         createdBy: { type: string }
         createdAt: { type: string }
       required: [id, dealId, patternCode, disposition, createdBy]
@@ -2976,6 +3008,21 @@ components:
         data:
           type: array
           items: { $ref: "#/components/schemas/Product" }
+      required: [data]
+    Ad360Feature:
+      type: object
+      properties:
+        id: { type: integer }
+        code: { type: string }
+        label: { type: string }
+        description: { type: ["string", "null"] }
+      required: [id, code, label]
+    Ad360FeatureListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/Ad360Feature" }
       required: [data]
     Competitor:
       type: object

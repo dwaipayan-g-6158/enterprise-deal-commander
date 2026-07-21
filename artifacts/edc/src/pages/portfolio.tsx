@@ -6,6 +6,7 @@ import { AlertTriangle } from "lucide-react";
 import { ProductMixSection } from "@/components/cockpit/product-mix-section";
 import { PortfolioSummaryCards } from "@/components/cockpit/portfolio-summary-cards";
 import { PortfolioRiskHeatmap } from "@/components/cockpit/portfolio-risk-heatmap";
+import { formatNum } from "@/lib/format";
 
 export default function Portfolio() {
   const { data: response, isLoading } = useGetPortfolioAnalysis();
@@ -22,7 +23,7 @@ export default function Portfolio() {
           <Badge key={corr.code} variant="outline" className="text-xs bg-muted/50 flex gap-1">
             <AlertTriangle className="w-3 h-3 text-amber-500" />
             <span className="font-mono">{corr.code}</span>
-            <span className="text-muted-foreground">({(corr.share * 100).toFixed(0)}%, {corr.lift > 0 ? '+' : ''}{corr.lift.toFixed(1)}x)</span>
+            <span className="text-muted-foreground">({formatNum(corr.share * 100)}%, {corr.lift > 0 ? '+' : ''}{formatNum(corr.lift)}x)</span>
           </Badge>
         ))}
       </div>
@@ -67,7 +68,7 @@ export default function Portfolio() {
                   <TableRow key={i}>
                     <TableCell className="font-medium">{row.accountManager}</TableCell>
                     <TableCell>{row.dealCount}</TableCell>
-                    <TableCell>{row.avgCycleTimeDays} days</TableCell>
+                    <TableCell>{formatNum(row.avgCycleTimeDays)} days</TableCell>
                     <TableCell>{renderCorrelations(row.alertCorrelations)}</TableCell>
                   </TableRow>
                 ))}
@@ -95,7 +96,7 @@ export default function Portfolio() {
                   <TableRow key={i}>
                     <TableCell className="font-medium">{row.technicalLead}</TableCell>
                     <TableCell>{row.dealCount}</TableCell>
-                    <TableCell>{row.avgCycleTimeDays} days</TableCell>
+                    <TableCell>{formatNum(row.avgCycleTimeDays)} days</TableCell>
                     <TableCell>{renderCorrelations(row.alertCorrelations)}</TableCell>
                   </TableRow>
                 ))}
@@ -123,7 +124,7 @@ export default function Portfolio() {
                   <TableRow key={i}>
                     <TableCell className="font-medium">{row.productName}</TableCell>
                     <TableCell>{row.dealCount}</TableCell>
-                    <TableCell>{(row.presentInStalledShare * 100).toFixed(0)}%</TableCell>
+                    <TableCell>{formatNum(row.presentInStalledShare * 100)}%</TableCell>
                     <TableCell>{renderCorrelations(row.alertCorrelations)}</TableCell>
                   </TableRow>
                 ))}

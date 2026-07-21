@@ -112,7 +112,7 @@ export interface MatrixCell {
   toId: number;
   rate: number;
   n: number;
-  kind: "forward" | "stagnation" | "regression";
+  kind: "win" | "forward" | "stagnation" | "regression" | "loss";
   significant: boolean;
 }
 
@@ -142,8 +142,21 @@ export function computeConversionMatrix(
       const n = inWindow.filter((t) => t.fromStageId === from.id && t.toStageId === to.id).length;
       const denom = outTotal.get(from.id) ?? 0;
       const rate = denom > 0 ? round1((n / denom) * 100) : 0;
+      // Terminal outcomes are decided first — a move into Closed-Won/Closed-Lost
+      // is a win/loss regardless of sortOrder. Only non-terminal destinations
+      // fall back to comparing sortOrder (stagnation/forward/regression). This
+      // is what keeps a loss from being misread as "forward" just because the
+      // Closed-Lost stage happens to sort after every real stage.
       const kind: MatrixCell["kind"] =
-        to.sortOrder === from.sortOrder ? "stagnation" : to.sortOrder > from.sortOrder ? "forward" : "regression";
+        to.terminal === "won"
+          ? "win"
+          : to.terminal === "lost"
+            ? "loss"
+            : to.sortOrder === from.sortOrder
+              ? "stagnation"
+              : to.sortOrder > from.sortOrder
+                ? "forward"
+                : "regression";
       return { fromId: from.id, toId: to.id, rate, n, kind, significant: zTestSignificant(n, denom, baseline) };
     }),
   );
@@ -193,14 +206,64 @@ export function computeSankeyFlows(
 }
 
 // ---------------------------------------------------------------------------
+// Task 4b: computeTransitionBreakdown
+// ---------------------------------------------------------------------------
+
+export interface BreakdownBucket { count: number; value: number }
+export interface TransitionBreakdown {
+  advance: BreakdownBucket;
+  recycle: BreakdownBucket;
+  won: BreakdownBucket;
+  lost: BreakdownBucket;
+}
+
+// Classifies every transition into one of four plain-language buckets using
+// the already-computed TransitionType (forward -> advance, backward ->
+// recycle, exit_won -> won, exit_lost -> lost). "create" transitions (a deal
+// entering the pipeline, not moving between stages) are excluded. This is the
+// data behind the Stage Transitions breakdown panel — it complements the
+// Sankey (which only shows forward progression) by accounting for every
+// transition, including the recycled/won/lost ones the Sankey omits.
+export function computeTransitionBreakdown(transitions: TransitionRec[]): TransitionBreakdown {
+  const bucket = (): BreakdownBucket => ({ count: 0, value: 0 });
+  const out: TransitionBreakdown = { advance: bucket(), recycle: bucket(), won: bucket(), lost: bucket() };
+  for (const t of transitions) {
+    const key: keyof TransitionBreakdown | null =
+      t.transitionType === "forward"
+        ? "advance"
+        : t.transitionType === "backward"
+          ? "recycle"
+          : t.transitionType === "exit_won"
+            ? "won"
+            : t.transitionType === "exit_lost"
+              ? "lost"
+              : null;
+    if (key == null) continue;
+    out[key].count += 1;
+    out[key].value += t.tcv;
+  }
+  for (const k of Object.keys(out) as (keyof TransitionBreakdown)[]) out[k].value = Math.round(out[k].value);
+  return out;
+}
+
+// ---------------------------------------------------------------------------
 // Task 5: computeRecycleExit
 // ---------------------------------------------------------------------------
 
-export interface WaterfallStep { label: string; delta: number; kind: "created" | "won" | "lost" | "recycled" }
+// "created"/"won"/"lost" are signed deltas that bridge to the ending open
+// value; "ending" is the resulting running total, not a delta, so the UI
+// renders it as a neutral subtotal rather than a +/- change.
+export interface WaterfallStep { label: string; delta: number; kind: "created" | "won" | "lost" | "ending" }
 export interface RecycleExit {
   overallRecycleRate: number;
+  recycledDealCount: number;
+  recycledValue: number;
   recycleRateByStage: Record<number, number>;
+  // Combined (won+lost) exit rate by stage, kept for callers that don't need
+  // the won/lost split.
   exitRateByStage: Record<number, number>;
+  exitWonRateByStage: Record<number, number>;
+  exitLostRateByStage: Record<number, number>;
   recycleCountDistribution: Record<number, number>;
   waterfall: WaterfallStep[];
 }
@@ -217,41 +280,62 @@ export function computeRecycleExit(transitions: TransitionRec[], stages: StageDe
   const recycledDeals = [...backByDeal.values()].filter((c) => c > 0).length;
   const recycleCountDistribution: Record<number, number> = {};
   for (const c of backByDeal.values()) recycleCountDistribution[c] = (recycleCountDistribution[c] ?? 0) + 1;
+  const recycledValue = transitions
+    .filter((t) => t.transitionType === "backward")
+    .reduce((s, t) => s + t.tcv, 0);
 
   // Recycle/exit rate by stage = (backward|exit from stage) / (entered stage).
   const enteredByStage = new Map<number, number>();
   const backFromStage = new Map<number, number>();
   const exitFromStage = new Map<number, number>();
+  const exitWonFromStage = new Map<number, number>();
+  const exitLostFromStage = new Map<number, number>();
   for (const t of transitions) {
     if (t.toStageId != null) enteredByStage.set(t.toStageId, (enteredByStage.get(t.toStageId) ?? 0) + 1);
     if (t.fromStageId != null && t.transitionType === "backward")
       backFromStage.set(t.fromStageId, (backFromStage.get(t.fromStageId) ?? 0) + 1);
     if (t.fromStageId != null && (t.transitionType === "exit_won" || t.transitionType === "exit_lost"))
       exitFromStage.set(t.fromStageId, (exitFromStage.get(t.fromStageId) ?? 0) + 1);
+    if (t.fromStageId != null && t.transitionType === "exit_won")
+      exitWonFromStage.set(t.fromStageId, (exitWonFromStage.get(t.fromStageId) ?? 0) + 1);
+    if (t.fromStageId != null && t.transitionType === "exit_lost")
+      exitLostFromStage.set(t.fromStageId, (exitLostFromStage.get(t.fromStageId) ?? 0) + 1);
   }
   const recycleRateByStage: Record<number, number> = {};
   const exitRateByStage: Record<number, number> = {};
+  const exitWonRateByStage: Record<number, number> = {};
+  const exitLostRateByStage: Record<number, number> = {};
   for (const s of stages) {
     const entered = enteredByStage.get(s.id) ?? 0;
     recycleRateByStage[s.id] = entered > 0 ? round1(((backFromStage.get(s.id) ?? 0) / entered) * 100) : 0;
     exitRateByStage[s.id] = entered > 0 ? round1(((exitFromStage.get(s.id) ?? 0) / entered) * 100) : 0;
+    exitWonRateByStage[s.id] = entered > 0 ? round1(((exitWonFromStage.get(s.id) ?? 0) / entered) * 100) : 0;
+    exitLostRateByStage[s.id] = entered > 0 ? round1(((exitLostFromStage.get(s.id) ?? 0) / entered) * 100) : 0;
   }
 
-  // Waterfall: created (+), recycled marker, won (−), lost (−).
+  // Value bridge: Created (+) -> Won (−) -> Lost (−) -> Still open (running
+  // total). Recycling is deal churn *within* the pipeline, not a value entry
+  // or exit, so it's surfaced separately (recycledDealCount/recycledValue)
+  // rather than as a waterfall step.
   const created = transitions.filter((t) => t.transitionType === "create").reduce((s, t) => s + t.tcv, 0);
   const won = transitions.filter((t) => t.transitionType === "exit_won").reduce((s, t) => s + t.tcv, 0);
   const lost = transitions.filter((t) => t.transitionType === "exit_lost").reduce((s, t) => s + t.tcv, 0);
+  const stillOpen = Math.max(0, created - won - lost);
   const waterfall: WaterfallStep[] = [
     { label: "Created", delta: Math.round(created), kind: "created" },
-    { label: "Recycled", delta: 0, kind: "recycled" },
     { label: "Won", delta: -Math.round(won), kind: "won" },
     { label: "Lost", delta: -Math.round(lost), kind: "lost" },
+    { label: "Still open", delta: Math.round(stillOpen), kind: "ending" },
   ];
 
   return {
     overallRecycleRate: round1((recycledDeals / totalDeals) * 100),
+    recycledDealCount: recycledDeals,
+    recycledValue: Math.round(recycledValue),
     recycleRateByStage,
     exitRateByStage,
+    exitWonRateByStage,
+    exitLostRateByStage,
     recycleCountDistribution,
     waterfall,
   };
@@ -368,6 +452,88 @@ export function computeHealthScore(
     attrition: percentileRank(inputs.retentionRate, history.attrition),
   };
   // Weighted mean over available (non-null) sub-scores; re-normalize weights.
+  let wSum = 0;
+  let acc = 0;
+  for (const k of Object.keys(weights) as (keyof HealthWeights)[]) {
+    const s = subScores[k];
+    if (s != null) {
+      acc += weights[k] * s;
+      wSum += weights[k];
+    }
+  }
+  const score = wSum > 0 ? Math.round(acc / wSum) : 0;
+  return { score, subScores };
+}
+
+// ---------------------------------------------------------------------------
+// Task 7b: scoreHealthAbsolute
+// ---------------------------------------------------------------------------
+//
+// computeHealthScore above is relative — it percentile-ranks today's value
+// against accrued history, and returns a neutral 50 for every dimension until
+// that history exists (see percentileRank). For a single-tenant cockpit that
+// starves the Pipeline Pulse widget of any real signal from day one — every
+// sub-score, and therefore the composite, sits at exactly 50 forever unless
+// history is separately wired in.
+//
+// scoreHealthAbsolute instead scores each dimension against a fixed,
+// documented benchmark curve (no historical baseline required), so the score
+// is meaningful immediately and the same curve doubles as the "how is this
+// calculated" copy shown in the UI's info hints.
+
+// A benchmark is a linear ramp from (floorValue -> floorScore) to
+// (ceilValue -> ceilScore), clamped at both ends. For "lower is better"
+// metrics (e.g. velocity, age) floorScore is the higher number and
+// floorValue < ceilValue still holds — the ramp direction is encoded by
+// which score is higher, not by value ordering.
+export interface HealthBenchmark {
+  floorValue: number;
+  floorScore: number;
+  ceilValue: number;
+  ceilScore: number;
+}
+export type HealthBenchmarks = Record<keyof HealthWeights, HealthBenchmark>;
+
+export const DEFAULT_HEALTH_BENCHMARKS: HealthBenchmarks = {
+  // Qualified pipeline coverage ratio (qualified value / target). 0x -> 0, 3x+ -> 100.
+  coverage: { floorValue: 0, floorScore: 0, ceilValue: 3, ceilScore: 100 },
+  // Average stage residence in days (lower is better). <=30d -> 100, >=120d -> 0.
+  velocity: { floorValue: 30, floorScore: 100, ceilValue: 120, ceilScore: 0 },
+  // Win rate, 0..1. 0% -> 0, 40%+ -> 100.
+  conversion: { floorValue: 0, floorScore: 0, ceilValue: 0.4, ceilScore: 100 },
+  // Net-new value as a ratio of the remaining coverage gap. 0x -> 0, 1x+ (gap fully backfilled) -> 100.
+  generation: { floorValue: 0, floorScore: 0, ceilValue: 1, ceilScore: 100 },
+  // Share of open deals running >1.5x their stage's median residence (lower is better). 0% -> 100, 50%+ -> 0.
+  age: { floorValue: 0, floorScore: 100, ceilValue: 0.5, ceilScore: 0 },
+  // Retention rate = 1 - recycle rate, 0..1. <=50% -> 0, 100% -> 100.
+  attrition: { floorValue: 0.5, floorScore: 0, ceilValue: 1, ceilScore: 100 },
+};
+
+function scoreAgainstBenchmark(value: number | null, b: HealthBenchmark): number | null {
+  if (value == null) return null;
+  const { floorValue, floorScore, ceilValue, ceilScore } = b;
+  if (floorValue === ceilValue) return floorScore;
+  const t = (value - floorValue) / (ceilValue - floorValue);
+  const clamped = Math.max(0, Math.min(1, t));
+  return Math.round(floorScore + clamped * (ceilScore - floorScore));
+}
+
+export function scoreHealthAbsolute(
+  inputs: HealthInputs,
+  benchmarks: HealthBenchmarks = DEFAULT_HEALTH_BENCHMARKS,
+  weights: HealthWeights = DEFAULT_HEALTH_WEIGHTS,
+): HealthScore {
+  const subScores: Record<keyof HealthWeights, number | null> = {
+    coverage: scoreAgainstBenchmark(inputs.coverageQualified, benchmarks.coverage),
+    velocity: scoreAgainstBenchmark(inputs.velocityIndex, benchmarks.velocity),
+    conversion: scoreAgainstBenchmark(inputs.winRate, benchmarks.conversion),
+    generation: scoreAgainstBenchmark(inputs.generationRatio, benchmarks.generation),
+    age: scoreAgainstBenchmark(inputs.agingScore, benchmarks.age),
+    attrition: scoreAgainstBenchmark(inputs.retentionRate, benchmarks.attrition),
+  };
+  // Weighted mean over available (non-null) sub-scores; re-normalize weights
+  // (identical aggregation rule to computeHealthScore, just fed by absolute
+  // sub-scores instead of percentile ranks).
   let wSum = 0;
   let acc = 0;
   for (const k of Object.keys(weights) as (keyof HealthWeights)[]) {

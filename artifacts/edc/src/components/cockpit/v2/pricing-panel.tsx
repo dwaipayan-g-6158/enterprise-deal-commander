@@ -4,12 +4,15 @@ import {
   useGetPricingSchedule,
   useUpdatePricingSchedule,
   useUpdateDeal,
+  useListAd360Features,
+  useListCrossSells,
   type Deal,
 } from "@workspace/api-client-react";
 import { calculateFlatTCV } from "@workspace/engine";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -292,6 +295,114 @@ function WorksheetSection({
   );
 }
 
+/* ------------------------------------------------------------------ */
+/* AD360 Enterprise — Licensing & Customization                        */
+/* Shown only when AD360 Enterprise is pitched in Cross-Sell. Seat count */
+/* and selected features are informational only — deliberately kept    */
+/* separate from the Commercial Worksheet and do not affect product/    */
+/* services revenue or TCV.                                             */
+/* ------------------------------------------------------------------ */
+
+function Ad360LicensingCard({ dealId, deal }: { dealId: string; deal: Deal }) {
+  const { toast } = useToast();
+  const invalidate = useCockpitInvalidate(dealId);
+  const { data: features } = useListAd360Features();
+  const updateAd360 = useUpdateDeal();
+
+  const [seatCount, setSeatCount] = useState(deal.ad360SeatCount ?? 0);
+  const [notes, setNotes] = useState(deal.ad360FeatureNotes ?? "");
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(
+    () => new Set((deal.ad360Features ?? []).map((f) => f.id)),
+  );
+
+  // Resync when the deal changes underneath us (deal switch, external update).
+  useEffect(() => {
+    setSeatCount(deal.ad360SeatCount ?? 0);
+    setNotes(deal.ad360FeatureNotes ?? "");
+    setSelectedIds(new Set((deal.ad360Features ?? []).map((f) => f.id)));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dealId, deal.ad360SeatCount, deal.ad360FeatureNotes, deal.ad360Features]);
+
+  const toggleFeature = (id: number) =>
+    setSelectedIds((s) => {
+      const next = new Set(s);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+
+  const save = async () => {
+    try {
+      await updateAd360.mutateAsync({
+        id: dealId,
+        data: {
+          ad360_seat_count: seatCount || null,
+          ad360_feature_notes: notes.trim() || null,
+          ad360_feature_ids: [...selectedIds],
+        } as never,
+      });
+      await invalidate();
+      toast({ title: "AD360 Enterprise licensing saved" });
+    } catch {
+      toast({ title: "Failed to save licensing details", variant: "destructive" });
+    }
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-lg">
+          AD360 Enterprise — Licensing &amp; Customization
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <NumberField
+          label="Licensed users / seats"
+          value={seatCount}
+          step={1}
+          onChange={setSeatCount}
+        />
+        <div className="space-y-1.5">
+          <Label className="text-xs text-muted-foreground">
+            Platform customization features
+          </Label>
+          <div className="space-y-1">
+            {(features?.data ?? []).map((f) => (
+              <label
+                key={f.id}
+                className="flex items-center gap-2 text-sm cursor-pointer"
+              >
+                <Checkbox
+                  checked={selectedIds.has(f.id)}
+                  onCheckedChange={() => toggleFeature(f.id)}
+                />
+                {f.label}
+              </label>
+            ))}
+          </div>
+        </div>
+        <div className="space-y-1.5">
+          <Label className="text-xs text-muted-foreground">
+            Other customization notes
+          </Label>
+          <Textarea
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            placeholder="Any customization requirements not covered above..."
+          />
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Informational only — does not affect product revenue, services
+          revenue, or TCV.
+        </p>
+        <Button size="sm" onClick={save} disabled={updateAd360.isPending}>
+          {updateAd360.isPending ? "Saving..." : "Save Licensing Details"}
+        </Button>
+      </CardContent>
+    </Card>
+  );
+}
+
 export function PricingPanel({
   dealId,
   currency,
@@ -309,6 +420,13 @@ export function PricingPanel({
   const update = useUpdatePricingSchedule();
   const [rows, setRows] = useState<Row[]>([]);
   const [scheduleOpen, setScheduleOpen] = useState(false);
+
+  // AD360 Enterprise licensing/customization only applies once the product is
+  // pitched in Cross-Sell — this is the link between the two tabs.
+  const { data: crossSells } = useListCrossSells(dealId);
+  const ad360EnterprisePitched = (crossSells?.data ?? []).some(
+    (c) => c.code === "AD360_ENTERPRISE" && c.isPitched,
+  );
 
   useEffect(() => {
     const years = q.data?.data;
@@ -778,6 +896,11 @@ export function PricingPanel({
           </div>
         </CardContent>
       </Card>
+
+      {/* ============== AD360 Enterprise Licensing & Customization ============== */}
+      {ad360EnterprisePitched ? (
+        <Ad360LicensingCard dealId={dealId} deal={deal} />
+      ) : null}
 
       {/* ===================== Multi-Year Pricing Schedule (TCV) ===================== */}
       <Card>

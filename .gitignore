@@ -63,3 +63,6 @@ Thumbs.db
 
 # Playwright MCP scratch artifacts
 .playwright-mcp/
+
+# Claude Code local-only settings (personal permissions, not shared)
+.claude/settings.local.json

@@ -86,6 +86,11 @@ export function CrossSellPanel({ dealId }: { dealId: string }) {
                     {p.productCategory && (
                       <p className="text-xs text-muted-foreground">{p.productCategory}</p>
                     )}
+                    {p.code === "AD360_ENTERPRISE" && selected.has(p.id) && (
+                      <p className="text-xs text-primary">
+                        Configure licensing &amp; customization in the Pricing tab.
+                      </p>
+                    )}
                   </div>
                 </label>
               ))}

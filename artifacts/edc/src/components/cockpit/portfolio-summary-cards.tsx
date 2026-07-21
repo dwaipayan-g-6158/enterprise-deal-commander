@@ -3,6 +3,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { Layers, Link2, DollarSign, AlertOctagon } from "lucide-react";
+import { formatNum } from "@/lib/format";
 
 function compactValue(n: number, currency: string): string {
   const sym = currency === "USD" ? "$" : `${currency} `;
@@ -63,7 +64,7 @@ export function PortfolioSummaryCards({ summary }: { summary: PortfolioSummary }
         delayMs={0}
         icon={<Layers className="h-3.5 w-3.5" />}
         label="Diversification Index"
-        value={summary.diversificationIndex.toFixed(2)}
+        value={formatNum(summary.diversificationIndex)}
         valueClassName={diversificationAccent(summary.diversificationIndex)}
         subtitle="0 = concentrated · 1 = diversified"
       />
@@ -85,7 +86,7 @@ export function PortfolioSummaryCards({ summary }: { summary: PortfolioSummary }
         subtitle={
           cluster ? (
             <span className="font-mono">
-              {cluster.code} · ×{cluster.lift.toFixed(1)} lift · {(cluster.share * 100).toFixed(0)}% of deals
+              {cluster.code} · ×{formatNum(cluster.lift)} lift · {formatNum(cluster.share * 100)}% of deals
             </span>
           ) : (
             "No dominant cluster — risk is well spread"
@@ -107,7 +108,7 @@ export function PortfolioSummaryCards({ summary }: { summary: PortfolioSummary }
         label="Critical Deals"
         value={summary.redDealCount}
         valueClassName={summary.redDealCount > 0 ? "text-rose-600 dark:text-rose-400" : undefined}
-        subtitle={`of ${summary.totalDealCount} monitored at RED health`}
+        subtitle={`of ${summary.totalDealCount} monitored with a critical (RED) alert`}
       />
     </div>
   );

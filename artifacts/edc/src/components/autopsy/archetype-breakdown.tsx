@@ -8,6 +8,7 @@ import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
 import { ArrowUpRight, Stethoscope } from "lucide-react";
 import { LossAutopsySheet } from "./loss-autopsy-sheet";
+import { formatNum } from "@/lib/format";
 
 function compactUSD(n: number): string {
   if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(2)}M`;
@@ -100,21 +101,21 @@ export function ArchetypeBreakdown() {
                     <p className="text-sm text-muted-foreground mb-2">Avg Gate Completion</p>
                     <div className="flex items-center gap-3">
                       <Progress value={arch.avgGateCompletionPct} className="flex-1" />
-                      <span className="font-mono font-medium">{arch.avgGateCompletionPct.toFixed(0)}%</span>
+                      <span className="font-mono font-medium">{formatNum(arch.avgGateCompletionPct)}%</span>
                     </div>
                   </div>
                   <div>
                     <p className="text-sm text-muted-foreground mb-2">Services Attach Rate</p>
                     <div className="flex items-center gap-3">
                       <Progress value={arch.servicesAttachShare * 100} className="flex-1" />
-                      <span className="font-mono font-medium">{(arch.servicesAttachShare * 100).toFixed(0)}%</span>
+                      <span className="font-mono font-medium">{formatNum(arch.servicesAttachShare * 100)}%</span>
                     </div>
                   </div>
                   <div>
                     <p className="text-sm text-muted-foreground mb-2">Never Passed Gate 2</p>
                     <div className="flex items-center gap-3">
                       <Progress value={arch.neverPassedGate2Share * 100} className="flex-1 bg-muted [&>div]:bg-destructive" />
-                      <span className="font-mono font-medium text-destructive">{(arch.neverPassedGate2Share * 100).toFixed(0)}%</span>
+                      <span className="font-mono font-medium text-destructive">{formatNum(arch.neverPassedGate2Share * 100)}%</span>
                     </div>
                   </div>
                 </div>
@@ -136,7 +137,7 @@ export function ArchetypeBreakdown() {
                             <TableCell>
                               <div className="flex items-center gap-2">
                                 <Progress value={p.share * 100} className="h-2 w-24" />
-                                <span className="font-mono text-xs text-muted-foreground">{(p.share * 100).toFixed(0)}%</span>
+                                <span className="font-mono text-xs text-muted-foreground">{formatNum(p.share * 100)}%</span>
                               </div>
                             </TableCell>
                           </TableRow>

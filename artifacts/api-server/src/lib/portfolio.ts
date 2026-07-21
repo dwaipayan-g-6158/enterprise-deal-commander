@@ -12,10 +12,15 @@ import {
   correlatedExposureTcv,
   diversificationIndex,
   pickHighestCorrelationCluster,
-  significantCodes,
+  recurringActiveCodes,
   type GroupCorrelation,
   type MetricsRecord,
 } from "./portfolio-metrics";
+
+/** Round to at most 2 decimal places (e.g. 23.6667 -> 23.67). */
+function round2(n: number): number {
+  return Math.round(n * 100) / 100;
+}
 
 /**
  * Shared portfolio/summary compute used by both the read endpoints (live
@@ -190,6 +195,7 @@ export async function computePortfolioAnalysis() {
     alertCodes: [...d.governance.alerts, ...d.governance.managedAlerts].map(
       (a) => a.code,
     ),
+    hasActiveRedAlert: d.governance.alerts.some((a) => a.severity === "RED"),
     products: d.financials.crossSells.map((c) => c.productName),
     stalled: d.governance.alerts.some((a) => a.code === "STALLED_VALIDATION"),
   }));
@@ -222,8 +228,9 @@ export async function computePortfolioAnalysis() {
     accountManager: am,
     dealCount: recs.length,
     alertCorrelations: correlations(recs, globalShares),
-    avgCycleTimeDays:
+    avgCycleTimeDays: round2(
       recs.reduce((s, r) => s + r.daysInStage, 0) / Math.max(1, recs.length),
+    ),
   }));
 
   const tlGroups = groupBy("technicalLead");
@@ -233,14 +240,15 @@ export async function computePortfolioAnalysis() {
       technicalLead: tl,
       dealCount: recs.length,
       alertCorrelations: correlations(recs, globalShares),
-      avgCycleTimeDays:
+      avgCycleTimeDays: round2(
         recs.reduce((s, r) => s + r.daysInStage, 0) / Math.max(1, recs.length),
+      ),
     }));
 
   const noTlRecs = tlGroups.get("Unassigned") ?? [];
   const noTechnicalLeadCycleTimeDays =
     noTlRecs.length > 0
-      ? noTlRecs.reduce((s, r) => s + r.daysInStage, 0) / noTlRecs.length
+      ? round2(noTlRecs.reduce((s, r) => s + r.daysInStage, 0) / noTlRecs.length)
       : null;
 
   const productGroups = new Map<string, PortfolioRecord[]>();
@@ -292,11 +300,7 @@ export async function computePortfolioAnalysis() {
     dealCount: g.dealCount,
     alertCorrelations: g.alertCorrelations,
   }));
-  const sigCodes = significantCodes([
-    ...managerCorr,
-    ...leadCorr,
-    ...productCorr,
-  ], portfolioConfig);
+  const sigCodes = recurringActiveCodes(records, portfolioConfig);
   const summary = {
     diversificationIndex: diversificationIndex(amCells),
     highestCorrelationCluster: pickHighestCorrelationCluster({
@@ -305,7 +309,7 @@ export async function computePortfolioAnalysis() {
       product: productCorr,
     }, portfolioConfig),
     correlatedExposureTcv: correlatedExposureTcv(records, sigCodes),
-    redDealCount: records.filter((r) => r.healthStatus === "RED").length,
+    redDealCount: records.filter((r) => r.hasActiveRedAlert).length,
     totalDealCount: records.length,
     reportingCurrency,
   };

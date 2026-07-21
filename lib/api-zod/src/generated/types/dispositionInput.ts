@@ -19,4 +19,9 @@ export interface DispositionInput {
      * @maxLength 100
      */
   snooze_until_field_change?: string;
+  /**
+     * @minimum 1
+     * @maximum 365
+     */
+  snooze_duration_days?: number;
 }

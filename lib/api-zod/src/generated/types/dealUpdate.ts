@@ -70,6 +70,17 @@ export interface DealUpdate {
   compliance_driver_id?: number | null;
   /** @nullable */
   estimated_log_sources?: number | null;
+  /**
+     * @minimum 0
+     * @nullable
+     */
+  ad360_seat_count?: number | null;
+  /**
+     * @maxLength 2000
+     * @nullable
+     */
+  ad360_feature_notes?: string | null;
+  ad360_feature_ids?: number[];
   product_interest_ids?: string[];
   compliance_driver_ids?: number[];
   /**
