@@ -40,7 +40,7 @@ export function TransitionSankey() {
   if (query.isError) {
     return (
       <div className="bg-card border border-border rounded-lg p-6 text-sm text-destructive">
-        Failed to load transition data.
+        We couldn't load transition data. Nothing else on this page is affected.
       </div>
     );
   }
