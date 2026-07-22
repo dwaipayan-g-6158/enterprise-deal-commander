@@ -16,6 +16,7 @@ import {
 import { TeamSettings } from "@/components/settings/team-settings";
 import { TargetsSettings } from "@/components/settings/targets-settings";
 import { ScoringWeightsSettings } from "@/components/settings/scoring-weights-settings";
+import { AchievementsSettings } from "@/components/settings/achievements-settings";
 
 export default function Settings() {
   const { data: response, isLoading } = useListEngineThresholds();
@@ -75,6 +76,7 @@ export default function Settings() {
           <TabsTrigger value="webhooks">Webhooks</TabsTrigger>
           <TabsTrigger value="targets">Targets</TabsTrigger>
           <TabsTrigger value="team">Team</TabsTrigger>
+          <TabsTrigger value="achievements">Achievements</TabsTrigger>
         </TabsList>
 
         <TabsContent value="thresholds" className="pt-4 space-y-4">
@@ -134,6 +136,9 @@ export default function Settings() {
         </TabsContent>
         <TabsContent value="team" className="pt-4">
           <TeamSettings />
+        </TabsContent>
+        <TabsContent value="achievements" className="pt-4">
+          <AchievementsSettings />
         </TabsContent>
       </Tabs>
     </div>
