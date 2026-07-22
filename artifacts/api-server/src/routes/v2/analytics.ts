@@ -1,5 +1,5 @@
 import { Router, type IRouter, type Request, type Response } from "express";
-import { and, asc, desc, eq, inArray, isNull, lte, max, ne, notInArray, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, isNull, lte, max, ne, notInArray, sql } from "drizzle-orm";
 import {
   db,
   enterpriseDeals,
@@ -24,6 +24,7 @@ import {
   dealSnapshots,
   pipelineTransitions,
   pipelineTargets,
+  commanderAchievements,
 } from "@workspace/db";
 import {
   runPipelineSimulation,
@@ -47,7 +48,7 @@ import { GetDealScoreParams, GetPricingBenchmarksQueryParams, ParseNlcCommandBod
 import { notFound } from "../../lib/http";
 import { toISO, getHealthWeights } from "../../lib/intelligence";
 import { scoreDeal, rescoreActiveDeals } from "../../lib/scoring";
-import { cachedIntel } from "../../lib/portfolio";
+import { cachedIntel, computeSummary } from "../../lib/portfolio";
 import { computeMemoryHealth } from "../../lib/memory-health";
 import { computeCompetitorIntel, computePlaybookEffectiveness, percentiles } from "../../lib/memory-intel";
 import { pickLatestPerDeal, computeScoreDelta } from "../../lib/roster-enrichment";
@@ -824,6 +825,108 @@ router.get("/analytics/memory-insights", async (_req: Request, res: Response) =>
 router.get("/analytics/memory-health", async (_req: Request, res: Response) => {
   const rows = await db.select().from(dealMemory);
   res.json({ data: computeMemoryHealth(rows) });
+});
+
+/* ------------------------------------------ Dashboard: Engagement (Achievements) */
+
+interface AchievementDef {
+  code: string;
+  name: string;
+  description: string;
+}
+
+// Rescaled to this app's actual data volume (~12-14 deals) rather than the
+// PRD's literal examples (100 closes, 25-deal veteran) — see the design spec
+// for why. Permanence comes from the commander_achievements table, not from
+// these live metrics being monotonic: dealPlaybookAssignments.status CAN
+// revert on a reopened step, but once earned, an achievement stays earned.
+const ACHIEVEMENT_DEFS: AchievementDef[] = [
+  { code: "first_close", name: "First Deal Closed", description: "Every journey starts with a single close." },
+  { code: "playbooks_3", name: "3 Playbooks Completed", description: "Process is what separates good from great." },
+  { code: "giant_slayer", name: "Giant Slayer", description: "You don't just close deals — you win them." },
+  { code: "clean_pipeline", name: "Clean Pipeline", description: "Zero stalled deals, zero red alerts. Enjoy the calm." },
+];
+
+async function evaluateAchievements(): Promise<Record<string, boolean>> {
+  // Deliberately NOT the file's `activeFilter` (deletedAt IS NULL AND
+  // archivedAt IS NULL) — a Closed-Won deal is typically archived shortly
+  // after closing (post-mortem subscriber), so excluding archived deals
+  // would undercount "ever closed." Only true deletions should be excluded.
+  const [closedWonRow] = await db
+    .select({ count: sql<number>`count(*)` })
+    .from(enterpriseDeals)
+    .innerJoin(pipelineStages, eq(enterpriseDeals.salesStageId, pipelineStages.id))
+    .where(and(eq(pipelineStages.stageName, "Closed-Won"), isNull(enterpriseDeals.deletedAt)));
+
+  const [playbooksRow] = await db
+    .select({ count: sql<number>`count(*)` })
+    .from(dealPlaybookAssignments)
+    .where(eq(dealPlaybookAssignments.status, "Completed"));
+
+  const wonAgainst = await db
+    .select({ competitorId: dealCompetitors.competitorId })
+    .from(dealCompetitors)
+    .where(eq(dealCompetitors.status, "Won Against"));
+  const distinctCompetitorsBeaten = new Set(wonAgainst.map((r) => r.competitorId)).size;
+
+  const summary = await computeSummary();
+
+  return {
+    first_close: Number(closedWonRow.count) >= 1,
+    playbooks_3: Number(playbooksRow.count) >= 3,
+    giant_slayer: distinctCompetitorsBeaten >= 2,
+    clean_pipeline: summary.staleDeals.length === 0 && summary.dealsByHealth.RED === 0,
+  };
+}
+
+router.get("/analytics/engagement", async (req: Request, res: Response) => {
+  const since = typeof req.query.since === "string" ? req.query.since : undefined;
+
+  const trueNow = await evaluateAchievements();
+  const existingRows = await db.select().from(commanderAchievements);
+  const existingCodes = new Set(existingRows.map((r) => r.achievementCode));
+  // First-ever evaluation (empty table): silently backfill whatever's
+  // already true rather than reporting it as "newly earned" — the live dev
+  // DB already has real history predating this feature, and toasting 2-3
+  // "achievement unlocked" celebrations on the first load after deploy
+  // would misrepresent things that actually happened weeks ago.
+  const isFirstEverEvaluation = existingRows.length === 0;
+
+  const newlyEarnedCodes: string[] = [];
+  for (const def of ACHIEVEMENT_DEFS) {
+    if (trueNow[def.code] && !existingCodes.has(def.code)) {
+      await db.insert(commanderAchievements).values({ achievementCode: def.code }).onConflictDoNothing();
+      if (!isFirstEverEvaluation) newlyEarnedCodes.push(def.code);
+    }
+  }
+
+  const finalRows = await db.select().from(commanderAchievements);
+  const earnedMap = new Map(finalRows.map((r) => [r.achievementCode, r.earnedAt]));
+  const achievements = ACHIEVEMENT_DEFS.map((def) => ({
+    code: def.code,
+    name: def.name,
+    description: def.description,
+    earnedAt: earnedMap.get(def.code)?.toISOString() ?? null,
+    locked: !earnedMap.has(def.code),
+  }));
+
+  let dealsClosedWonSince: { dealId: string; dealName: string }[] = [];
+  if (since) {
+    const rows = await db
+      .select({ id: enterpriseDeals.id, dealName: enterpriseDeals.dealName })
+      .from(enterpriseDeals)
+      .innerJoin(pipelineStages, eq(enterpriseDeals.salesStageId, pipelineStages.id))
+      .where(
+        and(
+          eq(pipelineStages.stageName, "Closed-Won"),
+          isNull(enterpriseDeals.deletedAt),
+          gte(enterpriseDeals.stageEnteredAt, new Date(since)),
+        ),
+      );
+    dealsClosedWonSince = rows.map((d) => ({ dealId: d.id, dealName: d.dealName }));
+  }
+
+  res.json({ data: { achievements, newlyEarnedCodes, dealsClosedWonSince } });
 });
 
 /* ------------------------------------- Competitive & Pricing Intelligence */
