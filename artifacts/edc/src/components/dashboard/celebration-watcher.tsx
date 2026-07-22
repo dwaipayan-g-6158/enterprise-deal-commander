@@ -46,9 +46,12 @@ export function CelebrationWatcher({
   // (millisecond-precision) for the activity query, triggering a continuous
   // refetch loop (same hazard `dashboard-hero.tsx`'s `since24h` guards against).
   const [ninetyDaysAgo] = useState(() => new Date(Date.now() - NINETY_DAYS_MS).toISOString());
+  // 200, not 500: /v2/activity's clampLimit() (routes/v2/index.ts) hard-caps
+  // every request at 200 rows server-side regardless of what's requested, so
+  // asking for more would only imply headroom that can't actually be delivered.
   const { data: activityWrapper, isLoading: isLoadingActivity } = useListPortfolioActivity({
     since: ninetyDaysAgo,
-    limit: 500,
+    limit: 200,
   });
 
   const dataReady = enabled && !isLoadingEngagement && !isLoadingActivity;

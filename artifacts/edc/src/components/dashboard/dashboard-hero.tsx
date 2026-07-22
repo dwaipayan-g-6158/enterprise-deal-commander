@@ -39,7 +39,10 @@ export function DashboardHero({
   const recentActivity = recentActivityWrapper?.data ?? [];
 
   const [streakWindowStart] = useState(() => new Date(Date.now() - NINETY_DAYS_MS).toISOString());
-  const streakParams = { since: streakWindowStart, limit: 500 };
+  // 200, not 500: /v2/activity's clampLimit() (routes/v2/index.ts) hard-caps
+  // every request at 200 rows server-side regardless of what's requested, so
+  // asking for more would only imply headroom that can't actually be delivered.
+  const streakParams = { since: streakWindowStart, limit: 200 };
   const { data: streakActivityWrapper } = useListPortfolioActivity(streakParams, {
     query: { queryKey: getListPortfolioActivityQueryKey(streakParams) },
   });

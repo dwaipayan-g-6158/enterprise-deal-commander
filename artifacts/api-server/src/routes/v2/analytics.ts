@@ -892,11 +892,9 @@ router.get("/analytics/engagement", async (req: Request, res: Response) => {
   // would misrepresent things that actually happened weeks ago.
   const isFirstEverEvaluation = existingRows.length === 0;
 
-  const newlyEarnedCodes: string[] = [];
   for (const def of ACHIEVEMENT_DEFS) {
     if (trueNow[def.code] && !existingCodes.has(def.code)) {
       await db.insert(commanderAchievements).values({ achievementCode: def.code }).onConflictDoNothing();
-      if (!isFirstEverEvaluation) newlyEarnedCodes.push(def.code);
     }
   }
 
@@ -909,6 +907,25 @@ router.get("/analytics/engagement", async (req: Request, res: Response) => {
     earnedAt: earnedMap.get(def.code)?.toISOString() ?? null,
     locked: !earnedMap.has(def.code),
   }));
+
+  // Derived from earnedAt vs `since`, NOT "inserted during this exact call".
+  // This route is hit by two independent callers (AchievementsSettings with no
+  // `since`, CelebrationWatcher with `since: previousVisitAt`) that share the
+  // same unconditional upsert above. If "newly earned" meant "this call did
+  // the insert," whichever caller happened to hit the server first after a
+  // criterion became true would silently claim it — and a later caller would
+  // just see the code already in `existingCodes` and never report it, even
+  // though it genuinely became earned within its own `since` window. Comparing
+  // timestamps instead makes the answer caller-order-independent: every caller
+  // that passes `since` gets a consistent, timestamp-derived result.
+  // isFirstEverEvaluation still silences the very first evaluation (empty
+  // table) so backfilled pre-existing history is never reported as "new",
+  // even if a caller's `since` happens to be old.
+  const sinceDate = !isFirstEverEvaluation && since ? new Date(since) : null;
+  const newlyEarnedCodes =
+    sinceDate && !Number.isNaN(sinceDate.getTime())
+      ? finalRows.filter((r) => r.earnedAt.getTime() > sinceDate.getTime()).map((r) => r.achievementCode)
+      : [];
 
   let dealsClosedWonSince: { dealId: string; dealName: string }[] = [];
   if (since) {
