@@ -32,6 +32,9 @@ import { MemoryInsights } from "@/components/dashboard/widgets/memory-insights";
 import { PipelineRiskOverview } from "@/components/dashboard/widgets/pipeline-risk-overview";
 import { relativeTime, type Health } from "@/components/dashboard/widgets/_shared";
 import { DashboardHero } from "@/components/dashboard/dashboard-hero";
+import { InsightBanner } from "@/components/dashboard/widgets/insight-banner";
+import { WeeklyReview } from "@/components/dashboard/widgets/weekly-review";
+import { DailyMission } from "@/components/dashboard/widgets/daily-mission";
 
 type OpenDialog =
   | null
@@ -119,6 +122,9 @@ export default function Dashboard() {
   return (
     <div className="p-8 max-w-[1600px] mx-auto space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
       <DashboardHero />
+      <InsightBanner />
+      <WeeklyReview />
+      <DailyMission />
 
       {/* Row 1 — Pipeline Vital Signs */}
       <VitalSignsBar
