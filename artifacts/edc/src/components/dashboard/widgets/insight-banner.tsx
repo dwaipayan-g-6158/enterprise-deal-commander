@@ -51,7 +51,7 @@ export function InsightBanner() {
   if (!insight) return null;
 
   return (
-    <div className="rounded-lg border bg-muted/20 p-4 flex items-center justify-between gap-4">
+    <div className="rounded-lg border bg-muted/20 py-2.5 px-4 flex items-center justify-between gap-4">
       <p className="text-sm">{insight.text}</p>
       {insight.navigateTo && (
         <button

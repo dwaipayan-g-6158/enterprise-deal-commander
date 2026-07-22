@@ -61,7 +61,7 @@ export function DailyMission() {
           Today&apos;s Mission
         </CardTitle>
       </CardHeader>
-      <CardContent className="space-y-4">
+      <CardContent className="space-y-3">
         {isLoading ? (
           <Skeleton className="h-48 w-full" />
         ) : total === 0 ? (
@@ -78,7 +78,7 @@ export function DailyMission() {
                     <motion.li
                       key={item.id}
                       {...rowMotion(reduce, i)}
-                      className="flex min-h-[44px] items-center gap-3 rounded-md px-2 -mx-2"
+                      className="flex items-center gap-3 rounded-md px-2 py-1 -mx-2"
                     >
                       <Checkbox
                         checked={acked}
@@ -89,24 +89,26 @@ export function DailyMission() {
                       <button
                         type="button"
                         onClick={() => navigate(item.navigateTo)}
-                        className="min-w-0 flex-1 py-1 text-left transition-colors hover:text-primary cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm"
+                        className="min-w-0 flex-1 text-left transition-colors hover:text-primary cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm"
                       >
                         <p
                           className={cn(
-                            "truncate text-sm",
+                            "truncate text-sm leading-tight",
                             acked && "text-muted-foreground line-through",
                           )}
                         >
                           {item.label}
                         </p>
-                        <p className="truncate text-xs text-muted-foreground">{item.meta}</p>
+                        <p className="truncate text-xs leading-tight text-muted-foreground">
+                          {item.meta}
+                        </p>
                       </button>
                     </motion.li>
                   );
                 })}
               </AnimatePresence>
             </ul>
-            <div className="space-y-1.5">
+            <div className="space-y-1">
               <Progress value={progress} />
               <p className="text-xs text-muted-foreground">
                 {done === total
