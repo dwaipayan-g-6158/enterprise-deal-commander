@@ -13,7 +13,7 @@ interface Decision {
   owner: string;
   dueDate: string;
 }
-interface PlaybookStep {
+export interface PlaybookStep {
   dealId: string;
   dealName: string;
   playbookName: string;
@@ -27,7 +27,7 @@ interface UpcomingClose {
   accountName: string;
   daysToClose: number;
 }
-interface NextActionsData {
+export interface NextActionsData {
   overdue: Decision[];
   dueThisWeek: Decision[];
   playbookSteps: PlaybookStep[];
@@ -35,7 +35,7 @@ interface NextActionsData {
   pendingCount: number;
 }
 
-function fmtDue(iso: string): string {
+export function fmtDue(iso: string): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "";
   const days = Math.round((d.getTime() - Date.now()) / 86_400_000);
@@ -46,18 +46,27 @@ function fmtDue(iso: string): string {
 
 // Widget 7 — Next Actions / What Needs Me. The 48-hour priority list, grouped by
 // urgency: overdue → due this week → playbook steps → upcoming closes.
-export function NextActions() {
+export function NextActions({ onViewAll }: { onViewAll: () => void }) {
   const { data, isLoading } = useGetNextActions();
   const [, navigate] = useLocation();
   const d = data?.data as NextActionsData | undefined;
 
   return (
     <Card>
-      <CardHeader className="pb-3">
+      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
         <CardTitle className="flex items-center gap-2 text-base">
           <ListChecks className="h-4 w-4 text-primary" />
           Next Actions {d ? `(${d.pendingCount})` : ""}
         </CardTitle>
+        {d && d.pendingCount > 0 && (
+          <button
+            type="button"
+            onClick={onViewAll}
+            className="text-xs font-medium text-primary hover:underline cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm"
+          >
+            View all →
+          </button>
+        )}
       </CardHeader>
       <CardContent className="space-y-4">
         {isLoading || !d ? (

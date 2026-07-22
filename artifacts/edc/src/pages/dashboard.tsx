@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useLocation } from "wouter";
 import { CriticalAlertsDialog } from "@/components/dashboard/critical-alerts-dialog";
+import { NextActionsDialog } from "@/components/dashboard/next-actions-dialog";
 import { StaleDealsDialog } from "@/components/dashboard/stale-deals-dialog";
 import { HealthStatusDialog } from "@/components/dashboard/health-status-dialog";
 import { TotalTcvDialog } from "@/components/dashboard/total-tcv-dialog";
@@ -40,7 +41,8 @@ type OpenDialog =
   | "health"
   | "stage"
   | "weightedPipeline"
-  | "avgScore";
+  | "avgScore"
+  | "actions";
 
 export default function Dashboard() {
   const { data: summaryWrapper, isLoading } = useGetIntelligenceSummary();
@@ -152,7 +154,7 @@ export default function Dashboard() {
 
       {/* Row 3 — Next Actions + Forecast */}
       <div className="grid grid-cols-1 @3xl:grid-cols-2 gap-6">
-        <NextActions />
+        <NextActions onViewAll={() => setOpenDialog("actions")} />
         <ForecastSnapshot reportingCurrency={reportingCurrency} />
       </div>
 
@@ -253,6 +255,10 @@ export default function Dashboard() {
         open={openDialog === "avgScore"}
         onOpenChange={(o) => setOpenDialog(o ? "avgScore" : null)}
         avgScore={avgScore}
+      />
+      <NextActionsDialog
+        open={openDialog === "actions"}
+        onOpenChange={(o) => setOpenDialog(o ? "actions" : null)}
       />
     </div>
   );
