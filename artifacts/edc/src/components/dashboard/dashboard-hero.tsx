@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import {
   useGetMe,
-  useDashboardVisit,
   useListDeals,
   useListPortfolioActivity,
   getListPortfolioActivityQueryKey,
@@ -15,27 +14,19 @@ import { selectGreeting, type GreetingContext, type GreetingPool } from "@/lib/g
 import GREETING_POOL from "@/lib/greetings/greeting-pool.json";
 import { readShownHistory, recordShown } from "@/lib/greetings/shown-history";
 import { defaultStore } from "@/lib/storage";
+import { computeStreak } from "@/lib/streak/compute-streak";
 
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
 const SEVEN_DAYS_MS = 7 * ONE_DAY_MS;
+const NINETY_DAYS_MS = 90 * ONE_DAY_MS;
 
-export function DashboardHero() {
+export function DashboardHero({
+  previousVisitAt,
+}: {
+  previousVisitAt: string | null | undefined;
+}) {
   const [, navigate] = useLocation();
   const { data: me, isLoading: isLoadingMe } = useGetMe();
-  const dashboardVisit = useDashboardVisit();
-  const touched = useRef(false);
-  const [previousVisitAt, setPreviousVisitAt] = useState<string | null | undefined>(undefined);
-
-  useEffect(() => {
-    if (touched.current) return;
-    touched.current = true;
-    dashboardVisit.mutateAsync().then(
-      (res) => setPreviousVisitAt(res.previousVisitAt),
-      () => setPreviousVisitAt(null),
-    );
-    // Intentionally fires exactly once per mount, not on every dep identity churn.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   // Computed once per mount, not on every render — otherwise this timestamp's
   // millisecond precision would mint a brand-new query key every render and
@@ -46,6 +37,13 @@ export function DashboardHero() {
     limit: 50,
   });
   const recentActivity = recentActivityWrapper?.data ?? [];
+
+  const [streakWindowStart] = useState(() => new Date(Date.now() - NINETY_DAYS_MS).toISOString());
+  const streakParams = { since: streakWindowStart, limit: 500 };
+  const { data: streakActivityWrapper } = useListPortfolioActivity(streakParams, {
+    query: { queryKey: getListPortfolioActivityQueryKey(streakParams) },
+  });
+  const streak = computeStreak((streakActivityWrapper?.data ?? []).map((e) => e.occurredAt), new Date());
 
   const welcomeBackEnabled = previousVisitAt !== undefined && previousVisitAt !== null;
   const welcomeBackParams = { since: previousVisitAt ?? undefined, limit: 20 };
@@ -142,6 +140,11 @@ export function DashboardHero() {
         <div>
           <h1 className="text-3xl font-bold tracking-tight text-foreground">{headline}</h1>
           {subline && <p className="text-muted-foreground mt-2">{subline}</p>}
+          {streak > 0 && (
+            <p className="text-xs text-muted-foreground mt-1">
+              🔥 {streak} day{streak === 1 ? "" : "s"} active
+            </p>
+          )}
         </div>
       ) : (
         <div className="space-y-2">

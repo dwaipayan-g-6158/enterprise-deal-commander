@@ -1,9 +1,10 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   useGetIntelligenceSummary,
   useGetVitalSigns,
   useListPortfolioActivity,
   useListDeals,
+  useDashboardVisit,
 } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -32,8 +33,10 @@ import { MemoryInsights } from "@/components/dashboard/widgets/memory-insights";
 import { PipelineRiskOverview } from "@/components/dashboard/widgets/pipeline-risk-overview";
 import { relativeTime, type Health } from "@/components/dashboard/widgets/_shared";
 import { DashboardHero } from "@/components/dashboard/dashboard-hero";
+import { CelebrationWatcher } from "@/components/dashboard/celebration-watcher";
 import { InsightBanner } from "@/components/dashboard/widgets/insight-banner";
 import { WeeklyReview } from "@/components/dashboard/widgets/weekly-review";
+import { EndOfDayReflection } from "@/components/dashboard/widgets/end-of-day-reflection";
 import { DailyMission } from "@/components/dashboard/widgets/daily-mission";
 
 type OpenDialog =
@@ -87,6 +90,21 @@ export default function Dashboard() {
     setOpenDialog("stage");
   };
 
+  const dashboardVisit = useDashboardVisit();
+  const dashboardVisitTouched = useRef(false);
+  const [previousVisitAt, setPreviousVisitAt] = useState<string | null | undefined>(undefined);
+
+  useEffect(() => {
+    if (dashboardVisitTouched.current) return;
+    dashboardVisitTouched.current = true;
+    dashboardVisit.mutateAsync().then(
+      (res) => setPreviousVisitAt(res.previousVisitAt),
+      () => setPreviousVisitAt(null),
+    );
+    // Intentionally fires exactly once per mount, not on every dep identity churn.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   if (isLoading) {
     return (
       <div className="p-8 space-y-6">
@@ -121,9 +139,11 @@ export default function Dashboard() {
 
   return (
     <div className="p-8 max-w-[1600px] mx-auto space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-      <DashboardHero />
+      <DashboardHero previousVisitAt={previousVisitAt} />
+      <CelebrationWatcher previousVisitAt={previousVisitAt} />
       <InsightBanner />
       <WeeklyReview />
+      <EndOfDayReflection />
       <DailyMission />
 
       {/* Row 1 — Pipeline Vital Signs */}
