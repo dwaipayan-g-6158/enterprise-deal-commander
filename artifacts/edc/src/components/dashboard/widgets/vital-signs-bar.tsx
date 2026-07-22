@@ -21,6 +21,8 @@ interface Props {
   onOpenTcv: () => void;
   onOpenRed: () => void;
   onOpenStale: () => void;
+  onOpenWeightedPipeline: () => void;
+  onOpenAvgScore: () => void;
 }
 
 // Widget 1 — Pipeline Vital Signs. The Commander's heartbeat check: money at
@@ -35,6 +37,8 @@ export function VitalSignsBar({
   onOpenTcv,
   onOpenRed,
   onOpenStale,
+  onOpenWeightedPipeline,
+  onOpenAvgScore,
 }: Props) {
   const { data, isLoading } = useGetVitalSigns();
   const vs = data?.data as VitalSignsData | undefined;
@@ -75,7 +79,7 @@ export function VitalSignsBar({
       </Card>
 
       {/* Weighted Pipeline */}
-      <Card className="bg-card border-border shadow-sm">
+      <Card className={cardCls} {...clickable(onOpenWeightedPipeline)} aria-haspopup="dialog">
         <CardHeader className={headCls}>
           <CardTitle className={titleCls}>Weighted Pipeline</CardTitle>
           <Scale className="h-4 w-4 text-primary" />
@@ -139,7 +143,7 @@ export function VitalSignsBar({
       </Card>
 
       {/* Average Score */}
-      <Card className="bg-card border-border shadow-sm">
+      <Card className={cardCls} {...clickable(onOpenAvgScore)} aria-haspopup="dialog">
         <CardHeader className={headCls}>
           <CardTitle className={titleCls}>Avg Score</CardTitle>
           <Gauge className="h-4 w-4 text-primary" />

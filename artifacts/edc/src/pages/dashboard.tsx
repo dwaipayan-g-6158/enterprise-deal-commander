@@ -1,6 +1,7 @@
 import { useState } from "react";
 import {
   useGetIntelligenceSummary,
+  useGetVitalSigns,
   useListPortfolioActivity,
   useListDeals,
 } from "@workspace/api-client-react";
@@ -11,6 +12,8 @@ import { CriticalAlertsDialog } from "@/components/dashboard/critical-alerts-dia
 import { StaleDealsDialog } from "@/components/dashboard/stale-deals-dialog";
 import { HealthStatusDialog } from "@/components/dashboard/health-status-dialog";
 import { TotalTcvDialog } from "@/components/dashboard/total-tcv-dialog";
+import { WeightedPipelineDialog } from "@/components/dashboard/weighted-pipeline-dialog";
+import { AvgScoreDialog } from "@/components/dashboard/avg-score-dialog";
 import { StageDealsDialog } from "@/components/dashboard/stage-deals-dialog";
 import { VitalSignsBar } from "@/components/dashboard/widgets/vital-signs-bar";
 import { HealthDistribution } from "@/components/dashboard/widgets/health-distribution";
@@ -29,10 +32,19 @@ import { PipelineRiskOverview } from "@/components/dashboard/widgets/pipeline-ri
 import { relativeTime, type Health } from "@/components/dashboard/widgets/_shared";
 import { DashboardHero } from "@/components/dashboard/dashboard-hero";
 
-type OpenDialog = null | "tcv" | "alerts" | "stale" | "health" | "stage";
+type OpenDialog =
+  | null
+  | "tcv"
+  | "alerts"
+  | "stale"
+  | "health"
+  | "stage"
+  | "weightedPipeline"
+  | "avgScore";
 
 export default function Dashboard() {
   const { data: summaryWrapper, isLoading } = useGetIntelligenceSummary();
+  const { data: vitalSignsWrapper } = useGetVitalSigns();
   const [, navigate] = useLocation();
 
   const [openDialog, setOpenDialog] = useState<OpenDialog>(null);
@@ -96,6 +108,11 @@ export default function Dashboard() {
   const totalTCV = summary?.totalTCV ?? 0;
   const activeDeals = summary?.totalDealsMonitored ?? 0;
   const staleCount = summary?.staleDeals?.length ?? 0;
+  const vitalSigns = vitalSignsWrapper?.data as
+    | { weightedPipeline: number; avgScore: number | null }
+    | undefined;
+  const weightedPipeline = vitalSigns?.weightedPipeline ?? 0;
+  const avgScore = vitalSigns?.avgScore ?? null;
 
   return (
     <div className="p-8 max-w-[1600px] mx-auto space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -111,6 +128,8 @@ export default function Dashboard() {
         onOpenTcv={() => setOpenDialog("tcv")}
         onOpenRed={() => openHealth("RED")}
         onOpenStale={() => setOpenDialog("stale")}
+        onOpenWeightedPipeline={() => setOpenDialog("weightedPipeline")}
+        onOpenAvgScore={() => setOpenDialog("avgScore")}
       />
 
       {/* Row 2 — Health Distribution + Pipeline Risk Overview + Critical Alerts */}
@@ -222,6 +241,18 @@ export default function Dashboard() {
         open={openDialog === "stage"}
         onOpenChange={(o) => setOpenDialog(o ? "stage" : null)}
         stage={stageSelected}
+      />
+      <WeightedPipelineDialog
+        open={openDialog === "weightedPipeline"}
+        onOpenChange={(o) => setOpenDialog(o ? "weightedPipeline" : null)}
+        weightedPipeline={weightedPipeline}
+        totalTCV={totalTCV}
+        reportingCurrency={reportingCurrency}
+      />
+      <AvgScoreDialog
+        open={openDialog === "avgScore"}
+        onOpenChange={(o) => setOpenDialog(o ? "avgScore" : null)}
+        avgScore={avgScore}
       />
     </div>
   );

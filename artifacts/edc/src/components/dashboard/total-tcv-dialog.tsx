@@ -1,4 +1,6 @@
 import { useLocation } from "wouter";
+import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
+import { keepPreviousData } from "@tanstack/react-query";
 import { useListDeals, getListDealsQueryKey } from "@workspace/api-client-react";
 import {
   Dialog,
@@ -9,6 +11,8 @@ import {
 } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { TrendingUp, ChevronRight, ArrowRight } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { rowMotion } from "./widgets/_shared";
 
 type Health = "GREEN" | "YELLOW" | "RED";
 
@@ -35,10 +39,15 @@ export function TotalTcvDialog({
   reportingCurrency,
 }: TotalTcvDialogProps) {
   const [, navigate] = useLocation();
+  const reduce = !!useReducedMotion();
 
   const listParams = { state: "active" as const, limit: 200 };
-  const { data, isLoading } = useListDeals(listParams, {
-    query: { enabled: open, queryKey: getListDealsQueryKey(listParams) },
+  const { data, isLoading, isFetching, isPlaceholderData } = useListDeals(listParams, {
+    query: {
+      enabled: open,
+      queryKey: getListDealsQueryKey(listParams),
+      placeholderData: keepPreviousData,
+    },
   });
   const deals = data?.data ?? [];
 
@@ -114,7 +123,7 @@ export function TotalTcvDialog({
           <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
             TCV by health
           </p>
-          {isLoading ? (
+          {isLoading && !isPlaceholderData ? (
             <Skeleton className="h-16 w-full rounded-md" />
           ) : (
             (["RED", "YELLOW", "GREEN"] as Health[]).map((h) => {
@@ -149,42 +158,52 @@ export function TotalTcvDialog({
           <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
             Top deals by value
           </p>
-          {isLoading ? (
+          {isLoading && !isPlaceholderData ? (
             <div className="space-y-2">
               <Skeleton className="h-10 w-full rounded-md" />
               <Skeleton className="h-10 w-full rounded-md" />
             </div>
           ) : (
-            <ul className="max-h-[28vh] divide-y overflow-y-auto pr-1">
-              {topDeals.map((deal) => (
-                <li key={deal.id}>
-                  <button
-                    type="button"
-                    onClick={() => goToDeal(deal.id)}
-                    aria-label={`Open deal ${deal.dealName}`}
-                    className="flex w-full items-center gap-3 px-2 -mx-2 py-2 text-left rounded-md transition-colors hover:bg-muted/40 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                  >
-                    <span
-                      className={`h-2.5 w-2.5 shrink-0 rounded-full ${
-                        HEALTH_META[(deal.healthStatus as Health) ?? "GREEN"]
-                          ?.dot ?? "bg-muted-foreground"
-                      }`}
-                    />
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-medium">
-                        {deal.dealName}
-                      </p>
-                      <p className="truncate text-xs text-muted-foreground">
-                        {deal.accountName} · {deal.salesStage}
-                      </p>
-                    </div>
-                    <span className="whitespace-nowrap font-mono text-sm">
-                      {compact(deal.normalizedTCV ?? deal.calculatedTCV ?? 0)}
-                    </span>
-                    <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
-                  </button>
-                </li>
-              ))}
+            // Fixed height (not max-height): the box stays the same size
+            // whether the top-6 list is short or full, and while a
+            // keep-previous refetch is settling.
+            <ul
+              className={cn(
+                "h-[280px] divide-y overflow-y-auto pr-1 transition-opacity duration-150",
+                isFetching && isPlaceholderData && "opacity-60",
+              )}
+            >
+              <AnimatePresence initial={false}>
+                {topDeals.map((deal, index) => (
+                  <motion.li key={deal.id} {...rowMotion(reduce, index)}>
+                    <button
+                      type="button"
+                      onClick={() => goToDeal(deal.id)}
+                      aria-label={`Open deal ${deal.dealName}`}
+                      className="flex w-full items-center gap-3 px-2 -mx-2 py-2 text-left rounded-md transition-colors hover:bg-muted/40 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    >
+                      <span
+                        className={`h-2.5 w-2.5 shrink-0 rounded-full ${
+                          HEALTH_META[(deal.healthStatus as Health) ?? "GREEN"]
+                            ?.dot ?? "bg-muted-foreground"
+                        }`}
+                      />
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-medium">
+                          {deal.dealName}
+                        </p>
+                        <p className="truncate text-xs text-muted-foreground">
+                          {deal.accountName} · {deal.salesStage}
+                        </p>
+                      </div>
+                      <span className="whitespace-nowrap font-mono text-sm">
+                        {compact(deal.normalizedTCV ?? deal.calculatedTCV ?? 0)}
+                      </span>
+                      <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+                    </button>
+                  </motion.li>
+                ))}
+              </AnimatePresence>
             </ul>
           )}
         </div>

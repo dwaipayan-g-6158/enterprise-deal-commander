@@ -1,6 +1,7 @@
 // Shared helpers + tiny presentational bits for the dashboard command-center
 // widgets. Keep this lean — anything chart-shaped lives in cockpit/charts.
 import { ArrowDown, ArrowUp } from "lucide-react";
+import type { Target, Transition } from "framer-motion";
 
 export type Health = "GREEN" | "YELLOW" | "RED";
 
@@ -72,6 +73,30 @@ export function daysUntil(iso: string | null | undefined): number | null {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return null;
   return Math.round((d.getTime() - Date.now()) / 86_400_000);
+}
+
+/**
+ * Framer-motion props for a staggered fade/slide-in list row, spread onto a
+ * `motion.li`/`motion.button` inside an `AnimatePresence`. Mirrors the house
+ * convention in cockpit/account-navigation-array.tsx (fade + small x-slide,
+ * capped stagger delay) so every dialog's row entrance reads the same.
+ * Collapses to an instant, no-op transition when `reduce` (prefers-reduced-
+ * motion) is true — always pass `!!useReducedMotion()` from the caller.
+ */
+export function rowMotion(
+  reduce: boolean,
+  index: number,
+): { initial: Target | false; animate: Target; exit: Target; transition: Transition } {
+  return {
+    initial: reduce ? false : { opacity: 0, x: -12 },
+    animate: { opacity: 1, x: 0 },
+    exit: { opacity: 0 },
+    transition: {
+      duration: reduce ? 0 : 0.18,
+      delay: reduce ? 0 : Math.min(index, 15) * 0.025,
+      ease: "easeOut",
+    },
+  };
 }
 
 /**
