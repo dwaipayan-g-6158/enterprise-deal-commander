@@ -452,3 +452,19 @@ export const dealTags = edcV2.table(
   },
   (t) => [unique("deal_tag_pk").on(t.dealId, t.tagId)],
 );
+
+/* ------------------------------------------- Phase 3 Engagement — Achievements */
+
+/**
+ * Permanent ledger of earned achievements. Achievement criteria are
+ * evaluated live on every GET /v2/analytics/engagement call; a row is
+ * inserted here the first time a criterion is found true and stays forever
+ * afterward, even if the underlying metric later dips back below threshold
+ * (e.g. a reopened playbook step reduces the "completed" count). No FK to
+ * `commanders` — single-commander app, same reasoning as every other
+ * `edc_v2` durable table not needing one.
+ */
+export const commanderAchievements = edcV2.table("commander_achievements", {
+  achievementCode: varchar("achievement_code", { length: 60 }).primaryKey(),
+  earnedAt: timestamp("earned_at", { withTimezone: true }).notNull().defaultNow(),
+});
