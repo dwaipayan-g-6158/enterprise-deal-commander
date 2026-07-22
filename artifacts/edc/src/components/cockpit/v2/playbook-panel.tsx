@@ -284,6 +284,15 @@ function stageIcon(entry: JourneyEntry) {
   return <Circle className="h-5 w-5 text-muted-foreground" />;
 }
 
+function progressMessage(pct: number): string | null {
+  if (pct >= 100) return "All playbooks complete. Nice work.";
+  if (pct >= 90) return "Almost there.";
+  if (pct >= 75) return "Well past the halfway point.";
+  if (pct >= 50) return "Halfway there.";
+  if (pct >= 25) return "Off to a solid start.";
+  return null;
+}
+
 export function PlaybookPanel({ dealId }: { dealId: string }) {
   const { toast } = useToast();
   const qc = useQueryClient();
@@ -395,6 +404,9 @@ export function PlaybookPanel({ dealId }: { dealId: string }) {
           <p className="text-xs text-muted-foreground">
             {completedSteps}/{totalSteps} steps · {playbooksComplete}/{journey.length} playbooks complete
           </p>
+          {progressMessage(overallPct) && (
+            <p className="text-xs text-muted-foreground">{progressMessage(overallPct)}</p>
+          )}
         </div>
       </CardHeader>
       <CardContent>
