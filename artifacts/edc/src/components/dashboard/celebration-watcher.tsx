@@ -85,13 +85,17 @@ export function CelebrationWatcher({
     drainedRef.current = true;
 
     let index = 0;
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
     function showNext() {
       const item = queue![index];
       toast({ title: item.title, description: item.description });
       index++;
-      if (index < queue!.length) setTimeout(showNext, TOAST_ADVANCE_MS);
+      if (index < queue!.length) timeoutId = setTimeout(showNext, TOAST_ADVANCE_MS);
     }
     showNext();
+    return () => {
+      if (timeoutId) clearTimeout(timeoutId);
+    };
     // Drains exactly once, the moment a non-empty queue is first computed.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [queue]);
