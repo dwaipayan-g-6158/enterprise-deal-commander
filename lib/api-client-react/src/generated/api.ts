@@ -82,6 +82,7 @@ import type {
   GateUpdateInput,
   GenericDataResponse,
   GetAutopsyParams,
+  GetEngagementParams,
   GetFlowConversionMatrixParams,
   GetFlowSankeyParams,
   GetPipelineSimulationParams,
@@ -6018,6 +6019,84 @@ export function useGetMemoryInsights<TData = Awaited<ReturnType<typeof getMemory
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getGetMemoryInsightsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getGetEngagementUrl = (params?: GetEngagementParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/v2/analytics/engagement?${stringifiedParams}` : `/api/v2/analytics/engagement`
+}
+
+export const getEngagement = async (params?: GetEngagementParams, options?: RequestInit): Promise<GenericDataResponse> => {
+
+  return customFetch<GenericDataResponse>(getGetEngagementUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetEngagementQueryKey = (params?: GetEngagementParams,) => {
+    return [
+    `/api/v2/analytics/engagement`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetEngagementQueryOptions = <TData = Awaited<ReturnType<typeof getEngagement>>, TError = ErrorType<unknown>>(params?: GetEngagementParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getEngagement>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetEngagementQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getEngagement>>> = ({ signal }) => getEngagement(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getEngagement>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetEngagementQueryResult = NonNullable<Awaited<ReturnType<typeof getEngagement>>>
+export type GetEngagementQueryError = ErrorType<unknown>
+
+
+
+export function useGetEngagement<TData = Awaited<ReturnType<typeof getEngagement>>, TError = ErrorType<unknown>>(
+ params?: GetEngagementParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getEngagement>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetEngagementQueryOptions(params,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

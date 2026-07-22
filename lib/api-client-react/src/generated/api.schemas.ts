@@ -2218,6 +2218,10 @@ export type GetPipelineSimulationParams = {
 iterations?: number;
 };
 
+export type GetEngagementParams = {
+since?: string;
+};
+
 export type GetPricingBenchmarksParams = {
 pricingModel?: string;
 servicesTier?: string;

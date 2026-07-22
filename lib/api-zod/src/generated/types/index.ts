@@ -124,6 +124,7 @@ export * from './gateUpdateInput';
 export * from './genericDataResponse';
 export * from './genericDataResponseData';
 export * from './getAutopsyParams';
+export * from './getEngagementParams';
 export * from './getFlowConversionMatrixParams';
 export * from './getFlowSankeyMode';
 export * from './getFlowSankeyParams';

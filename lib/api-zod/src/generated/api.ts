@@ -1978,6 +1978,15 @@ export const GetMemoryInsightsResponse = zod.object({
 })
 
 
+export const GetEngagementQueryParams = zod.object({
+  "since": zod.coerce.string().optional()
+})
+
+export const GetEngagementResponse = zod.object({
+  "data": zod.record(zod.string(), zod.unknown())
+})
+
+
 export const GetMemoryHealthResponse = zod.object({
   "data": zod.record(zod.string(), zod.unknown())
 })

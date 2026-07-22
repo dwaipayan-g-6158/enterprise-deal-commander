@@ -1172,6 +1172,14 @@ paths:
       tags: [v2intel]
       responses:
         "200": { description: Deterministic deal-memory insights vs current pipeline, content: { application/json: { schema: { $ref: "#/components/schemas/GenericDataResponse" } } } }
+  /v2/analytics/engagement:
+    get:
+      operationId: getEngagement
+      tags: [v2intel]
+      parameters:
+        - { name: since, in: query, required: false, schema: { type: string } }
+      responses:
+        "200": { description: Achievement state and since-last-visit celebration triggers, content: { application/json: { schema: { $ref: "#/components/schemas/GenericDataResponse" } } } }
   /v2/analytics/memory-health:
     get:
       operationId: getMemoryHealth
