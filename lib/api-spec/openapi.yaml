@@ -3412,8 +3412,8 @@ components:
     UpsertMeddpiccAnswerInput:
       type: object
       properties:
-        questionOrder: { type: integer }
-        score: { type: integer }
+        questionOrder: { type: integer, minimum: 1, maximum: 43 }
+        score: { type: integer, minimum: 0, maximum: 3 }
         note: { type: ["string", "null"] }
       required: [questionOrder, score]
 

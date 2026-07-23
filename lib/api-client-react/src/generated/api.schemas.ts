@@ -1460,7 +1460,15 @@ export interface MeddpiccAssessmentResponse {
 }
 
 export interface UpsertMeddpiccAnswerInput {
+  /**
+     * @minimum 1
+     * @maximum 43
+     */
   questionOrder: number;
+  /**
+     * @minimum 0
+     * @maximum 3
+     */
   score: number;
   /** @nullable */
   note?: string | null;

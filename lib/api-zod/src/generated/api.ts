@@ -1923,9 +1923,16 @@ export const UpsertMeddpiccAnswerParams = zod.object({
   "dealId": zod.coerce.string()
 })
 
+export const upsertMeddpiccAnswerBodyQuestionOrderMax = 43;
+
+export const upsertMeddpiccAnswerBodyScoreMin = 0;
+export const upsertMeddpiccAnswerBodyScoreMax = 3;
+
+
+
 export const UpsertMeddpiccAnswerBody = zod.object({
-  "questionOrder": zod.number(),
-  "score": zod.number(),
+  "questionOrder": zod.number().min(1).max(upsertMeddpiccAnswerBodyQuestionOrderMax),
+  "score": zod.number().min(upsertMeddpiccAnswerBodyScoreMin).max(upsertMeddpiccAnswerBodyScoreMax),
   "note": zod.string().nullish()
 })
 

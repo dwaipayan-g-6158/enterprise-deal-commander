@@ -17,7 +17,7 @@ import {
   type MeddpiccScoreResult,
 } from "@workspace/engine";
 import { getMeddpiccSuggestions, type MeddpiccSuggestion } from "./meddpicc-signals";
-import { notFound } from "./http";
+import { notFound, badRequest } from "./http";
 
 async function loadThresholds(): Promise<MeddpiccThresholds> {
   const rows = await db
@@ -167,6 +167,10 @@ export async function upsertMeddpiccAnswer(
     .where(eq(meddpiccQuestions.questionOrder, questionOrder))
     .limit(1);
   if (!question) throw notFound(`No MEDDPICC question with order ${questionOrder}`);
+
+  if (!Number.isInteger(input.score) || input.score < 0 || input.score > 3) {
+    throw badRequest(`score must be an integer between 0 and 3, got ${input.score}`);
+  }
 
   const suggestions = await getMeddpiccSuggestions(dealId);
   const suggestion = suggestions.find((s) => s.questionOrder === questionOrder);

@@ -103,6 +103,35 @@ describe("getMeddpiccAssessment / upsertMeddpiccAnswer", () => {
       upsertMeddpiccAnswer("00000000-0000-0000-0000-000000000000", 1, { score: 3 }, "vitest"),
     ).rejects.toThrow();
   });
+
+  it("rejects a score above the valid range (99)", async () => {
+    const dealId = await createDeal("Discovery");
+    await expect(upsertMeddpiccAnswer(dealId, 1, { score: 99 }, "vitest")).rejects.toThrow();
+  });
+
+  it("rejects a score below the valid range (-1)", async () => {
+    const dealId = await createDeal("Discovery");
+    await expect(upsertMeddpiccAnswer(dealId, 1, { score: -1 }, "vitest")).rejects.toThrow();
+  });
+
+  it("rejects a non-integer score (1.5)", async () => {
+    const dealId = await createDeal("Discovery");
+    await expect(upsertMeddpiccAnswer(dealId, 1, { score: 1.5 }, "vitest")).rejects.toThrow();
+  });
+
+  it("accepts the boundary-valid score 0", async () => {
+    const dealId = await createDeal("Discovery");
+    await upsertMeddpiccAnswer(dealId, 1, { score: 0 }, "vitest");
+    const assessment = await getMeddpiccAssessment(dealId);
+    expect(assessment?.answers.find((a) => a.questionOrder === 1)?.score).toBe(0);
+  });
+
+  it("accepts the boundary-valid score 3", async () => {
+    const dealId = await createDeal("Discovery");
+    await upsertMeddpiccAnswer(dealId, 1, { score: 3 }, "vitest");
+    const assessment = await getMeddpiccAssessment(dealId);
+    expect(assessment?.answers.find((a) => a.questionOrder === 1)?.score).toBe(3);
+  });
 });
 
 describe("stage bucket wiring", () => {
