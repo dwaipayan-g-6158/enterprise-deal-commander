@@ -16,6 +16,7 @@ import { registerPlaybookEngine } from "./playbook-engine";
 import { registerPostMortem } from "./post-mortem";
 import { registerScoring } from "./scoring";
 import { registerPipelineTransitions } from "./pipeline-transitions";
+import { registerMeddpicc } from "./meddpicc";
 
 export { captureSnapshot } from "./snapshot-service";
 export { reconcileHealth } from "./health-tracker";
@@ -57,6 +58,7 @@ export function registerSubscribers(): void {
   disposers.push(registerPostMortem());
   disposers.push(registerScoring());
   disposers.push(registerPipelineTransitions());
+  disposers.push(registerMeddpicc());
 
   // Register portfolio rollups with the MV refresh registry and warm them once
   // at startup so the first portfolio/summary read is already precomputed.
