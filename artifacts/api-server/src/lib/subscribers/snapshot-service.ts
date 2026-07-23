@@ -6,6 +6,7 @@ import {
   assembleDealIntelligence,
 } from "../intelligence";
 import { getPlaybookSignals } from "../playbook-signals";
+import { getLatestMeddpiccScore } from "../meddpicc";
 import { logger } from "../logger";
 
 /**
@@ -47,6 +48,7 @@ export async function captureSnapshot(
   const gates = await getDealGates(dealId);
   const intel = await assembleDealIntelligence(dealId);
   const playbook = await getPlaybookSignals(dealId);
+  const meddpicc = await getLatestMeddpiccScore(dealId);
 
   const governance = intel
     ? {
@@ -77,6 +79,9 @@ export async function captureSnapshot(
         criticalGaps: playbook.criticalGaps,
         overdueCount: playbook.overdueCount,
       },
+      meddpicc: meddpicc
+        ? { overallPct: meddpicc.overallPct, stagePct: meddpicc.stagePct, ragStatus: meddpicc.ragStatus }
+        : null,
     },
     createdBy: actor,
   });
