@@ -349,6 +349,8 @@ async function seedLookups() {
       { parameterKey: "portfolio_significant_lift", parameterValue: "1.5", dataType: "number", description: "Minimum lift over baseline for an alert-code correlation to be treated as significant" },
       { parameterKey: "portfolio_cluster_min_share", parameterValue: "0.5", dataType: "number", description: "Minimum share of a group's deals carrying a code for it to count toward a correlation cluster" },
       { parameterKey: "portfolio_cluster_min_deals", parameterValue: "3", dataType: "number", description: "Minimum deals in a group before its correlations are considered for clustering" },
+      { parameterKey: "meddpicc_red_max", parameterValue: "40", dataType: "number", description: "MEDDPICC overall % below which the qualification RAG badge shows Red" },
+      { parameterKey: "meddpicc_green_min", parameterValue: "75", dataType: "number", description: "MEDDPICC overall % above which the qualification RAG badge shows Green" },
     ])
     .onConflictDoNothing();
 
