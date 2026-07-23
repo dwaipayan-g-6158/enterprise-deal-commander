@@ -68,6 +68,28 @@ describe("buildInsights — comparison (WoW pipeline)", () => {
     const comparison = insights.find((i) => i.kind === "comparison");
     expect(comparison?.navigateTo).toBeUndefined();
   });
+
+  it("sets a non-empty detail line with both raw numbers, for both the delta and steady branches", () => {
+    const rising: InsightBuilderInputs = {
+      vitalSigns: {
+        weightedPipeline: 1_200_000,
+        baseline: { totalTCV: 1_000_000, activeDeals: 10, redAlerts: 1 },
+      },
+    };
+    const risingComparison = buildInsights(rising, NOW).find((i) => i.kind === "comparison");
+    expect(risingComparison?.detail).toBeTruthy();
+    expect(risingComparison?.detail).toMatch(/\$1\.2M/);
+    expect(risingComparison?.detail).toMatch(/\$1M/);
+
+    const steady: InsightBuilderInputs = {
+      vitalSigns: {
+        weightedPipeline: 1_000_000,
+        baseline: { totalTCV: 1_000_000, activeDeals: 10, redAlerts: 1 },
+      },
+    };
+    const steadyComparison = buildInsights(steady, NOW).find((i) => i.kind === "comparison");
+    expect(steadyComparison?.detail).toBeTruthy();
+  });
 });
 
 describe("buildInsights — anomaly (stale deals)", () => {
@@ -110,6 +132,32 @@ describe("buildInsights — anomaly (stale deals)", () => {
     expect(anomaly?.text).toContain("Acme Corp");
     expect(anomaly?.navigateTo).toBe("/deals/deal-1");
   });
+
+  it("maps every stale deal (not just the first) into supportingDeals, with a days-in-stage meta", () => {
+    const inputs: InsightBuilderInputs = {
+      summary: {
+        staleDeals: [
+          { dealId: "deal-1", dealName: "Acme Corp", daysInStage: 40 },
+          { dealId: "deal-2", dealName: "Globex", daysInStage: 32 },
+        ],
+      },
+    };
+    const anomaly = buildInsights(inputs, NOW).find((i) => i.kind === "anomaly");
+    expect(anomaly?.supportingDeals).toEqual([
+      { id: "deal-1", dealName: "Acme Corp", meta: "40d in stage" },
+      { id: "deal-2", dealName: "Globex", meta: "32d in stage" },
+    ]);
+  });
+
+  it("omits the meta suffix when daysInStage is absent", () => {
+    const inputs: InsightBuilderInputs = {
+      summary: {
+        staleDeals: [{ dealId: "deal-1", dealName: "Acme Corp" }],
+      },
+    };
+    const anomaly = buildInsights(inputs, NOW).find((i) => i.kind === "anomaly");
+    expect(anomaly?.supportingDeals).toEqual([{ id: "deal-1", dealName: "Acme Corp", meta: undefined }]);
+  });
 });
 
 describe("buildInsights — pattern (memory insights)", () => {
@@ -148,6 +196,33 @@ describe("buildInsights — pattern (memory insights)", () => {
     expect(patterns[0].navigateTo).toBe("/deals/deal-a");
     expect(patterns[1].text).toBe("Discount-heavy deals close slower.");
     expect(patterns[1].navigateTo).toBeUndefined();
+  });
+
+  it("maps every matched deal (not just the first) into supportingDeals; an empty match list yields []", () => {
+    const inputs: InsightBuilderInputs = {
+      memoryInsights: {
+        archivedCount: 6,
+        insights: [
+          {
+            text: "Deals with a slow Gate 2 tend to stall.",
+            matchedDeals: [
+              { id: "deal-a", dealName: "Acme" },
+              { id: "deal-b", dealName: "Beta" },
+            ],
+          },
+          {
+            text: "Discount-heavy deals close slower.",
+            matchedDeals: [],
+          },
+        ],
+      },
+    };
+    const patterns = buildInsights(inputs, NOW).filter((i) => i.kind === "pattern");
+    expect(patterns[0].supportingDeals).toEqual([
+      { id: "deal-a", dealName: "Acme" },
+      { id: "deal-b", dealName: "Beta" },
+    ]);
+    expect(patterns[1].supportingDeals).toEqual([]);
   });
 
   it("gives pattern insights stable, distinct ids", () => {

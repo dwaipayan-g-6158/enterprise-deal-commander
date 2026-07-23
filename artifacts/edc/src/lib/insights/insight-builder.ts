@@ -6,11 +6,22 @@
 
 export type InsightKind = "trend" | "anomaly" | "comparison" | "pattern";
 
+/** One deal backing an insight's claim, surfaced so the user can validate it. */
+export interface InsightSupportingDeal {
+  id: string;
+  dealName: string;
+  meta?: string;
+}
+
 export interface Insight {
   id: string;
   kind: InsightKind;
   text: string;
   navigateTo?: string;
+  /** One-line "why" for insights with no per-deal breakdown (comparison). */
+  detail?: string;
+  /** Itemized "why" for insights backed by a list of matching deals (anomaly, pattern). */
+  supportingDeals?: InsightSupportingDeal[];
 }
 
 /**
@@ -69,12 +80,18 @@ function buildComparisonInsight(vitalSigns: VitalSignsInsightInput | null | unde
   // Never fabricate a comparison with no history — the only gate is whether
   // a baseline snapshot exists at all.
   if (!vitalSigns || !baseline) return null;
+  // Note: this compares a *weighted* current figure against an *unweighted*
+  // week-old baseline (there's no weighted-pipeline baseline snapshot to
+  // compare against). `detail` surfaces both raw numbers with honest,
+  // differentiated labels rather than implying they're the same metric.
+  const detail = `Now (weighted): ${compactCurrency(vitalSigns.weightedPipeline)} · Last wk (total TCV): ${compactCurrency(baseline.totalTCV)}`;
   const delta = vitalSigns.weightedPipeline - baseline.totalTCV;
   if (delta === 0) {
     return {
       id: "comparison-wow-pipeline",
       kind: "comparison",
       text: `Weighted pipeline is holding steady vs last week at ${compactCurrency(vitalSigns.weightedPipeline)}.`,
+      detail,
     };
   }
   const direction = delta > 0 ? "up" : "down";
@@ -82,6 +99,7 @@ function buildComparisonInsight(vitalSigns: VitalSignsInsightInput | null | unde
     id: "comparison-wow-pipeline",
     kind: "comparison",
     text: `Weighted pipeline is ${direction} ${compactCurrency(Math.abs(delta))} vs last week.`,
+    detail,
   };
 }
 
@@ -98,6 +116,11 @@ function buildAnomalyInsight(summary: SummaryInsightInput | null | undefined): I
     kind: "anomaly",
     text,
     navigateTo: `/deals/${first.dealId}`,
+    supportingDeals: staleDeals.map((d) => ({
+      id: d.dealId,
+      dealName: d.dealName,
+      meta: d.daysInStage != null ? `${d.daysInStage}d in stage` : undefined,
+    })),
   };
 }
 
@@ -108,6 +131,7 @@ function buildPatternInsights(memoryInsights: MemoryInsightsInput | null | undef
     kind: "pattern" as const,
     text: ins.text,
     navigateTo: ins.matchedDeals[0] ? `/deals/${ins.matchedDeals[0].id}` : undefined,
+    supportingDeals: ins.matchedDeals.map((m) => ({ id: m.id, dealName: m.dealName })),
   }));
 }
 

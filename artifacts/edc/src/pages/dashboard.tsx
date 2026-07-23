@@ -34,10 +34,8 @@ import { PipelineRiskOverview } from "@/components/dashboard/widgets/pipeline-ri
 import { relativeTime, type Health } from "@/components/dashboard/widgets/_shared";
 import { DashboardHero } from "@/components/dashboard/dashboard-hero";
 import { CelebrationWatcher } from "@/components/dashboard/celebration-watcher";
-import { InsightBanner } from "@/components/dashboard/widgets/insight-banner";
 import { WeeklyReview } from "@/components/dashboard/widgets/weekly-review";
-import { EndOfDayReflection } from "@/components/dashboard/widgets/end-of-day-reflection";
-import { DailyMission } from "@/components/dashboard/widgets/daily-mission";
+import { DailyBar } from "@/components/dashboard/daily-bar/daily-bar";
 
 type OpenDialog =
   | null
@@ -141,10 +139,8 @@ export default function Dashboard() {
     <div className="p-8 max-w-[1600px] mx-auto space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
       <DashboardHero previousVisitAt={previousVisitAt} />
       <CelebrationWatcher previousVisitAt={previousVisitAt} />
-      <InsightBanner />
       <WeeklyReview />
-      <EndOfDayReflection />
-      <DailyMission />
+      <DailyBar />
 
       {/* Row 1 — Pipeline Vital Signs */}
       <VitalSignsBar
