@@ -39,7 +39,7 @@ async function suggestBudgetApproved(dealId: string): Promise<MeddpiccSuggestion
     .select({ gateCode: dealTechnicalGates.gateCode, isCompleted: dealTechnicalGates.isCompleted })
     .from(dealTechnicalGates)
     .where(eq(dealTechnicalGates.dealId, dealId));
-  const executiveAgreed = gates.some((g) => g.isCompleted && /EXEC|AGREED|G1/i.test(g.gateCode));
+  const executiveAgreed = gates.some((g) => g.isCompleted && g.gateCode === "G1_EXECUTIVE_AGREED");
   return {
     questionOrder: 9,
     suggestedScore: executiveAgreed ? 3 : 0,

@@ -8,10 +8,12 @@ import {
   servicesTiers,
   stakeholders,
   dealMemory,
+  dealTechnicalGates,
 } from "@workspace/db";
 import { getMeddpiccSuggestions } from "./meddpicc-signals";
 
 const createdDealIds: string[] = [];
+const createdDealMemoryIds: string[] = [];
 
 async function createDeal(stageId: number, accountName: string): Promise<string> {
   const [pricing] = await db.select().from(pricingModels).limit(1);
@@ -35,6 +37,9 @@ async function createDeal(stageId: number, accountName: string): Promise<string>
 }
 
 afterAll(async () => {
+  if (createdDealMemoryIds.length > 0) {
+    await db.delete(dealMemory).where(inArray(dealMemory.id, createdDealMemoryIds));
+  }
   if (createdDealIds.length > 0) {
     await db.delete(enterpriseDeals).where(inArray(enterpriseDeals.id, createdDealIds));
   }
@@ -75,6 +80,28 @@ describe("getMeddpiccSuggestions", () => {
     expect(suggestions.find((s) => s.questionOrder === 6)?.suggestedScore).toBe(3);
   });
 
+  it("does not suggest budget approved (Q9) when only the unrelated G1_CRITERIA_LOCKED gate is completed", async () => {
+    const dealId = await createDeal(1, `Acct ${Date.now()}-f`);
+    await db.insert(dealTechnicalGates).values({
+      dealId,
+      gateCode: "G1_CRITERIA_LOCKED",
+      isCompleted: true,
+    });
+    const suggestions = await getMeddpiccSuggestions(dealId);
+    expect(suggestions.find((s) => s.questionOrder === 9)?.suggestedScore).toBe(0);
+  });
+
+  it("suggests 3 for budget approved (Q9) when G1_EXECUTIVE_AGREED gate is completed", async () => {
+    const dealId = await createDeal(1, `Acct ${Date.now()}-g`);
+    await db.insert(dealTechnicalGates).values({
+      dealId,
+      gateCode: "G1_EXECUTIVE_AGREED",
+      isCompleted: true,
+    });
+    const suggestions = await getMeddpiccSuggestions(dealId);
+    expect(suggestions.find((s) => s.questionOrder === 9)?.suggestedScore).toBe(3);
+  });
+
   it("suggests 3 for existing-customer (Q24) when the account has a prior Won deal", async () => {
     const accountName = `Repeat Acct ${Date.now()}`;
     const dealId = await createDeal(1, accountName);
@@ -87,9 +114,9 @@ describe("getMeddpiccSuggestions", () => {
         outcome: "Won",
       })
       .returning({ id: dealMemory.id });
+    createdDealMemoryIds.push(prior.id);
     const suggestions = await getMeddpiccSuggestions(dealId);
     expect(suggestions.find((s) => s.questionOrder === 24)?.suggestedScore).toBe(3);
-    await db.delete(dealMemory).where(inArray(dealMemory.id, [prior.id]));
   });
 
   it("suggests 2 for existing-customer (Q24) when the account has no prior Won deal", async () => {
