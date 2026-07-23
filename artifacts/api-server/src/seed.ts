@@ -34,9 +34,11 @@ import {
   playbookSteps,
   dealMemory,
   dealCompetitors,
+  meddpiccQuestions,
 } from "@workspace/db";
 import { logger } from "./lib/logger";
 import { rescoreActiveDeals } from "./lib/scoring";
+import { QUESTION_CATALOG } from "@workspace/engine";
 
 async function seedLookups() {
   await db
@@ -544,6 +546,24 @@ async function seedPlaybooks() {
   logger.info({ count: playbookData.length }, "Seeded stage-keyed playbooks");
 }
 
+async function seedMeddpiccQuestions() {
+  const existing = await db.select({ id: meddpiccQuestions.id }).from(meddpiccQuestions).limit(1);
+  if (existing.length > 0) {
+    logger.info("MEDDPICC questions already present — skipping MEDDPICC seed");
+    return;
+  }
+  await db.insert(meddpiccQuestions).values(
+    QUESTION_CATALOG.map((q) => ({
+      questionOrder: q.questionOrder,
+      pillar: q.pillar,
+      stageTag: q.stageTag,
+      questionText: q.questionText,
+      helpText: q.helpText ?? null,
+    })),
+  );
+  logger.info(`Seeded ${QUESTION_CATALOG.length} MEDDPICC questions`);
+}
+
 async function seedCommander() {
   const username = process.env.COMMANDER_USERNAME ?? "commander";
   const password = process.env.COMMANDER_PASSWORD ?? "DealCommander!2026";
@@ -934,6 +954,7 @@ async function main() {
   logger.info("Seeding EDC database...");
   await seedLookups();
   await seedPlaybooks();
+  await seedMeddpiccQuestions();
   await seedCommander();
   await seedDeals();
   const scored = await rescoreActiveDeals();
