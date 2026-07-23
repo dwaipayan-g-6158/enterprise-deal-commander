@@ -45,6 +45,7 @@ interface TrajectoryPoint {
   stage: string | null;
   tcv: number | null;
   playbookPct: number | null;
+  meddpiccPct: number | null;
 }
 
 interface StageChange {
@@ -63,7 +64,7 @@ interface ChartRow extends TrajectoryPoint {
   t: number;
 }
 
-type Metric = "score" | "gate" | "tcv" | "playbook";
+type Metric = "score" | "gate" | "tcv" | "playbook" | "meddpicc";
 
 // ---- Health label + the dot color used inside the chart/tooltip --------------
 const HEALTH_LABEL: Record<NonNullable<Health>, string> = {
@@ -92,6 +93,7 @@ const METRIC_COLOR: Record<Metric, string> = {
   gate: "hsl(var(--chart-1))", // indigo
   tcv: "hsl(var(--chart-2))", // emerald
   playbook: "hsl(var(--chart-4))", // amber/violet
+  meddpicc: "hsl(var(--chart-5))", // sky
 };
 
 const METRIC_LABEL: Record<Metric, string> = {
@@ -99,6 +101,7 @@ const METRIC_LABEL: Record<Metric, string> = {
   gate: "Gate %",
   tcv: "TCV",
   playbook: "Playbook %",
+  meddpicc: "MEDDPICC %",
 };
 
 const chartConfig: ChartConfig = {
@@ -106,6 +109,7 @@ const chartConfig: ChartConfig = {
   gate: { label: "Gate %", color: "hsl(var(--chart-1))" },
   tcv: { label: "TCV", color: "hsl(var(--chart-2))" },
   playbook: { label: "Playbook %", color: "hsl(var(--chart-4))" },
+  meddpicc: { label: "MEDDPICC %", color: "hsl(var(--chart-5))" },
 };
 
 // ---- Date helpers ------------------------------------------------------------
@@ -326,6 +330,10 @@ function TrajectoryTooltip({ active, payload }: TooltipProps) {
           label="Playbook %"
           value={row.playbookPct != null ? `${formatNum(row.playbookPct)}%` : "—"}
         />
+        <TooltipRow
+          label="MEDDPICC %"
+          value={row.meddpiccPct != null ? `${formatNum(row.meddpiccPct)}%` : "—"}
+        />
         <div className="flex items-center justify-between gap-3">
           <span className="text-muted-foreground">Health</span>
           <span className="flex items-center gap-1.5 font-medium">
@@ -482,7 +490,9 @@ function makeEndpointLayer(
         ? "tcv"
         : metric === "playbook"
           ? "playbookPct"
-          : "score";
+          : metric === "meddpicc"
+            ? "meddpiccPct"
+            : "score";
 
   // last row with a non-null value for this metric
   let endRow: ChartRow | undefined;
@@ -537,7 +547,9 @@ function HeroChart({ metric, rows }: { metric: Metric; rows: ChartRow[] }) {
         ? "tcv"
         : metric === "playbook"
           ? "playbookPct"
-          : "score";
+          : metric === "meddpicc"
+            ? "meddpiccPct"
+            : "score";
 
   // Y domain: 0–100 for score/gate; data-driven padded domain for TCV.
   const isTcv = metric === "tcv";
@@ -552,7 +564,7 @@ function HeroChart({ metric, rows }: { metric: Metric; rows: ChartRow[] }) {
   const valueFmt = (v: number) =>
     isTcv
       ? compactCurrency(v)
-      : metric === "gate" || metric === "playbook"
+      : metric === "gate" || metric === "playbook" || metric === "meddpicc"
         ? `${formatNum(v)}%`
         : formatNum(v);
 
@@ -722,7 +734,7 @@ function TrajectoryHeaderBar({
         {showTabs && (
           <Tabs value={metric} onValueChange={(val) => setMetric(val as Metric)}>
             <TabsList className="h-8">
-              {(["score", "gate", "tcv", "playbook"] as const).map((m) => (
+              {(["score", "gate", "tcv", "playbook", "meddpicc"] as const).map((m) => (
                 <TabsTrigger key={m} value={m} className="text-xs">
                   {METRIC_LABEL[m]}
                 </TabsTrigger>
