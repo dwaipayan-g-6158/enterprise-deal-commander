@@ -1491,4 +1491,3 @@ export * from "./flow";
 export * from "./loss-risk";
 
 export * from "./meddpicc";
-export { QUESTION_CATALOG } from "./meddpicc";
