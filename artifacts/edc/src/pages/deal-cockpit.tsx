@@ -51,6 +51,7 @@ import { CompetitivePanel } from "@/components/cockpit/v2/competitive-panel";
 import { StakeholdersPanel } from "@/components/cockpit/v2/stakeholders-panel";
 import { DecisionsPanel } from "@/components/cockpit/v2/decisions-panel";
 import { PlaybookPanel } from "@/components/cockpit/v2/playbook-panel";
+import { MeddpiccPanel } from "@/components/cockpit/v2/meddpicc-panel";
 import { PricingPanel } from "@/components/cockpit/v2/pricing-panel";
 import { DealTagsBar } from "@/components/cockpit/v2/deal-tags-bar";
 import { formatCurrency } from "@/components/cockpit/use-invalidate";
@@ -262,6 +263,7 @@ export default function DealCockpit() {
       );
       case "blockers": return <BlockersPanel dealId={id} />;
       case "playbook": return <PlaybookPanel dealId={id} />;
+      case "meddpicc": return <MeddpiccPanel dealId={id} />;
       case "score": return <ScorePanel dealId={id} />;
       case "competitive": return <CompetitivePanel dealId={id} incumbentId={deal.competitorId} />;
       case "stakeholders": return <StakeholdersPanel dealId={id} />;

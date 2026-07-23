@@ -8,11 +8,11 @@ describe("cockpit-tabs", () => {
     ]);
   });
 
-  it("covers all 13 panel sub-tabs exactly once", () => {
+  it("covers all 14 panel sub-tabs exactly once", () => {
     const subs = COCKPIT_GROUPS.flatMap((g) => g.subs.map((s) => s.id)).sort();
     expect(subs).toEqual([
       "activity", "blockers", "coaching", "competitive", "crosssell",
-      "decisions", "history", "pricing", "playbook", "risk", "score",
+      "decisions", "history", "meddpicc", "pricing", "playbook", "risk", "score",
       "stakeholders", "technical",
     ].sort());
   });

@@ -13,6 +13,7 @@ export const COCKPIT_GROUPS: TabGroup[] = [
   { id: "validation", label: "Validation", icon: Activity, subs: [
       { id: "technical", label: "Technical Gates" },
       { id: "playbook", label: "Playbook" },
+      { id: "meddpicc", label: "MEDDPICC" },
   ] },
   { id: "intel", label: "Intelligence", icon: Gauge, subs: [
       { id: "score", label: "Score" },
