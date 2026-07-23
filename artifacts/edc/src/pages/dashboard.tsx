@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
 import {
   useGetIntelligenceSummary,
   useGetVitalSigns,
@@ -36,6 +36,9 @@ import { DashboardHero } from "@/components/dashboard/dashboard-hero";
 import { CelebrationWatcher } from "@/components/dashboard/celebration-watcher";
 import { WeeklyReview } from "@/components/dashboard/widgets/weekly-review";
 import { DailyBar } from "@/components/dashboard/daily-bar/daily-bar";
+import { CustomizeLayoutControl } from "@/components/dashboard/customize-layout-control";
+import { getRowOrder, saveRowOrder, resetRowOrder } from "@/lib/dashboard-layout/row-order";
+import { defaultStore } from "@/lib/storage";
 
 type OpenDialog =
   | null
@@ -103,6 +106,17 @@ export default function Dashboard() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const [rowOrder, setRowOrder] = useState<string[]>(() => getRowOrder(defaultStore));
+
+  function handleReorder(next: string[]) {
+    setRowOrder(next);
+    saveRowOrder(defaultStore, next);
+  }
+  function handleResetLayout() {
+    resetRowOrder(defaultStore);
+    setRowOrder(getRowOrder(defaultStore));
+  }
+
   if (isLoading) {
     return (
       <div className="p-8 space-y-6">
@@ -142,101 +156,115 @@ export default function Dashboard() {
       <WeeklyReview />
       <DailyBar />
 
-      {/* Row 1 — Pipeline Vital Signs */}
-      <VitalSignsBar
-        totalTCV={totalTCV}
-        activeDeals={activeDeals}
-        redAlerts={counts.RED}
-        staleCount={staleCount}
-        reportingCurrency={reportingCurrency}
-        onOpenTcv={() => setOpenDialog("tcv")}
-        onOpenRed={() => openHealth("RED")}
-        onOpenStale={() => setOpenDialog("stale")}
-        onOpenWeightedPipeline={() => setOpenDialog("weightedPipeline")}
-        onOpenAvgScore={() => setOpenDialog("avgScore")}
-      />
+      {(() => {
+        const rowsById: Record<string, ReactNode> = {
+          "vital-signs": (
+            <VitalSignsBar
+              totalTCV={totalTCV}
+              activeDeals={activeDeals}
+              redAlerts={counts.RED}
+              staleCount={staleCount}
+              reportingCurrency={reportingCurrency}
+              onOpenTcv={() => setOpenDialog("tcv")}
+              onOpenRed={() => openHealth("RED")}
+              onOpenStale={() => setOpenDialog("stale")}
+              onOpenWeightedPipeline={() => setOpenDialog("weightedPipeline")}
+              onOpenAvgScore={() => setOpenDialog("avgScore")}
+            />
+          ),
+          "health-risk-alerts": (
+            <div className="grid grid-cols-1 @3xl:grid-cols-2 @5xl:grid-cols-3 gap-6">
+              <HealthDistribution
+                counts={counts}
+                tcvAtRisk={tcvAtRisk}
+                reportingCurrency={reportingCurrency}
+                onSelect={openHealth}
+              />
+              <PipelineRiskOverview reportingCurrency={reportingCurrency} />
+              <CriticalAlertsFeed
+                alerts={summary?.criticalAlerts ?? []}
+                tcvByDealId={tcvByDealId}
+                reportingCurrency={reportingCurrency}
+                onViewAll={() => setOpenDialog("alerts")}
+                onSelect={(dealId) => navigate(`/deals/${dealId}`)}
+              />
+            </div>
+          ),
+          "actions-forecast": (
+            <div className="grid grid-cols-1 @3xl:grid-cols-2 gap-6">
+              <NextActions onViewAll={() => setOpenDialog("actions")} />
+              <ForecastSnapshot reportingCurrency={reportingCurrency} />
+            </div>
+          ),
+          "stage-gate-funnel": (
+            <div className="grid grid-cols-1 @3xl:grid-cols-2 gap-6">
+              <StageFunnel reportingCurrency={reportingCurrency} onSelectStage={openStage} />
+              <GateFunnel />
+            </div>
+          ),
+          "deal-roster": <DealRoster reportingCurrency={reportingCurrency} />,
+          "close-timeline-activity": (
+            <div className="grid grid-cols-1 @3xl:grid-cols-2 gap-6">
+              <CloseTimeline reportingCurrency={reportingCurrency} />
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base">Recent Activity</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {activity.length > 0 ? (
+                    <ul className="space-y-3">
+                      {activity.map((e) => (
+                        <li key={e.id} className="text-sm border-l-2 border-primary/40 pl-3">
+                          <div className="flex justify-between gap-2">
+                            <button
+                              type="button"
+                              onClick={() => navigate(`/deals/${e.dealId}`)}
+                              className="font-medium text-left hover:underline cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm"
+                            >
+                              {e.summary}
+                            </button>
+                            <span className="text-xs text-muted-foreground whitespace-nowrap">
+                              {relativeTime(e.occurredAt)}
+                            </span>
+                          </div>
+                          <p className="text-xs text-muted-foreground">
+                            {e.dealName ?? "Deal"} · by {e.actor}
+                          </p>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">It's quiet in here. Let's change that.</p>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
+          ),
+          "velocity-competitive": (
+            <div className="grid grid-cols-1 @3xl:grid-cols-2 gap-6">
+              <VelocitySummary />
+              <CompetitiveSummary />
+            </div>
+          ),
+          "simulation-band": <SimulationBand reportingCurrency={reportingCurrency} />,
+          "memory-insights": <MemoryInsights />,
+        };
 
-      {/* Row 2 — Health Distribution + Pipeline Risk Overview + Critical Alerts */}
-      <div className="grid grid-cols-1 @3xl:grid-cols-2 @5xl:grid-cols-3 gap-6">
-        <HealthDistribution
-          counts={counts}
-          tcvAtRisk={tcvAtRisk}
-          reportingCurrency={reportingCurrency}
-          onSelect={openHealth}
-        />
-        <PipelineRiskOverview reportingCurrency={reportingCurrency} />
-        <CriticalAlertsFeed
-          alerts={summary?.criticalAlerts ?? []}
-          tcvByDealId={tcvByDealId}
-          reportingCurrency={reportingCurrency}
-          onViewAll={() => setOpenDialog("alerts")}
-          onSelect={(dealId) => navigate(`/deals/${dealId}`)}
-        />
-      </div>
-
-      {/* Row 3 — Next Actions + Forecast */}
-      <div className="grid grid-cols-1 @3xl:grid-cols-2 gap-6">
-        <NextActions onViewAll={() => setOpenDialog("actions")} />
-        <ForecastSnapshot reportingCurrency={reportingCurrency} />
-      </div>
-
-      {/* Row 4 — Stage Funnel + Gate Funnel */}
-      <div className="grid grid-cols-1 @3xl:grid-cols-2 gap-6">
-        <StageFunnel reportingCurrency={reportingCurrency} onSelectStage={openStage} />
-        <GateFunnel />
-      </div>
-
-      {/* Row 5 — Deal Roster */}
-      <DealRoster reportingCurrency={reportingCurrency} />
-
-      {/* Row 6 — Close Timeline + Recent Activity */}
-      <div className="grid grid-cols-1 @3xl:grid-cols-2 gap-6">
-        <CloseTimeline reportingCurrency={reportingCurrency} />
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base">Recent Activity</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {activity.length > 0 ? (
-              <ul className="space-y-3">
-                {activity.map((e) => (
-                  <li key={e.id} className="text-sm border-l-2 border-primary/40 pl-3">
-                    <div className="flex justify-between gap-2">
-                      <button
-                        type="button"
-                        onClick={() => navigate(`/deals/${e.dealId}`)}
-                        className="font-medium text-left hover:underline cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm"
-                      >
-                        {e.summary}
-                      </button>
-                      <span className="text-xs text-muted-foreground whitespace-nowrap">
-                        {relativeTime(e.occurredAt)}
-                      </span>
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                      {e.dealName ?? "Deal"} · by {e.actor}
-                    </p>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className="text-sm text-muted-foreground">It's quiet in here. Let's change that.</p>
-            )}
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Row 7 — Velocity + Competitive */}
-      <div className="grid grid-cols-1 @3xl:grid-cols-2 gap-6">
-        <VelocitySummary />
-        <CompetitiveSummary />
-      </div>
-
-      {/* Row 8 — Simulation Band */}
-      <SimulationBand reportingCurrency={reportingCurrency} />
-
-      {/* Row 9 — Deal Memory Insights */}
-      <MemoryInsights />
+        return (
+          <>
+            <div className="flex justify-end">
+              <CustomizeLayoutControl
+                rowOrder={rowOrder}
+                onReorder={handleReorder}
+                onReset={handleResetLayout}
+              />
+            </div>
+            {rowOrder.map((id) => (
+              <Fragment key={id}>{rowsById[id]}</Fragment>
+            ))}
+          </>
+        );
+      })()}
 
       <TotalTcvDialog
         open={openDialog === "tcv"}
