@@ -6,8 +6,13 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "./ui/button";
 import { ThemeToggle } from "./theme-toggle";
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { EdcLogoMark } from "./edc-logo-mark";
+import { useIdleStatus } from "@/lib/presence/use-idle-status";
+import { useFocusMode } from "@/lib/presence/focus-mode-context";
+import { pickDailyQuote } from "@/lib/quotes/quote-rotation";
+import { defaultStore } from "@/lib/storage";
 
 const navItems = [
   { href: "/", label: "Command Center", icon: LayoutDashboard },
@@ -19,9 +24,82 @@ const navItems = [
   { href: "/settings", label: "Settings", icon: Settings },
 ];
 
+function initialsFrom(displayName?: string, email?: string): string {
+  if (displayName && displayName.trim().length > 0) {
+    const parts = displayName.trim().split(/\s+/);
+    const first = parts[0]?.[0] ?? "";
+    const last = parts.length > 1 ? parts[parts.length - 1][0] : "";
+    return (first + last).toUpperCase();
+  }
+  if (email && email.length > 0) return email[0].toUpperCase();
+  return "?";
+}
+
+// Profile Presence status line (PRD 4.12). Active/Away is auto-detected;
+// Focus Mode is a manual override the commander toggles here — it also
+// suppresses the sidebar quote, CelebrationWatcher's toasts, and the
+// DailyBar insight segment (see Task 8), so this doubles as a real "just
+// show me the work" control, not a cosmetic label.
+function PresenceStatusLine() {
+  const { enabled: focusMode, toggle } = useFocusMode();
+  const idleStatus = useIdleStatus();
+  const label = focusMode ? "Focus Mode" : idleStatus === "active" ? "Active" : "Away";
+  const dotClass = focusMode
+    ? "bg-primary"
+    : idleStatus === "active"
+      ? "bg-emerald-500"
+      : "bg-muted-foreground";
+
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm"
+        >
+          <span className={`h-1.5 w-1.5 rounded-full ${dotClass}`} aria-hidden />
+          {label}
+        </button>
+      </PopoverTrigger>
+      <PopoverContent align="start" className="w-64">
+        <p className="text-sm font-medium">Focus Mode</p>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Hides celebration toasts, the daily insight, the quote line, and personality messages.
+          Alerts, next actions, and deal data stay exactly as they are.
+        </p>
+        <Button
+          type="button"
+          variant={focusMode ? "default" : "outline"}
+          size="sm"
+          className="mt-3 w-full min-h-[44px]"
+          onClick={toggle}
+        >
+          {focusMode ? "Turn off Focus Mode" : "Turn on Focus Mode"}
+        </Button>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+// Random Professional Quotes (PRD 4.5) — one per local day, hidden under
+// Focus Mode. Locked once per mount, matching PersonalityLine's convention.
+function SidebarQuoteLine() {
+  const { enabled: focusMode } = useFocusMode();
+  const [quote] = useState(() => pickDailyQuote(defaultStore, new Date()));
+
+  if (focusMode) return null;
+
+  return (
+    <p className="text-[11px] text-muted-foreground italic mt-2 leading-snug">
+      &ldquo;{quote.text}&rdquo;
+      {quote.author && <span className="not-italic"> — {quote.author}</span>}
+    </p>
+  );
+}
+
 function SidebarBody({ location, user, onNavigate, onLogout }: {
   location: string;
-  user: { email?: string; role?: string } | undefined;
+  user: { email?: string; role?: string; displayName?: string } | undefined;
   onNavigate?: () => void;
   onLogout: () => void;
 }) {
@@ -41,6 +119,7 @@ function SidebarBody({ location, user, onNavigate, onLogout }: {
             <h1 className="text-sm font-bold tracking-tight text-foreground leading-snug cursor-pointer hover:text-primary transition-colors">Enterprise Deal Commander</h1>
           </Link>
           <p className="text-[10px] text-muted-foreground mt-1 uppercase tracking-widest font-mono">Commander Console</p>
+          <SidebarQuoteLine />
         </div>
       </div>
 
@@ -69,9 +148,17 @@ function SidebarBody({ location, user, onNavigate, onLogout }: {
           </kbd>
           <span>for quick search</span>
         </p>
-        <div className="mb-2">
-          <p className="text-sm font-medium">{user?.email}</p>
-          <p className="text-xs text-muted-foreground capitalize">{user?.role}</p>
+        <div className="mb-2 flex items-center gap-2.5">
+          <span
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/15 text-xs font-semibold text-primary"
+            aria-hidden
+          >
+            {initialsFrom(user?.displayName, user?.email)}
+          </span>
+          <div className="min-w-0">
+            <p className="truncate text-sm font-medium">{user?.displayName || user?.email}</p>
+            <PresenceStatusLine />
+          </div>
         </div>
         <ThemeToggle />
         <Button variant="outline" className="w-full justify-start text-muted-foreground" onClick={onLogout}>
