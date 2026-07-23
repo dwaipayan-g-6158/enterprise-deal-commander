@@ -7,6 +7,7 @@ import { PwaUpdatePrompt } from "@/components/pwa-update-prompt";
 import { OfflineBanner } from "@/components/offline-banner";
 import { OfflineSaveNotice } from "@/components/offline-save-notice";
 import { ThemeProvider } from "@/components/theme-provider";
+import { FocusModeProvider } from "@/lib/presence/focus-mode-context";
 import { CommandPalette } from "@/components/command-palette";
 import NotFound from "@/pages/not-found";
 import { Layout } from "@/components/layout";
@@ -89,17 +90,19 @@ function Router() {
 function App() {
   return (
     <ThemeProvider>
-      <QueryClientProvider client={queryClient}>
-        <TooltipProvider>
-          <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
-            <Router />
-          </WouterRouter>
-          <Toaster />
-          <PwaUpdatePrompt />
-          <OfflineBanner />
-          <OfflineSaveNotice />
-        </TooltipProvider>
-      </QueryClientProvider>
+      <FocusModeProvider>
+        <QueryClientProvider client={queryClient}>
+          <TooltipProvider>
+            <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
+              <Router />
+            </WouterRouter>
+            <Toaster />
+            <PwaUpdatePrompt />
+            <OfflineBanner />
+            <OfflineSaveNotice />
+          </TooltipProvider>
+        </QueryClientProvider>
+      </FocusModeProvider>
     </ThemeProvider>
   );
 }
