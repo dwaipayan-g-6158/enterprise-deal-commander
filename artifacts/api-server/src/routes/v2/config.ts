@@ -54,7 +54,7 @@ import { getActor } from "../../lib/auth";
 import { notFound } from "../../lib/http";
 import { logSettingsChange } from "../../lib/settings-audit";
 import { emitDealEvent } from "../../lib/events";
-import { getPlaybookJourney, startPlaybookForDeal } from "../../lib/playbook-signals";
+import { getPlaybookJourney, startPlaybookForDeal, recomputeAssignment, dealIdForAssignment } from "../../lib/playbook-signals";
 import { cache, CacheKeys } from "../../lib/cache";
 
 const router: IRouter = Router();
@@ -226,53 +226,6 @@ router.post("/deals/:dealId/playbooks/:playbookId/start", async (req: Request, r
   }
   res.json({ data: { assignmentId: assignment.id, created } });
 });
-
-// Recompute the assignment pointer + status after any step action. currentStepId
-// = first step not yet completed-or-skipped (highlight only — steps are freely
-// actionable out of order); status = "Completed" once every step is terminal.
-async function recomputeAssignment(assignmentId: string) {
-  const [assignment] = await db
-    .select()
-    .from(dealPlaybookAssignments)
-    .where(eq(dealPlaybookAssignments.id, assignmentId))
-    .limit(1);
-  if (!assignment) return;
-  const steps = await db
-    .select({ id: playbookSteps.id })
-    .from(playbookSteps)
-    .where(eq(playbookSteps.playbookId, assignment.playbookId))
-    .orderBy(asc(playbookSteps.stepOrder));
-  const completions = await db
-    .select()
-    .from(playbookStepCompletions)
-    .where(eq(playbookStepCompletions.assignmentId, assignmentId));
-  const terminal = new Set(
-    completions
-      .filter((c) => c.status === "completed" || c.status === "skipped")
-      .map((c) => c.stepId),
-  );
-  const next = steps.find((s) => !terminal.has(s.id));
-  if (next) {
-    await db
-      .update(dealPlaybookAssignments)
-      .set({ currentStepId: next.id, status: "Active", completedAt: null })
-      .where(eq(dealPlaybookAssignments.id, assignmentId));
-  } else if (steps.length > 0) {
-    await db
-      .update(dealPlaybookAssignments)
-      .set({ status: "Completed", completedAt: new Date(), currentStepId: null })
-      .where(eq(dealPlaybookAssignments.id, assignmentId));
-  }
-}
-
-async function dealIdForAssignment(assignmentId: string): Promise<string | null> {
-  const [a] = await db
-    .select({ dealId: dealPlaybookAssignments.dealId })
-    .from(dealPlaybookAssignments)
-    .where(eq(dealPlaybookAssignments.id, assignmentId))
-    .limit(1);
-  return a?.dealId ?? null;
-}
 
 // Set a step's action state (completed | skipped | blocked) with an optional note.
 // Steps are freely actionable in any order. Upserts one ledger row per step.

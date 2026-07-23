@@ -408,3 +408,50 @@ export async function startPlaybookForDeal(
     .returning();
   return { assignment: created, created: true };
 }
+
+// Recompute the assignment pointer + status after any step action. currentStepId
+// = first step not yet completed-or-skipped (highlight only — steps are freely
+// actionable out of order); status = "Completed" once every step is terminal.
+export async function recomputeAssignment(assignmentId: string): Promise<void> {
+  const [assignment] = await db
+    .select()
+    .from(dealPlaybookAssignments)
+    .where(eq(dealPlaybookAssignments.id, assignmentId))
+    .limit(1);
+  if (!assignment) return;
+  const steps = await db
+    .select({ id: playbookSteps.id })
+    .from(playbookSteps)
+    .where(eq(playbookSteps.playbookId, assignment.playbookId))
+    .orderBy(asc(playbookSteps.stepOrder));
+  const completions = await db
+    .select()
+    .from(playbookStepCompletions)
+    .where(eq(playbookStepCompletions.assignmentId, assignmentId));
+  const terminal = new Set(
+    completions
+      .filter((c) => c.status === "completed" || c.status === "skipped")
+      .map((c) => c.stepId),
+  );
+  const next = steps.find((s) => !terminal.has(s.id));
+  if (next) {
+    await db
+      .update(dealPlaybookAssignments)
+      .set({ currentStepId: next.id, status: "Active", completedAt: null })
+      .where(eq(dealPlaybookAssignments.id, assignmentId));
+  } else if (steps.length > 0) {
+    await db
+      .update(dealPlaybookAssignments)
+      .set({ status: "Completed", completedAt: new Date(), currentStepId: null })
+      .where(eq(dealPlaybookAssignments.id, assignmentId));
+  }
+}
+
+export async function dealIdForAssignment(assignmentId: string): Promise<string | null> {
+  const [a] = await db
+    .select({ dealId: dealPlaybookAssignments.dealId })
+    .from(dealPlaybookAssignments)
+    .where(eq(dealPlaybookAssignments.id, assignmentId))
+    .limit(1);
+  return a?.dealId ?? null;
+}
