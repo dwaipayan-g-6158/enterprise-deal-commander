@@ -154,6 +154,13 @@ export async function upsertMeddpiccAnswer(
   input: { score: number; note?: string | null },
   actor: string,
 ): Promise<void> {
+  const [deal] = await db
+    .select({ id: enterpriseDeals.id })
+    .from(enterpriseDeals)
+    .where(eq(enterpriseDeals.id, dealId))
+    .limit(1);
+  if (!deal) throw notFound(`No deal with id ${dealId}`);
+
   const [question] = await db
     .select({ id: meddpiccQuestions.id })
     .from(meddpiccQuestions)

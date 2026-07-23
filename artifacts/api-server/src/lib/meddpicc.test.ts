@@ -97,6 +97,12 @@ describe("getMeddpiccAssessment / upsertMeddpiccAnswer", () => {
     expect(answer?.score).toBe(3);
     expect(answer?.note).toBe("changed my mind");
   });
+
+  it("throws for a non-existent dealId", async () => {
+    await expect(
+      upsertMeddpiccAnswer("00000000-0000-0000-0000-000000000000", 1, { score: 3 }, "vitest"),
+    ).rejects.toThrow();
+  });
 });
 
 describe("stage bucket wiring", () => {
