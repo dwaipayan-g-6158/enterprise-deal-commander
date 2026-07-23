@@ -3,6 +3,7 @@ import { Switch, Route, Router as WouterRouter, useLocation, Redirect } from "wo
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { AmbientBackground } from "@/components/ambient-background";
 import { PwaUpdatePrompt } from "@/components/pwa-update-prompt";
 import { OfflineBanner } from "@/components/offline-banner";
 import { OfflineSaveNotice } from "@/components/offline-save-notice";
@@ -97,6 +98,7 @@ function App() {
               <Router />
             </WouterRouter>
             <Toaster />
+            <AmbientBackground />
             <PwaUpdatePrompt />
             <OfflineBanner />
             <OfflineSaveNotice />

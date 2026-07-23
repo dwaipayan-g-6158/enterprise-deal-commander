@@ -165,12 +165,48 @@
   --chart-5: 199 89% 55%;   /* sky */
 }
 
+/* Ambient Background (PRD 4.21) — a genuinely subtle (<=5% perceptual)
+   tint per time-of-day band, reusing lib/greetings/time-bands.ts's exact
+   boundaries so this never competes with Phase 1's greeting logic.
+   Afternoon has no override block — it uses the baseline tokens above
+   as-is. `.dark[data-time-band=...]` rules are listed after the
+   `:root[data-time-band=...]` rules (same ordering `.dark` already uses
+   against `:root`), so dark mode correctly wins when both apply. The
+   transition itself lives on `body` below; prefers-reduced-motion already
+   zeroes all transition durations globally (see the media query further
+   down), so no extra handling is needed here for that. */
+:root[data-time-band="morning"] {
+  --background: 205 22% 98%;
+  --card: 210 15% 99%;
+}
+:root[data-time-band="evening"] {
+  --background: 30 18% 97%;
+  --card: 30 12% 98%;
+}
+:root[data-time-band="night"] {
+  --background: 225 22% 96%;
+  --card: 225 15% 98%;
+}
+.dark[data-time-band="morning"] {
+  --background: 215 10% 11%;
+  --card: 215 10% 13%;
+}
+.dark[data-time-band="evening"] {
+  --background: 20 10% 10%;
+  --card: 20 10% 12%;
+}
+.dark[data-time-band="night"] {
+  --background: 225 12% 8%;
+  --card: 225 12% 10%;
+}
+
 @layer base {
   * {
     @apply border-border;
   }
   body {
     @apply bg-background text-foreground font-sans antialiased;
+    transition: background-color 2s ease;
   }
   button, a, [role="button"] { touch-action: manipulation; }
 
