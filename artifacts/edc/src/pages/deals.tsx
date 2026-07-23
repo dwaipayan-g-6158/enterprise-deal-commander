@@ -8,6 +8,7 @@ import {
   useListTags,
   getListDealsQueryKey,
 } from "@workspace/api-client-react";
+import { PersonalityLine } from "@/components/personality-line";
 import { useQueryClient } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -365,6 +366,7 @@ export default function Deals() {
       {/* States: loading / error / empty */}
       {isLoading ? (
         <Card className="p-4 space-y-3">
+          <PersonalityLine className="text-xs text-muted-foreground italic" />
           {Array.from({ length: 6 }).map((_, i) => (
             <Skeleton key={i} className="h-9 w-full" />
           ))}

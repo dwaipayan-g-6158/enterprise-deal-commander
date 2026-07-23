@@ -4,6 +4,7 @@ import { LossDashboardPanel } from "@/components/autopsy/loss-dashboard-panel";
 import { CompetitiveLossPanel } from "@/components/autopsy/competitive-loss-panel";
 import { LossRiskPanel } from "@/components/autopsy/loss-risk-panel";
 import { ProductGapsPanel } from "@/components/autopsy/product-gaps-panel";
+import { PersonalityLine } from "@/components/personality-line";
 
 export default function Autopsy() {
   return (
@@ -11,6 +12,7 @@ export default function Autopsy() {
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Closed-Lost Autopsy</h1>
         <p className="text-muted-foreground mt-2">Learn from loss: post-mortem analysis and pattern recognition</p>
+        <PersonalityLine className="text-xs text-muted-foreground italic mt-1" />
       </div>
 
       <Tabs defaultValue="loss-intelligence">

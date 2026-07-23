@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { AlertTriangle } from "lucide-react";
+import { PersonalityLine } from "@/components/personality-line";
 import { ProductMixSection } from "@/components/cockpit/product-mix-section";
 import { PortfolioSummaryCards } from "@/components/cockpit/portfolio-summary-cards";
 import { PortfolioRiskHeatmap } from "@/components/cockpit/portfolio-risk-heatmap";
@@ -12,7 +13,13 @@ export default function Portfolio() {
   const { data: response, isLoading } = useGetPortfolioAnalysis();
   const data = response?.data;
 
-  if (isLoading) return <div className="p-8">Correlating risk patterns…</div>;
+  if (isLoading)
+    return (
+      <div className="p-8 space-y-2">
+        <p>Correlating risk patterns…</p>
+        <PersonalityLine />
+      </div>
+    );
   if (!data) return <div className="p-8">No portfolio analysis to show yet.</div>;
 
   const renderCorrelations = (correlations: any[]) => {

@@ -7,6 +7,7 @@ import { CompetitorsTab } from "@/components/memory/competitors-tab";
 import { PricingTab } from "@/components/memory/pricing-tab";
 import { AdvisorTab } from "@/components/memory/advisor-tab";
 import { RevivalTab } from "@/components/memory/revival-tab";
+import { PersonalityLine } from "@/components/personality-line";
 
 const TABS = [
   { id: "search", label: "Search" },
@@ -30,6 +31,7 @@ export default function Memory() {
       <div>
         <h1 className="text-3xl font-bold">Deal Memory</h1>
         <p className="text-muted-foreground">Institutional knowledge base — searchable archive of closed deals.</p>
+        <PersonalityLine className="text-xs text-muted-foreground italic mt-1" />
       </div>
 
       <Tabs value={tab} onValueChange={setTab}>
