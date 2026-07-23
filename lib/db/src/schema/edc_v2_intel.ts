@@ -468,3 +468,55 @@ export const commanderAchievements = edcV2.table("commander_achievements", {
   achievementCode: varchar("achievement_code", { length: 60 }).primaryKey(),
   earnedAt: timestamp("earned_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+/* --------------------------------------------------- F17 MEDDPICC Qualification */
+
+export const meddpiccQuestions = edcV2.table("meddpicc_questions", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  questionOrder: smallint("question_order").notNull().unique(),
+  pillar: varchar("pillar", { length: 30 }).notNull(),
+  stageTag: varchar("stage_tag", { length: 1 }).notNull(),
+  questionText: text("question_text").notNull(),
+  helpText: text("help_text"),
+});
+
+export const dealMeddpiccAnswers = edcV2.table(
+  "deal_meddpicc_answers",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    dealId: uuid("deal_id")
+      .notNull()
+      .references(() => enterpriseDeals.id, { onDelete: "cascade" }),
+    questionId: uuid("question_id")
+      .notNull()
+      .references(() => meddpiccQuestions.id),
+    score: smallint("score"),
+    isAutoSuggested: boolean("is_auto_suggested").notNull().default(false),
+    suggestedScore: smallint("suggested_score"),
+    note: text("note"),
+    answeredAt: timestamp("answered_at", { withTimezone: true }),
+    answeredBy: varchar("answered_by", { length: 255 }),
+  },
+  (t) => [unique("deal_meddpicc_answer_uq").on(t.dealId, t.questionId)],
+);
+
+export const dealMeddpiccScores = edcV2.table(
+  "deal_meddpicc_scores",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    dealId: uuid("deal_id")
+      .notNull()
+      .references(() => enterpriseDeals.id, { onDelete: "cascade" }),
+    overallScore: integer("overall_score").notNull(),
+    overallPct: numeric("overall_pct", { precision: 5, scale: 2 }).notNull(),
+    stagePct: numeric("stage_pct", { precision: 5, scale: 2 }),
+    ragStatus: varchar("rag_status", { length: 10 }).notNull(),
+    pillarBreakdown: jsonb("pillar_breakdown").notNull().$type<
+      { pillar: string; raw: number; max: number; pct: number }[]
+    >(),
+    strongNoCount: smallint("strong_no_count").notNull(),
+    unknownCount: smallint("unknown_count").notNull(),
+    computedAt: timestamp("computed_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("deal_meddpicc_score_deal_time_idx").on(t.dealId, t.computedAt.desc())],
+);
