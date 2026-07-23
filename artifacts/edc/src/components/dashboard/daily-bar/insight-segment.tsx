@@ -6,6 +6,7 @@ import {
   useGetIntelligenceSummary,
   useGetMemoryInsights,
 } from "@workspace/api-client-react";
+import { useFocusMode } from "@/lib/presence/focus-mode-context";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   buildInsights,
@@ -26,6 +27,7 @@ import { defaultStore } from "@/lib/storage";
 // candidate worth surfacing — same as the original.
 export function InsightSegment() {
   const [, navigate] = useLocation();
+  const { enabled: focusMode } = useFocusMode();
   const { data: vitalSignsWrapper, isLoading: isLoadingVitalSigns } = useGetVitalSigns();
   const { data: summaryWrapper, isLoading: isLoadingSummary } = useGetIntelligenceSummary();
   const { data: memoryWrapper, isLoading: isLoadingMemory } = useGetMemoryInsights();
@@ -47,7 +49,7 @@ export function InsightSegment() {
   }
   const insight = lockedInsightRef.current;
 
-  if (!insight) return null;
+  if (!insight || focusMode) return null;
 
   return (
     <Popover>

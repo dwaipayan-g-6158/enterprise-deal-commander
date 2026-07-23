@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useGetEngagement, useListPortfolioActivity, getGetEngagementQueryKey } from "@workspace/api-client-react";
 import { useToast } from "@/hooks/use-toast";
+import { useFocusMode } from "@/lib/presence/focus-mode-context";
 import {
   buildCelebrationQueue,
   streakMilestoneCrossed,
@@ -35,6 +36,7 @@ export function CelebrationWatcher({
   previousVisitAt: string | null | undefined;
 }) {
   const { toast } = useToast();
+  const { enabled: focusMode } = useFocusMode();
   const enabled = previousVisitAt !== undefined && previousVisitAt !== null;
 
   const engagementParams = { since: previousVisitAt ?? undefined };
@@ -84,7 +86,7 @@ export function CelebrationWatcher({
 
   const drainedRef = useRef(false);
   useEffect(() => {
-    if (!queue || queue.length === 0 || drainedRef.current) return;
+    if (!queue || queue.length === 0 || drainedRef.current || focusMode) return;
     drainedRef.current = true;
 
     let index = 0;
