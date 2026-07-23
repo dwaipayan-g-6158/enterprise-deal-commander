@@ -29,6 +29,7 @@ import crudRouter from "./crud";
 import analyticsRouter from "./analytics";
 import configRouter from "./config";
 import exportsRouter from "./exports";
+import meddpiccRouter from "./meddpicc";
 
 const router: IRouter = Router();
 
@@ -39,6 +40,7 @@ router.use(crudRouter);
 router.use(analyticsRouter);
 router.use(configRouter);
 router.use(exportsRouter);
+router.use(meddpiccRouter);
 
 async function ensureDeal(dealId: string) {
   const rows = await db
