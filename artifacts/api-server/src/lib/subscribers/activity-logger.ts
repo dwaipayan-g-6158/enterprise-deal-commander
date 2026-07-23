@@ -37,6 +37,8 @@ function summarize(event: DealEvent): string {
         : `Playbook step marked ${event.action}`;
     case "playbook.assigned":
       return "Playbook started";
+    case "meddpicc.answer_changed":
+      return `MEDDPICC question ${event.questionOrder} scored ${event.score}`;
   }
 }
 
@@ -54,6 +56,8 @@ function entityOf(event: DealEvent): { entityType: string; entityId: string | nu
       return { entityType: "playbook", entityId: event.stepId };
     case "playbook.assigned":
       return { entityType: "playbook", entityId: event.assignmentId };
+    case "meddpicc.answer_changed":
+      return { entityType: "meddpicc", entityId: String(event.questionOrder) };
     default:
       return { entityType: "deal", entityId: null };
   }

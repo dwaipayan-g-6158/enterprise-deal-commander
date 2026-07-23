@@ -61,6 +61,10 @@ export type DealEventPayloads = {
     assignmentId: string;
     playbookId: string;
   };
+  "meddpicc.answer_changed": DealEventBase & {
+    questionOrder: number;
+    score: number;
+  };
 };
 
 export type DealEventType = keyof DealEventPayloads;
