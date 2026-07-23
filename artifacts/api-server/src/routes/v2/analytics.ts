@@ -1228,6 +1228,14 @@ router.get("/analytics/deals/:dealId/trajectory", async (req: Request, res: Resp
     return typeof pct === "number" ? pct : null;
   };
 
+  // MEDDPICC overall % from the snapshot payload (added 2026-07-24); null on
+  // snapshots taken before MEDDPICC scoring existed.
+  const meddpiccPctOf = (payload: Record<string, unknown> | null): number | null => {
+    const mp = (payload as { meddpicc?: { overallPct?: unknown } } | null)?.meddpicc;
+    const pct = mp?.overallPct;
+    return typeof pct === "number" ? pct : null;
+  };
+
   interface SnapPoint {
     at: string;
     health: string | null;
@@ -1235,6 +1243,7 @@ router.get("/analytics/deals/:dealId/trajectory", async (req: Request, res: Resp
     tcv: number | null;
     gatePct: number | null;
     playbookPct: number | null;
+    meddpiccPct: number | null;
   }
   const snapshots: SnapPoint[] = snapRows.map((r) => ({
     at: toISO(r.snapshotAt) ?? new Date().toISOString(),
@@ -1243,6 +1252,7 @@ router.get("/analytics/deals/:dealId/trajectory", async (req: Request, res: Resp
     tcv: r.calculatedTcv != null ? Number(r.calculatedTcv) : null,
     gatePct: gatePctOf(r.payload),
     playbookPct: playbookPctOf(r.payload),
+    meddpiccPct: meddpiccPctOf(r.payload),
   }));
 
   const scores = scoreRows.map((r) => ({
@@ -1275,6 +1285,7 @@ router.get("/analytics/deals/:dealId/trajectory", async (req: Request, res: Resp
   let curStage: string | null = null;
   let curTcv: number | null = null;
   let curPlaybookPct: number | null = null;
+  let curMeddpiccPct: number | null = null;
   const points = timestamps.map((at) => {
     if (scoreByAt.has(at)) curScore = scoreByAt.get(at) ?? curScore;
     const snap = snapByAt.get(at);
@@ -1284,6 +1295,7 @@ router.get("/analytics/deals/:dealId/trajectory", async (req: Request, res: Resp
       if (snap.stage != null) curStage = snap.stage;
       if (snap.tcv != null) curTcv = snap.tcv;
       if (snap.playbookPct != null) curPlaybookPct = snap.playbookPct;
+      if (snap.meddpiccPct != null) curMeddpiccPct = snap.meddpiccPct;
     }
     return {
       at,
@@ -1293,6 +1305,7 @@ router.get("/analytics/deals/:dealId/trajectory", async (req: Request, res: Resp
       stage: curStage,
       tcv: curTcv,
       playbookPct: curPlaybookPct,
+      meddpiccPct: curMeddpiccPct,
     };
   });
 
