@@ -1489,3 +1489,5 @@ export * from "./risk-v2";
 export * from "./flow";
 
 export * from "./loss-risk";
+
+export * from "./meddpicc";
