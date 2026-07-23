@@ -75,6 +75,19 @@ async function stepStatus(assignmentId: string, stepName: string): Promise<strin
   return completion?.status;
 }
 
+async function completionRowCount(assignmentId: string, stepName: string): Promise<number> {
+  const [pb] = await db.select().from(playbooks).where(eq(playbooks.playbookName, "Discovery / Qualification Playbook"));
+  const [step] = await db
+    .select()
+    .from(playbookSteps)
+    .where(and(eq(playbookSteps.playbookId, pb.id), eq(playbookSteps.stepName, stepName)));
+  const rows = await db
+    .select()
+    .from(playbookStepCompletions)
+    .where(and(eq(playbookStepCompletions.assignmentId, assignmentId), eq(playbookStepCompletions.stepId, step.id)));
+  return rows.length;
+}
+
 beforeAll(() => {
   registerSubscribers();
 });
@@ -128,5 +141,32 @@ describe("MEDDPICC subscriber", () => {
 
     const status = await stepStatus(assignmentId, "MEDDPICC qualification scored");
     expect(status).toBe("skipped"); // untouched — explicit rep decision respected
+  });
+
+  it("produces exactly one completion row when two answer_changed events fire back-to-back for the same deal", async () => {
+    const dealId = await createDiscoveryDeal();
+    const assignmentId = await assignDiscoveryPlaybook(dealId);
+
+    for (const q of QUESTION_CATALOG) {
+      await upsertMeddpiccAnswer(dealId, q.questionOrder, { score: 3 }, ACTOR);
+    }
+
+    // Fire twice in immediate succession, with no await between them, so both
+    // subscriber dispatches are in flight concurrently for the same deal /
+    // assignment — this is the race the per-assignment serialization guards.
+    emitDealEvent("meddpicc.answer_changed", { dealId, actor: ACTOR, questionOrder: 43, score: 3 });
+    emitDealEvent("meddpicc.answer_changed", { dealId, actor: ACTOR, questionOrder: 43, score: 3 });
+
+    const status = await poll(
+      () => stepStatus(assignmentId, "MEDDPICC qualification scored"),
+      (s) => s === "completed",
+    );
+    expect(status).toBe("completed");
+
+    // Give both dispatches ample time to fully settle (including the losing
+    // one's no-op check), then assert exactly one row was ever inserted.
+    await new Promise((r) => setTimeout(r, 1500));
+    const count = await completionRowCount(assignmentId, "MEDDPICC qualification scored");
+    expect(count).toBe(1);
   });
 });
