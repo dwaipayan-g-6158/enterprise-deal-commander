@@ -1407,6 +1407,65 @@ export interface DealScoreResponse {
   data: DealScore;
 }
 
+export interface MeddpiccQuestion {
+  questionOrder: number;
+  pillar: string;
+  stageTag: string;
+  questionText: string;
+  /** @nullable */
+  helpText?: string | null;
+}
+
+export interface MeddpiccAnswer {
+  questionOrder: number;
+  /** @nullable */
+  score: number | null;
+  /** @nullable */
+  note: string | null;
+  isAutoSuggested: boolean;
+}
+
+export interface MeddpiccSuggestion {
+  questionOrder: number;
+  suggestedScore: number;
+  reason: string;
+}
+
+export interface MeddpiccPillarBreakdown {
+  pillar: string;
+  raw: number;
+  max: number;
+  pct: number;
+}
+
+export interface MeddpiccScore {
+  overallScore: number;
+  overallPct: number;
+  stagePct: number;
+  ragStatus: string;
+  pillarBreakdown: MeddpiccPillarBreakdown[];
+  strongNoCount: number;
+  unknownCount: number;
+}
+
+export interface MeddpiccAssessment {
+  questions: MeddpiccQuestion[];
+  answers: MeddpiccAnswer[];
+  suggestions: MeddpiccSuggestion[];
+  score: MeddpiccScore;
+}
+
+export interface MeddpiccAssessmentResponse {
+  data: MeddpiccAssessment;
+}
+
+export interface UpsertMeddpiccAnswerInput {
+  questionOrder: number;
+  score: number;
+  /** @nullable */
+  note?: string | null;
+}
+
 export interface DealCompetitor {
   id: string;
   dealId: string;

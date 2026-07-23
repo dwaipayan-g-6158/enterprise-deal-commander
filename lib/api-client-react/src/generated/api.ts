@@ -110,6 +110,7 @@ import type {
   ListSettingsChangeLogParams,
   LoginInput,
   LossArchetypeListResponse,
+  MeddpiccAssessmentResponse,
   MeetingSessionInput,
   MeetingSessionListResponse,
   MeetingSessionResponse,
@@ -159,6 +160,7 @@ import type {
   TeamMemberListResponse,
   TeamMemberResponse,
   ThresholdsUpdate,
+  UpsertMeddpiccAnswerInput,
   UpsertPipelineTarget200,
   WebhookDeliveryListResponse,
   WebhookInput,
@@ -5036,6 +5038,143 @@ export function useGetDealScore<TData = Awaited<ReturnType<typeof getDealScore>>
 
 
 
+
+export const getGetMeddpiccAssessmentUrl = (dealId: string,) => {
+
+
+
+
+  return `/api/v2/deals/${dealId}/meddpicc`
+}
+
+export const getMeddpiccAssessment = async (dealId: string, options?: RequestInit): Promise<MeddpiccAssessmentResponse> => {
+
+  return customFetch<MeddpiccAssessmentResponse>(getGetMeddpiccAssessmentUrl(dealId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetMeddpiccAssessmentQueryKey = (dealId: string,) => {
+    return [
+    `/api/v2/deals/${dealId}/meddpicc`
+    ] as const;
+    }
+
+
+export const getGetMeddpiccAssessmentQueryOptions = <TData = Awaited<ReturnType<typeof getMeddpiccAssessment>>, TError = ErrorType<unknown>>(dealId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getMeddpiccAssessment>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetMeddpiccAssessmentQueryKey(dealId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getMeddpiccAssessment>>> = ({ signal }) => getMeddpiccAssessment(dealId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: !!(dealId), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getMeddpiccAssessment>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetMeddpiccAssessmentQueryResult = NonNullable<Awaited<ReturnType<typeof getMeddpiccAssessment>>>
+export type GetMeddpiccAssessmentQueryError = ErrorType<unknown>
+
+
+
+export function useGetMeddpiccAssessment<TData = Awaited<ReturnType<typeof getMeddpiccAssessment>>, TError = ErrorType<unknown>>(
+ dealId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getMeddpiccAssessment>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetMeddpiccAssessmentQueryOptions(dealId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getUpsertMeddpiccAnswerUrl = (dealId: string,) => {
+
+
+
+
+  return `/api/v2/deals/${dealId}/meddpicc`
+}
+
+export const upsertMeddpiccAnswer = async (dealId: string,
+    upsertMeddpiccAnswerInput: UpsertMeddpiccAnswerInput, options?: RequestInit): Promise<MeddpiccAssessmentResponse> => {
+
+  return customFetch<MeddpiccAssessmentResponse>(getUpsertMeddpiccAnswerUrl(dealId),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      upsertMeddpiccAnswerInput,)
+  }
+);}
+
+
+
+
+export const getUpsertMeddpiccAnswerMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof upsertMeddpiccAnswer>>, TError,{dealId: string;data: BodyType<UpsertMeddpiccAnswerInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof upsertMeddpiccAnswer>>, TError,{dealId: string;data: BodyType<UpsertMeddpiccAnswerInput>}, TContext> => {
+
+const mutationKey = ['upsertMeddpiccAnswer'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof upsertMeddpiccAnswer>>, {dealId: string;data: BodyType<UpsertMeddpiccAnswerInput>}> = (props) => {
+          const {dealId,data} = props ?? {};
+
+          return  upsertMeddpiccAnswer(dealId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpsertMeddpiccAnswerMutationResult = NonNullable<Awaited<ReturnType<typeof upsertMeddpiccAnswer>>>
+    export type UpsertMeddpiccAnswerMutationBody = BodyType<UpsertMeddpiccAnswerInput>
+    export type UpsertMeddpiccAnswerMutationError = ErrorType<unknown>
+
+    export const useUpsertMeddpiccAnswer = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof upsertMeddpiccAnswer>>, TError,{dealId: string;data: BodyType<UpsertMeddpiccAnswerInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof upsertMeddpiccAnswer>>,
+        TError,
+        {dealId: string;data: BodyType<UpsertMeddpiccAnswerInput>},
+        TContext
+      > => {
+      return useMutation(getUpsertMeddpiccAnswerMutationOptions(options));
+    }
 
 export const getRecalculateScoresUrl = () => {
 

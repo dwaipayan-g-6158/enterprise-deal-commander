@@ -1082,6 +1082,26 @@ paths:
         - { name: dealId, in: path, required: true, schema: { type: string } }
       responses:
         "200": { description: Predictive score, content: { application/json: { schema: { $ref: "#/components/schemas/DealScoreResponse" } } } }
+  /v2/deals/{dealId}/meddpicc:
+    get:
+      operationId: getMeddpiccAssessment
+      tags: [v2intel]
+      parameters:
+        - { name: dealId, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: MEDDPICC assessment, content: { application/json: { schema: { $ref: "#/components/schemas/MeddpiccAssessmentResponse" } } } }
+    patch:
+      operationId: upsertMeddpiccAnswer
+      tags: [v2intel]
+      parameters:
+        - { name: dealId, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UpsertMeddpiccAnswerInput" }
+      responses:
+        "200": { description: Answer saved, content: { application/json: { schema: { $ref: "#/components/schemas/MeddpiccAssessmentResponse" } } } }
   /v2/scores/recalculate:
     post:
       operationId: recalculateScores
@@ -3331,6 +3351,71 @@ components:
       properties:
         data: { $ref: "#/components/schemas/DealScore" }
       required: [data]
+
+    # MEDDPICC auto-scoring
+    MeddpiccQuestion:
+      type: object
+      properties:
+        questionOrder: { type: integer }
+        pillar: { type: string }
+        stageTag: { type: string }
+        questionText: { type: string }
+        helpText: { type: ["string", "null"] }
+      required: [questionOrder, pillar, stageTag, questionText]
+    MeddpiccAnswer:
+      type: object
+      properties:
+        questionOrder: { type: integer }
+        score: { type: ["integer", "null"] }
+        note: { type: ["string", "null"] }
+        isAutoSuggested: { type: boolean }
+      required: [questionOrder, score, note, isAutoSuggested]
+    MeddpiccSuggestion:
+      type: object
+      properties:
+        questionOrder: { type: integer }
+        suggestedScore: { type: integer }
+        reason: { type: string }
+      required: [questionOrder, suggestedScore, reason]
+    MeddpiccPillarBreakdown:
+      type: object
+      properties:
+        pillar: { type: string }
+        raw: { type: integer }
+        max: { type: integer }
+        pct: { type: integer }
+      required: [pillar, raw, max, pct]
+    MeddpiccScore:
+      type: object
+      properties:
+        overallScore: { type: integer }
+        overallPct: { type: integer }
+        stagePct: { type: integer }
+        ragStatus: { type: string }
+        pillarBreakdown: { type: array, items: { $ref: "#/components/schemas/MeddpiccPillarBreakdown" } }
+        strongNoCount: { type: integer }
+        unknownCount: { type: integer }
+      required: [overallScore, overallPct, stagePct, ragStatus, pillarBreakdown, strongNoCount, unknownCount]
+    MeddpiccAssessment:
+      type: object
+      properties:
+        questions: { type: array, items: { $ref: "#/components/schemas/MeddpiccQuestion" } }
+        answers: { type: array, items: { $ref: "#/components/schemas/MeddpiccAnswer" } }
+        suggestions: { type: array, items: { $ref: "#/components/schemas/MeddpiccSuggestion" } }
+        score: { $ref: "#/components/schemas/MeddpiccScore" }
+      required: [questions, answers, suggestions, score]
+    MeddpiccAssessmentResponse:
+      type: object
+      properties:
+        data: { $ref: "#/components/schemas/MeddpiccAssessment" }
+      required: [data]
+    UpsertMeddpiccAnswerInput:
+      type: object
+      properties:
+        questionOrder: { type: integer }
+        score: { type: integer }
+        note: { type: ["string", "null"] }
+      required: [questionOrder, score]
 
     # F2 Competitive
     DealCompetitor:

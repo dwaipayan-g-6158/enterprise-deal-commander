@@ -1877,6 +1877,96 @@ export const GetDealScoreResponse = zod.object({
 })
 
 
+export const GetMeddpiccAssessmentParams = zod.object({
+  "dealId": zod.coerce.string()
+})
+
+export const GetMeddpiccAssessmentResponse = zod.object({
+  "data": zod.object({
+  "questions": zod.array(zod.object({
+  "questionOrder": zod.number(),
+  "pillar": zod.string(),
+  "stageTag": zod.string(),
+  "questionText": zod.string(),
+  "helpText": zod.string().nullish()
+})),
+  "answers": zod.array(zod.object({
+  "questionOrder": zod.number(),
+  "score": zod.number().nullable(),
+  "note": zod.string().nullable(),
+  "isAutoSuggested": zod.boolean()
+})),
+  "suggestions": zod.array(zod.object({
+  "questionOrder": zod.number(),
+  "suggestedScore": zod.number(),
+  "reason": zod.string()
+})),
+  "score": zod.object({
+  "overallScore": zod.number(),
+  "overallPct": zod.number(),
+  "stagePct": zod.number(),
+  "ragStatus": zod.string(),
+  "pillarBreakdown": zod.array(zod.object({
+  "pillar": zod.string(),
+  "raw": zod.number(),
+  "max": zod.number(),
+  "pct": zod.number()
+})),
+  "strongNoCount": zod.number(),
+  "unknownCount": zod.number()
+})
+})
+})
+
+
+export const UpsertMeddpiccAnswerParams = zod.object({
+  "dealId": zod.coerce.string()
+})
+
+export const UpsertMeddpiccAnswerBody = zod.object({
+  "questionOrder": zod.number(),
+  "score": zod.number(),
+  "note": zod.string().nullish()
+})
+
+export const UpsertMeddpiccAnswerResponse = zod.object({
+  "data": zod.object({
+  "questions": zod.array(zod.object({
+  "questionOrder": zod.number(),
+  "pillar": zod.string(),
+  "stageTag": zod.string(),
+  "questionText": zod.string(),
+  "helpText": zod.string().nullish()
+})),
+  "answers": zod.array(zod.object({
+  "questionOrder": zod.number(),
+  "score": zod.number().nullable(),
+  "note": zod.string().nullable(),
+  "isAutoSuggested": zod.boolean()
+})),
+  "suggestions": zod.array(zod.object({
+  "questionOrder": zod.number(),
+  "suggestedScore": zod.number(),
+  "reason": zod.string()
+})),
+  "score": zod.object({
+  "overallScore": zod.number(),
+  "overallPct": zod.number(),
+  "stagePct": zod.number(),
+  "ragStatus": zod.string(),
+  "pillarBreakdown": zod.array(zod.object({
+  "pillar": zod.string(),
+  "raw": zod.number(),
+  "max": zod.number(),
+  "pct": zod.number()
+})),
+  "strongNoCount": zod.number(),
+  "unknownCount": zod.number()
+})
+})
+})
+
+
 export const RecalculateScoresResponse = zod.object({
   "data": zod.record(zod.string(), zod.unknown())
 })
