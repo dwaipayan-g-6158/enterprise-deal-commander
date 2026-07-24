@@ -72,6 +72,33 @@ const RAG_BADGE: Record<Score["ragStatus"], string> = {
   Green: "bg-emerald-500 text-white",
 };
 
+const SCORE_STYLE: Record<number, { label: string; dot: string; wash: string; solid: string }> = {
+  3: {
+    label: "Strong Yes",
+    dot: "bg-emerald-500",
+    wash: "bg-emerald-500/10 border-emerald-500/20 text-emerald-700 dark:text-emerald-400",
+    solid: "bg-emerald-600 text-white border-emerald-600",
+  },
+  2: {
+    label: "Neutral",
+    dot: "bg-slate-500",
+    wash: "bg-slate-500/10 border-slate-500/20 text-slate-700 dark:text-slate-400",
+    solid: "bg-slate-600 text-white border-slate-600",
+  },
+  1: {
+    label: "Strong No",
+    dot: "bg-rose-500",
+    wash: "bg-rose-500/10 border-rose-500/20 text-rose-700 dark:text-rose-400",
+    solid: "bg-rose-600 text-white border-rose-600",
+  },
+  0: {
+    label: "Unknown",
+    dot: "bg-slate-400",
+    wash: "border-dashed border-slate-300 dark:border-slate-600 bg-transparent text-muted-foreground",
+    solid: "bg-slate-400 text-white border-slate-400",
+  },
+};
+
 function QuestionRow({
   question,
   answer,
@@ -101,18 +128,22 @@ function QuestionRow({
         )}
       </div>
       <div className="flex items-center gap-1.5">
-        {[3, 2, 1, 0].map((n) => (
-          <Button
-            key={n}
-            type="button"
-            size="sm"
-            variant={answer?.score === n ? "default" : "outline"}
-            className="h-7 w-9 px-0"
-            onClick={() => onScore(n, noteDraft || null)}
-          >
-            {n}
-          </Button>
-        ))}
+        {[3, 2, 1, 0].map((n) => {
+          const isSelected = answer?.score === n;
+          const style = SCORE_STYLE[n];
+          return (
+            <Button
+              key={n}
+              type="button"
+              size="sm"
+              variant="outline"
+              className={cn("h-7 w-9 px-0", isSelected ? style.solid : style.wash)}
+              onClick={() => onScore(n, noteDraft || null)}
+            >
+              {n}
+            </Button>
+          );
+        })}
         {answer?.isAutoSuggested && (
           <span className="text-xs text-muted-foreground">accepted suggestion</span>
         )}
@@ -240,9 +271,23 @@ export function MeddpiccPanel({ dealId }: { dealId: string }) {
           <Badge variant="outline">{score.stagePct}% at this stage</Badge>
         </div>
       </CardHeader>
-      <div className="mb-3 flex gap-4 text-xs text-muted-foreground">
-        <span>Strong No: {score.strongNoCount}</span>
-        <span>Unknown: {score.unknownCount}</span>
+      <div className="mb-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
+        <span className="flex items-center gap-1.5">
+          <span className={cn("h-2 w-2 rounded-full", SCORE_STYLE[3].dot)} />
+          Strong Yes
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className={cn("h-2 w-2 rounded-full", SCORE_STYLE[2].dot)} />
+          Neutral
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className={cn("h-2 w-2 rounded-full", SCORE_STYLE[1].dot)} />
+          Strong No: {score.strongNoCount}
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="h-2 w-2 rounded-full border border-dashed border-slate-400" />
+          Unknown: {score.unknownCount}
+        </span>
       </div>
       {PILLAR_ORDER.map((pillar) => (
         <PillarSection
