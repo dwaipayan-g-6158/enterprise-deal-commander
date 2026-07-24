@@ -1,7 +1,8 @@
-import { and, eq, isNull, gt } from "drizzle-orm";
+import { and, eq, isNull, gt, notInArray } from "drizzle-orm";
 import {
   db,
   enterpriseDeals,
+  pipelineStages,
   dealReviewMarkers,
   dealAuditLog,
 } from "@workspace/db";
@@ -48,10 +49,12 @@ async function activeDealIds(): Promise<string[]> {
   const rows = await db
     .select({ id: enterpriseDeals.id })
     .from(enterpriseDeals)
+    .innerJoin(pipelineStages, eq(enterpriseDeals.salesStageId, pipelineStages.id))
     .where(
       and(
         isNull(enterpriseDeals.deletedAt),
         isNull(enterpriseDeals.archivedAt),
+        notInArray(pipelineStages.stageName, ["Closed-Won", "Closed-Lost"]),
       ),
     );
   return rows.map((r) => r.id);
