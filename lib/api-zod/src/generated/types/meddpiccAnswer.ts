@@ -5,6 +5,7 @@
  * Enterprise Deal Commander (EDC) Phase 1 API
  * OpenAPI spec version: 1.0.0
  */
+import type { MeddpiccAnswerSource } from './meddpiccAnswerSource';
 
 export interface MeddpiccAnswer {
   questionOrder: number;
@@ -12,5 +13,7 @@ export interface MeddpiccAnswer {
   score: number | null;
   /** @nullable */
   note: string | null;
-  isAutoSuggested: boolean;
+  source: MeddpiccAnswerSource;
+  /** @nullable */
+  reason: string | null;
 }

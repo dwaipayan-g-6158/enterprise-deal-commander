@@ -3368,15 +3368,9 @@ components:
         questionOrder: { type: integer }
         score: { type: ["integer", "null"] }
         note: { type: ["string", "null"] }
-        isAutoSuggested: { type: boolean }
-      required: [questionOrder, score, note, isAutoSuggested]
-    MeddpiccSuggestion:
-      type: object
-      properties:
-        questionOrder: { type: integer }
-        suggestedScore: { type: integer }
-        reason: { type: string }
-      required: [questionOrder, suggestedScore, reason]
+        source: { type: string, enum: [manual, computed, unanswered] }
+        reason: { type: ["string", "null"] }
+      required: [questionOrder, score, note, source, reason]
     MeddpiccPillarBreakdown:
       type: object
       properties:
@@ -3401,9 +3395,8 @@ components:
       properties:
         questions: { type: array, items: { $ref: "#/components/schemas/MeddpiccQuestion" } }
         answers: { type: array, items: { $ref: "#/components/schemas/MeddpiccAnswer" } }
-        suggestions: { type: array, items: { $ref: "#/components/schemas/MeddpiccSuggestion" } }
         score: { $ref: "#/components/schemas/MeddpiccScore" }
-      required: [questions, answers, suggestions, score]
+      required: [questions, answers, score]
     MeddpiccAssessmentResponse:
       type: object
       properties:
@@ -3412,7 +3405,7 @@ components:
     UpsertMeddpiccAnswerInput:
       type: object
       properties:
-        questionOrder: { type: integer, minimum: 1, maximum: 43 }
+        questionOrder: { type: integer, minimum: 1, maximum: 8 }
         score: { type: integer, minimum: 0, maximum: 3 }
         note: { type: ["string", "null"] }
       required: [questionOrder, score]

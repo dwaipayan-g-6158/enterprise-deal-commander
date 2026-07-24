@@ -9,7 +9,7 @@
 export interface UpsertMeddpiccAnswerInput {
   /**
      * @minimum 1
-     * @maximum 43
+     * @maximum 8
      */
   questionOrder: number;
   /**

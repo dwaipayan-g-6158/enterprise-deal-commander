@@ -1416,19 +1416,24 @@ export interface MeddpiccQuestion {
   helpText?: string | null;
 }
 
+export type MeddpiccAnswerSource = typeof MeddpiccAnswerSource[keyof typeof MeddpiccAnswerSource];
+
+
+export const MeddpiccAnswerSource = {
+  manual: 'manual',
+  computed: 'computed',
+  unanswered: 'unanswered',
+} as const;
+
 export interface MeddpiccAnswer {
   questionOrder: number;
   /** @nullable */
   score: number | null;
   /** @nullable */
   note: string | null;
-  isAutoSuggested: boolean;
-}
-
-export interface MeddpiccSuggestion {
-  questionOrder: number;
-  suggestedScore: number;
-  reason: string;
+  source: MeddpiccAnswerSource;
+  /** @nullable */
+  reason: string | null;
 }
 
 export interface MeddpiccPillarBreakdown {
@@ -1451,7 +1456,6 @@ export interface MeddpiccScore {
 export interface MeddpiccAssessment {
   questions: MeddpiccQuestion[];
   answers: MeddpiccAnswer[];
-  suggestions: MeddpiccSuggestion[];
   score: MeddpiccScore;
 }
 
@@ -1462,7 +1466,7 @@ export interface MeddpiccAssessmentResponse {
 export interface UpsertMeddpiccAnswerInput {
   /**
      * @minimum 1
-     * @maximum 43
+     * @maximum 8
      */
   questionOrder: number;
   /**

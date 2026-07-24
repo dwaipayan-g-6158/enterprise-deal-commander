@@ -1894,12 +1894,8 @@ export const GetMeddpiccAssessmentResponse = zod.object({
   "questionOrder": zod.number(),
   "score": zod.number().nullable(),
   "note": zod.string().nullable(),
-  "isAutoSuggested": zod.boolean()
-})),
-  "suggestions": zod.array(zod.object({
-  "questionOrder": zod.number(),
-  "suggestedScore": zod.number(),
-  "reason": zod.string()
+  "source": zod.enum(['manual', 'computed', 'unanswered']),
+  "reason": zod.string().nullable()
 })),
   "score": zod.object({
   "overallScore": zod.number(),
@@ -1923,7 +1919,7 @@ export const UpsertMeddpiccAnswerParams = zod.object({
   "dealId": zod.coerce.string()
 })
 
-export const upsertMeddpiccAnswerBodyQuestionOrderMax = 43;
+export const upsertMeddpiccAnswerBodyQuestionOrderMax = 8;
 
 export const upsertMeddpiccAnswerBodyScoreMin = 0;
 export const upsertMeddpiccAnswerBodyScoreMax = 3;
@@ -1949,12 +1945,8 @@ export const UpsertMeddpiccAnswerResponse = zod.object({
   "questionOrder": zod.number(),
   "score": zod.number().nullable(),
   "note": zod.string().nullable(),
-  "isAutoSuggested": zod.boolean()
-})),
-  "suggestions": zod.array(zod.object({
-  "questionOrder": zod.number(),
-  "suggestedScore": zod.number(),
-  "reason": zod.string()
+  "source": zod.enum(['manual', 'computed', 'unanswered']),
+  "reason": zod.string().nullable()
 })),
   "score": zod.object({
   "overallScore": zod.number(),

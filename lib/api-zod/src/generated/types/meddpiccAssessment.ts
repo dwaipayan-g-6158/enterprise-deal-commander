@@ -8,11 +8,9 @@
 import type { MeddpiccAnswer } from './meddpiccAnswer';
 import type { MeddpiccQuestion } from './meddpiccQuestion';
 import type { MeddpiccScore } from './meddpiccScore';
-import type { MeddpiccSuggestion } from './meddpiccSuggestion';
 
 export interface MeddpiccAssessment {
   questions: MeddpiccQuestion[];
   answers: MeddpiccAnswer[];
-  suggestions: MeddpiccSuggestion[];
   score: MeddpiccScore;
 }
