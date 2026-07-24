@@ -4,11 +4,9 @@ import {
   useGetPipelineSimulation,
   useGetWinLossAnalytics,
   useGetCompetitiveAnalytics,
-  useGetPipelineAnalytics,
 } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { FileText, Download, TrendingUp, Swords, Gauge } from "lucide-react";
+import { TrendingUp, Swords, Gauge } from "lucide-react";
 import { Empty, EmptyHeader, EmptyMedia, EmptyTitle, EmptyDescription } from "@/components/ui/empty";
 import { ForecastFan } from "@/components/cockpit/charts/forecast-fan";
 import { WinLossDonut } from "@/components/cockpit/charts/winloss-donut";
@@ -50,7 +48,6 @@ export function AnalyticsOverview() {
   const sim = useGetPipelineSimulation();
   const winLoss = useGetWinLossAnalytics();
   const competitive = useGetCompetitiveAnalytics();
-  const pipeline = useGetPipelineAnalytics();
   const [, navigate] = useLocation();
 
   const vDeals = ((velocity.data?.data as { deals?: VelocityDeal[] })?.deals ?? []) as VelocityDeal[];
@@ -61,33 +58,11 @@ export function AnalyticsOverview() {
     | { won: number; lost: number; winRatePct: number | null; byTcvRange: { range: string; total: number; wins: number; winRatePct: number | null }[] }
     | undefined;
   const comps = ((competitive.data?.data as { competitors?: CompetitorRow[] })?.competitors ?? []) as CompetitorRow[];
-  const pipe = pipeline.data?.data as { totalTcv: number; activeDeals: number } | undefined;
   const vBenchmarks = ((velocityBenchmarks.data?.data as { benchmarks?: VelocityBenchmark[] })?.benchmarks ??
     []) as VelocityBenchmark[];
 
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold">Pipeline Analytics</h1>
-          <p className="text-muted-foreground">
-            {pipe ? `${money(pipe.totalTcv)} across ${pipe.activeDeals} active deals` : "Crunching the pipeline…"}
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <Button variant="outline" asChild>
-            <a href="/api/v2/reports/pipeline" target="_blank" rel="noreferrer">
-              <FileText className="h-4 w-4 mr-2" /> Board Report
-            </a>
-          </Button>
-          <Button variant="outline" asChild>
-            <a href="/api/v2/export/deals?format=csv">
-              <Download className="h-4 w-4 mr-2" /> Export CSV
-            </a>
-          </Button>
-        </div>
-      </div>
-
       <div className="grid grid-cols-1 @3xl:grid-cols-2 gap-6">
         {/* Monte Carlo */}
         <Card>
