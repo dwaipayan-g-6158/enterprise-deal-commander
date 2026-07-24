@@ -35,6 +35,8 @@ import {
   dealMemory,
   dealCompetitors,
   meddpiccQuestions,
+  dealMeddpiccAnswers,
+  dealMeddpiccScores,
 } from "@workspace/db";
 import { logger } from "./lib/logger";
 import { rescoreActiveDeals } from "./lib/scoring";
@@ -549,11 +551,29 @@ async function seedPlaybooks() {
 }
 
 async function seedMeddpiccQuestions() {
-  const existing = await db.select({ id: meddpiccQuestions.id }).from(meddpiccQuestions).limit(1);
-  if (existing.length > 0) {
-    logger.info("MEDDPICC questions already present — skipping MEDDPICC seed");
+  const existing = await db
+    .select({ questionOrder: meddpiccQuestions.questionOrder })
+    .from(meddpiccQuestions);
+  const existingOrders = new Set(existing.map((r) => r.questionOrder));
+  const catalogOrders = new Set(QUESTION_CATALOG.map((q) => q.questionOrder));
+  const matches =
+    existing.length === QUESTION_CATALOG.length &&
+    [...catalogOrders].every((o) => existingOrders.has(o));
+
+  if (matches) {
+    logger.info("MEDDPICC questions already present and match the current catalog — skipping MEDDPICC seed");
     return;
   }
+
+  if (existing.length > 0) {
+    logger.warn(
+      "MEDDPICC question catalog has changed — resetting deal_meddpicc_answers, deal_meddpicc_scores, and meddpicc_questions",
+    );
+    await db.delete(dealMeddpiccAnswers);
+    await db.delete(dealMeddpiccScores);
+    await db.delete(meddpiccQuestions);
+  }
+
   await db.insert(meddpiccQuestions).values(
     QUESTION_CATALOG.map((q) => ({
       questionOrder: q.questionOrder,
