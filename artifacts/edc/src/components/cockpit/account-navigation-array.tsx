@@ -63,6 +63,8 @@ export function AccountNavigationArray({ activeDealId, expandedGroup, onExpandGr
 
   // Center the active deal's card in the strip when it changes or the fanned
   // group changes, so the open deal stays visible even with many deals.
+  // Note: a wheel gesture that arrives mid-flight here will be interrupted by
+  // the glide effect below taking over scrollLeft — intentional, not a bug.
   const navRef = useRef<HTMLElement>(null);
   const activeRef = useRef<HTMLButtonElement>(null);
   useEffect(() => {
@@ -111,22 +113,29 @@ export function AccountNavigationArray({ activeDealId, expandedGroup, onExpandGr
     );
     if (!viewport) return;
 
-    // Accumulating target for the momentum glide; null means no glide is
-    // currently in flight, so the next wheel event should seed it from the
-    // viewport's actual scrollLeft rather than a stale prior value.
+    // Accumulating target for the momentum glide, and the glide's own
+    // interpolated position tracked as a float — never read back from
+    // viewport.scrollLeft, since the DOM getter quantizes to whole pixels on
+    // integer-DPR displays, which would stall the lerp just short of target
+    // and leave the loop rescheduling forever. null on both means no glide
+    // is currently in flight, so the next wheel event should seed both from
+    // the viewport's actual scrollLeft rather than a stale prior value.
     let targetScrollLeft: number | null = null;
+    let animatedPosition: number | null = null;
     let animationFrame: number | null = null;
 
     const glide = () => {
-      if (targetScrollLeft === null) return;
+      if (targetScrollLeft === null || animatedPosition === null) return;
       const target = targetScrollLeft;
-      const next = lerpScrollPosition(viewport.scrollLeft, target, SCROLL_MOMENTUM_FACTOR);
+      const next = lerpScrollPosition(animatedPosition, target, SCROLL_MOMENTUM_FACTOR);
       if (Math.abs(target - next) < SCROLL_MOMENTUM_EPSILON) {
         viewport.scrollLeft = target;
         targetScrollLeft = null;
+        animatedPosition = null;
         animationFrame = null;
         return;
       }
+      animatedPosition = next;
       viewport.scrollLeft = next;
       animationFrame = requestAnimationFrame(glide);
     };
@@ -154,11 +163,15 @@ export function AccountNavigationArray({ activeDealId, expandedGroup, onExpandGr
         return;
       }
 
-      // Seed the target from the strip's actual position only when no glide
-      // is in flight, so a fresh gesture always starts from wherever the
-      // strip really is (e.g. after a scrollbar drag or scrollIntoView), not
-      // a stale target left over from an earlier gesture.
-      if (targetScrollLeft === null) targetScrollLeft = viewport.scrollLeft;
+      // Seed both the target and the animated position from the strip's
+      // actual current scrollLeft only when no glide is in flight, so a
+      // fresh gesture always starts from wherever the strip really is (e.g.
+      // after a scrollbar drag or scrollIntoView), not a stale value left
+      // over from an earlier gesture.
+      if (targetScrollLeft === null) {
+        targetScrollLeft = viewport.scrollLeft;
+        animatedPosition = viewport.scrollLeft;
+      }
       targetScrollLeft = clampScrollTarget(targetScrollLeft + step, max);
       if (animationFrame === null) animationFrame = requestAnimationFrame(glide);
     };

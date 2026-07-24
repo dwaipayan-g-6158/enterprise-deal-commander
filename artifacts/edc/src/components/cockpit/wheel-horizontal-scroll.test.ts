@@ -62,6 +62,20 @@ describe("lerpScrollPosition", () => {
   it("moves partway toward a target below current (negative direction)", () => {
     expect(lerpScrollPosition(100, 0, 0.2)).toBeCloseTo(80);
   });
+
+  it("converges to within a small epsilon of target within a bounded number of iterations when kept in float space", () => {
+    let position = 0;
+    const target = 400;
+    const epsilon = 0.5;
+    let iterations = 0;
+    const maxIterations = 100;
+    while (Math.abs(target - position) >= epsilon && iterations < maxIterations) {
+      position = lerpScrollPosition(position, target, 0.2);
+      iterations++;
+    }
+    expect(iterations).toBeLessThan(maxIterations);
+    expect(Math.abs(target - position)).toBeLessThan(epsilon);
+  });
 });
 
 describe("clampScrollTarget", () => {
