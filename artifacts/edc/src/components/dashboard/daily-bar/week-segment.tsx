@@ -111,9 +111,15 @@ export function WeekSegment() {
           type="button"
           className="inline-flex items-center gap-2 rounded-md px-2.5 py-2 min-h-[44px] text-sm hover:bg-muted/60 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           aria-label={
-            monday
-              ? `This Week: ${openCount} open item${openCount === 1 ? "" : "s"}`
-              : "Week Summary"
+            isLoading
+              ? monday
+                ? "This Week"
+                : "Week Summary"
+              : monday
+                ? `This Week: ${openCount} open item${openCount === 1 ? "" : "s"}`
+                : baseline !== null && vitalSigns
+                  ? `Week Summary: pipeline ${vitalSigns.totalTCV >= baseline.totalTCV ? "up" : "down"} ${compactCurrency(Math.abs(vitalSigns.totalTCV - baseline.totalTCV))} vs last week`
+                  : "Week Summary"
           }
         >
           <CalendarDays className="h-4 w-4 text-primary shrink-0" />
