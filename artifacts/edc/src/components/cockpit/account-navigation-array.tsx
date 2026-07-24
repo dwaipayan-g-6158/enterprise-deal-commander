@@ -9,7 +9,11 @@ import { formatCurrency } from "./use-invalidate";
 import { cn } from "@/lib/utils";
 import { CreateDealSheet } from "./create-deal-sheet";
 import { groupDeals, type StripDeal, type StripGroupId } from "./deal-strip-model";
-import { shouldConvertWheelToHorizontalScroll } from "./wheel-horizontal-scroll";
+import {
+  shouldConvertWheelToHorizontalScroll,
+  lerpScrollPosition,
+  clampScrollTarget,
+} from "./wheel-horizontal-scroll";
 
 const healthBorder: Record<string, string> = {
   RED: "border-l-destructive",
@@ -40,6 +44,12 @@ interface Props {
 }
 
 const GROUP_LABEL: Record<StripGroupId, string> = { open: "Open", closed: "Closed" };
+
+// Momentum-glide tuning: fraction of the remaining gap closed per animation
+// frame, and the pixel threshold below which the glide snaps to its exact
+// target and stops (no idle frames after settling).
+const SCROLL_MOMENTUM_FACTOR = 0.2;
+const SCROLL_MOMENTUM_EPSILON = 0.5;
 
 export function AccountNavigationArray({ activeDealId, expandedGroup, onExpandGroup }: Props) {
   const [, navigate] = useLocation();
@@ -101,6 +111,26 @@ export function AccountNavigationArray({ activeDealId, expandedGroup, onExpandGr
     );
     if (!viewport) return;
 
+    // Accumulating target for the momentum glide; null means no glide is
+    // currently in flight, so the next wheel event should seed it from the
+    // viewport's actual scrollLeft rather than a stale prior value.
+    let targetScrollLeft: number | null = null;
+    let animationFrame: number | null = null;
+
+    const glide = () => {
+      if (targetScrollLeft === null) return;
+      const target = targetScrollLeft;
+      const next = lerpScrollPosition(viewport.scrollLeft, target, SCROLL_MOMENTUM_FACTOR);
+      if (Math.abs(target - next) < SCROLL_MOMENTUM_EPSILON) {
+        viewport.scrollLeft = target;
+        targetScrollLeft = null;
+        animationFrame = null;
+        return;
+      }
+      viewport.scrollLeft = next;
+      animationFrame = requestAnimationFrame(glide);
+    };
+
     const handleWheel = (event: WheelEvent) => {
       const shouldConvert = shouldConvertWheelToHorizontalScroll(
         { deltaX: event.deltaX, deltaY: event.deltaY, ctrlKey: event.ctrlKey },
@@ -117,12 +147,28 @@ export function AccountNavigationArray({ activeDealId, expandedGroup, onExpandGr
           : event.deltaMode === 2
             ? event.deltaY * viewport.clientWidth
             : event.deltaY;
-      viewport.scrollLeft += step;
+      const max = viewport.scrollWidth - viewport.clientWidth;
+
+      if (reduce) {
+        viewport.scrollLeft = clampScrollTarget(viewport.scrollLeft + step, max);
+        return;
+      }
+
+      // Seed the target from the strip's actual position only when no glide
+      // is in flight, so a fresh gesture always starts from wherever the
+      // strip really is (e.g. after a scrollbar drag or scrollIntoView), not
+      // a stale target left over from an earlier gesture.
+      if (targetScrollLeft === null) targetScrollLeft = viewport.scrollLeft;
+      targetScrollLeft = clampScrollTarget(targetScrollLeft + step, max);
+      if (animationFrame === null) animationFrame = requestAnimationFrame(glide);
     };
 
     viewport.addEventListener("wheel", handleWheel, { passive: false });
-    return () => viewport.removeEventListener("wheel", handleWheel);
-  }, []);
+    return () => {
+      viewport.removeEventListener("wheel", handleWheel);
+      if (animationFrame !== null) cancelAnimationFrame(animationFrame);
+    };
+  }, [reduce]);
 
   const renderCard = (deal: StripDealItem, index: number, accent?: "won" | "lost") => {
     const active = deal.id === activeDealId;
