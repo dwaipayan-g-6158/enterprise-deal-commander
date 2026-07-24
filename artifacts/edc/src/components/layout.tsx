@@ -90,10 +90,12 @@ function SidebarQuoteLine() {
   if (focusMode) return null;
 
   return (
-    <p className="text-[11px] text-muted-foreground italic mt-2 leading-snug">
-      &ldquo;{quote.text}&rdquo;
-      {quote.author && <span className="not-italic"> — {quote.author}</span>}
-    </p>
+    <div className="border-t border-b border-border/60 py-2">
+      <p className="text-[11px] text-muted-foreground italic leading-snug">
+        &ldquo;{quote.text}&rdquo;
+        {quote.author && <span className="not-italic"> — {quote.author}</span>}
+      </p>
+    </div>
   );
 }
 
@@ -119,7 +121,6 @@ function SidebarBody({ location, user, onNavigate, onLogout }: {
             <h1 className="text-sm font-bold tracking-tight text-foreground leading-snug cursor-pointer hover:text-primary transition-colors">Enterprise Deal Commander</h1>
           </Link>
           <p className="text-[10px] text-muted-foreground mt-1 uppercase tracking-widest font-mono">Commander Console</p>
-          <SidebarQuoteLine />
         </div>
       </div>
 
@@ -138,6 +139,7 @@ function SidebarBody({ location, user, onNavigate, onLogout }: {
       </nav>
 
       <div className="p-4 border-t border-border space-y-2">
+        <SidebarQuoteLine />
         <p className="flex items-center gap-1 text-[10px] text-muted-foreground uppercase tracking-wider px-1 pb-1">
           <span>Press</span>
           <kbd className="rounded border border-border bg-muted px-1.5 py-0.5 font-mono text-[10px] leading-none text-foreground">
