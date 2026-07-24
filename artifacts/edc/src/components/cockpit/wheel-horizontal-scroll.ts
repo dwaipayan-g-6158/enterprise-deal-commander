@@ -30,3 +30,21 @@ export function shouldConvertWheelToHorizontalScroll(
   if (viewport.scrollWidth <= viewport.clientWidth) return false;
   return Math.abs(wheel.deltaY) >= Math.abs(wheel.deltaX);
 }
+
+/**
+ * One animation frame's step of linear interpolation from current toward
+ * target. `factor` is the fraction of the remaining distance to close per
+ * frame (e.g. 0.2 closes 20% of the gap each frame).
+ */
+export function lerpScrollPosition(
+  current: number,
+  target: number,
+  factor: number,
+): number {
+  return current + (target - current) * factor;
+}
+
+/** Clamp a scroll target to a viewport's valid scroll range of [0, max]. */
+export function clampScrollTarget(target: number, max: number): number {
+  return Math.max(0, Math.min(target, max));
+}
