@@ -1,16 +1,18 @@
 import { useState, ReactNode } from "react";
 import { Link, useLocation } from "wouter";
-import { LogOut, LayoutDashboard, Briefcase, BarChart, Settings, Activity, TrendingUp, BookMarked, Menu } from "lucide-react";
+import { LogOut, LayoutDashboard, Briefcase, BarChart, Settings, Activity, TrendingUp, BookMarked, Menu, Search } from "lucide-react";
 import { useLogout, useGetMe, getGetMeQueryKey } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "./ui/button";
 import { ThemeToggle } from "./theme-toggle";
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Kbd, KbdGroup } from "@/components/ui/kbd";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { EdcLogoMark } from "./edc-logo-mark";
 import { useIdleStatus } from "@/lib/presence/use-idle-status";
 import { useFocusMode } from "@/lib/presence/focus-mode-context";
+import { useCommandPalette } from "@/lib/command-palette-context";
 import { pickDailyQuote } from "@/lib/quotes/quote-rotation";
 import { defaultStore } from "@/lib/storage";
 
@@ -106,12 +108,13 @@ function SidebarBody({ location, user, onNavigate, onLogout }: {
   onLogout: () => void;
 }) {
   // The command palette binds both ⌘K and Ctrl+K; show the key that matches the
-  // user's OS so the hint isn't Mac-only.
+  // user's OS so the trigger isn't Mac-only.
   const isMac =
     typeof navigator !== "undefined" &&
     /Mac|iPhone|iPad|iPod/i.test(
       navigator.platform || navigator.userAgent || "",
     );
+  const { setOpen: setCommandPaletteOpen } = useCommandPalette();
   return (
     <>
       <div className="p-6 border-b border-border flex items-center gap-3">
@@ -140,16 +143,18 @@ function SidebarBody({ location, user, onNavigate, onLogout }: {
 
       <div className="p-4 border-t border-border space-y-2">
         <SidebarQuoteLine />
-        <p className="flex items-center gap-1 text-[10px] text-muted-foreground uppercase tracking-wider px-1 pb-1">
-          <span>Press</span>
-          <kbd className="rounded border border-border bg-muted px-1.5 py-0.5 font-mono text-[10px] leading-none text-foreground">
-            {isMac ? "⌘" : "Ctrl"}
-          </kbd>
-          <kbd className="rounded border border-border bg-muted px-1.5 py-0.5 font-mono text-[10px] leading-none text-foreground">
-            K
-          </kbd>
-          <span>for quick search</span>
-        </p>
+        <button
+          type="button"
+          onClick={() => setCommandPaletteOpen(true)}
+          className="flex w-full items-center gap-2 rounded-md border border-border bg-muted/40 px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          <Search className="h-4 w-4 shrink-0" />
+          <span className="flex-1 text-left">Search</span>
+          <KbdGroup>
+            <Kbd>{isMac ? "⌘" : "Ctrl"}</Kbd>
+            <Kbd>K</Kbd>
+          </KbdGroup>
+        </button>
         <div className="mb-2 flex items-center gap-2.5">
           <span
             className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/15 text-xs font-semibold text-primary"
@@ -186,6 +191,7 @@ export function Layout({ children }: { children: ReactNode }) {
   const isMobile = useIsMobile();
   const [navOpen, setNavOpen] = useState(false);
   const queryClient = useQueryClient();
+  const { setOpen: setCommandPaletteOpen } = useCommandPalette();
 
   const handleLogout = async () => {
     try {
@@ -232,6 +238,15 @@ export function Layout({ children }: { children: ReactNode }) {
             </Sheet>
             <EdcLogoMark size={24} animated={false} />
             <span className="font-bold tracking-tight text-foreground text-sm">Enterprise Deal Commander</span>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="ml-auto"
+              aria-label="Search"
+              onClick={() => setCommandPaletteOpen(true)}
+            >
+              <Search className="h-5 w-5" />
+            </Button>
           </header>
         )}
         <main className="flex-1 overflow-auto bg-background [scrollbar-gutter:stable]">

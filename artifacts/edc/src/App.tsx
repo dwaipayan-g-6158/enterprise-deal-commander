@@ -9,6 +9,7 @@ import { OfflineBanner } from "@/components/offline-banner";
 import { OfflineSaveNotice } from "@/components/offline-save-notice";
 import { ThemeProvider } from "@/components/theme-provider";
 import { FocusModeProvider } from "@/lib/presence/focus-mode-context";
+import { CommandPaletteProvider } from "@/lib/command-palette-context";
 import { CommandPalette } from "@/components/command-palette";
 import NotFound from "@/pages/not-found";
 import { Layout } from "@/components/layout";
@@ -61,10 +62,12 @@ function ProtectedRoute({ component: Component, ...rest }: any) {
   }
 
   return (
-    <Layout>
-      <CommandPalette />
-      <Component {...rest} />
-    </Layout>
+    <CommandPaletteProvider>
+      <Layout>
+        <CommandPalette />
+        <Component {...rest} />
+      </Layout>
+    </CommandPaletteProvider>
   );
 }
 

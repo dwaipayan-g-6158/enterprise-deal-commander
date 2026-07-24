@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useLocation } from "wouter";
 import { useTheme } from "next-themes";
 import {
@@ -10,6 +10,7 @@ import {
   CommandList,
   CommandSeparator,
 } from "@/components/ui/command";
+import { useCommandPalette } from "@/lib/command-palette-context";
 import { useListDeals, useLogout } from "@workspace/api-client-react";
 import { parseNLC } from "@workspace/engine";
 import {
@@ -26,23 +27,12 @@ import {
 } from "lucide-react";
 
 export function CommandPalette() {
-  const [open, setOpen] = useState(false);
+  const { open, setOpen } = useCommandPalette();
   const [query, setQuery] = useState("");
   const [, setLocation] = useLocation();
   const { theme, setTheme } = useTheme();
   const logout = useLogout();
   const { data: deals } = useListDeals({ state: "active", limit: 50 });
-
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
-        e.preventDefault();
-        setOpen((v) => !v);
-      }
-    };
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, []);
 
   const go = (path: string) => {
     setOpen(false);
