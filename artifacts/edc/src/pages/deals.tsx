@@ -508,7 +508,7 @@ export default function Deals() {
       <CreateDealSheet open={createOpen} onOpenChange={setCreateOpen} />
 
       <AlertDialog open={confirm !== null} onOpenChange={(v) => !v && setConfirm(null)}>
-        <AlertDialogContent>
+        <AlertDialogContent animation="spotlight">
           <AlertDialogHeader>
             <AlertDialogTitle>{confirm === "delete" ? "Delete deals?" : "Archive deals?"}</AlertDialogTitle>
             <AlertDialogDescription>

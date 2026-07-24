@@ -34,7 +34,7 @@ export function StageOverrideDialog({ moveApi }: { moveApi: StageMoveApi }) {
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && cancelOverride()}>
-      <DialogContent>
+      <DialogContent animation="spotlight">
         <DialogHeader>
           <DialogTitle>Stage advancement blocked</DialogTitle>
           <DialogDescription>

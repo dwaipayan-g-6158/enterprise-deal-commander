@@ -67,7 +67,7 @@ export function CloseDealDialog({
 
   return (
     <Dialog open={pending !== null} onOpenChange={(v) => !v && onCancel()}>
-      <DialogContent>
+      <DialogContent animation="spotlight">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             {isLost ? <Ban className="h-5 w-5 text-rose-500" /> : <Trophy className="h-5 w-5 text-emerald-500" />}

@@ -111,7 +111,7 @@ export function SnapshotViewer({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col">
+      <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col" animation="spotlight">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-3">
             <span>Point-in-time snapshot</span>

@@ -35,7 +35,7 @@ export function SaveViewDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-md" animation="spotlight">
         <DialogHeader>
           <DialogTitle>Save view</DialogTitle>
           <DialogDescription>

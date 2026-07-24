@@ -852,7 +852,7 @@ export function PricingPanel({
                   Apply to Deal
                 </Button>
               </AlertDialogTrigger>
-              <AlertDialogContent>
+              <AlertDialogContent animation="spotlight">
                 <AlertDialogHeader>
                   <AlertDialogTitle>Apply worksheet to deal?</AlertDialogTitle>
                   <AlertDialogDescription asChild>

@@ -25,7 +25,7 @@ export function ManageViewsDialog({
 }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-md" animation="spotlight">
         <DialogHeader>
           <DialogTitle>Manage views</DialogTitle>
           <DialogDescription>Rename or delete your custom views. Built-in views can't be changed.</DialogDescription>

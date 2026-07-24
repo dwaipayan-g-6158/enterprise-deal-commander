@@ -51,7 +51,7 @@ export function BatSignalDialog({
         onOpenChange(v);
       }}
     >
-      <DialogContent>
+      <DialogContent animation="spotlight">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Radio className="h-5 w-5 text-primary" />
