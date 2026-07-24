@@ -96,27 +96,39 @@ describe("buildTimeline — missing/unparseable dates", () => {
 });
 
 describe("buildTimeline — timezone-safe date-only parsing", () => {
-  it("buckets a bare YYYY-MM-DD string to its own year/month regardless of host timezone", () => {
-    // Regression test for the UTC-midnight-then-local-getters rollback bug:
-    // `new Date("2026-01-15")` parses as UTC midnight, and reading it back
-    // with `.getFullYear()/.getMonth()` in local time rolls it back to
-    // December 2025 for any timezone west of UTC. Even if this test happens
-    // to run in a UTC host environment (no rollback would be observable
-    // there), it still guards the code path: parseYearMonth reads the
-    // year/month directly out of the string instead of round-tripping
-    // through `new Date(...)`.
-    const deals = [deal({ id: "jan15", expectedCloseDate: "2026-01-15", normalizedTCV: 100 })];
-    const timeline = buildTimeline(deals, NOW);
-    expect(timeline.overdue!.deals.map((d) => d.id)).toEqual(["jan15"]);
-    // (2026-01 is before NOW's 2026-07, so it lands in overdue rather than
-    // months — the point under test is that it's January 2026, not December
-    // 2025 or any other rolled-back month.)
-  });
+  // Regression tests for the UTC-midnight-then-local-getters rollback bug:
+  // `new Date("2026-08-01")` parses as UTC midnight, and reading it back with
+  // `.getFullYear()/.getMonth()` in local time rolls it back to the previous
+  // *day* for any timezone west of UTC. That only crosses a month boundary
+  // when the source date is the FIRST day of the month — day 15 or day 31
+  // can roll back at most within the same month, never across it, so a test
+  // built on those dates would pass identically whether parseYearMonth used
+  // the buggy `new Date(...)` round-trip or the fixed direct-string-read.
+  // Both cases below deliberately use a day-01 date so the assertion would
+  // actually fail under the old round-trip on a host west of UTC. On a host
+  // that happens to run in UTC the rollback isn't observable either way, but
+  // the code path (parseYearMonth reading year/month directly out of the
+  // string, never constructing a `Date` from it) is still exercised.
 
-  it("a same-month bare date-only string still resolves to the current month bucket", () => {
-    const deals = [deal({ id: "jul31", expectedCloseDate: "2026-07-31", normalizedTCV: 100 })];
+  it("a future month's day-01 close date buckets to that month, not the current month it could roll back into", () => {
+    // NOW is 2026-07-15. A buggy UTC round-trip of "2026-08-01" would roll
+    // back to July 31 local time west of UTC, misfiling this into the
+    // current "2026-07" month bucket instead of "2026-08".
+    const deals = [deal({ id: "aug1", expectedCloseDate: "2026-08-01", normalizedTCV: 100 })];
     const timeline = buildTimeline(deals, NOW);
     expect(timeline.overdue).toBeNull();
+    expect(timeline.months).toHaveLength(1);
+    expect(timeline.months[0].key).toBe("2026-08");
+  });
+
+  it("the current month's day-01 close date buckets to the current month, not overdue", () => {
+    // NOW is 2026-07-15. A buggy UTC round-trip of "2026-07-01" would roll
+    // back to June 30 local time west of UTC, misfiling this into "overdue"
+    // instead of the current "2026-07" month bucket.
+    const deals = [deal({ id: "jul1", expectedCloseDate: "2026-07-01", normalizedTCV: 100 })];
+    const timeline = buildTimeline(deals, NOW);
+    expect(timeline.overdue).toBeNull();
+    expect(timeline.months).toHaveLength(1);
     expect(timeline.months[0].key).toBe("2026-07");
   });
 });

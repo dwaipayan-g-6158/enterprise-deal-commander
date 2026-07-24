@@ -4,7 +4,41 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { CalendarClock } from "lucide-react";
 import { compactCurrency, HEALTH_DOT } from "./_shared";
-import { buildTimeline } from "./close-timeline-model";
+import { buildTimeline, type TimelineBucket } from "./close-timeline-model";
+
+type TimelineCardDeal = TimelineBucket["deals"][number];
+
+/**
+ * One deal card, shared by the Overdue column and every month column — the
+ * markup used to be byte-for-byte duplicated between the two render sites.
+ * `navigate` is wouter's location setter, passed straight through from the
+ * component (no new prop drilling — everything here was already in scope).
+ */
+function DealCard({
+  deal,
+  reportingCurrency,
+  navigate,
+}: {
+  deal: TimelineCardDeal;
+  reportingCurrency: string;
+  navigate: (path: string) => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={() => navigate(`/deals/${deal.id}`)}
+      className="block w-full rounded-md border bg-card px-2 py-1.5 text-left transition-colors hover:border-primary/50 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+    >
+      <span className="flex items-center gap-1.5">
+        <span className={`h-2 w-2 shrink-0 rounded-full ${HEALTH_DOT[deal.health] ?? "bg-muted"}`} />
+        <span className="truncate text-xs font-medium">{deal.accountName}</span>
+      </span>
+      <span className="ml-3.5 block font-mono text-[11px] text-muted-foreground">
+        {compactCurrency(deal.tcv, reportingCurrency)}
+      </span>
+    </button>
+  );
+}
 
 // Widget 10 — Close Date Timeline. Deals positioned by month of expected close,
 // surfacing revenue concentration and at-risk dates. Closed (Won/Lost) deals
@@ -65,20 +99,7 @@ export function CloseTimeline({ reportingCurrency }: { reportingCurrency: string
                       </p>
                     </div>
                     {overdue.deals.map((d) => (
-                      <button
-                        key={d.id}
-                        type="button"
-                        onClick={() => navigate(`/deals/${d.id}`)}
-                        className="block w-full rounded-md border bg-card px-2 py-1.5 text-left transition-colors hover:border-primary/50 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                      >
-                        <span className="flex items-center gap-1.5">
-                          <span className={`h-2 w-2 shrink-0 rounded-full ${HEALTH_DOT[d.health] ?? "bg-muted"}`} />
-                          <span className="truncate text-xs font-medium">{d.accountName}</span>
-                        </span>
-                        <span className="ml-3.5 block font-mono text-[11px] text-muted-foreground">
-                          {compactCurrency(d.tcv, reportingCurrency)}
-                        </span>
-                      </button>
+                      <DealCard key={d.id} deal={d} reportingCurrency={reportingCurrency} navigate={navigate} />
                     ))}
                   </div>
                 )}
@@ -91,20 +112,7 @@ export function CloseTimeline({ reportingCurrency }: { reportingCurrency: string
                       </p>
                     </div>
                     {m.deals.map((d) => (
-                      <button
-                        key={d.id}
-                        type="button"
-                        onClick={() => navigate(`/deals/${d.id}`)}
-                        className="block w-full rounded-md border bg-card px-2 py-1.5 text-left transition-colors hover:border-primary/50 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                      >
-                        <span className="flex items-center gap-1.5">
-                          <span className={`h-2 w-2 shrink-0 rounded-full ${HEALTH_DOT[d.health] ?? "bg-muted"}`} />
-                          <span className="truncate text-xs font-medium">{d.accountName}</span>
-                        </span>
-                        <span className="ml-3.5 block font-mono text-[11px] text-muted-foreground">
-                          {compactCurrency(d.tcv, reportingCurrency)}
-                        </span>
-                      </button>
+                      <DealCard key={d.id} deal={d} reportingCurrency={reportingCurrency} navigate={navigate} />
                     ))}
                   </div>
                 ))}
