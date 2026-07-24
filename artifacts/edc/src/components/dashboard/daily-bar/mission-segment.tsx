@@ -11,6 +11,7 @@ import { buildMission, type NextActionsData } from "@/lib/mission/priority-score
 import { readAcked, toggleAck } from "@/lib/mission/daily-ack";
 import { defaultStore } from "@/lib/storage";
 import { rowMotion } from "@/components/dashboard/widgets/_shared";
+import { terminalOutcome } from "@/components/roster/model/board";
 
 // Daily Bar segment — Today's Mission (PRD 4.3 + 4.23). Same data/ranking/ack
 // logic as the former standalone `DailyMission` card; only the presentation
@@ -25,7 +26,10 @@ export function MissionSegment() {
   const { data: dealsWrapper, isLoading: isLoadingDeals } = useListDeals({ state: "active", limit: 500 });
 
   const nextActionsData = nextActionsWrapper?.data as NextActionsData | undefined;
-  const activeDeals = dealsWrapper?.data ?? [];
+  // "active" is a lifecycle filter only — Closed-Won/Closed-Lost deals stay in
+  // this fetch forever, so they must be excluded here before pricing today's
+  // mission items.
+  const activeDeals = (dealsWrapper?.data ?? []).filter((d) => terminalOutcome(d.salesStage) == null);
 
   const valueByDealId = useMemo(
     () => Object.fromEntries(activeDeals.map((d) => [d.id, d.normalizedTCV ?? d.calculatedTCV ?? 0])),

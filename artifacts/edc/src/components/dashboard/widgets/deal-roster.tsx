@@ -3,6 +3,7 @@ import { useLocation } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ArrowRight } from "lucide-react";
+import { terminalOutcome } from "@/components/roster/model/board";
 import { compactCurrency, shortDate, daysUntil, HEALTH_DOT, type Health } from "./_shared";
 
 interface Enrichment {
@@ -32,11 +33,17 @@ export function DealRoster({ reportingCurrency }: { reportingCurrency: string })
   const { data: dealsWrapper, isLoading } = useListDeals({
     state: "active",
     sort: "-calculatedTCV",
-    limit: LIMIT,
+    limit: LIMIT * 4,
   });
   const { data: enrichWrapper } = useGetRosterEnrichment();
 
-  const deals = dealsWrapper?.data ?? [];
+  // Over-fetch (LIMIT * 4) then filter out closed deals before slicing back
+  // down to LIMIT — otherwise a large closed deal sorting into the raw top-N
+  // would get fetched, filtered out, and leave a gap instead of being
+  // backfilled by the next genuinely open deal.
+  const deals = (dealsWrapper?.data ?? [])
+    .filter((d) => terminalOutcome(d.salesStage) == null)
+    .slice(0, LIMIT);
   const enrichRows = (enrichWrapper?.data as { deals?: Enrichment[] } | undefined)?.deals ?? [];
   const enrichById = new Map(enrichRows.map((e) => [e.id, e]));
 

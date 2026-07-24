@@ -3,6 +3,7 @@ import {
   useGetRosterEnrichment,
   useListDeals,
 } from "@workspace/api-client-react";
+import { terminalOutcome } from "@/components/roster/model/board";
 import {
   bucketDealsByLevel,
   averageScore,
@@ -39,7 +40,12 @@ export function usePipelineRisk() {
   const enrichQuery = useGetRosterEnrichment();
 
   const rows: PipelineRiskRow[] = useMemo(() => {
-    const deals = dealsQuery.data?.data ?? [];
+    // Closed-Won/Closed-Lost deals stay in every "active" (lifecycle) fetch
+    // forever, so they must be excluded here by sales stage before the
+    // pipeline risk exposure/rows are built.
+    const deals = (dealsQuery.data?.data ?? []).filter(
+      (d) => terminalOutcome(d.salesStage) == null,
+    );
     const enrichList =
       (enrichQuery.data?.data as { deals?: RosterEnrichmentItem[] } | undefined)
         ?.deals ?? [];

@@ -14,6 +14,7 @@ import GREETING_POOL from "@/lib/greetings/greeting-pool.json";
 import { readShownHistory, recordShown } from "@/lib/greetings/shown-history";
 import { defaultStore } from "@/lib/storage";
 import { computeStreak } from "@/lib/streak/compute-streak";
+import { terminalOutcome } from "@/components/roster/model/board";
 
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
 const SEVEN_DAYS_MS = 7 * ONE_DAY_MS;
@@ -55,6 +56,10 @@ export function DashboardHero() {
   const nowMs = Date.now();
   const weekFromNow = nowMs + SEVEN_DAYS_MS;
   const closingThisWeek = activeDeals.filter((d) => {
+    // "active" is a lifecycle filter only — a deal that already reached
+    // Closed-Won/Closed-Lost stays in this fetch, so it must be excluded here
+    // or it inflates the "closing this week" greeting even though it's decided.
+    if (terminalOutcome(d.salesStage) != null) return false;
     if (!d.expectedCloseDate) return false;
     const t = new Date(d.expectedCloseDate).getTime();
     return !Number.isNaN(t) && t >= nowMs && t <= weekFromNow;
