@@ -495,7 +495,9 @@ router.get("/analytics/vital-signs", async (_req: Request, res: Response) => {
       winProbabilityPct: enterpriseDeals.winProbabilityPct,
     })
     .from(enterpriseDeals)
-    .where(activeFilter);
+    .innerJoin(pipelineStages, eq(enterpriseDeals.salesStageId, pipelineStages.id))
+    .where(and(activeFilter, notInArray(pipelineStages.stageName, ["Closed-Won", "Closed-Lost"])));
+  const openIds = new Set(deals.map((d) => d.id));
   const scores = await latestScores();
 
   let totalTCV = 0;
@@ -528,6 +530,11 @@ router.get("/analytics/vital-signs", async (_req: Request, res: Response) => {
     .orderBy(desc(dealSnapshots.snapshotAt));
   const latestPerDeal = new Map<string, { health: string | null; tcv: number }>();
   for (const s of snaps) {
+    // Baseline restricted to deals still open today — a deal that has since
+    // closed drops out of the comparison entirely rather than being tracked
+    // via true point-in-time stage history, which this snapshot table
+    // doesn't reconstruct cheaply here.
+    if (!openIds.has(s.dealId)) continue;
     if (!latestPerDeal.has(s.dealId)) {
       latestPerDeal.set(s.dealId, { health: s.healthStatus, tcv: Number(s.calculatedTcv) || 0 });
     }
