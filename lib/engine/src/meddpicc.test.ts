@@ -3,7 +3,6 @@ import {
   QUESTION_CATALOG,
   computeMeddpiccScore,
   stageBucketForStageName,
-  DEFAULT_MEDDPICC_THRESHOLDS,
   type MeddpiccQuestion,
 } from "./meddpicc";
 

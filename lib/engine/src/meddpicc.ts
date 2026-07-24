@@ -1,5 +1,5 @@
-// MEDDPICC Auto-Scoring — pure & isomorphic, ported from the dealpad.io
-// MEDDPICC Analysis Template (43 questions, 8 pillars, 0-3 scored).
+// MEDDPICC Auto-Scoring — pure & isomorphic. 8 questions (one per MEDDPICC
+// pillar), each scored 0-3; 7 are computed live from deal data server-side.
 
 export type MeddpiccPillar =
   | "Metrics"
@@ -14,7 +14,7 @@ export type MeddpiccPillar =
 export type StageTag = "Q" | "P" | "N";
 
 export interface MeddpiccQuestion {
-  questionOrder: number; // 1-43
+  questionOrder: number; // 1-8
   pillar: MeddpiccPillar;
   stageTag: StageTag;
   questionText: string;
@@ -43,7 +43,7 @@ const PILLAR_ORDER: MeddpiccPillar[] = [
   "Competition",
 ];
 
-const TOTAL_MAX = QUESTION_CATALOG.length * 3; // 129
+const TOTAL_MAX = QUESTION_CATALOG.length * 3; // 8 * 3 = 24
 
 export type StageBucket = "Qualification" | "Proposition" | "Negotiation";
 
