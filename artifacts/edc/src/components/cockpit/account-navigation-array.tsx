@@ -9,6 +9,7 @@ import { formatCurrency } from "./use-invalidate";
 import { cn } from "@/lib/utils";
 import { CreateDealSheet } from "./create-deal-sheet";
 import { groupDeals, type StripDeal, type StripGroupId } from "./deal-strip-model";
+import { shouldConvertWheelToHorizontalScroll } from "./wheel-horizontal-scroll";
 
 const healthBorder: Record<string, string> = {
   RED: "border-l-destructive",
@@ -84,6 +85,33 @@ export function AccountNavigationArray({ activeDealId, expandedGroup, onExpandGr
       target?.focus({ preventScroll: true });
     });
   }, [expandedGroup]);
+
+  // Convert a plain vertical wheel scroll into horizontal scroll of the
+  // strip's own viewport, so an ordinary mouse wheel works like a trackpad's
+  // horizontal swipe while hovering the strip. Registered as a real DOM
+  // listener with { passive: false } — React's synthetic onWheel can't
+  // reliably preventDefault() the page's own scroll in every browser — and
+  // scoped to this component's viewport only, so no other ScrollArea in the
+  // app is affected.
+  useEffect(() => {
+    const viewport = navRef.current?.querySelector<HTMLDivElement>(
+      "[data-radix-scroll-area-viewport]",
+    );
+    if (!viewport) return;
+
+    const handleWheel = (event: WheelEvent) => {
+      const shouldConvert = shouldConvertWheelToHorizontalScroll(
+        { deltaX: event.deltaX, deltaY: event.deltaY, ctrlKey: event.ctrlKey },
+        { scrollWidth: viewport.scrollWidth, clientWidth: viewport.clientWidth },
+      );
+      if (!shouldConvert) return;
+      event.preventDefault();
+      viewport.scrollLeft += event.deltaY;
+    };
+
+    viewport.addEventListener("wheel", handleWheel, { passive: false });
+    return () => viewport.removeEventListener("wheel", handleWheel);
+  }, []);
 
   const renderCard = (deal: StripDealItem, index: number, accent?: "won" | "lost") => {
     const active = deal.id === activeDealId;
