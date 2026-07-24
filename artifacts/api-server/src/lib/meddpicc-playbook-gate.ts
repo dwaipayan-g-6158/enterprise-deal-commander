@@ -6,23 +6,23 @@ import {
   playbookSteps,
   playbookStepCompletions,
 } from "@workspace/db";
-import { dealEvents, emitDealEvent } from "../events";
-import { computeMeddpiccScoreForDeal } from "../meddpicc";
-import { recomputeAssignment, dealIdForAssignment } from "../playbook-signals";
+import { emitDealEvent } from "./events";
+import { recomputeAssignment, dealIdForAssignment } from "./playbook-signals";
 
 const MEDDPICC_STEP_NAME = "MEDDPICC qualification scored";
 const MEDDPICC_PLAYBOOK_NAME = "Discovery / Qualification Playbook";
 
 /**
- * Per-assignment serialization. `meddpicc.answer_changed` events can fire in
- * rapid succession for the same deal (e.g. two quick PATCH calls), and each
- * dispatch independently awaits a DB round trip between checking for an
- * existing completion row and inserting one. Without serialization, two
- * dispatches for the same assignment can both observe "no completion row
- * yet" before either INSERT lands, producing duplicate "completed" rows and
- * duplicate `playbook.step_changed` cascades — `playbookStepCompletions` has
- * no unique constraint on (assignmentId, stepId) to backstop this at the DB
- * level (unlike `dealPlaybookAssignments`'s `deal_playbook_assignment_uq`).
+ * Per-assignment serialization. `computeMeddpiccScoreForDeal` can be called
+ * in rapid succession for the same deal (e.g. two quick PATCH calls, or a
+ * PATCH immediately followed by the assessment refetch), and each call
+ * independently awaits a DB round trip between checking for an existing
+ * completion row and inserting one. Without serialization, two calls for the
+ * same assignment can both observe "no completion row yet" before either
+ * INSERT lands, producing duplicate "completed" rows and duplicate
+ * `playbook.step_changed` cascades — `playbookStepCompletions` has no unique
+ * constraint on (assignmentId, stepId) to backstop this at the DB level
+ * (unlike `dealPlaybookAssignments`'s `deal_playbook_assignment_uq`).
  * Chaining per assignment makes the check-then-insert atomic relative to
  * other calls for that same assignment: the second call's check runs only
  * after the first call has fully finished, so it sees the just-inserted row
@@ -77,7 +77,14 @@ async function completeStepIfNotAlready(assignmentId: string, stepId: string, ov
   }
 }
 
-async function autoCompleteMeddpiccStepIfGreen(dealId: string, overallPct: number): Promise<void> {
+/**
+ * Called directly from `computeMeddpiccScoreForDeal` whenever a deal's score
+ * is Green — not gated behind any event, so it fires on every score
+ * computation (GET assessment or PATCH answer alike), including the common
+ * case where Green is reached purely from auto-computed answers with no
+ * manual answer ever given.
+ */
+export async function autoCompleteMeddpiccStepIfGreen(dealId: string, overallPct: number): Promise<void> {
   const [row] = await db
     .select({
       assignmentId: dealPlaybookAssignments.id,
@@ -97,14 +104,4 @@ async function autoCompleteMeddpiccStepIfGreen(dealId: string, overallPct: numbe
   await runSerialPerAssignment(row.assignmentId, () =>
     completeStepIfNotAlready(row.assignmentId, row.stepId, overallPct),
   );
-}
-
-export function registerMeddpicc(): () => void {
-  return dealEvents.on(async (event) => {
-    if (event.type !== "meddpicc.answer_changed") return;
-    const result = await computeMeddpiccScoreForDeal(event.dealId);
-    if (result && result.ragStatus === "Green") {
-      await autoCompleteMeddpiccStepIfGreen(event.dealId, result.overallPct);
-    }
-  });
 }

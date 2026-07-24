@@ -17,6 +17,7 @@ import {
   type MeddpiccScoreResult,
 } from "@workspace/engine";
 import { getMeddpiccComputedAnswers } from "./meddpicc-signals";
+import { autoCompleteMeddpiccStepIfGreen } from "./meddpicc-playbook-gate";
 import { notFound, badRequest } from "./http";
 
 async function loadThresholds(): Promise<MeddpiccThresholds> {
@@ -125,6 +126,10 @@ export async function computeMeddpiccScoreForDeal(dealId: string): Promise<Meddp
     strongNoCount: result.strongNoCount,
     unknownCount: result.unknownCount,
   });
+
+  if (result.ragStatus === "Green") {
+    await autoCompleteMeddpiccStepIfGreen(dealId, result.overallPct);
+  }
 
   return result;
 }
