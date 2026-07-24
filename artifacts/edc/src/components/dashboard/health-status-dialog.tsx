@@ -142,7 +142,7 @@ export function HealthStatusDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-xl">
+      <DialogContent className="max-w-xl" animation="spotlight">
         <DialogHeader>
           <DialogTitle>Health Status</DialogTitle>
           <DialogDescription>

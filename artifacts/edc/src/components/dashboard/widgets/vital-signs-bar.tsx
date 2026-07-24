@@ -97,7 +97,7 @@ export function VitalSignsBar({
       </Card>
 
       {/* Active Deals */}
-      <Card className="bg-card border-border shadow-sm">
+      <Card className={cardCls} {...clickable(onOpenStale)} aria-haspopup="dialog">
         <CardHeader className={headCls}>
           <CardTitle className={titleCls}>Active Deals</CardTitle>
           <Layers className="h-4 w-4 text-muted-foreground" />
