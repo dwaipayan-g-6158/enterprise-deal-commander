@@ -254,4 +254,49 @@ describe("MEDDPICC playbook gate", () => {
     );
     expect(status).toBe("completed");
   });
+
+  it("reopens a system-completed step when the score subsequently drops below Green", async () => {
+    const dealId = await createDiscoveryDeal(`Acct ${Date.now()}-e`);
+    const assignmentId = await assignDiscoveryPlaybook(dealId);
+
+    for (let order = 1; order <= 8; order++) {
+      await upsertMeddpiccAnswer(dealId, order, { score: 3 }, ACTOR);
+    }
+    let assessment = await getMeddpiccAssessment(dealId);
+    expect(assessment?.score.ragStatus).toBe("Green");
+    expect(await stepStatus(assignmentId, MEDDPICC_STEP_NAME)).toBe("completed");
+
+    // Drop Metrics back down — 21/24 (88%) is still Green, so also drop
+    // Economic Buyer to land well under the 75% threshold.
+    await upsertMeddpiccAnswer(dealId, 1, { score: 0 }, ACTOR);
+    await upsertMeddpiccAnswer(dealId, 2, { score: 0 }, ACTOR);
+    assessment = await getMeddpiccAssessment(dealId);
+    expect(assessment?.score.ragStatus).not.toBe("Green");
+    expect(await stepStatus(assignmentId, MEDDPICC_STEP_NAME)).toBeUndefined();
+  });
+
+  it("does not reopen a step a rep manually completed, even when the score is Red", async () => {
+    const dealId = await createDiscoveryDeal(`Acct ${Date.now()}-f`);
+    const assignmentId = await assignDiscoveryPlaybook(dealId);
+    const [pb] = await db.select().from(playbooks).where(eq(playbooks.playbookName, DISCOVERY_PLAYBOOK));
+    const [step] = await db
+      .select()
+      .from(playbookSteps)
+      .where(and(eq(playbookSteps.playbookId, pb.id), eq(playbookSteps.stepName, MEDDPICC_STEP_NAME)));
+    // Simulates the manual "set step state" route, which persists the
+    // acting rep's name as completedBy (not "system").
+    await db.insert(playbookStepCompletions).values({
+      assignmentId,
+      stepId: step.id,
+      status: "completed",
+      completedBy: "A Human Rep",
+      notes: "Reviewed manually, marking done regardless of score",
+    });
+
+    const assessment = await getMeddpiccAssessment(dealId);
+    expect(assessment?.score.ragStatus).toBe("Red"); // brand-new deal, no signals set up
+
+    const status = await stepStatus(assignmentId, MEDDPICC_STEP_NAME);
+    expect(status).toBe("completed"); // untouched — a human's decision, not the system's
+  });
 });

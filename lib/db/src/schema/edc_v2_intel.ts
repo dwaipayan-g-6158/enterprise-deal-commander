@@ -337,6 +337,11 @@ export const playbookStepCompletions = edcV2.table("playbook_step_completions", 
   // for back-compat; new code reads status. "blocked" is a step the rep flagged as stuck — it is
   // NOT a terminal completion (excluded from progress) and feeds the risk engine as an execution gap.
   status: varchar("status", { length: 20 }).notNull().default("completed"),
+  // "system" for an auto-completion (e.g. MEDDPICC reaching Green), or the
+  // acting rep's display name for a manual action. Null for rows created
+  // before this column existed. Lets an auto-reopen check ("did the system
+  // grant this, or did a human?") never undo a rep's deliberate decision.
+  completedBy: varchar("completed_by", { length: 255 }),
 });
 
 /* ----------------------------------------- F13 Ramp Pricing & Financial Scenarios */

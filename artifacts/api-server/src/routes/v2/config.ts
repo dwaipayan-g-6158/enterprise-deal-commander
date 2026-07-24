@@ -250,6 +250,7 @@ router.post(
       skipped: b.status === "skipped",
       notes: b.note ?? null,
       skipReason: b.status === "skipped" ? (b.note ?? null) : null,
+      completedBy: actor.displayName,
     });
     await recomputeAssignment(assignmentId);
     const dealId = await dealIdForAssignment(assignmentId);

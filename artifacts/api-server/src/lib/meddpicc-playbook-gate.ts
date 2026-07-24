@@ -8,24 +8,26 @@ import {
 } from "@workspace/db";
 import { emitDealEvent } from "./events";
 import { recomputeAssignment, dealIdForAssignment } from "./playbook-signals";
+import type { MeddpiccScoreResult } from "@workspace/engine";
 
 const MEDDPICC_STEP_NAME = "MEDDPICC qualification scored";
 const MEDDPICC_PLAYBOOK_NAME = "Discovery / Qualification Playbook";
+const SYSTEM_ACTOR = "system";
 
 /**
  * Per-assignment serialization. `computeMeddpiccScoreForDeal` can be called
  * in rapid succession for the same deal (e.g. two quick PATCH calls, or a
  * PATCH immediately followed by the assessment refetch), and each call
  * independently awaits a DB round trip between checking for an existing
- * completion row and inserting one. Without serialization, two calls for the
- * same assignment can both observe "no completion row yet" before either
- * INSERT lands, producing duplicate "completed" rows and duplicate
+ * completion row and inserting/deleting it. Without serialization, two calls
+ * for the same assignment can both observe the same stale state before
+ * either write lands, producing duplicate rows or duplicate
  * `playbook.step_changed` cascades — `playbookStepCompletions` has no unique
  * constraint on (assignmentId, stepId) to backstop this at the DB level
  * (unlike `dealPlaybookAssignments`'s `deal_playbook_assignment_uq`).
- * Chaining per assignment makes the check-then-insert atomic relative to
+ * Chaining per assignment makes the check-then-write atomic relative to
  * other calls for that same assignment: the second call's check runs only
- * after the first call has fully finished, so it sees the just-inserted row
+ * after the first call has fully finished, so it sees the just-written state
  * and correctly no-ops. Calls for different assignments are unaffected and
  * still run concurrently.
  */
@@ -41,6 +43,20 @@ function runSerialPerAssignment(assignmentId: string, fn: () => Promise<void>): 
     }),
   );
   return next;
+}
+
+async function emitStepChanged(assignmentId: string, stepId: string, action: "completed" | "reopened") {
+  await recomputeAssignment(assignmentId);
+  const dealIdForEvent = await dealIdForAssignment(assignmentId);
+  if (dealIdForEvent) {
+    emitDealEvent("playbook.step_changed", {
+      dealId: dealIdForEvent,
+      actor: SYSTEM_ACTOR,
+      assignmentId,
+      stepId,
+      action,
+    });
+  }
 }
 
 async function completeStepIfNotAlready(assignmentId: string, stepId: string, overallPct: number): Promise<void> {
@@ -63,28 +79,49 @@ async function completeStepIfNotAlready(assignmentId: string, stepId: string, ov
     stepId,
     status: "completed",
     notes: `Auto-completed: MEDDPICC reached Green, ${overallPct}%`,
+    completedBy: SYSTEM_ACTOR,
   });
-  await recomputeAssignment(assignmentId);
-  const dealIdForEvent = await dealIdForAssignment(assignmentId);
-  if (dealIdForEvent) {
-    emitDealEvent("playbook.step_changed", {
-      dealId: dealIdForEvent,
-      actor: "system",
-      assignmentId,
-      stepId,
-      action: "completed",
-    });
-  }
+  await emitStepChanged(assignmentId, stepId, "completed");
+}
+
+async function reopenStepIfSystemCompleted(assignmentId: string, stepId: string): Promise<void> {
+  const [existing] = await db
+    .select({ status: playbookStepCompletions.status, completedBy: playbookStepCompletions.completedBy })
+    .from(playbookStepCompletions)
+    .where(
+      and(eq(playbookStepCompletions.assignmentId, assignmentId), eq(playbookStepCompletions.stepId, stepId)),
+    )
+    .limit(1);
+
+  // Nothing to reopen, or the row is a rep's own manual completion / an
+  // explicit skip / an explicit block — never undo a human decision because
+  // the score happened to dip.
+  if (!existing) return;
+  if (existing.status !== "completed" || existing.completedBy !== SYSTEM_ACTOR) return;
+
+  await db
+    .delete(playbookStepCompletions)
+    .where(
+      and(eq(playbookStepCompletions.assignmentId, assignmentId), eq(playbookStepCompletions.stepId, stepId)),
+    );
+  await emitStepChanged(assignmentId, stepId, "reopened");
 }
 
 /**
- * Called directly from `computeMeddpiccScoreForDeal` whenever a deal's score
- * is Green — not gated behind any event, so it fires on every score
- * computation (GET assessment or PATCH answer alike), including the common
- * case where Green is reached purely from auto-computed answers with no
- * manual answer ever given.
+ * Called directly from `computeMeddpiccScoreForDeal` on every score
+ * computation (GET assessment or PATCH answer alike) — not gated behind any
+ * event. Keeps the "MEDDPICC qualification scored" playbook step in sync
+ * with the current score in both directions, but only for what the system
+ * itself granted: reaching Green auto-completes the step if nothing has
+ * acted on it yet; dropping back below Green reopens it again, but only if
+ * the existing completion was itself system-granted — a rep's manual
+ * completion, skip, or block is never touched by a later score change.
  */
-export async function autoCompleteMeddpiccStepIfGreen(dealId: string, overallPct: number): Promise<void> {
+export async function syncMeddpiccPlaybookGate(
+  dealId: string,
+  ragStatus: MeddpiccScoreResult["ragStatus"],
+  overallPct: number,
+): Promise<void> {
   const [row] = await db
     .select({
       assignmentId: dealPlaybookAssignments.id,
@@ -102,6 +139,8 @@ export async function autoCompleteMeddpiccStepIfGreen(dealId: string, overallPct
   if (!row) return; // no assignment for this playbook on this deal
 
   await runSerialPerAssignment(row.assignmentId, () =>
-    completeStepIfNotAlready(row.assignmentId, row.stepId, overallPct),
+    ragStatus === "Green"
+      ? completeStepIfNotAlready(row.assignmentId, row.stepId, overallPct)
+      : reopenStepIfSystemCompleted(row.assignmentId, row.stepId),
   );
 }
