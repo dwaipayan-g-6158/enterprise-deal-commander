@@ -8,12 +8,6 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible";
-import { ChevronDown } from "lucide-react";
 
 interface Question {
   questionOrder: number;
@@ -26,12 +20,8 @@ interface Answer {
   questionOrder: number;
   score: number | null;
   note: string | null;
-  isAutoSuggested: boolean;
-}
-interface Suggestion {
-  questionOrder: number;
-  suggestedScore: number;
-  reason: string;
+  source: "manual" | "computed" | "unanswered";
+  reason: string | null;
 }
 interface PillarBreakdown {
   pillar: string;
@@ -51,7 +41,6 @@ interface Score {
 interface Assessment {
   questions: Question[];
   answers: Answer[];
-  suggestions: Suggestion[];
   score: Score;
 }
 
@@ -102,12 +91,10 @@ const SCORE_STYLE: Record<number, { label: string; dot: string; wash: string; so
 function QuestionRow({
   question,
   answer,
-  suggestion,
   onScore,
 }: {
   question: Question;
   answer: Answer | undefined;
-  suggestion: Suggestion | undefined;
   onScore: (score: number, note: string | null) => void;
 }) {
   const [noteDraft, setNoteDraft] = useState(answer?.note ?? "");
@@ -116,16 +103,12 @@ function QuestionRow({
     <div className="flex flex-col gap-2 border-b border-border/50 py-3 last:border-b-0">
       <div className="flex items-start justify-between gap-3">
         <p className="text-sm">
+          <span className="font-medium">{PILLAR_LABEL[question.pillar] ?? question.pillar}.</span>{" "}
           {question.questionText}
           {question.helpText && (
             <span className="ml-2 text-xs text-muted-foreground">{question.helpText}</span>
           )}
         </p>
-        {suggestion && answer?.score == null && (
-          <Badge variant="outline" className="shrink-0 text-[10px]">
-            Suggested: {suggestion.suggestedScore}
-          </Badge>
-        )}
       </div>
       <div className="flex items-center gap-1.5">
         {[3, 2, 1, 0].map((n) => {
@@ -144,10 +127,16 @@ function QuestionRow({
             </Button>
           );
         })}
-        {answer?.isAutoSuggested && (
-          <span className="text-xs text-muted-foreground">accepted suggestion</span>
+        {answer?.source === "manual" && (
+          <span className="text-xs text-muted-foreground">manually answered</span>
         )}
       </div>
+      {answer?.reason && (
+        <p className="text-xs text-muted-foreground">
+          {answer.source === "computed" ? "Auto: " : "System: "}
+          {answer.reason}
+        </p>
+      )}
       <Textarea
         value={noteDraft}
         onChange={(e) => setNoteDraft(e.target.value)}
@@ -162,62 +151,6 @@ function QuestionRow({
     </div>
   );
 }
-
-function PillarSection({
-  pillar,
-  breakdown,
-  questions,
-  answers,
-  suggestions,
-  onScore,
-}: {
-  pillar: string;
-  breakdown: PillarBreakdown | undefined;
-  questions: Question[];
-  answers: Answer[];
-  suggestions: Suggestion[];
-  onScore: (questionOrder: number, score: number, note: string | null) => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const answerByOrder = new Map(answers.map((a) => [a.questionOrder, a]));
-  const suggestionByOrder = new Map(suggestions.map((s) => [s.questionOrder, s]));
-
-  return (
-    <Collapsible open={open} onOpenChange={setOpen}>
-      <CollapsibleTrigger className="flex w-full items-center justify-between py-2 text-left">
-        <span className="text-sm font-medium">{PILLAR_LABEL[pillar] ?? pillar}</span>
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-muted-foreground">
-            {breakdown?.raw ?? 0}/{breakdown?.max ?? 0} · {breakdown?.pct ?? 0}%
-          </span>
-          <ChevronDown className={cn("h-4 w-4 transition-transform", open && "rotate-180")} />
-        </div>
-      </CollapsibleTrigger>
-      <CollapsibleContent>
-        {questions.map((q) => (
-          <QuestionRow
-            key={q.questionOrder}
-            question={q}
-            answer={answerByOrder.get(q.questionOrder)}
-            suggestion={suggestionByOrder.get(q.questionOrder)}
-            onScore={(score, note) => onScore(q.questionOrder, score, note)}
-          />
-        ))}
-      </CollapsibleContent>
-    </Collapsible>
-  );
-}
-
-const PILLAR_ORDER = [
-  "Metrics",
-  "EconomicBuyer",
-  "DecisionCriteria",
-  "DecisionProcess",
-  "PaperProcess",
-  "IdentifyPain",
-  "Champion",
-  "Competition",
-];
 
 export function MeddpiccPanel({ dealId }: { dealId: string }) {
   const qc = useQueryClient();
@@ -253,14 +186,8 @@ export function MeddpiccPanel({ dealId }: { dealId: string }) {
     return <Card className="p-4 text-sm text-muted-foreground">MEDDPICC assessment unavailable.</Card>;
   }
 
-  const { questions, answers, suggestions, score } = assessment;
-  const breakdownByPillar = new Map(score.pillarBreakdown.map((b) => [b.pillar, b]));
-  const questionsByPillar = new Map<string, Question[]>();
-  for (const q of questions) {
-    const list = questionsByPillar.get(q.pillar) ?? [];
-    list.push(q);
-    questionsByPillar.set(q.pillar, list);
-  }
+  const { questions, answers, score } = assessment;
+  const answerByOrder = new Map(answers.map((a) => [a.questionOrder, a]));
 
   return (
     <Card className="p-4">
@@ -289,15 +216,12 @@ export function MeddpiccPanel({ dealId }: { dealId: string }) {
           Unknown: {score.unknownCount}
         </span>
       </div>
-      {PILLAR_ORDER.map((pillar) => (
-        <PillarSection
-          key={pillar}
-          pillar={pillar}
-          breakdown={breakdownByPillar.get(pillar)}
-          questions={questionsByPillar.get(pillar) ?? []}
-          answers={answers}
-          suggestions={suggestions}
-          onScore={handleScore}
+      {questions.map((q) => (
+        <QuestionRow
+          key={q.questionOrder}
+          question={q}
+          answer={answerByOrder.get(q.questionOrder)}
+          onScore={(scoreValue, note) => handleScore(q.questionOrder, scoreValue, note)}
         />
       ))}
     </Card>
