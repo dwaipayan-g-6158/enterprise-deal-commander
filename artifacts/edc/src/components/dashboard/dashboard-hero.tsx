@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from "react";
-import { useLocation } from "wouter";
 import {
   useGetMe,
   useListDeals,
@@ -20,12 +19,7 @@ const ONE_DAY_MS = 24 * 60 * 60 * 1000;
 const SEVEN_DAYS_MS = 7 * ONE_DAY_MS;
 const NINETY_DAYS_MS = 90 * ONE_DAY_MS;
 
-export function DashboardHero({
-  previousVisitAt,
-}: {
-  previousVisitAt: string | null | undefined;
-}) {
-  const [, navigate] = useLocation();
+export function DashboardHero() {
   const { data: me, isLoading: isLoadingMe } = useGetMe();
 
   // Computed once per mount, not on every render — otherwise this timestamp's
@@ -47,13 +41,6 @@ export function DashboardHero({
     query: { queryKey: getListPortfolioActivityQueryKey(streakParams) },
   });
   const streak = computeStreak((streakActivityWrapper?.data ?? []).map((e) => e.occurredAt), new Date());
-
-  const welcomeBackEnabled = previousVisitAt !== undefined && previousVisitAt !== null;
-  const welcomeBackParams = { since: previousVisitAt ?? undefined, limit: 20 };
-  const { data: welcomeBackWrapper } = useListPortfolioActivity(welcomeBackParams, {
-    query: { enabled: welcomeBackEnabled, queryKey: getListPortfolioActivityQueryKey(welcomeBackParams) },
-  });
-  const welcomeBackActivity = welcomeBackWrapper?.data ?? [];
 
   const { data: activeDealsWrapper, isLoading: isLoadingDeals } = useListDeals({ state: "active", limit: 500 });
   const activeDeals = activeDealsWrapper?.data ?? [];
@@ -135,7 +122,6 @@ export function DashboardHero({
     headline = h;
     subline = rest.join(" ");
   }
-  const mostRecentDealId = welcomeBackActivity[0]?.dealId;
 
   return (
     <div className="space-y-4">
@@ -153,28 +139,6 @@ export function DashboardHero({
         <div className="space-y-2">
           <Skeleton className="h-9 w-[320px]" />
           <Skeleton className="h-5 w-[420px]" />
-        </div>
-      )}
-
-      {welcomeBackEnabled && welcomeBackActivity.length > 0 && (
-        <div className="rounded-lg border bg-muted/20 p-4 space-y-2">
-          <p className="text-sm font-semibold">Last session you:</p>
-          <ul className="space-y-1">
-            {welcomeBackActivity.slice(0, 5).map((e) => (
-              <li key={e.id} className="text-sm text-muted-foreground">
-                ✓ {e.summary}
-              </li>
-            ))}
-          </ul>
-          {mostRecentDealId && (
-            <button
-              type="button"
-              onClick={() => navigate(`/deals/${mostRecentDealId}`)}
-              className="inline-flex items-center min-h-[44px] py-2 text-sm font-medium text-primary hover:underline cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm"
-            >
-              Continue where you left off →
-            </button>
-          )}
         </div>
       )}
     </div>

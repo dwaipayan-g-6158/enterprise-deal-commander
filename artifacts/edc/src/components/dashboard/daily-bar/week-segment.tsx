@@ -10,8 +10,7 @@ import {
   useGetVitalSigns,
   getGetVitalSignsQueryKey,
 } from "@workspace/api-client-react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Skeleton } from "@/components/ui/skeleton";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { compactCurrency, DeltaBadge } from "@/components/dashboard/widgets/_shared";
 import { defaultStore } from "@/lib/storage";
 import { isMonday, isFriday, currentWeekWindow, weekKey } from "@/lib/weekly/week-boundaries";
@@ -20,9 +19,9 @@ import type { NextActionsData } from "@/components/dashboard/widgets/next-action
 
 /**
  * Structural slice of `/api/v2/analytics/vital-signs`'s `GenericDataResponse`
- * payload this widget needs — mirrors the local-type convention already used
- * in `vital-signs-bar.tsx` (no generated type exists for this endpoint since
- * v2 analytics routes return `GenericDataResponse`).
+ * payload this segment needs — mirrors the local-type convention already
+ * used in `vital-signs-bar.tsx` (no generated type exists for this endpoint
+ * since v2 analytics routes return `GenericDataResponse`).
  */
 interface VitalSignsData {
   totalTCV: number;
@@ -33,15 +32,13 @@ function plural(n: number, word: string): string {
   return `${n} ${word}${n === 1 ? "" : "s"}`;
 }
 
-// Widget — Weekly Review (PRD 4.13). Renders only on Monday (a "This Week"
-// briefing built from current pipeline state) or Friday (a "Week Summary" of
-// the week's activity plus a week-over-week pipeline delta, shown only when
-// snapshot history exists). Dismissable for the remainder of that ISO week
-// via `review-dismiss.ts`; reappears automatically the following Monday.
-// Every source hook here is already called elsewhere on the dashboard page,
-// so react-query dedupes identical query keys — no extra network cost when
-// this widget is mounted alongside `DashboardHero`/`NextActions`.
-export function WeeklyReview() {
+// Daily Bar segment — Week (formerly the standalone `WeeklyReview` card, PRD
+// 4.13). Same Monday/Friday gating, source hooks, and per-ISO-week dismissal
+// as before; only the presentation moved into a compact bar trigger + popover.
+// Unlike the other segments, the trigger itself carries a live glanceable
+// number — an open-items count on Monday, the pipeline delta chip on Friday —
+// so the "which way is this week trending" signal is visible without a click.
+export function WeekSegment() {
   // Locked once per mount — otherwise every render would mint a new
   // `since`/`until` pair (millisecond-precision) for the activity query,
   // triggering a continuous refetch loop (same hazard `dashboard-hero.tsx`'s
@@ -55,7 +52,7 @@ export function WeeklyReview() {
   const [locallyDismissed, setLocallyDismissed] = useState(false);
 
   // Monday branch data. Gated with `enabled` so a Tue-Sun mount of this
-  // widget alone doesn't fire a request nothing will render.
+  // segment alone doesn't fire a request nothing will render.
   const { data: summaryWrapper, isLoading: isLoadingSummary } = useGetIntelligenceSummary({
     query: { enabled: monday, queryKey: getGetIntelligenceSummaryQueryKey() },
   });
@@ -100,6 +97,7 @@ export function WeeklyReview() {
   const activeValidationCount = summary?.dealsByStage["Validation"] ?? 0;
   const upcomingClosesCount = nextActions?.upcomingCloses.length ?? 0;
   const overdueCount = nextActions?.overdue.length ?? 0;
+  const openCount = upcomingClosesCount + overdueCount;
 
   const stageAdvances = activity.filter((e) => e.eventType === "deal.stage_changed").length;
   const playbookCompletions = activity.filter(
@@ -107,24 +105,54 @@ export function WeeklyReview() {
   ).length;
 
   return (
-    <Card>
-      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
-        <CardTitle className="flex items-center gap-2 text-base">
-          <CalendarDays className="h-4 w-4 text-primary" />
-          {monday ? "This Week" : "Week Summary"}
-        </CardTitle>
+    <Popover>
+      <PopoverTrigger asChild>
         <button
           type="button"
-          onClick={handleDismiss}
-          aria-label="Dismiss weekly review for the rest of this week"
-          className="inline-flex min-h-[44px] min-w-[44px] -mr-2 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="inline-flex items-center gap-2 rounded-md px-2.5 py-2 min-h-[44px] text-sm hover:bg-muted/60 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          aria-label={
+            isLoading
+              ? monday
+                ? "This Week"
+                : "Week Summary"
+              : monday
+                ? `This Week: ${openCount} open item${openCount === 1 ? "" : "s"}`
+                : baseline !== null && vitalSigns
+                  ? `Week Summary: pipeline ${vitalSigns.totalTCV >= baseline.totalTCV ? "up" : "down"} ${compactCurrency(Math.abs(vitalSigns.totalTCV - baseline.totalTCV))} vs last week`
+                  : "Week Summary"
+          }
         >
-          <X className="h-4 w-4" aria-hidden />
+          <CalendarDays className="h-4 w-4 text-primary shrink-0" />
+          <span className="font-medium">Week</span>
+          {!isLoading && monday && (
+            <span className="font-mono text-xs text-muted-foreground tabular-nums">
+              {openCount} open
+            </span>
+          )}
+          {!isLoading && !monday && baseline !== null && vitalSigns && (
+            <DeltaBadge
+              current={vitalSigns.totalTCV}
+              baseline={baseline.totalTCV}
+              format={(n) => compactCurrency(n)}
+              compact
+            />
+          )}
         </button>
-      </CardHeader>
-      <CardContent>
+      </PopoverTrigger>
+      <PopoverContent align="start" className="w-80">
+        <div className="flex items-center justify-between mb-3">
+          <p className="text-sm font-medium">{monday ? "This Week" : "Week Summary"}</p>
+          <button
+            type="button"
+            onClick={handleDismiss}
+            aria-label="Dismiss weekly review for the rest of this week"
+            className="inline-flex min-h-[32px] min-w-[32px] -mr-1 -mt-1 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <X className="h-4 w-4" aria-hidden />
+          </button>
+        </div>
         {isLoading ? (
-          <Skeleton className="h-20 w-full" />
+          <p className="text-sm text-muted-foreground">Loading…</p>
         ) : monday ? (
           <ul className="space-y-1.5 text-sm">
             <li>{plural(activeValidationCount, "deal")} in active validation</li>
@@ -149,7 +177,7 @@ export function WeeklyReview() {
             )}
           </div>
         )}
-      </CardContent>
-    </Card>
+      </PopoverContent>
+    </Popover>
   );
 }
