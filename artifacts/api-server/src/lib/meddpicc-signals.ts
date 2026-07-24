@@ -1,9 +1,8 @@
 import { and, eq } from "drizzle-orm";
 import {
   db,
-  enterpriseDeals,
-  dealMemory,
   stakeholders,
+  dealMemory,
   dealTechnicalGates,
   dealCompetitors,
   dealPlaybookAssignments,
@@ -13,96 +12,61 @@ import {
 } from "@workspace/db";
 import { competitorWinRates } from "./competitive";
 
-export interface MeddpiccSuggestion {
+export interface MeddpiccComputedAnswer {
   questionOrder: number;
-  suggestedScore: number;
+  score: number;
   reason: string;
 }
 
-async function suggestEconomicBuyerKnown(dealId: string): Promise<MeddpiccSuggestion> {
-  const [eb] = await db
-    .select({ id: stakeholders.id })
-    .from(stakeholders)
-    .where(and(eq(stakeholders.dealId, dealId), eq(stakeholders.roleType, "Economic Buyer")))
-    .limit(1);
-  return {
-    questionOrder: 6,
-    suggestedScore: eb ? 3 : 0,
-    reason: eb
-      ? "An Economic Buyer stakeholder is tracked on this deal"
-      : "No stakeholder tagged Economic Buyer yet",
-  };
+async function computeEconomicBuyer(dealId: string): Promise<MeddpiccComputedAnswer> {
+  const [ebRows, gates] = await Promise.all([
+    db
+      .select({ name: stakeholders.name })
+      .from(stakeholders)
+      .where(and(eq(stakeholders.dealId, dealId), eq(stakeholders.roleType, "Economic Buyer")))
+      .limit(1),
+    db
+      .select({ gateCode: dealTechnicalGates.gateCode, isCompleted: dealTechnicalGates.isCompleted })
+      .from(dealTechnicalGates)
+      .where(eq(dealTechnicalGates.dealId, dealId)),
+  ]);
+  const eb = ebRows[0];
+  const gateDone = gates.some((g) => g.isCompleted && g.gateCode === "G1_EXECUTIVE_AGREED");
+  const score = eb && gateDone ? 3 : eb || gateDone ? 2 : 0;
+  const reason = [
+    eb ? `Economic Buyer tagged (${eb.name})` : "no Economic Buyer stakeholder tagged",
+    gateDone ? "executive-agreement gate completed" : "executive-agreement gate not yet completed",
+  ].join("; ");
+  return { questionOrder: 2, score, reason };
 }
 
-async function suggestBudgetApproved(dealId: string): Promise<MeddpiccSuggestion> {
+async function computeDecisionCriteria(dealId: string): Promise<MeddpiccComputedAnswer> {
   const gates = await db
     .select({ gateCode: dealTechnicalGates.gateCode, isCompleted: dealTechnicalGates.isCompleted })
     .from(dealTechnicalGates)
     .where(eq(dealTechnicalGates.dealId, dealId));
-  const executiveAgreed = gates.some((g) => g.isCompleted && g.gateCode === "G1_EXECUTIVE_AGREED");
+  const done = gates.some((g) => g.isCompleted && g.gateCode === "G1_CRITERIA_LOCKED");
   return {
-    questionOrder: 9,
-    suggestedScore: executiveAgreed ? 3 : 0,
-    reason: executiveAgreed
-      ? "Executive-agreement gate is completed"
-      : "Executive-agreement gate not yet completed",
+    questionOrder: 3,
+    score: done ? 3 : 0,
+    reason: done
+      ? "Technical success criteria gate (G1_CRITERIA_LOCKED) completed"
+      : "Technical success criteria gate not yet completed",
   };
 }
 
-async function suggestChampionIdentified(dealId: string): Promise<MeddpiccSuggestion> {
-  const champions = await db
+async function computeDecisionProcess(dealId: string): Promise<MeddpiccComputedAnswer> {
+  const rows = await db
     .select({ id: stakeholders.id })
     .from(stakeholders)
-    .where(and(eq(stakeholders.dealId, dealId), eq(stakeholders.sentiment, "Champion")));
-  return {
-    questionOrder: 34,
-    suggestedScore: champions.length > 0 ? 3 : 1,
-    reason:
-      champions.length > 0
-        ? `${champions.length} stakeholder(s) tagged Champion`
-        : "No stakeholder tagged Champion yet",
-  };
-}
-
-async function suggestExistingCustomer(dealId: string): Promise<MeddpiccSuggestion | null> {
-  const [deal] = await db
-    .select({ accountName: enterpriseDeals.accountName })
-    .from(enterpriseDeals)
-    .where(eq(enterpriseDeals.id, dealId))
-    .limit(1);
-  if (!deal) return null;
-  const [wonBefore] = await db
-    .select({ id: dealMemory.id })
-    .from(dealMemory)
-    .where(and(eq(dealMemory.accountName, deal.accountName), eq(dealMemory.outcome, "Won")))
-    .limit(1);
-  return {
-    questionOrder: 24,
-    suggestedScore: wonBefore ? 3 : 2,
-    reason: wonBefore
-      ? `${deal.accountName} has a prior Won deal on record`
-      : `No prior Won deal on record for ${deal.accountName} — treated as a net-new relationship`,
-  };
-}
-
-async function suggestCompetitionAdvantage(dealId: string): Promise<MeddpiccSuggestion | null> {
-  const rows = await db
-    .select({ competitorId: dealCompetitors.competitorId })
-    .from(dealCompetitors)
-    .where(eq(dealCompetitors.dealId, dealId));
-  if (rows.length === 0) return null;
-  const winRates = await competitorWinRates();
-  const rates = rows
-    .map((r) => winRates.get(r.competitorId)?.winRate)
-    .filter((r): r is number => typeof r === "number");
-  if (rates.length === 0) return null;
-  const avg = rates.reduce((s, r) => s + r, 0) / rates.length;
-  const suggestedScore = Math.min(3, Math.max(0, Math.round(avg * 3)));
-  return {
-    questionOrder: 39,
-    suggestedScore,
-    reason: `Average historical win rate vs. ${rates.length} tracked competitor(s): ${Math.round(avg * 100)}%`,
-  };
+    .where(and(eq(stakeholders.dealId, dealId), eq(stakeholders.isDecisionMaker, true)));
+  const count = rows.length;
+  const score = count >= 2 ? 3 : count === 1 ? 2 : 0;
+  const reason =
+    count === 0
+      ? "no stakeholders tagged as decision-makers yet"
+      : `${count} stakeholder(s) tagged as decision-maker${count === 1 ? "" : "s"}`;
+  return { questionOrder: 4, score, reason };
 }
 
 const PAPER_PROCESS_PLAYBOOK = "Procurement / Legal Playbook";
@@ -114,7 +78,7 @@ async function completedStepNames(dealId: string, playbookName: string): Promise
     .innerJoin(playbooks, eq(dealPlaybookAssignments.playbookId, playbooks.id))
     .where(and(eq(dealPlaybookAssignments.dealId, dealId), eq(playbooks.playbookName, playbookName)))
     .limit(1);
-  if (!assignment) return null; // no assignment yet — nothing to suggest from
+  if (!assignment) return null; // no assignment yet — nothing to compute from
 
   const rows = await db
     .select({ stepName: playbookSteps.stepName, status: playbookStepCompletions.status })
@@ -131,40 +95,99 @@ async function completedStepNames(dealId: string, playbookName: string): Promise
   return new Set(rows.filter((r) => r.status === "completed").map((r) => r.stepName));
 }
 
-async function suggestPaperProcessSteps(dealId: string): Promise<MeddpiccSuggestion[]> {
-  const completed = await completedStepNames(dealId, PAPER_PROCESS_PLAYBOOK);
-  if (completed === null) return [];
-
-  const redlinesDone = completed.has("Resolve legal redlines");
-  const ndaDone = completed.has("NDA, DPA & compliance evidence provided");
-  return [
-    {
-      questionOrder: 21,
-      suggestedScore: redlinesDone ? 3 : 0,
-      reason: redlinesDone
-        ? '"Resolve legal redlines" playbook step is completed'
-        : '"Resolve legal redlines" playbook step not yet completed',
-    },
-    {
-      questionOrder: 22,
-      suggestedScore: ndaDone ? 3 : 0,
-      reason: ndaDone
-        ? '"NDA, DPA & compliance evidence provided" playbook step is completed'
-        : '"NDA, DPA & compliance evidence provided" playbook step not yet completed',
-    },
-  ];
+async function computePaperProcess(dealId: string): Promise<MeddpiccComputedAnswer> {
+  const [completed, gates] = await Promise.all([
+    completedStepNames(dealId, PAPER_PROCESS_PLAYBOOK),
+    db
+      .select({ gateCode: dealTechnicalGates.gateCode, isCompleted: dealTechnicalGates.isCompleted })
+      .from(dealTechnicalGates)
+      .where(eq(dealTechnicalGates.dealId, dealId)),
+  ]);
+  const redlinesDone = completed?.has("Resolve legal redlines") ?? false;
+  const ndaDone = completed?.has("NDA, DPA & compliance evidence provided") ?? false;
+  const complianceGateDone = gates.some((g) => g.isCompleted && g.gateCode === "G4_COMPLIANCE_VALIDATED");
+  const score = [redlinesDone, ndaDone, complianceGateDone].filter(Boolean).length;
+  const reason = `${score} of 3 signals complete: redlines ${redlinesDone ? "done" : "not done"}, NDA/DPA ${
+    ndaDone ? "done" : "not done"
+  }, compliance gate ${complianceGateDone ? "done" : "not done"}`;
+  return { questionOrder: 5, score, reason };
 }
 
-export async function getMeddpiccSuggestions(dealId: string): Promise<MeddpiccSuggestion[]> {
-  const [eb, budget, champion, existingCustomer, competition, paperProcess] = await Promise.all([
-    suggestEconomicBuyerKnown(dealId),
-    suggestBudgetApproved(dealId),
-    suggestChampionIdentified(dealId),
-    suggestExistingCustomer(dealId),
-    suggestCompetitionAdvantage(dealId),
-    suggestPaperProcessSteps(dealId),
+async function computeIdentifyPain(dealId: string, accountName: string): Promise<MeddpiccComputedAnswer> {
+  const [wonBefore] = await db
+    .select({ id: dealMemory.id })
+    .from(dealMemory)
+    .where(and(eq(dealMemory.accountName, accountName), eq(dealMemory.outcome, "Won")))
+    .limit(1);
+  return {
+    questionOrder: 6,
+    score: wonBefore ? 3 : 2,
+    reason: wonBefore
+      ? `${accountName} has a prior Won deal on record`
+      : `No prior Won deal on record for ${accountName} — treated as a net-new relationship`,
+  };
+}
+
+async function computeChampion(dealId: string): Promise<MeddpiccComputedAnswer> {
+  const [champions, gates] = await Promise.all([
+    db
+      .select({ name: stakeholders.name })
+      .from(stakeholders)
+      .where(and(eq(stakeholders.dealId, dealId), eq(stakeholders.sentiment, "Champion"))),
+    db
+      .select({ gateCode: dealTechnicalGates.gateCode, isCompleted: dealTechnicalGates.isCompleted })
+      .from(dealTechnicalGates)
+      .where(eq(dealTechnicalGates.dealId, dealId)),
   ]);
-  return [eb, budget, champion, existingCustomer, competition, ...paperProcess].filter(
-    (s): s is MeddpiccSuggestion => s !== null,
-  );
+  const hasChampion = champions.length > 0;
+  const gateDone = gates.some((g) => g.isCompleted && g.gateCode === "G2_CHAMPION_DEFENSIBLE");
+  const score = hasChampion && gateDone ? 3 : hasChampion || gateDone ? 2 : 1;
+  const reason = [
+    hasChampion ? `Champion tagged (${champions.map((c) => c.name).join(", ")})` : "no Champion stakeholder tagged",
+    gateDone ? "internal-defensibility gate completed" : "internal-defensibility gate not yet completed",
+  ].join("; ");
+  return { questionOrder: 7, score, reason };
+}
+
+async function computeCompetition(dealId: string): Promise<MeddpiccComputedAnswer> {
+  const rows = await db
+    .select({ competitorId: dealCompetitors.competitorId })
+    .from(dealCompetitors)
+    .where(eq(dealCompetitors.dealId, dealId));
+  if (rows.length === 0) {
+    return { questionOrder: 8, score: 0, reason: "no competitor tracked on this deal yet" };
+  }
+  const winRates = await competitorWinRates();
+  const rates = rows
+    .map((r) => winRates.get(r.competitorId)?.winRate)
+    .filter((r): r is number => typeof r === "number");
+  if (rates.length === 0) {
+    return {
+      questionOrder: 8,
+      score: 0,
+      reason: `${rows.length} competitor(s) tracked but no historical win-rate evidence yet`,
+    };
+  }
+  const avg = rates.reduce((s, r) => s + r, 0) / rates.length;
+  const score = Math.min(3, Math.max(0, Math.round(avg * 3)));
+  return {
+    questionOrder: 8,
+    score,
+    reason: `Average historical win rate vs. ${rates.length} tracked competitor(s): ${Math.round(avg * 100)}%`,
+  };
+}
+
+export async function getMeddpiccComputedAnswers(
+  dealId: string,
+  accountName: string,
+): Promise<MeddpiccComputedAnswer[]> {
+  return Promise.all([
+    computeEconomicBuyer(dealId),
+    computeDecisionCriteria(dealId),
+    computeDecisionProcess(dealId),
+    computePaperProcess(dealId),
+    computeIdentifyPain(dealId, accountName),
+    computeChampion(dealId),
+    computeCompetition(dealId),
+  ]);
 }
