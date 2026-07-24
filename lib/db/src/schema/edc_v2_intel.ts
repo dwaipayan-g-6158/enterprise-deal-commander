@@ -491,8 +491,6 @@ export const dealMeddpiccAnswers = edcV2.table(
       .notNull()
       .references(() => meddpiccQuestions.id),
     score: smallint("score"),
-    isAutoSuggested: boolean("is_auto_suggested").notNull().default(false),
-    suggestedScore: smallint("suggested_score"),
     note: text("note"),
     answeredAt: timestamp("answered_at", { withTimezone: true }),
     answeredBy: varchar("answered_by", { length: 255 }),

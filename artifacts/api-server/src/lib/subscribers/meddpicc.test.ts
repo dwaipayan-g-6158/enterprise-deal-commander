@@ -108,7 +108,7 @@ describe("MEDDPICC subscriber", () => {
     for (const q of QUESTION_CATALOG) {
       await upsertMeddpiccAnswer(dealId, q.questionOrder, { score: 3 }, ACTOR);
     }
-    emitDealEvent("meddpicc.answer_changed", { dealId, actor: ACTOR, questionOrder: 43, score: 3 });
+    emitDealEvent("meddpicc.answer_changed", { dealId, actor: ACTOR, questionOrder: 8, score: 3 });
 
     const status = await poll(
       () => stepStatus(assignmentId, "MEDDPICC qualification scored"),
@@ -136,7 +136,7 @@ describe("MEDDPICC subscriber", () => {
     for (const q of QUESTION_CATALOG) {
       await upsertMeddpiccAnswer(dealId, q.questionOrder, { score: 3 }, ACTOR);
     }
-    emitDealEvent("meddpicc.answer_changed", { dealId, actor: ACTOR, questionOrder: 43, score: 3 });
+    emitDealEvent("meddpicc.answer_changed", { dealId, actor: ACTOR, questionOrder: 8, score: 3 });
     await new Promise((r) => setTimeout(r, 1500)); // give the (no-op) subscriber time to run
 
     const status = await stepStatus(assignmentId, "MEDDPICC qualification scored");
@@ -154,8 +154,8 @@ describe("MEDDPICC subscriber", () => {
     // Fire twice in immediate succession, with no await between them, so both
     // subscriber dispatches are in flight concurrently for the same deal /
     // assignment — this is the race the per-assignment serialization guards.
-    emitDealEvent("meddpicc.answer_changed", { dealId, actor: ACTOR, questionOrder: 43, score: 3 });
-    emitDealEvent("meddpicc.answer_changed", { dealId, actor: ACTOR, questionOrder: 43, score: 3 });
+    emitDealEvent("meddpicc.answer_changed", { dealId, actor: ACTOR, questionOrder: 8, score: 3 });
+    emitDealEvent("meddpicc.answer_changed", { dealId, actor: ACTOR, questionOrder: 8, score: 3 });
 
     const status = await poll(
       () => stepStatus(assignmentId, "MEDDPICC qualification scored"),

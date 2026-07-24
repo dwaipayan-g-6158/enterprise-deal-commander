@@ -1,4 +1,4 @@
-import { and, asc, eq, desc } from "drizzle-orm";
+import { and, eq, desc, inArray } from "drizzle-orm";
 import {
   db,
   enterpriseDeals,
@@ -16,7 +16,7 @@ import {
   type MeddpiccThresholds,
   type MeddpiccScoreResult,
 } from "@workspace/engine";
-import { getMeddpiccSuggestions, type MeddpiccSuggestion } from "./meddpicc-signals";
+import { getMeddpiccComputedAnswers } from "./meddpicc-signals";
 import { notFound, badRequest } from "./http";
 
 async function loadThresholds(): Promise<MeddpiccThresholds> {
@@ -32,29 +32,86 @@ async function loadThresholds(): Promise<MeddpiccThresholds> {
   };
 }
 
-async function loadAnswerMap(dealId: string): Promise<Record<number, number | null>> {
-  const rows = await db
-    .select({ questionOrder: meddpiccQuestions.questionOrder, score: dealMeddpiccAnswers.score })
-    .from(meddpiccQuestions)
-    .leftJoin(
-      dealMeddpiccAnswers,
-      and(eq(dealMeddpiccAnswers.questionId, meddpiccQuestions.id), eq(dealMeddpiccAnswers.dealId, dealId)),
-    );
-  const answers: Record<number, number | null> = {};
-  for (const r of rows) answers[r.questionOrder] = r.score ?? null;
-  return answers;
+interface DealForMeddpicc {
+  accountName: string;
+  stageName: string | null;
 }
 
-export async function computeMeddpiccScoreForDeal(dealId: string): Promise<MeddpiccScoreResult | null> {
+async function loadDeal(dealId: string): Promise<DealForMeddpicc | null> {
   const [deal] = await db
-    .select({ stageName: pipelineStages.stageName })
+    .select({ accountName: enterpriseDeals.accountName, stageName: pipelineStages.stageName })
     .from(enterpriseDeals)
     .leftJoin(pipelineStages, eq(enterpriseDeals.salesStageId, pipelineStages.id))
     .where(eq(enterpriseDeals.id, dealId))
     .limit(1);
+  return deal ?? null;
+}
+
+export interface MeddpiccAnswerView {
+  questionOrder: number;
+  score: number | null;
+  note: string | null;
+  source: "manual" | "computed" | "unanswered";
+  reason: string | null;
+}
+
+async function loadEffectiveAnswers(dealId: string, accountName: string): Promise<MeddpiccAnswerView[]> {
+  const questionOrders = QUESTION_CATALOG.map((q) => q.questionOrder);
+  const [manualRows, computed] = await Promise.all([
+    db
+      .select({
+        questionOrder: meddpiccQuestions.questionOrder,
+        score: dealMeddpiccAnswers.score,
+        note: dealMeddpiccAnswers.note,
+      })
+      .from(meddpiccQuestions)
+      .leftJoin(
+        dealMeddpiccAnswers,
+        and(eq(dealMeddpiccAnswers.questionId, meddpiccQuestions.id), eq(dealMeddpiccAnswers.dealId, dealId)),
+      )
+      .where(inArray(meddpiccQuestions.questionOrder, questionOrders)),
+    getMeddpiccComputedAnswers(dealId, accountName),
+  ]);
+
+  const manualByOrder = new Map(manualRows.filter((r) => r.score != null).map((r) => [r.questionOrder, r]));
+  const computedByOrder = new Map(computed.map((c) => [c.questionOrder, c]));
+
+  return QUESTION_CATALOG.map((q): MeddpiccAnswerView => {
+    const manual = manualByOrder.get(q.questionOrder);
+    const auto = computedByOrder.get(q.questionOrder);
+    if (manual) {
+      return {
+        questionOrder: q.questionOrder,
+        score: manual.score,
+        note: manual.note ?? null,
+        source: "manual",
+        reason: auto?.reason ?? null,
+      };
+    }
+    if (auto) {
+      return {
+        questionOrder: q.questionOrder,
+        score: auto.score,
+        note: null,
+        source: "computed",
+        reason: auto.reason,
+      };
+    }
+    return { questionOrder: q.questionOrder, score: null, note: null, source: "unanswered", reason: null };
+  });
+}
+
+export async function computeMeddpiccScoreForDeal(dealId: string): Promise<MeddpiccScoreResult | null> {
+  const deal = await loadDeal(dealId);
   if (!deal) return null;
 
-  const [answers, thresholds] = await Promise.all([loadAnswerMap(dealId), loadThresholds()]);
+  const [effectiveAnswers, thresholds] = await Promise.all([
+    loadEffectiveAnswers(dealId, deal.accountName),
+    loadThresholds(),
+  ]);
+  const answers: Record<number, number | null> = {};
+  for (const a of effectiveAnswers) answers[a.questionOrder] = a.score;
+
   const stageBucket = stageBucketForStageName(deal.stageName ?? "");
   const result = computeMeddpiccScore(answers, stageBucket, thresholds);
 
@@ -93,59 +150,23 @@ export async function getLatestMeddpiccScore(
   };
 }
 
-export interface MeddpiccAnswerView {
-  questionOrder: number;
-  score: number | null;
-  note: string | null;
-  isAutoSuggested: boolean;
-}
-
 export interface MeddpiccAssessment {
   questions: typeof QUESTION_CATALOG;
   answers: MeddpiccAnswerView[];
-  suggestions: MeddpiccSuggestion[];
   score: MeddpiccScoreResult;
 }
 
 export async function getMeddpiccAssessment(dealId: string): Promise<MeddpiccAssessment | null> {
-  const [deal] = await db
-    .select({ id: enterpriseDeals.id })
-    .from(enterpriseDeals)
-    .where(eq(enterpriseDeals.id, dealId))
-    .limit(1);
+  const deal = await loadDeal(dealId);
   if (!deal) return null;
 
-  const rows = await db
-    .select({
-      questionOrder: meddpiccQuestions.questionOrder,
-      score: dealMeddpiccAnswers.score,
-      note: dealMeddpiccAnswers.note,
-      isAutoSuggested: dealMeddpiccAnswers.isAutoSuggested,
-    })
-    .from(meddpiccQuestions)
-    .leftJoin(
-      dealMeddpiccAnswers,
-      and(eq(dealMeddpiccAnswers.questionId, meddpiccQuestions.id), eq(dealMeddpiccAnswers.dealId, dealId)),
-    )
-    .orderBy(asc(meddpiccQuestions.questionOrder));
-
-  const [suggestions, score] = await Promise.all([
-    getMeddpiccSuggestions(dealId),
+  const [answers, score] = await Promise.all([
+    loadEffectiveAnswers(dealId, deal.accountName),
     computeMeddpiccScoreForDeal(dealId),
   ]);
   if (!score) return null;
 
-  return {
-    questions: QUESTION_CATALOG,
-    answers: rows.map((r) => ({
-      questionOrder: r.questionOrder,
-      score: r.score ?? null,
-      note: r.note ?? null,
-      isAutoSuggested: r.isAutoSuggested ?? false,
-    })),
-    suggestions,
-    score,
-  };
+  return { questions: QUESTION_CATALOG, answers, score };
 }
 
 export async function upsertMeddpiccAnswer(
@@ -172,10 +193,6 @@ export async function upsertMeddpiccAnswer(
     throw badRequest(`score must be an integer between 0 and 3, got ${input.score}`);
   }
 
-  const suggestions = await getMeddpiccSuggestions(dealId);
-  const suggestion = suggestions.find((s) => s.questionOrder === questionOrder);
-  const isAutoSuggested = suggestion?.suggestedScore === input.score;
-
   await db
     .insert(dealMeddpiccAnswers)
     .values({
@@ -183,8 +200,6 @@ export async function upsertMeddpiccAnswer(
       questionId: question.id,
       score: input.score,
       note: input.note ?? null,
-      isAutoSuggested,
-      suggestedScore: suggestion?.suggestedScore ?? null,
       answeredAt: new Date(),
       answeredBy: actor,
     })
@@ -193,8 +208,6 @@ export async function upsertMeddpiccAnswer(
       set: {
         score: input.score,
         note: input.note ?? null,
-        isAutoSuggested,
-        suggestedScore: suggestion?.suggestedScore ?? null,
         answeredAt: new Date(),
         answeredBy: actor,
       },

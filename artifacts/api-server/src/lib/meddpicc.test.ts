@@ -11,10 +11,6 @@ import {
 const createdDealIds: string[] = [];
 
 async function createDeal(stageName: string): Promise<string> {
-  const [stage] = await db.select().from(pipelineStages).where(
-    // any stage whose name matches; falls back to first stage if not found
-    stageName ? (undefined as never) : (undefined as never),
-  );
   const [pricing] = await db.select().from(pricingModels).limit(1);
   const [tier] = await db.select().from(servicesTiers).limit(1);
   const stages = await db.select().from(pipelineStages);
@@ -45,13 +41,12 @@ afterAll(async () => {
 });
 
 describe("computeMeddpiccScoreForDeal", () => {
-  it("scores 0% for a brand-new deal with no answers and persists a snapshot row", async () => {
+  it("computes a score for a brand-new deal from live-computed answers alone and persists a snapshot row", async () => {
     const dealId = await createDeal("Discovery");
     const result = await computeMeddpiccScoreForDeal(dealId);
-    expect(result?.overallPct).toBe(0);
-    expect(result?.ragStatus).toBe("Red");
+    expect(result).not.toBeNull();
     const latest = await getLatestMeddpiccScore(dealId);
-    expect(latest?.overallPct).toBe(0);
+    expect(latest?.overallPct).toBe(result?.overallPct);
   });
 
   it("returns null for a non-existent deal", async () => {
@@ -61,39 +56,50 @@ describe("computeMeddpiccScoreForDeal", () => {
 });
 
 describe("getMeddpiccAssessment / upsertMeddpiccAnswer", () => {
-  it("returns all 43 questions with null answers before anything is scored", async () => {
+  it("returns all 8 questions, each with a computed or unanswered source before any manual answer", async () => {
     const dealId = await createDeal("Discovery");
     const assessment = await getMeddpiccAssessment(dealId);
-    expect(assessment?.questions).toHaveLength(43);
-    expect(assessment?.answers.every((a) => a.score === null)).toBe(true);
+    expect(assessment?.questions).toHaveLength(8);
+    expect(assessment?.answers).toHaveLength(8);
+    const metrics = assessment?.answers.find((a) => a.questionOrder === 1);
+    expect(metrics?.source).toBe("unanswered");
+    expect(metrics?.score).toBeNull();
+    const economicBuyer = assessment?.answers.find((a) => a.questionOrder === 2);
+    expect(economicBuyer?.source).toBe("computed");
+    expect(economicBuyer?.reason).not.toBeNull();
   });
 
-  it("upserts an answer and reflects it in the next assessment + score", async () => {
+  it("upserts a manual answer for Metrics and reflects it in the next assessment + score", async () => {
     const dealId = await createDeal("Discovery");
     await upsertMeddpiccAnswer(dealId, 1, { score: 3 }, "vitest");
     const assessment = await getMeddpiccAssessment(dealId);
     const answer = assessment?.answers.find((a) => a.questionOrder === 1);
     expect(answer?.score).toBe(3);
+    expect(answer?.source).toBe("manual");
     expect(assessment?.score.overallScore).toBeGreaterThanOrEqual(3);
   });
 
-  it("marks isAutoSuggested true when the saved score matches the live suggestion", async () => {
+  it("a manual override on an auto-computed question wins over the live-computed value", async () => {
     const dealId = await createDeal("Discovery");
-    // Q24 (existing customer) always has a suggestion (3 or 2) even with no data.
     const before = await getMeddpiccAssessment(dealId);
-    const suggestion = before?.suggestions.find((s) => s.questionOrder === 24);
-    expect(suggestion).toBeDefined();
-    await upsertMeddpiccAnswer(dealId, 24, { score: suggestion!.suggestedScore }, "vitest");
+    const computed = before?.answers.find((a) => a.questionOrder === 3); // Decision Criteria, computed 0 with no gate
+    expect(computed?.source).toBe("computed");
+    expect(computed?.score).toBe(0);
+
+    await upsertMeddpiccAnswer(dealId, 3, { score: 3 }, "vitest");
     const after = await getMeddpiccAssessment(dealId);
-    expect(after?.answers.find((a) => a.questionOrder === 24)?.isAutoSuggested).toBe(true);
+    const overridden = after?.answers.find((a) => a.questionOrder === 3);
+    expect(overridden?.source).toBe("manual");
+    expect(overridden?.score).toBe(3);
+    expect(overridden?.reason).not.toBeNull(); // reason still shown even though overridden
   });
 
   it("upserting the same question twice updates rather than duplicates", async () => {
     const dealId = await createDeal("Discovery");
-    await upsertMeddpiccAnswer(dealId, 5, { score: 1 }, "vitest");
-    await upsertMeddpiccAnswer(dealId, 5, { score: 3, note: "changed my mind" }, "vitest");
+    await upsertMeddpiccAnswer(dealId, 1, { score: 1 }, "vitest");
+    await upsertMeddpiccAnswer(dealId, 1, { score: 3, note: "changed my mind" }, "vitest");
     const assessment = await getMeddpiccAssessment(dealId);
-    const answer = assessment?.answers.find((a) => a.questionOrder === 5);
+    const answer = assessment?.answers.find((a) => a.questionOrder === 1);
     expect(answer?.score).toBe(3);
     expect(answer?.note).toBe("changed my mind");
   });
@@ -135,11 +141,11 @@ describe("getMeddpiccAssessment / upsertMeddpiccAnswer", () => {
 });
 
 describe("stage bucket wiring", () => {
-  it("uses the Qualification bucket (Q-tagged /81) for a Discovery-stage deal", async () => {
+  it("uses the Qualification bucket (Q-tagged questions only) for a Discovery-stage deal", async () => {
     const dealId = await createDeal("Discovery");
-    for (const order of [1, 2, 3, 4, 5]) await upsertMeddpiccAnswer(dealId, order, { score: 3 }, "vitest");
+    // Q-tagged questions: Metrics(1), DecisionCriteria(3), DecisionProcess(4), IdentifyPain(6), Competition(8) — 5 x 3 = 15 max.
+    for (const order of [1, 3, 4, 6, 8]) await upsertMeddpiccAnswer(dealId, order, { score: 3 }, "vitest");
     const result = await computeMeddpiccScoreForDeal(dealId);
-    // 5 Metrics questions (all Q-tagged) x 3 = 15 of 81 possible stage points.
-    expect(result?.stagePct).toBe(Math.round((15 / 81) * 100));
+    expect(result?.stagePct).toBe(100);
   });
 });
