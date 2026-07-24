@@ -8,29 +8,30 @@ import {
 } from "./meddpicc";
 
 describe("MEDDPICC question catalog", () => {
-  it("has exactly 43 questions", () => {
-    expect(QUESTION_CATALOG).toHaveLength(43);
+  it("has exactly 8 questions", () => {
+    expect(QUESTION_CATALOG).toHaveLength(8);
   });
 
-  it("has unique, sequential questionOrder values 1-43", () => {
+  it("has unique, sequential questionOrder values 1-8", () => {
     const orders = QUESTION_CATALOG.map((q) => q.questionOrder).sort((a, b) => a - b);
-    expect(orders).toEqual(Array.from({ length: 43 }, (_, i) => i + 1));
+    expect(orders).toEqual(Array.from({ length: 8 }, (_, i) => i + 1));
   });
 
-  it("stage-tag counts match the source template (27 Q, 9 P, 7 N)", () => {
+  it("stage-tag counts: 5 Q, 2 P, 1 N", () => {
     const byTag = (tag: string) => QUESTION_CATALOG.filter((q) => q.stageTag === tag).length;
-    expect(byTag("Q")).toBe(27);
-    expect(byTag("P")).toBe(9);
-    expect(byTag("N")).toBe(7);
+    expect(byTag("Q")).toBe(5);
+    expect(byTag("P")).toBe(2);
+    expect(byTag("N")).toBe(1);
   });
 
-  it("pillar max points sum to 129", () => {
+  it("pillar max points sum to 24 (8 pillars x 3)", () => {
     const maxByPillar = new Map<string, number>();
     for (const q of QUESTION_CATALOG as MeddpiccQuestion[]) {
       maxByPillar.set(q.pillar, (maxByPillar.get(q.pillar) ?? 0) + 3);
     }
+    expect(maxByPillar.size).toBe(8);
     const total = [...maxByPillar.values()].reduce((s, v) => s + v, 0);
-    expect(total).toBe(129);
+    expect(total).toBe(24);
   });
 });
 
@@ -58,7 +59,7 @@ describe("computeMeddpiccScore", () => {
     expect(r.overallPct).toBe(0);
     expect(r.ragStatus).toBe("Red");
     expect(r.pillarBreakdown).toHaveLength(8);
-    expect(r.unknownCount).toBe(43);
+    expect(r.unknownCount).toBe(8);
     expect(r.strongNoCount).toBe(0);
   });
 
@@ -66,32 +67,28 @@ describe("computeMeddpiccScore", () => {
     const answers: Record<number, number> = {};
     for (const q of QUESTION_CATALOG) answers[q.questionOrder] = 3;
     const r = computeMeddpiccScore(answers, "Negotiation");
-    expect(r.overallScore).toBe(129);
+    expect(r.overallScore).toBe(24);
     expect(r.overallPct).toBe(100);
     expect(r.ragStatus).toBe("Green");
     expect(r.unknownCount).toBe(0);
   });
 
-  it("Metrics pillar max is 15 (5 questions x 3) and reflects partial answers", () => {
-    const answers: Record<number, number> = { 1: 3, 2: 3, 3: 0, 4: 0, 5: 0 };
-    const r = computeMeddpiccScore(answers, "Negotiation");
+  it("Metrics pillar max is 3 (1 question) and reflects partial answers", () => {
+    const r = computeMeddpiccScore({ 1: 2 }, "Negotiation");
     const metrics = r.pillarBreakdown.find((p) => p.pillar === "Metrics");
-    expect(metrics).toEqual({ pillar: "Metrics", raw: 6, max: 15, pct: 40 });
+    expect(metrics).toEqual({ pillar: "Metrics", raw: 2, max: 3, pct: 67 });
   });
 
-  it("stagePct only counts Q-tagged questions in the Qualification bucket", () => {
-    const answers: Record<number, number> = {};
-    for (const q of QUESTION_CATALOG.filter((q) => q.stageTag === "Q")) {
-      answers[q.questionOrder] = 3;
-    }
+  it("stagePct only counts Q-tagged questions (1,3,4,6,8) in the Qualification bucket", () => {
+    const answers: Record<number, number> = { 1: 3, 3: 3, 4: 3, 6: 3, 8: 3 };
     const r = computeMeddpiccScore(answers, "Qualification");
-    expect(r.stagePct).toBe(100); // all 27 Q-tagged questions maxed
-    expect(r.overallPct).toBeLessThan(100); // P/N questions still unanswered
+    expect(r.stagePct).toBe(100); // all 5 Q-tagged questions maxed (15/15)
+    expect(r.overallPct).toBeLessThan(100); // P/N questions (2,5,7) still unanswered
   });
 
   it("RAG boundaries: <40 Red, 40-75 inclusive Amber, >75 Green", () => {
     const at = (pct: number) => {
-      const score = Math.round((pct / 100) * 129);
+      const score = Math.round((pct / 100) * 24);
       const answers: Record<number, number> = {};
       let remaining = score;
       for (const q of QUESTION_CATALOG) {
@@ -104,7 +101,7 @@ describe("computeMeddpiccScore", () => {
     expect(at(39)).toBe("Red");
     expect(at(40)).toBe("Amber");
     expect(at(75)).toBe("Amber");
-    expect(at(76)).toBe("Green");
+    expect(at(79)).toBe("Green");
   });
 
   it("respects custom thresholds", () => {
@@ -115,8 +112,8 @@ describe("computeMeddpiccScore", () => {
   });
 
   it("counts explicit Strong-No (1) and Unknown (0/unanswered) separately", () => {
-    const r = computeMeddpiccScore({ 1: 1, 2: 0, 3: 1 }, "Negotiation");
-    expect(r.strongNoCount).toBe(2);
-    expect(r.unknownCount).toBe(41); // 40 unanswered + question 2 explicitly rated 0
+    const r = computeMeddpiccScore({ 1: 1, 2: 0 }, "Negotiation");
+    expect(r.strongNoCount).toBe(1);
+    expect(r.unknownCount).toBe(7); // 6 unanswered + question 2 explicitly rated 0
   });
 });

@@ -22,56 +22,14 @@ export interface MeddpiccQuestion {
 }
 
 export const QUESTION_CATALOG: MeddpiccQuestion[] = [
-  { questionOrder: 1, pillar: "Metrics", stageTag: "Q", questionText: "Does our solution make the project viable and will it deliver significant improvements?" },
-  { questionOrder: 2, pillar: "Metrics", stageTag: "Q", questionText: "Do we fully understand what value the customer is seeking to get? Business outcomes, measurements or results known." },
-  { questionOrder: 3, pillar: "Metrics", stageTag: "Q", questionText: "Are there serious business/technical/financial implications if the project is not executed?" },
-  { questionOrder: 4, pillar: "Metrics", stageTag: "Q", questionText: "Is there an on-going benefit to the customer's business?" },
-  { questionOrder: 5, pillar: "Metrics", stageTag: "Q", questionText: "Is there a pertinent ROI story that can be translated into $ value?" },
-
-  { questionOrder: 6, pillar: "EconomicBuyer", stageTag: "P", questionText: "Do we know who has the power to spend the budget?" },
-  { questionOrder: 7, pillar: "EconomicBuyer", stageTag: "P", questionText: "Additional financial approvers identified?" },
-  { questionOrder: 8, pillar: "EconomicBuyer", stageTag: "P", questionText: "Do we understand the economic buyer's mindset, expectations and priorities?" },
-  { questionOrder: 9, pillar: "EconomicBuyer", stageTag: "Q", questionText: "Has budget been approved internally?" },
-  { questionOrder: 10, pillar: "EconomicBuyer", stageTag: "P", questionText: "Do we understand the economic buyer's challenges and buying criteria?" },
-
-  { questionOrder: 11, pillar: "DecisionCriteria", stageTag: "Q", questionText: "Do we understand the vendor evaluation/selection criteria and how it will be weighted?" },
-  { questionOrder: 12, pillar: "DecisionCriteria", stageTag: "Q", questionText: "Do we understand the customer's decision criteria for each stage in their purchasing cycle?" },
-  { questionOrder: 13, pillar: "DecisionCriteria", stageTag: "Q", questionText: "Do we understand who or what organization will influence each decision criteria?" },
-  { questionOrder: 14, pillar: "DecisionCriteria", stageTag: "Q", questionText: "The customer is not buying on the lowest price." },
-  { questionOrder: 15, pillar: "DecisionCriteria", stageTag: "P", questionText: "The contract terms and conditions are acceptable to us and to the customer?" },
-
-  { questionOrder: 16, pillar: "DecisionProcess", stageTag: "N", questionText: "Have we met with the key decision makers (C-level) to discuss their needs and the strengths of our solution?" },
-  { questionOrder: 17, pillar: "DecisionProcess", stageTag: "Q", questionText: "Have we identified the individuals with decision-making powers and the roles each play in this specific opportunity?" },
-  { questionOrder: 18, pillar: "DecisionProcess", stageTag: "Q", questionText: "Do we fully understand the customer timeline and is it realistic?" },
-  { questionOrder: 19, pillar: "DecisionProcess", stageTag: "Q", questionText: "Do we understand what decision will be made at each stage of the process, when it will happen and who will be involved?" },
-  { questionOrder: 20, pillar: "DecisionProcess", stageTag: "P", questionText: "Do we have internal teams on-board to support the customer with any queries at each stage of the process?" },
-
-  { questionOrder: 21, pillar: "PaperProcess", stageTag: "P", questionText: "Do we understand their signature process and identified all the signatories?" },
-  { questionOrder: 22, pillar: "PaperProcess", stageTag: "Q", questionText: "Do we have an existing MSA that we can leverage? If not, have we submitted our MSA for review?" },
-  { questionOrder: 23, pillar: "PaperProcess", stageTag: "N", questionText: "SOW or CO drafted and ready or with the customer for review?" },
-
-  { questionOrder: 24, pillar: "IdentifyPain", stageTag: "Q", questionText: "Are they an existing customer or new customer?", helpText: "Score 3 if already a customer with a won deal on record, otherwise 2 — this is never a real \"no.\"" },
-  { questionOrder: 25, pillar: "IdentifyPain", stageTag: "P", questionText: "Do we fully understand the customer's requirements, the problem they are trying to address and the outcome they want to achieve?" },
-  { questionOrder: 26, pillar: "IdentifyPain", stageTag: "N", questionText: "Our proposal contains win themes, competitive advantages and addresses the concerns of discriminators and distractors." },
-  { questionOrder: 27, pillar: "IdentifyPain", stageTag: "Q", questionText: "Is there a compelling event to close within the timeframe identified — will the project reduce cost, improve agility, or mitigate risk?", helpText: "Score 3 if yes and you can name the compelling event, 0 if you're still just checking." },
-  { questionOrder: 28, pillar: "IdentifyPain", stageTag: "N", questionText: "The technical, operational and commercial proposal satisfies requirements and fits the customer's business strategy." },
-  { questionOrder: 29, pillar: "IdentifyPain", stageTag: "Q", questionText: "Does our standard solution solve the customer's problem?" },
-  { questionOrder: 30, pillar: "IdentifyPain", stageTag: "Q", questionText: "Can we fully deliver on all mandatory requirements?" },
-  { questionOrder: 31, pillar: "IdentifyPain", stageTag: "Q", questionText: "Are any non-compliant areas not show-stoppers?" },
-  { questionOrder: 32, pillar: "IdentifyPain", stageTag: "Q", questionText: "Can we deliver any non-standard requirements?" },
-  { questionOrder: 33, pillar: "IdentifyPain", stageTag: "Q", questionText: "Are partners needed, and if so, have they been identified and on-boarded?", helpText: "Score 3 if not needed or already engaged, 1-2 if in process, 0 if needed but not yet identified." },
-
-  { questionOrder: 34, pillar: "Champion", stageTag: "P", questionText: "Have we identified champion(s)?" },
-  { questionOrder: 35, pillar: "Champion", stageTag: "N", questionText: "Do they fully understand the value we will deliver and are they most likely to benefit from our solution?" },
-  { questionOrder: 36, pillar: "Champion", stageTag: "N", questionText: "Are the champions prepared to become true defenders of the cause and sell our solution within their organization on our behalf?" },
-  { questionOrder: 37, pillar: "Champion", stageTag: "N", questionText: "Do the champions have the influencing power, good track record, and acceptance by peers/decision makers to swing the decision in our favor?" },
-
-  { questionOrder: 38, pillar: "Competition", stageTag: "Q", questionText: "Have we had early engagement to influence the client against the competition?" },
-  { questionOrder: 39, pillar: "Competition", stageTag: "Q", questionText: "Do we have a strong relationship with the customer and a distinct competitive advantage from the start?" },
-  { questionOrder: 40, pillar: "Competition", stageTag: "Q", questionText: "Is there a compelling event needing them to move away from their incumbent?" },
-  { questionOrder: 41, pillar: "Competition", stageTag: "Q", questionText: "If a competitor is favored by the customer, can we overcome this?" },
-  { questionOrder: 42, pillar: "Competition", stageTag: "Q", questionText: "Do we have reference customers with similar outcomes in the same sector?" },
-  { questionOrder: 43, pillar: "Competition", stageTag: "Q", questionText: "Will winning open up new market opportunities for us?" },
+  { questionOrder: 1, pillar: "Metrics", stageTag: "Q", questionText: "Is there a clear, quantifiable business case (ROI/value) for this deal?" },
+  { questionOrder: 2, pillar: "EconomicBuyer", stageTag: "P", questionText: "Have we identified the Economic Buyer and secured executive agreement on evaluation criteria?", helpText: "Auto-computed from a stakeholder tagged Economic Buyer and the G1_EXECUTIVE_AGREED gate." },
+  { questionOrder: 3, pillar: "DecisionCriteria", stageTag: "Q", questionText: "Are the customer's technical success criteria locked and documented?", helpText: "Auto-computed from the G1_CRITERIA_LOCKED gate." },
+  { questionOrder: 4, pillar: "DecisionProcess", stageTag: "Q", questionText: "Have we identified the individuals with decision-making power in this deal?", helpText: "Auto-computed from stakeholders flagged as decision-makers." },
+  { questionOrder: 5, pillar: "PaperProcess", stageTag: "N", questionText: "Is the legal/paper process (redlines, NDA/DPA, compliance) on track?", helpText: "Auto-computed from Procurement/Legal playbook steps and the G4_COMPLIANCE_VALIDATED gate." },
+  { questionOrder: 6, pillar: "IdentifyPain", stageTag: "Q", questionText: "Do we understand the customer's pain and is this an existing relationship?", helpText: "Auto-computed from prior Won deals with this account." },
+  { questionOrder: 7, pillar: "Champion", stageTag: "P", questionText: "Have we identified a Champion who can defend us internally?", helpText: "Auto-computed from a stakeholder tagged Champion and the G2_CHAMPION_DEFENSIBLE gate." },
+  { questionOrder: 8, pillar: "Competition", stageTag: "Q", questionText: "Do we have a demonstrated competitive advantage against tracked competitors?", helpText: "Auto-computed from tracked competitors and historical win-rate." },
 ];
 
 const PILLAR_ORDER: MeddpiccPillar[] = [
