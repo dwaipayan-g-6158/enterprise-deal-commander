@@ -94,6 +94,8 @@ export function AccountNavigationArray({ activeDealId, expandedGroup, onExpandGr
   // scoped to this component's viewport only, so no other ScrollArea in the
   // app is affected.
   useEffect(() => {
+    // One-shot: assumes the Radix viewport exists at mount, true today since
+    // <nav>/ScrollArea always render unconditionally with no loading guard.
     const viewport = navRef.current?.querySelector<HTMLDivElement>(
       "[data-radix-scroll-area-viewport]",
     );
@@ -106,7 +108,16 @@ export function AccountNavigationArray({ activeDealId, expandedGroup, onExpandGr
       );
       if (!shouldConvert) return;
       event.preventDefault();
-      viewport.scrollLeft += event.deltaY;
+      // In Chrome (unlike Firefox), Shift+wheel arrives as deltaY-dominant, so
+      // it also lands here — still the correct horizontal-scroll outcome.
+      // Normalize by deltaMode: Firefox reports line deltas (~3), not pixels.
+      const step =
+        event.deltaMode === 1
+          ? event.deltaY * 16
+          : event.deltaMode === 2
+            ? event.deltaY * viewport.clientWidth
+            : event.deltaY;
+      viewport.scrollLeft += step;
     };
 
     viewport.addEventListener("wheel", handleWheel, { passive: false });
