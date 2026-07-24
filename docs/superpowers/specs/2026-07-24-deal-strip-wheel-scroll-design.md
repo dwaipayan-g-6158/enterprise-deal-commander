@@ -41,8 +41,14 @@ wheel-scrolls-horizontally behavior it didn't ask for.
 
 ## Scope
 
-Frontend-only, one file: `artifacts/edc/src/components/cockpit/account-navigation-array.tsx`.
-No backend, schema, or API changes.
+Frontend-only, two files under `artifacts/edc/src/components/cockpit/`:
+`account-navigation-array.tsx` (the DOM wiring) plus a new sibling pure module,
+`wheel-horizontal-scroll.ts`, that holds the should-we-convert-this-event
+decision — split out during planning so that piece of logic can get a real
+Vitest unit test (this package's tests are `environment: "node"` and
+`.test.ts`-only, so logic has to live outside the `.tsx` to be covered at
+all), mirroring how `deal-strip-model.ts` already sits next to this same
+component for the same reason. No backend, schema, or API changes.
 
 ## Behavior
 
@@ -79,8 +85,12 @@ these are touched by this change.
 
 ## Testing
 
-Manual, in-browser (no automated test — this is pointer/wheel-event behavior
-not meaningfully covered by Vitest):
+The should-convert decision (overflow check, ctrlKey guard, delta-dominance
+comparison) is a pure function in `wheel-horizontal-scroll.ts` and gets an
+automated Vitest unit test. The DOM wiring itself — the actual
+`addEventListener`/`scrollLeft` mutation in `account-navigation-array.tsx` —
+is pointer/wheel-event behavior not meaningfully covered by this package's
+node-environment Vitest setup, so it's verified manually, in-browser:
 
 - With enough deals to overflow the strip: wheel-scrolling over it moves the
   strip horizontally; the page underneath does not also scroll.
@@ -95,6 +105,8 @@ not meaningfully covered by Vitest):
 - No change to the shared `ScrollArea`/`ScrollBar` primitive
   (`components/ui/scroll-area.tsx`) — other consumers of it elsewhere in the
   app are unaffected.
+- No change to `deal-strip-model.ts` — the new `wheel-horizontal-scroll.ts`
+  module is unrelated to deal grouping and stays separate.
 - No drag-to-scroll (click-and-drag the row itself) — not requested; the
   scrollbar thumb already provides a drag affordance.
 - No change to scroll speed/acceleration curves beyond the 1:1 mapping above.
