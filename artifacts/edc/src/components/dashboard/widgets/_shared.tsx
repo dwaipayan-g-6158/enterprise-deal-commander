@@ -102,22 +102,28 @@ export function rowMotion(
 /**
  * Week-over-week delta indicator. `positiveIsGood` flips the color semantics:
  * for TCV a rise is good (green); for red-alert counts a rise is bad (red).
+ * `compact` omits the trailing "vs last wk" label, for tight spaces like a
+ * DailyBar segment trigger.
  */
 export function DeltaBadge({
   current,
   baseline,
   positiveIsGood = true,
   format = (n: number) => String(n),
+  compact = false,
 }: {
   current: number;
   baseline: number | null | undefined;
   positiveIsGood?: boolean;
   format?: (n: number) => string;
+  compact?: boolean;
 }) {
   if (baseline == null) return null;
   const delta = current - baseline;
   if (delta === 0) {
-    return <span className="text-xs text-muted-foreground">— vs last wk</span>;
+    return (
+      <span className="text-xs text-muted-foreground">{compact ? "—" : "— vs last wk"}</span>
+    );
   }
   const up = delta > 0;
   const good = up === positiveIsGood;
@@ -128,7 +134,7 @@ export function DeltaBadge({
     >
       <Icon className="h-3 w-3" aria-hidden />
       {format(Math.abs(delta))}
-      <span className="text-muted-foreground font-normal ml-0.5">vs last wk</span>
+      {!compact && <span className="text-muted-foreground font-normal ml-0.5">vs last wk</span>}
     </span>
   );
 }

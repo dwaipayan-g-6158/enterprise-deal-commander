@@ -34,7 +34,6 @@ import { PipelineRiskOverview } from "@/components/dashboard/widgets/pipeline-ri
 import { relativeTime, type Health } from "@/components/dashboard/widgets/_shared";
 import { DashboardHero } from "@/components/dashboard/dashboard-hero";
 import { CelebrationWatcher } from "@/components/dashboard/celebration-watcher";
-import { WeeklyReview } from "@/components/dashboard/widgets/weekly-review";
 import { DailyBar } from "@/components/dashboard/daily-bar/daily-bar";
 import { CustomizeLayoutControl } from "@/components/dashboard/customize-layout-control";
 import { getRowOrder, saveRowOrder, resetRowOrder } from "@/lib/dashboard-layout/row-order";
@@ -153,7 +152,6 @@ export default function Dashboard() {
     <div className="p-8 max-w-[1600px] mx-auto space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
       <DashboardHero />
       <CelebrationWatcher previousVisitAt={previousVisitAt} />
-      <WeeklyReview />
       <DailyBar previousVisitAt={previousVisitAt} />
 
       {(() => {
