@@ -26,15 +26,15 @@ export function MissionSegment() {
   const { data: dealsWrapper, isLoading: isLoadingDeals } = useListDeals({ state: "active", limit: 500 });
 
   const nextActionsData = nextActionsWrapper?.data as NextActionsData | undefined;
-  // "active" is a lifecycle filter only — Closed-Won/Closed-Lost deals stay in
-  // this fetch forever, so they must be excluded here before pricing today's
-  // mission items.
-  const activeDeals = (dealsWrapper?.data ?? []).filter((d) => terminalOutcome(d.salesStage) == null);
+  const rawDeals = dealsWrapper?.data ?? [];
 
-  const valueByDealId = useMemo(
-    () => Object.fromEntries(activeDeals.map((d) => [d.id, d.normalizedTCV ?? d.calculatedTCV ?? 0])),
-    [activeDeals],
-  );
+  const valueByDealId = useMemo(() => {
+    // "active" is a lifecycle filter only — Closed-Won/Closed-Lost deals stay
+    // in this fetch forever, so they must be excluded here before pricing
+    // today's mission items.
+    const activeDeals = rawDeals.filter((d) => terminalOutcome(d.salesStage) == null);
+    return Object.fromEntries(activeDeals.map((d) => [d.id, d.normalizedTCV ?? d.calculatedTCV ?? 0]));
+  }, [rawDeals]);
 
   const items = useMemo(
     () => buildMission(nextActionsData, valueByDealId, new Date()),

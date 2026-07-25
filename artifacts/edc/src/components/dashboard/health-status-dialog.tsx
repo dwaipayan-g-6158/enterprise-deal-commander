@@ -14,6 +14,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { rowMotion } from "./widgets/_shared";
+import { terminalOutcome } from "@/components/roster/model/board";
 
 type Health = "GREEN" | "YELLOW" | "RED";
 
@@ -120,7 +121,7 @@ export function HealthStatusDialog({
       placeholderData: keepPreviousData,
     },
   });
-  const deals = data?.data ?? [];
+  const deals = (data?.data ?? []).filter((d) => terminalOutcome(d.salesStage) == null);
 
   // Computed from state, never from measuring the swapping content: the
   // inner AnimatePresence keeps old-band rows mounted mid-exit, so a

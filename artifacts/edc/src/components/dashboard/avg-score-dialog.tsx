@@ -18,6 +18,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Gauge, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { HEALTH_DOT, rowMotion, type Health } from "./widgets/_shared";
+import { terminalOutcome } from "@/components/roster/model/board";
 
 interface Enrichment {
   id: string;
@@ -72,7 +73,7 @@ export function AvgScoreDialog({ open, onOpenChange, avgScore }: AvgScoreDialogP
       placeholderData: keepPreviousData,
     },
   });
-  const deals = dealsWrapper?.data ?? [];
+  const deals = (dealsWrapper?.data ?? []).filter((d) => terminalOutcome(d.salesStage) == null);
   const enrichRows = (enrichWrapper?.data as { deals?: Enrichment[] } | undefined)?.deals ?? [];
   const scoreById = new Map(enrichRows.map((e) => [e.id, e.score]));
   const isPlaceholderData = dealsPlaceholder || enrichPlaceholder;

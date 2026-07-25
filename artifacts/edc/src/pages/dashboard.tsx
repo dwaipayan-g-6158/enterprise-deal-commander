@@ -38,6 +38,7 @@ import { DailyBar } from "@/components/dashboard/daily-bar/daily-bar";
 import { CustomizeLayoutControl } from "@/components/dashboard/customize-layout-control";
 import { getRowOrder, saveRowOrder, resetRowOrder } from "@/lib/dashboard-layout/row-order";
 import { defaultStore } from "@/lib/storage";
+import { terminalOutcome } from "@/components/roster/model/board";
 
 type OpenDialog =
   | null
@@ -72,7 +73,7 @@ export default function Dashboard() {
     state: "active",
     limit: 200,
   });
-  const redDeals = redDealsWrapper?.data ?? [];
+  const redDeals = (redDealsWrapper?.data ?? []).filter((d) => terminalOutcome(d.salesStage) == null);
   const tcvAtRisk = redDeals.reduce(
     (sum, d) => sum + (d.normalizedTCV ?? d.calculatedTCV ?? 0),
     0,

@@ -530,10 +530,11 @@ router.get("/analytics/vital-signs", async (_req: Request, res: Response) => {
     .orderBy(desc(dealSnapshots.snapshotAt));
   const latestPerDeal = new Map<string, { health: string | null; tcv: number }>();
   for (const s of snaps) {
-    // Baseline restricted to deals still open today — a deal that has since
-    // closed drops out of the comparison entirely rather than being tracked
-    // via true point-in-time stage history, which this snapshot table
-    // doesn't reconstruct cheaply here.
+    // Deliberately "currently open, applied retroactively" rather than true
+    // point-in-time stage history (which dealSnapshots.salesStage would
+    // support) — keeping both sides of the delta over the same population
+    // means the week-over-week numbers reflect change within the open
+    // cohort, not deals entering or leaving it.
     if (!openIds.has(s.dealId)) continue;
     if (!latestPerDeal.has(s.dealId)) {
       latestPerDeal.set(s.dealId, { health: s.healthStatus, tcv: Number(s.calculatedTcv) || 0 });

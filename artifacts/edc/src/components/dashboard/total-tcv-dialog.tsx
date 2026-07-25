@@ -13,6 +13,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { TrendingUp, ChevronRight, ArrowRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { rowMotion } from "./widgets/_shared";
+import { terminalOutcome } from "@/components/roster/model/board";
 
 type Health = "GREEN" | "YELLOW" | "RED";
 
@@ -49,7 +50,7 @@ export function TotalTcvDialog({
       placeholderData: keepPreviousData,
     },
   });
-  const deals = data?.data ?? [];
+  const deals = (data?.data ?? []).filter((d) => terminalOutcome(d.salesStage) == null);
 
   const full = (n: number) =>
     new Intl.NumberFormat("en-US", {
