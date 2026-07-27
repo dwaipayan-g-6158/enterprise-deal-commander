@@ -56,7 +56,14 @@ import { clusterProductGaps } from "../../lib/product-gaps";
 
 const router: IRouter = Router();
 
-const activeFilter = and(isNull(enterpriseDeals.deletedAt), isNull(enterpriseDeals.archivedAt));
+// "Active" here means "not soft-deleted." Archived deals are real, historical
+// deals that still count in every analytics number below — that's the whole
+// point of archiving vs. deleting. See
+// docs/superpowers/plans/2026-07-27-archive-lifecycle-and-semantics.md.
+// Contrast with lib/scoring.ts and lib/subscribers/index.ts, which each
+// define their OWN separate activeFilter/activeDealIds that DO exclude
+// archived deals on purpose (a closed deal's score/snapshot is frozen).
+const activeFilter = isNull(enterpriseDeals.deletedAt);
 
 function daysBetween(from: Date | string | null, to = new Date()): number {
   if (!from) return 0;

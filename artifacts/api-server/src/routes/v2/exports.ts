@@ -1,5 +1,5 @@
 import { Router, type IRouter, type Request, type Response } from "express";
-import { and, desc, eq, isNull } from "drizzle-orm";
+import { desc, eq, isNull } from "drizzle-orm";
 import {
   db,
   enterpriseDeals,
@@ -16,7 +16,9 @@ import { runPipelineSimulation, type SimDeal } from "@workspace/engine";
  */
 const router: IRouter = Router();
 
-const activeFilter = and(isNull(enterpriseDeals.deletedAt), isNull(enterpriseDeals.archivedAt));
+// See the comment on the identically-named const in routes/v2/analytics.ts —
+// archived deals still count in the export.
+const activeFilter = isNull(enterpriseDeals.deletedAt);
 
 function csvCell(v: unknown): string {
   const s = v == null ? "" : String(v);
