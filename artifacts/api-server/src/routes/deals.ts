@@ -653,17 +653,32 @@ router.delete("/deals/:id", async (req: Request, res: Response) => {
 router.post("/deals/:id/restore", async (req: Request, res: Response) => {
   const { id } = RestoreDealParams.parse(req.params);
   const actor = getActor(req);
-  const result = await db
+
+  const existingRows = await db
+    .select({ deletedAt: enterpriseDeals.deletedAt, archivedAt: enterpriseDeals.archivedAt })
+    .from(enterpriseDeals)
+    .where(eq(enterpriseDeals.id, id));
+  const existing = existingRows[0];
+  if (!existing) throw notFound("Deal not found");
+  if (!existing.deletedAt && !existing.archivedAt) {
+    throw conflict("Deal is already active");
+  }
+
+  // Undo exactly one level: a deleted-and-archived deal returns to Archived,
+  // not straight to Active. Only a plain archived (or plain deleted) deal
+  // returns to Active. This is what makes the round-trip lossless — see
+  // docs/superpowers/plans/2026-07-27-archive-lifecycle-and-semantics.md.
+  const clearingDeleted = existing.deletedAt !== null;
+  await db
     .update(enterpriseDeals)
-    .set({ deletedAt: null, archivedAt: null })
-    .where(eq(enterpriseDeals.id, id))
-    .returning({ id: enterpriseDeals.id });
-  if (result.length === 0) throw notFound("Deal not found");
+    .set(clearingDeleted ? { deletedAt: null } : { archivedAt: null })
+    .where(eq(enterpriseDeals.id, id));
+
   await writeAudit({
     dealId: id,
     entityType: "deal",
-    fieldChanged: "deleted_at",
-    newValue: "restored",
+    fieldChanged: clearingDeleted ? "deleted_at" : "archived_at",
+    newValue: clearingDeleted ? "restored" : "unarchived",
     changedBy: actor.displayName,
   });
   emitDealEvent("deal.restored", { dealId: id, actor: actor.displayName });
