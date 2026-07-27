@@ -220,3 +220,26 @@ describe("POST /deals/:id/archive — idempotency", () => {
     expect(thrown?.status).toBe(404);
   });
 });
+
+describe("POST /deals/:id/archive — stage eligibility", () => {
+  it("409s when the deal is not in a closed stage", async () => {
+    const id = await createDeal("archive-open", "Discovery");
+
+    const { thrown } = await callArchive(id);
+    expect(thrown?.status).toBe(409);
+    expect(thrown?.code).toBe("ARCHIVE_GUARDRAIL");
+
+    const flags = await readFlags(id);
+    expect(flags.archivedAt).toBeNull(); // untouched
+  });
+
+  it("still archives a Closed-Won deal", async () => {
+    const id = await createDeal("archive-won", "Closed-Won");
+
+    const { thrown } = await callArchive(id);
+    expect(thrown).toBeUndefined();
+
+    const flags = await readFlags(id);
+    expect(flags.archivedAt).not.toBeNull();
+  });
+});

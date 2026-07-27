@@ -33,7 +33,7 @@ import {
   ArchiveDealResponse,
 } from "@workspace/api-zod";
 import { requireAuth, getActor } from "../lib/auth";
-import { badRequest, notFound, conflict, stageGuardrail } from "../lib/http";
+import { badRequest, notFound, conflict, stageGuardrail, archiveGuardrail } from "../lib/http";
 import { serializeDeal, assembleDealIntelligence } from "../lib/intelligence";
 import { writeAudit } from "../lib/audit";
 import { emitDealEvent } from "../lib/events";
@@ -691,12 +691,22 @@ router.post("/deals/:id/archive", async (req: Request, res: Response) => {
   const actor = getActor(req);
 
   const existingRows = await db
-    .select({ deletedAt: enterpriseDeals.deletedAt, archivedAt: enterpriseDeals.archivedAt })
+    .select({
+      deletedAt: enterpriseDeals.deletedAt,
+      archivedAt: enterpriseDeals.archivedAt,
+      stageName: pipelineStages.stageName,
+    })
     .from(enterpriseDeals)
+    .innerJoin(pipelineStages, eq(enterpriseDeals.salesStageId, pipelineStages.id))
     .where(eq(enterpriseDeals.id, id));
   const existing = existingRows[0];
   if (!existing || existing.deletedAt) throw notFound("Deal not found");
   if (existing.archivedAt) throw conflict("Deal is already archived");
+  if (existing.stageName !== "Closed-Won" && existing.stageName !== "Closed-Lost") {
+    throw archiveGuardrail(
+      "Only Closed-Won or Closed-Lost deals can be archived. Move the deal to a closed stage first.",
+    );
+  }
 
   await db
     .update(enterpriseDeals)

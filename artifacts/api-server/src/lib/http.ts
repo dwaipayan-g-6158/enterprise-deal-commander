@@ -28,6 +28,8 @@ export const stageGuardrail = (message: string, patternCodes: string[]) => {
   err.patternCodes = patternCodes;
   return err;
 };
+export const archiveGuardrail = (message: string) =>
+  new HttpError(409, "ARCHIVE_GUARDRAIL", message);
 
 export function sendError(res: Response, err: HttpError): void {
   res.status(err.status).json({
