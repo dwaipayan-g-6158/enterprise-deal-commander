@@ -33,7 +33,7 @@ import {
   ArchiveDealResponse,
 } from "@workspace/api-zod";
 import { requireAuth, getActor } from "../lib/auth";
-import { badRequest, notFound, conflict, stageGuardrail } from "../lib/http";
+import { badRequest, notFound, conflict, stageGuardrail, archiveGuardrail } from "../lib/http";
 import { serializeDeal, assembleDealIntelligence } from "../lib/intelligence";
 import { writeAudit } from "../lib/audit";
 import { emitDealEvent } from "../lib/events";
@@ -55,6 +55,9 @@ router.get("/deals", async (req: Request, res: Response) => {
     conditions.push(isNull(enterpriseDeals.deletedAt));
   } else if (state === "deleted") {
     conditions.push(isNotNull(enterpriseDeals.deletedAt));
+  } else if (state === "all") {
+    // Active + Archived, i.e. every real deal — excludes only the trash.
+    conditions.push(isNull(enterpriseDeals.deletedAt));
   }
   if (q.stage) {
     conditions.push(eq(pipelineStages.stageName, q.stage));
@@ -518,10 +521,26 @@ const updateDealHandler = async (req: Request, res: Response) => {
     body.sales_stage_id !== existing.salesStageId
   ) {
     const stageRows = await db
-      .select({ id: pipelineStages.id, sortOrder: pipelineStages.sortOrder })
+      .select({ id: pipelineStages.id, sortOrder: pipelineStages.sortOrder, stageName: pipelineStages.stageName })
       .from(pipelineStages);
     const fromStage = stageRows.find((s) => s.id === existing.salesStageId);
     const toStage = stageRows.find((s) => s.id === body.sales_stage_id);
+
+    // Archived implies closed (enforced at archive time in the /archive
+    // handler below) — that invariant would otherwise silently break if an
+    // archived deal could be PATCHed to an open stage without first being
+    // restored. Guard it here too, not just at archive time.
+    if (
+      existing.archivedAt &&
+      toStage &&
+      toStage.stageName !== "Closed-Won" &&
+      toStage.stageName !== "Closed-Lost"
+    ) {
+      throw archiveGuardrail(
+        "Restore this deal before moving it out of a closed stage.",
+      );
+    }
+
     const isAdvancing =
       !!fromStage && !!toStage && toStage.sortOrder > fromStage.sortOrder;
     if (isAdvancing) {
@@ -653,20 +672,45 @@ router.delete("/deals/:id", async (req: Request, res: Response) => {
 router.post("/deals/:id/restore", async (req: Request, res: Response) => {
   const { id } = RestoreDealParams.parse(req.params);
   const actor = getActor(req);
-  const result = await db
+
+  const existingRows = await db
+    .select({ deletedAt: enterpriseDeals.deletedAt, archivedAt: enterpriseDeals.archivedAt })
+    .from(enterpriseDeals)
+    .where(eq(enterpriseDeals.id, id));
+  const existing = existingRows[0];
+  if (!existing) throw notFound("Deal not found");
+  if (!existing.deletedAt && !existing.archivedAt) {
+    throw conflict("Deal is already active");
+  }
+
+  // Undo exactly one level: a deleted-and-archived deal returns to Archived,
+  // not straight to Active. Only a plain archived (or plain deleted) deal
+  // returns to Active. This is what makes the round-trip lossless — see
+  // docs/superpowers/plans/2026-07-27-archive-lifecycle-and-semantics.md.
+  const clearingDeleted = existing.deletedAt !== null;
+  await db
     .update(enterpriseDeals)
-    .set({ deletedAt: null, archivedAt: null })
-    .where(eq(enterpriseDeals.id, id))
-    .returning({ id: enterpriseDeals.id });
-  if (result.length === 0) throw notFound("Deal not found");
+    .set(clearingDeleted ? { deletedAt: null } : { archivedAt: null })
+    .where(eq(enterpriseDeals.id, id));
+
   await writeAudit({
     dealId: id,
     entityType: "deal",
-    fieldChanged: "deleted_at",
-    newValue: "restored",
+    fieldChanged: clearingDeleted ? "deleted_at" : "archived_at",
+    newValue: clearingDeleted ? "restored" : "unarchived",
     changedBy: actor.displayName,
   });
-  emitDealEvent("deal.restored", { dealId: id, actor: actor.displayName });
+  // Still archived after this operation (the deleted-and-archived → Archived
+  // case)? Then nothing new happened for a snapshot or health check to
+  // capture — the deal was already archived, and shouldSkipSnapshot /
+  // shouldSkipHealthReconcile exist specifically to avoid wasted work on
+  // archived deals. A restore that lands on genuine Active (from
+  // deleted-only or archived-only) DOES emit normally — the deal is live
+  // again and a fresh snapshot/health-check is wanted there.
+  const stillArchived = clearingDeleted && existing.archivedAt !== null;
+  if (!stillArchived) {
+    emitDealEvent("deal.restored", { dealId: id, actor: actor.displayName });
+  }
   const data = await serializeDeal(id);
   res.json(RestoreDealResponse.parse({ data }));
 });
@@ -674,12 +718,29 @@ router.post("/deals/:id/restore", async (req: Request, res: Response) => {
 router.post("/deals/:id/archive", async (req: Request, res: Response) => {
   const { id } = ArchiveDealParams.parse(req.params);
   const actor = getActor(req);
-  const result = await db
+
+  const existingRows = await db
+    .select({
+      deletedAt: enterpriseDeals.deletedAt,
+      archivedAt: enterpriseDeals.archivedAt,
+      stageName: pipelineStages.stageName,
+    })
+    .from(enterpriseDeals)
+    .innerJoin(pipelineStages, eq(enterpriseDeals.salesStageId, pipelineStages.id))
+    .where(eq(enterpriseDeals.id, id));
+  const existing = existingRows[0];
+  if (!existing || existing.deletedAt) throw notFound("Deal not found");
+  if (existing.archivedAt) throw conflict("Deal is already archived");
+  if (existing.stageName !== "Closed-Won" && existing.stageName !== "Closed-Lost") {
+    throw archiveGuardrail(
+      "Only Closed-Won or Closed-Lost deals can be archived. Move the deal to a closed stage first.",
+    );
+  }
+
+  await db
     .update(enterpriseDeals)
     .set({ archivedAt: new Date() })
-    .where(and(eq(enterpriseDeals.id, id), isNull(enterpriseDeals.deletedAt)))
-    .returning({ id: enterpriseDeals.id });
-  if (result.length === 0) throw notFound("Deal not found");
+    .where(eq(enterpriseDeals.id, id));
   await writeAudit({
     dealId: id,
     entityType: "deal",

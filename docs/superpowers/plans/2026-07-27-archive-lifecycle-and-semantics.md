@@ -15,7 +15,7 @@
 - `artifacts/api-server` is bundled with esbuild; `pnpm --filter @workspace/api-server run dev` always rebuilds before starting, so no manual rebuild step is needed beyond restarting that process.
 - Every new/changed SQL predicate on `enterprise_deals` must be commented with *why* it does or doesn't include `archived_at` — this file has ~6 independently-defined "active" filters across different modules, and the whole point of this change is that they now mean different things on purpose.
 - `pipelineStages.stageName` literals are exactly `"Closed-Won"` and `"Closed-Lost"` (hyphenated) — copy the existing string, don't retype it.
-- Zero deals are archived on the dev DB today. Phase B's Task 7 verification depends on this being true — don't archive anything manually before running it.
+- **Correction (found during the final whole-branch review, not at planning time):** the dev DB was NOT actually clean when this plan was written — two seed deals ("Project Solace", "Project Sentinel") were already archived from unrelated prior activity that predates this plan. Every task's actual test methodology was unaffected (each test computes a before/after delta within its own run, so pre-existing archived rows cancel out of the comparison), but the "provably a no-op today" framing in Task 5 rested on a premise that wasn't independently verified against the live DB before being stated as fact. Lesson for future plans: state DB preconditions only after running the query that confirms them, not by inference from the seed script's logic.
 
 ---
 

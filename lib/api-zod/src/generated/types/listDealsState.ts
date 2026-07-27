@@ -13,4 +13,5 @@ export const ListDealsState = {
   active: 'active',
   archived: 'archived',
   deleted: 'deleted',
+  all: 'all',
 } as const;

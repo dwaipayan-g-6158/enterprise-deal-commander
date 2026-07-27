@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { groupDeals, visualOrder, groupForDeal, type StripDeal } from "./deal-strip-model";
+import { groupDeals, visualOrder, groupForDeal, expandedGroupFor, type StripDeal } from "./deal-strip-model";
 
 function deal(p: Partial<StripDeal> & { id: string }): StripDeal {
   return { salesStage: "Discovery", calculatedTCV: 100, ...p };
@@ -76,5 +76,30 @@ describe("groupForDeal", () => {
     expect(groupForDeal(groups, "w")).toBe("closed");
     expect(groupForDeal(groups, "l")).toBe("closed");
     expect(groupForDeal(groups, "missing")).toBeNull();
+  });
+});
+
+describe("expandedGroupFor", () => {
+  const groups = groupDeals([
+    deal({ id: "o", salesStage: "Discovery" }),
+    deal({ id: "w", salesStage: "Closed-Won" }),
+    deal({ id: "l", salesStage: "Closed-Lost" }),
+  ]);
+
+  it("returns the deal's actual group when it's present in the list", () => {
+    expect(expandedGroupFor(groups, "o", "Discovery")).toBe("open");
+    expect(expandedGroupFor(groups, "w", "Closed-Won")).toBe("closed");
+    expect(expandedGroupFor(groups, "l", "Closed-Lost")).toBe("closed");
+  });
+
+  it("falls back to the viewed deal's own stage when it's absent from the list (e.g. archived)", () => {
+    expect(expandedGroupFor(groups, "missing", "Closed-Lost")).toBe("closed");
+    expect(expandedGroupFor(groups, "missing", "Closed-Won")).toBe("closed");
+  });
+
+  it("falls back to open when the absent deal's stage is non-terminal, missing, or unknown", () => {
+    expect(expandedGroupFor(groups, "missing", "Discovery")).toBe("open");
+    expect(expandedGroupFor(groups, "missing", undefined)).toBe("open");
+    expect(expandedGroupFor(groups, "missing", null)).toBe("open");
   });
 });

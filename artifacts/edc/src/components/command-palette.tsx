@@ -32,7 +32,7 @@ export function CommandPalette() {
   const [, setLocation] = useLocation();
   const { theme, setTheme } = useTheme();
   const logout = useLogout();
-  const { data: deals } = useListDeals({ state: "active", limit: 50 });
+  const { data: deals } = useListDeals({ state: "all", limit: 50 });
 
   const go = (path: string) => {
     setOpen(false);
@@ -52,10 +52,14 @@ export function CommandPalette() {
   // Natural-language command parsing (V2 F19) — deterministic, client-side.
   const nlc = query.trim().length > 4 ? parseNLC(query) : null;
   const nlcConditions = nlc && nlc.type === "LIST" ? nlc.conditions : nlc && nlc.type === "COUNT" ? nlc.conditions : [];
-  const allDeals = deals?.data ?? [];
+  // The underlying fetch is state: "all" (active + archived) so archived
+  // deals stay findable by NAME in the plain "Deals" group below — but NLC
+  // answers questions about the live pipeline ("red deals above $1M"), so it
+  // gets its own not-archived slice rather than inheriting "all" wholesale.
+  const openDeals = (deals?.data ?? []).filter((d) => !d.archivedAt);
   const nlcMatches =
     nlcConditions.length > 0
-      ? allDeals.filter((d) =>
+      ? openDeals.filter((d) =>
           nlcConditions.every((c) => {
             if (c.field === "health") return d.healthStatus === c.value;
             if (c.field === "tcv") {
@@ -129,6 +133,11 @@ export function CommandPalette() {
                   <span className="ml-2 text-muted-foreground text-xs">
                     {deal.accountName}
                   </span>
+                  {deal.archivedAt && (
+                    <span className="ml-2 text-muted-foreground text-xs italic">
+                      Archived
+                    </span>
+                  )}
                 </CommandItem>
               ))}
             </CommandGroup>

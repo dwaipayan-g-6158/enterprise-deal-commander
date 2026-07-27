@@ -1,5 +1,5 @@
 import { db, dealSnapshots } from "@workspace/db";
-import { dealEvents } from "../events";
+import { dealEvents, type DealEventType } from "../events";
 import {
   serializeDeal,
   getDealGates,
@@ -88,10 +88,15 @@ export async function captureSnapshot(
   return true;
 }
 
+/** Events that never warrant a new snapshot: the deal was removed, or shelved
+ *  — a closed deal's state is frozen, so archiving it teaches us nothing new. */
+export function shouldSkipSnapshot(eventType: DealEventType): boolean {
+  return eventType === "deal.deleted" || eventType === "deal.archived";
+}
+
 export function registerSnapshotService(): () => void {
   return dealEvents.on(async (event) => {
-    // Skip snapshotting hard-removed deals — there is nothing to serialize.
-    if (event.type === "deal.deleted") return;
+    if (shouldSkipSnapshot(event.type)) return;
     await captureSnapshot({
       dealId: event.dealId,
       reason: `event:${event.type}`,

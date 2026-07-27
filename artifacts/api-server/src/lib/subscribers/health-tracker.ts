@@ -1,6 +1,6 @@
 import { db, dealHealthHistory } from "@workspace/db";
 import { desc, eq } from "drizzle-orm";
-import { dealEvents, emitDealEvent } from "../events";
+import { dealEvents, emitDealEvent, type DealEventType } from "../events";
 import { assembleDealIntelligence } from "../intelligence";
 
 /**
@@ -79,10 +79,19 @@ function runSerialPerDeal(
   return next;
 }
 
+/** health.changed is a self-recursion guard; deal.deleted/deal.archived are
+ *  deals whose health will never be checked again. */
+export function shouldSkipHealthReconcile(eventType: DealEventType): boolean {
+  return (
+    eventType === "health.changed" ||
+    eventType === "deal.deleted" ||
+    eventType === "deal.archived"
+  );
+}
+
 export function registerHealthTracker(): () => void {
   return dealEvents.on(async (event) => {
-    if (event.type === "health.changed") return;
-    if (event.type === "deal.deleted") return;
+    if (shouldSkipHealthReconcile(event.type)) return;
     await runSerialPerDeal(event.dealId, () =>
       reconcileHealth(event.dealId, event.actor),
     );

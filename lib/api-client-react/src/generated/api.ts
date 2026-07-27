@@ -987,7 +987,7 @@ export const archiveDeal = async (id: string, options?: RequestInit): Promise<De
 
 
 
-export const getArchiveDealMutationOptions = <TError = ErrorType<unknown>,
+export const getArchiveDealMutationOptions = <TError = ErrorType<ErrorResponse>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof archiveDeal>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
 ): UseMutationOptions<Awaited<ReturnType<typeof archiveDeal>>, TError,{id: string}, TContext> => {
 
@@ -1016,9 +1016,9 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
     export type ArchiveDealMutationResult = NonNullable<Awaited<ReturnType<typeof archiveDeal>>>
 
-    export type ArchiveDealMutationError = ErrorType<unknown>
+    export type ArchiveDealMutationError = ErrorType<ErrorResponse>
 
-    export const useArchiveDeal = <TError = ErrorType<unknown>,
+    export const useArchiveDeal = <TError = ErrorType<ErrorResponse>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof archiveDeal>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
  ): UseMutationResult<
         Awaited<ReturnType<typeof archiveDeal>>,

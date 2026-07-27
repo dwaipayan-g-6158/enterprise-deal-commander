@@ -241,8 +241,15 @@ export default function Deals() {
       await invalidate();
       if (previewDealId === id) setPreviewDealId(null);
       toast({ title: `Deal ${action}d` });
-    } catch {
-      toast({ title: `Could not ${action} deal`, variant: "destructive" });
+    } catch (err) {
+      // Surface the server's actual message (e.g. "Only Closed-Won or
+      // Closed-Lost deals can be archived...") rather than a generic toast —
+      // same shape the API client throws elsewhere in this codebase, see
+      // technical-gates.tsx / risk-governance.tsx / blockers-panel.tsx.
+      const msg =
+        (err as { data?: { error?: { message?: string } } })?.data?.error?.message ??
+        (err instanceof Error ? err.message : undefined);
+      toast({ title: `Could not ${action} deal`, description: msg, variant: "destructive" });
     }
   };
 

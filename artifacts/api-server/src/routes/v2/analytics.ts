@@ -56,7 +56,16 @@ import { clusterProductGaps } from "../../lib/product-gaps";
 
 const router: IRouter = Router();
 
-const activeFilter = and(isNull(enterpriseDeals.deletedAt), isNull(enterpriseDeals.archivedAt));
+// Just "not soft-deleted" — archived deals are real, historical deals that
+// still count in every analytics number below — that's the whole point of
+// archiving vs. deleting. See
+// docs/superpowers/plans/2026-07-27-archive-lifecycle-and-semantics.md.
+// Named notDeletedFilter (not activeFilter) precisely because it does NOT
+// exclude archived deals — contrast with lib/scoring.ts and
+// lib/subscribers/index.ts, which each define their OWN separate
+// activeFilter/activeDealIds that DO exclude archived deals on purpose (a
+// closed deal's score/snapshot is frozen).
+const notDeletedFilter = isNull(enterpriseDeals.deletedAt);
 
 function daysBetween(from: Date | string | null, to = new Date()): number {
   if (!from) return 0;
@@ -90,7 +99,7 @@ router.get("/analytics/velocity", async (_req: Request, res: Response) => {
     })
     .from(enterpriseDeals)
     .leftJoin(pipelineStages, eq(enterpriseDeals.salesStageId, pipelineStages.id))
-    .where(activeFilter);
+    .where(notDeletedFilter);
 
   // Benchmark = median days-in-stage across active deals in the same stage.
   const byStage = new Map<string, number[]>();
@@ -128,7 +137,7 @@ router.get("/analytics/velocity/benchmarks", async (_req: Request, res: Response
     .select({ stageEnteredAt: enterpriseDeals.stageEnteredAt, stageName: pipelineStages.stageName })
     .from(enterpriseDeals)
     .leftJoin(pipelineStages, eq(enterpriseDeals.salesStageId, pipelineStages.id))
-    .where(activeFilter);
+    .where(notDeletedFilter);
   const byStage = new Map<string, number[]>();
   for (const r of rows) {
     const key = r.stageName ?? "?";
@@ -160,7 +169,7 @@ router.get("/analytics/pipeline", async (_req: Request, res: Response) => {
     })
     .from(enterpriseDeals)
     .leftJoin(pipelineStages, eq(enterpriseDeals.salesStageId, pipelineStages.id))
-    .where(activeFilter);
+    .where(notDeletedFilter);
   let totalTcv = 0;
   const byStage = new Map<string, { count: number; tcv: number }>();
   for (const r of rows) {
@@ -204,6 +213,13 @@ async function scoresAsOf(cutoff: Date): Promise<Map<string, number>> {
 
 router.get("/analytics/simulation", async (req: Request, res: Response) => {
   const iterations = Math.min(50_000, Math.max(1000, Number(req.query.iterations) || 10000));
+  // Closed deals (Won or Lost) never enter the forecast, regardless of
+  // archive state — a booked/lost deal has no remaining outcome to simulate.
+  // Before archiving stopped meaning "excluded from everything," archiving a
+  // closed deal was the only way to remove it from this Monte Carlo run;
+  // this stage filter is what replaces that escape hatch now that archived
+  // deals still count elsewhere in analytics.
+  const CLOSED_STAGES: string[] = ["Closed-Won", "Closed-Lost"];
   const deals = await db
     .select({
       id: enterpriseDeals.id,
@@ -212,7 +228,8 @@ router.get("/analytics/simulation", async (req: Request, res: Response) => {
       winProbabilityPct: enterpriseDeals.winProbabilityPct,
     })
     .from(enterpriseDeals)
-    .where(activeFilter);
+    .innerJoin(pipelineStages, eq(enterpriseDeals.salesStageId, pipelineStages.id))
+    .where(and(notDeletedFilter, notInArray(pipelineStages.stageName, CLOSED_STAGES)));
   const scores = await latestScores();
   const sim: SimDeal[] = deals.map((d) => ({
     calculatedTCV: (Number(d.productRevenue) || 0) + (Number(d.servicesRevenue) || 0),
@@ -302,7 +319,7 @@ router.get("/analytics/gates", async (_req: Request, res: Response) => {
     })
     .from(dealTechnicalGates)
     .innerJoin(enterpriseDeals, eq(dealTechnicalGates.dealId, enterpriseDeals.id))
-    .where(activeFilter);
+    .where(notDeletedFilter);
 
   const agg = new Map<string, { completed: number; total: number }>();
   for (const r of gateRows) {
@@ -351,6 +368,12 @@ router.get("/analytics/next-actions", async (_req: Request, res: Response) => {
   const in7 = new Date(now.getTime() + 7 * 86_400_000);
   const in30 = new Date(now.getTime() + 30 * 86_400_000);
 
+  // next-actions is a reminder surface, so closed deals (Won or Lost) are
+  // excluded — which also excludes archived deals for free, since archiving
+  // requires a closed stage (enforced on /deals/:id/archive and on later
+  // stage edits — see routes/deals.ts).
+  const CLOSED_STAGES: string[] = ["Closed-Won", "Closed-Lost"];
+
   const decisions = await db
     .select({
       id: dealDecisions.id,
@@ -363,7 +386,14 @@ router.get("/analytics/next-actions", async (_req: Request, res: Response) => {
     })
     .from(dealDecisions)
     .innerJoin(enterpriseDeals, eq(dealDecisions.dealId, enterpriseDeals.id))
-    .where(and(activeFilter, eq(dealDecisions.status, "Pending")));
+    .innerJoin(pipelineStages, eq(enterpriseDeals.salesStageId, pipelineStages.id))
+    .where(
+      and(
+        notDeletedFilter,
+        eq(dealDecisions.status, "Pending"),
+        notInArray(pipelineStages.stageName, CLOSED_STAGES),
+      ),
+    );
 
   const overdue: ActionItem[] = [];
   const dueThisWeek: ActionItem[] = [];
@@ -401,7 +431,14 @@ router.get("/analytics/next-actions", async (_req: Request, res: Response) => {
     .from(dealPlaybookAssignments)
     .innerJoin(enterpriseDeals, eq(dealPlaybookAssignments.dealId, enterpriseDeals.id))
     .innerJoin(playbooks, eq(dealPlaybookAssignments.playbookId, playbooks.id))
-    .where(and(activeFilter, eq(dealPlaybookAssignments.status, "Active")));
+    .innerJoin(pipelineStages, eq(enterpriseDeals.salesStageId, pipelineStages.id))
+    .where(
+      and(
+        notDeletedFilter,
+        eq(dealPlaybookAssignments.status, "Active"),
+        notInArray(pipelineStages.stageName, CLOSED_STAGES),
+      ),
+    );
 
   const playbookStepsOut: {
     dealId: string;
@@ -444,7 +481,10 @@ router.get("/analytics/next-actions", async (_req: Request, res: Response) => {
     }
   }
 
-  // Imminent close dates (active deals within 30 days).
+  // Imminent close dates: deals still OPEN (i.e. not Closed-Won/Closed-Lost)
+  // within 30 days. "Open" here is distinct from "active" (= just not-deleted
+  // elsewhere in this file, per notDeletedFilter above) — a closed deal has
+  // no meaningful close date left to remind anyone about.
   const closeRows = await db
     .select({
       id: enterpriseDeals.id,
@@ -453,7 +493,8 @@ router.get("/analytics/next-actions", async (_req: Request, res: Response) => {
       expectedCloseDate: enterpriseDeals.expectedCloseDate,
     })
     .from(enterpriseDeals)
-    .where(activeFilter);
+    .innerJoin(pipelineStages, eq(enterpriseDeals.salesStageId, pipelineStages.id))
+    .where(and(notDeletedFilter, notInArray(pipelineStages.stageName, CLOSED_STAGES)));
   const upcomingCloses = closeRows
     .filter((d) => {
       if (!d.expectedCloseDate) return false;
@@ -496,7 +537,7 @@ router.get("/analytics/vital-signs", async (_req: Request, res: Response) => {
     })
     .from(enterpriseDeals)
     .innerJoin(pipelineStages, eq(enterpriseDeals.salesStageId, pipelineStages.id))
-    .where(and(activeFilter, notInArray(pipelineStages.stageName, ["Closed-Won", "Closed-Lost"])));
+    .where(and(notDeletedFilter, notInArray(pipelineStages.stageName, ["Closed-Won", "Closed-Lost"])));
   const openIds = new Set(deals.map((d) => d.id));
   const scores = await latestScores();
 
@@ -577,7 +618,7 @@ router.get("/analytics/roster", async (_req: Request, res: Response) => {
     })
     .from(enterpriseDeals)
     .leftJoin(pipelineStages, eq(enterpriseDeals.salesStageId, pipelineStages.id))
-    .where(activeFilter);
+    .where(notDeletedFilter);
 
   const scores = await latestScores();
   // Score trend: baseline = each deal's score as of 7 days ago (null delta when
@@ -597,7 +638,7 @@ router.get("/analytics/roster", async (_req: Request, res: Response) => {
     .select({ dealId: dealTechnicalGates.dealId, isCompleted: dealTechnicalGates.isCompleted })
     .from(dealTechnicalGates)
     .innerJoin(enterpriseDeals, eq(dealTechnicalGates.dealId, enterpriseDeals.id))
-    .where(activeFilter);
+    .where(notDeletedFilter);
   const gateAgg = new Map<string, { c: number; t: number }>();
   for (const g of gateRows) {
     const cur = gateAgg.get(g.dealId) ?? { c: 0, t: 0 };
@@ -737,7 +778,7 @@ router.get("/analytics/memory-insights", async (_req: Request, res: Response) =>
     })
     .from(enterpriseDeals)
     .leftJoin(competitors, eq(enterpriseDeals.competitorId, competitors.id))
-    .where(activeFilter);
+    .where(notDeletedFilter);
   const tcvOf = (d: { productRevenue: unknown; servicesRevenue: unknown }) =>
     (Number(d.productRevenue) || 0) + (Number(d.servicesRevenue) || 0);
 
@@ -856,10 +897,10 @@ const ACHIEVEMENT_DEFS: AchievementDef[] = [
 ];
 
 async function evaluateAchievements(): Promise<Record<string, boolean>> {
-  // Deliberately NOT the file's `activeFilter` (deletedAt IS NULL AND
-  // archivedAt IS NULL) — a Closed-Won deal is typically archived shortly
-  // after closing (post-mortem subscriber), so excluding archived deals
-  // would undercount "ever closed." Only true deletions should be excluded.
+  // Only true deletions are excluded here (same predicate as the file's
+  // `notDeletedFilter`, inlined for locality) — a Closed-Won deal is
+  // typically archived shortly after closing (post-mortem subscriber), so
+  // excluding archived deals would undercount "ever closed."
   const [closedWonRow] = await db
     .select({ count: sql<number>`count(*)` })
     .from(enterpriseDeals)
@@ -1002,7 +1043,7 @@ router.get("/analytics/loss-risk", async (_req: Request, res: Response) => {
     .select({ id: enterpriseDeals.id })
     .from(enterpriseDeals)
     .innerJoin(pipelineStages, eq(enterpriseDeals.salesStageId, pipelineStages.id))
-    .where(and(activeFilter, eq(pipelineStages.stageName, "Closed-Lost")));
+    .where(and(notDeletedFilter, eq(pipelineStages.stageName, "Closed-Lost")));
 
   const lostIntel = await Promise.all(lostDeals.map((d) => cachedIntel(d.id)));
   const lostAlertCodes = lostIntel
@@ -1018,7 +1059,7 @@ router.get("/analytics/loss-risk", async (_req: Request, res: Response) => {
     })
     .from(enterpriseDeals)
     .innerJoin(pipelineStages, eq(enterpriseDeals.salesStageId, pipelineStages.id))
-    .where(and(activeFilter, notInArray(pipelineStages.stageName, ["Closed-Won", "Closed-Lost"])));
+    .where(and(notDeletedFilter, notInArray(pipelineStages.stageName, ["Closed-Won", "Closed-Lost"])));
 
   const activeIntel = await Promise.all(activeDeals.map((d) => cachedIntel(d.id)));
   const deals = activeDeals
@@ -1138,7 +1179,7 @@ router.get("/analytics/loss-dashboard", async (_req: Request, res: Response) => 
     .select({ id: enterpriseDeals.id })
     .from(enterpriseDeals)
     .innerJoin(pipelineStages, eq(enterpriseDeals.salesStageId, pipelineStages.id))
-    .where(and(activeFilter, eq(pipelineStages.stageName, "Closed-Lost")));
+    .where(and(notDeletedFilter, eq(pipelineStages.stageName, "Closed-Lost")));
   const lostIntel = await Promise.all(lostDeals.map((d) => cachedIntel(d.id)));
   const alertCodeLists = lostIntel
     .filter((i): i is NonNullable<typeof i> => i != null)
@@ -1377,7 +1418,7 @@ async function loadOpenDeals(): Promise<OpenDeal[]> {
       landedAt: enterpriseDeals.landedAt,
     })
     .from(enterpriseDeals)
-    .where(activeFilter);
+    .where(notDeletedFilter);
 
   // AI win-probability from latest deal_scores per deal.
   // dealScores.score is an integer 0-100; OpenDeal.aiWinProbability is 0..1.
@@ -1495,7 +1536,7 @@ router.get("/analytics/flow/health-score", async (_req: Request, res: Response) 
     .select({ stageEnteredAt: enterpriseDeals.stageEnteredAt, stageName: pipelineStages.stageName })
     .from(enterpriseDeals)
     .leftJoin(pipelineStages, eq(enterpriseDeals.salesStageId, pipelineStages.id))
-    .where(activeFilter);
+    .where(notDeletedFilter);
   const daysByStage = new Map<string, number[]>();
   const dealAges = stageAgeRows.map((r) => {
     const key = r.stageName ?? "?";
