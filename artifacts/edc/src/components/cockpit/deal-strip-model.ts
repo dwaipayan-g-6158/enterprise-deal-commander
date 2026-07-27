@@ -69,3 +69,25 @@ export function groupForDeal<T extends StripDeal>(
     return "closed";
   return null;
 }
+
+/**
+ * Which group the strip should fan for the deal currently being viewed.
+ *
+ * groupForDeal()'s null is correct as a plain membership query — it stays
+ * exactly as-is. The bug this fixes lives at the OLD call site, which did
+ * `groupForDeal(...) ?? "open"`: that fanned Open with nothing highlighted
+ * whenever the viewed deal wasn't in the strip's list — which, now that
+ * archiving is the actual mechanism for leaving the strip, is a normal case
+ * (any archived deal), not an edge case. Falling back to the deal's own
+ * sales stage opens the fan that actually matches it.
+ */
+export function expandedGroupFor<T extends StripDeal>(
+  groups: StripGroups<T>,
+  activeDealId: string,
+  activeSalesStage?: string | null,
+): StripGroupId {
+  return (
+    groupForDeal(groups, activeDealId) ??
+    (terminalOutcome(activeSalesStage) !== null ? "closed" : "open")
+  );
+}

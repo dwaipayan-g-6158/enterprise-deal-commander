@@ -43,7 +43,7 @@ import { AccountNavigationArray } from "@/components/cockpit/account-navigation-
 import {
   groupDeals,
   visualOrder,
-  groupForDeal,
+  expandedGroupFor,
   type StripGroupId,
 } from "@/components/cockpit/deal-strip-model";
 import { ScorePanel } from "@/components/cockpit/v2/score-panel";
@@ -127,7 +127,8 @@ export default function DealCockpit() {
   useEffect(() => setManualExpanded(null), [id]);
 
   const groups = useMemo(() => groupDeals(allDeals?.data ?? []), [allDeals]);
-  const expandedGroup: StripGroupId = manualExpanded ?? groupForDeal(groups, id) ?? "open";
+  const expandedGroup: StripGroupId =
+    manualExpanded ?? expandedGroupFor(groups, id, dealResponse?.data?.salesStage);
   // Arrow-key nav walks exactly the fanned group's visible order, so the strip
   // and the keyboard shortcut never disagree.
   const navOrder = useMemo(
@@ -295,6 +296,14 @@ export default function DealCockpit() {
               {risk ? <span className="font-mono tabular-nums mr-1.5">{risk.compositeScore}</span> : null}
               {RISK_LEVEL_LABEL[level]}
             </Badge>
+            {(deal.archivedAt || deal.deletedAt) && (
+              <Badge
+                variant="outline"
+                className="border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-400 font-medium"
+              >
+                {deal.deletedAt ? "Deleted" : "Archived"}
+              </Badge>
+            )}
           </div>
           <p className="text-muted-foreground text-lg">{deal.accountName}</p>
           <DealTagsBar dealId={id} />
