@@ -689,12 +689,19 @@ router.post("/deals/:id/restore", async (req: Request, res: Response) => {
 router.post("/deals/:id/archive", async (req: Request, res: Response) => {
   const { id } = ArchiveDealParams.parse(req.params);
   const actor = getActor(req);
-  const result = await db
+
+  const existingRows = await db
+    .select({ deletedAt: enterpriseDeals.deletedAt, archivedAt: enterpriseDeals.archivedAt })
+    .from(enterpriseDeals)
+    .where(eq(enterpriseDeals.id, id));
+  const existing = existingRows[0];
+  if (!existing || existing.deletedAt) throw notFound("Deal not found");
+  if (existing.archivedAt) throw conflict("Deal is already archived");
+
+  await db
     .update(enterpriseDeals)
     .set({ archivedAt: new Date() })
-    .where(and(eq(enterpriseDeals.id, id), isNull(enterpriseDeals.deletedAt)))
-    .returning({ id: enterpriseDeals.id });
-  if (result.length === 0) throw notFound("Deal not found");
+    .where(eq(enterpriseDeals.id, id));
   await writeAudit({
     dealId: id,
     entityType: "deal",

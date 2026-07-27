@@ -172,3 +172,51 @@ describe("DELETE /deals/:id — archived → deleted transition", () => {
     expect(audit.newValue).toBe("deleted");
   });
 });
+
+async function callArchive(id: string) {
+  const handler = getHandler("post", "/deals/:id/archive");
+  let captured: unknown;
+  let thrown: (Error & { status?: number; code?: string }) | undefined;
+  const fakeReq = { params: { id }, actor } as unknown as Request;
+  const fakeRes = { json: (body: unknown) => { captured = body; } } as unknown as Response;
+  try {
+    await handler(fakeReq, fakeRes);
+  } catch (err) {
+    thrown = err as Error & { status?: number; code?: string };
+  }
+  return { captured, thrown };
+}
+
+describe("POST /deals/:id/archive — idempotency", () => {
+  it("archives a closed deal and audits archived_at", async () => {
+    const id = await createDeal("archive-once", "Closed-Lost");
+
+    const { thrown } = await callArchive(id);
+    expect(thrown).toBeUndefined();
+
+    const flags = await readFlags(id);
+    expect(flags.archivedAt).not.toBeNull();
+
+    const audit = await latestAudit(id);
+    expect(audit.fieldChanged).toBe("archived_at");
+    expect(audit.newValue).toBe("archived");
+  });
+
+  it("409s when the deal is already archived", async () => {
+    const id = await createDeal("archive-twice", "Closed-Lost", { archivedAt: new Date() });
+
+    const { thrown } = await callArchive(id);
+    expect(thrown?.status).toBe(409);
+  });
+
+  it("404s for a nonexistent deal", async () => {
+    const { thrown } = await callArchive("00000000-0000-0000-0000-000000000000");
+    expect(thrown?.status).toBe(404);
+  });
+
+  it("404s for an already-deleted deal", async () => {
+    const id = await createDeal("archive-deleted", "Closed-Lost", { deletedAt: new Date() });
+    const { thrown } = await callArchive(id);
+    expect(thrown?.status).toBe(404);
+  });
+});
