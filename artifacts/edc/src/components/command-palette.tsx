@@ -32,7 +32,7 @@ export function CommandPalette() {
   const [, setLocation] = useLocation();
   const { theme, setTheme } = useTheme();
   const logout = useLogout();
-  const { data: deals } = useListDeals({ state: "active", limit: 50 });
+  const { data: deals } = useListDeals({ state: "all", limit: 50 });
 
   const go = (path: string) => {
     setOpen(false);

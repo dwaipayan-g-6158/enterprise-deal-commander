@@ -64,7 +64,7 @@ export const ListDealsQueryParams = zod.object({
   "stage": zod.coerce.string().optional(),
   "health": zod.enum(['GREEN', 'YELLOW', 'RED']).optional(),
   "sort": zod.coerce.string().optional(),
-  "state": zod.enum(['active', 'archived', 'deleted']).optional(),
+  "state": zod.enum(['active', 'archived', 'deleted', 'all']).optional(),
   "limit": zod.coerce.number().optional(),
   "offset": zod.coerce.number().optional()
 })

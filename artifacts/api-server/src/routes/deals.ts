@@ -55,6 +55,9 @@ router.get("/deals", async (req: Request, res: Response) => {
     conditions.push(isNull(enterpriseDeals.deletedAt));
   } else if (state === "deleted") {
     conditions.push(isNotNull(enterpriseDeals.deletedAt));
+  } else if (state === "all") {
+    // Active + Archived, i.e. every real deal — excludes only the trash.
+    conditions.push(isNull(enterpriseDeals.deletedAt));
   }
   if (q.stage) {
     conditions.push(eq(pipelineStages.stageName, q.stage));

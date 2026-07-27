@@ -132,7 +132,7 @@ paths:
         - { name: stage, in: query, required: false, schema: { type: string } }
         - { name: health, in: query, required: false, schema: { type: string, enum: [GREEN, YELLOW, RED] } }
         - { name: sort, in: query, required: false, schema: { type: string } }
-        - { name: state, in: query, required: false, schema: { type: string, enum: [active, archived, deleted] } }
+        - { name: state, in: query, required: false, schema: { type: string, enum: [active, archived, deleted, all] } }
         - { name: limit, in: query, required: false, schema: { type: integer } }
         - { name: offset, in: query, required: false, schema: { type: integer } }
       responses:
@@ -260,7 +260,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/DealResponse"
         "409":
-          description: Not removed
+          description: Deal is already active
           content:
             application/json:
               schema:
