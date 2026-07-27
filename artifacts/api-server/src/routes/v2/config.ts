@@ -1,5 +1,5 @@
 import { Router, type IRouter, type Request, type Response } from "express";
-import { and, asc, desc, eq, sql } from "drizzle-orm";
+import { and, asc, desc, eq, isNull, sql } from "drizzle-orm";
 import {
   db,
   enterpriseDeals,
@@ -580,7 +580,11 @@ router.delete("/custom-patterns/:id", async (req: Request, res: Response) => {
   res.json({ message: "Pattern deleted" });
 });
 
-// Build a normalized intelligence-shaped object per active deal for pattern eval.
+// Build a normalized intelligence-shaped object per LIVE deal (excludes
+// soft-deleted and archived) for pattern eval. This is a live-preview
+// surface — "if I saved this pattern right now, which of my current deals
+// would it fire on" — so it deliberately does NOT include archived deals,
+// unlike the historical analytics endpoints in routes/v2/analytics.ts.
 async function normalizedDeals() {
   const deals = await db
     .select({
@@ -593,7 +597,8 @@ async function normalizedDeals() {
       stageName: pipelineStages.stageName,
     })
     .from(enterpriseDeals)
-    .leftJoin(pipelineStages, eq(enterpriseDeals.salesStageId, pipelineStages.id));
+    .leftJoin(pipelineStages, eq(enterpriseDeals.salesStageId, pipelineStages.id))
+    .where(and(isNull(enterpriseDeals.deletedAt), isNull(enterpriseDeals.archivedAt)));
   const out = [];
   for (const d of deals) {
     const gates = await db
