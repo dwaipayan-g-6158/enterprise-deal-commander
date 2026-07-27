@@ -370,7 +370,14 @@ router.get("/analytics/next-actions", async (_req: Request, res: Response) => {
     })
     .from(dealDecisions)
     .innerJoin(enterpriseDeals, eq(dealDecisions.dealId, enterpriseDeals.id))
-    .where(and(activeFilter, eq(dealDecisions.status, "Pending")));
+    .innerJoin(pipelineStages, eq(enterpriseDeals.salesStageId, pipelineStages.id))
+    .where(
+      and(
+        activeFilter,
+        eq(dealDecisions.status, "Pending"),
+        notInArray(pipelineStages.stageName, ["Closed-Won", "Closed-Lost"]),
+      ),
+    );
 
   const overdue: ActionItem[] = [];
   const dueThisWeek: ActionItem[] = [];
@@ -408,7 +415,14 @@ router.get("/analytics/next-actions", async (_req: Request, res: Response) => {
     .from(dealPlaybookAssignments)
     .innerJoin(enterpriseDeals, eq(dealPlaybookAssignments.dealId, enterpriseDeals.id))
     .innerJoin(playbooks, eq(dealPlaybookAssignments.playbookId, playbooks.id))
-    .where(and(activeFilter, eq(dealPlaybookAssignments.status, "Active")));
+    .innerJoin(pipelineStages, eq(enterpriseDeals.salesStageId, pipelineStages.id))
+    .where(
+      and(
+        activeFilter,
+        eq(dealPlaybookAssignments.status, "Active"),
+        notInArray(pipelineStages.stageName, ["Closed-Won", "Closed-Lost"]),
+      ),
+    );
 
   const playbookStepsOut: {
     dealId: string;
@@ -460,7 +474,8 @@ router.get("/analytics/next-actions", async (_req: Request, res: Response) => {
       expectedCloseDate: enterpriseDeals.expectedCloseDate,
     })
     .from(enterpriseDeals)
-    .where(activeFilter);
+    .innerJoin(pipelineStages, eq(enterpriseDeals.salesStageId, pipelineStages.id))
+    .where(and(activeFilter, notInArray(pipelineStages.stageName, ["Closed-Won", "Closed-Lost"])));
   const upcomingCloses = closeRows
     .filter((d) => {
       if (!d.expectedCloseDate) return false;
