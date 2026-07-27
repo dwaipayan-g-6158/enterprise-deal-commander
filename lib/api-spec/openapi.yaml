@@ -12,6 +12,8 @@ tags:
     description: Health operations
   - name: auth
     description: Authentication
+  - name: users
+    description: Admin + reader account management (RBAC delegation)
   - name: deals
     description: Enterprise deal CRUD and lifecycle
   - name: gates
@@ -116,6 +118,162 @@ paths:
                 $ref: "#/components/schemas/DashboardVisitResponse"
         "401":
           description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  # ============ USERS (RBAC delegation) ============
+  # Every non-GET route here is enforced by the app-wide requireWriteRole gate
+  # (artifacts/api-server/src/lib/rbac.ts) — readers hit 403 automatically.
+  # GET is intentionally open to readers too: no secret leaves the server
+  # (passwordHash is never a field), and "readers see everything" is a
+  # settled product decision for this app.
+  /v1/users:
+    get:
+      operationId: listUsers
+      tags: [users]
+      summary: List all commander accounts
+      responses:
+        "200":
+          description: Users
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserListResponse"
+    post:
+      operationId: createUser
+      tags: [users]
+      summary: Create a user (admin only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateUserInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserResponse"
+        "403":
+          description: Forbidden (reader)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Username already in use
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /v1/users/{id}:
+    patch:
+      operationId: updateUser
+      tags: [users]
+      summary: Change a user's display name, role, or active state (admin only)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateUserInput"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserResponse"
+        "403":
+          description: Forbidden (reader)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: >
+            Self-demotion/deactivation, or this is the last active admin
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      operationId: deleteUser
+      tags: [users]
+      summary: Permanently delete a user (admin only)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResponse"
+        "403":
+          description: Forbidden (reader)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Self-delete, or this is the last active admin
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /v1/users/{id}/password:
+    post:
+      operationId: resetUserPassword
+      tags: [users]
+      summary: Reset a user's password (admin only; also usable on self)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ResetPasswordInput"
+      responses:
+        "200":
+          description: Password reset
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResponse"
+        "400":
+          description: Password too short
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Forbidden (reader)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: User not found
           content:
             application/json:
               schema:
@@ -1929,7 +2087,7 @@ components:
       properties:
         id: { type: string }
         email: { type: string }
-        role: { type: string }
+        role: { type: string, enum: [admin, reader] }
         displayName: { type: string }
       required: [id, email, role, displayName]
     DashboardVisitResponse:
@@ -1937,6 +2095,50 @@ components:
       properties:
         previousVisitAt: { type: ["string", "null"] }
       required: [previousVisitAt]
+
+    User:
+      type: object
+      properties:
+        id: { type: string }
+        email: { type: string }
+        displayName: { type: string }
+        role: { type: string, enum: [admin, reader] }
+        isActive: { type: boolean }
+        createdAt: { type: string }
+        lastDashboardVisitAt: { type: ["string", "null"] }
+      required: [id, email, displayName, role, isActive, createdAt, lastDashboardVisitAt]
+    UserListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/User" }
+      required: [data]
+    UserResponse:
+      type: object
+      properties:
+        data: { $ref: "#/components/schemas/User" }
+      required: [data]
+    CreateUserInput:
+      type: object
+      properties:
+        email: { type: string, minLength: 1 }
+        display_name: { type: string, minLength: 1, maxLength: 255 }
+        password: { type: string, minLength: 12 }
+        role: { type: string, enum: [admin, reader] }
+      required: [email, display_name, password]
+    UpdateUserInput:
+      type: object
+      properties:
+        display_name: { type: string, minLength: 1, maxLength: 255 }
+        role: { type: string, enum: [admin, reader] }
+        is_active: { type: boolean }
+      minProperties: 1
+    ResetPasswordInput:
+      type: object
+      properties:
+        password: { type: string, minLength: 12 }
+      required: [password]
 
     Deal:
       type: object

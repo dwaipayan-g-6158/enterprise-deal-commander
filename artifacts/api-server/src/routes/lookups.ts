@@ -47,12 +47,10 @@ import {
 } from "@workspace/api-zod";
 import { logSettingsChange } from "../lib/settings-audit";
 import { getActor } from "../lib/auth";
-import { requireAuth } from "../lib/auth";
 import { badRequest, conflict, notFound } from "../lib/http";
 
+// Auth + write-role enforcement is applied centrally in routes/index.ts.
 const router: IRouter = Router();
-
-router.use(requireAuth);
 
 router.get("/lookups/pipeline-stages", async (_req: Request, res: Response) => {
   const rows = await db

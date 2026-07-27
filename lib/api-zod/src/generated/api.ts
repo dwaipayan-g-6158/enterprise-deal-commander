@@ -43,7 +43,7 @@ export const LogoutResponse = zod.object({
 export const GetMeResponse = zod.object({
   "id": zod.string(),
   "email": zod.string(),
-  "role": zod.string(),
+  "role": zod.enum(['admin', 'reader']),
   "displayName": zod.string()
 })
 
@@ -53,6 +53,102 @@ export const GetMeResponse = zod.object({
  */
 export const DashboardVisitResponse = zod.object({
   "previousVisitAt": zod.string().nullable()
+})
+
+
+/**
+ * @summary List all commander accounts
+ */
+export const ListUsersResponse = zod.object({
+  "data": zod.array(zod.object({
+  "id": zod.string(),
+  "email": zod.string(),
+  "displayName": zod.string(),
+  "role": zod.enum(['admin', 'reader']),
+  "isActive": zod.boolean(),
+  "createdAt": zod.string(),
+  "lastDashboardVisitAt": zod.string().nullable()
+}))
+})
+
+
+/**
+ * @summary Create a user (admin only)
+ */
+
+export const createUserBodyDisplayNameMax = 255;
+
+export const createUserBodyPasswordMin = 12;
+
+
+
+export const CreateUserBody = zod.object({
+  "email": zod.string().min(1),
+  "display_name": zod.string().min(1).max(createUserBodyDisplayNameMax),
+  "password": zod.string().min(createUserBodyPasswordMin),
+  "role": zod.enum(['admin', 'reader']).optional()
+})
+
+
+/**
+ * @summary Change a user's display name, role, or active state (admin only)
+ */
+export const UpdateUserParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const updateUserBodyDisplayNameMax = 255;
+
+
+
+export const UpdateUserBody = zod.object({
+  "display_name": zod.string().min(1).max(updateUserBodyDisplayNameMax).optional(),
+  "role": zod.enum(['admin', 'reader']).optional(),
+  "is_active": zod.boolean().optional()
+})
+
+export const UpdateUserResponse = zod.object({
+  "data": zod.object({
+  "id": zod.string(),
+  "email": zod.string(),
+  "displayName": zod.string(),
+  "role": zod.enum(['admin', 'reader']),
+  "isActive": zod.boolean(),
+  "createdAt": zod.string(),
+  "lastDashboardVisitAt": zod.string().nullable()
+})
+})
+
+
+/**
+ * @summary Permanently delete a user (admin only)
+ */
+export const DeleteUserParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const DeleteUserResponse = zod.object({
+  "message": zod.string()
+})
+
+
+/**
+ * @summary Reset a user's password (admin only; also usable on self)
+ */
+export const ResetUserPasswordParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const resetUserPasswordBodyPasswordMin = 12;
+
+
+
+export const ResetUserPasswordBody = zod.object({
+  "password": zod.string().min(resetUserPasswordBodyPasswordMin)
+})
+
+export const ResetUserPasswordResponse = zod.object({
+  "message": zod.string()
 })
 
 

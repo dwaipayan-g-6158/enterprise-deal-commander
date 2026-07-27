@@ -36,6 +36,9 @@ import { useToast } from "@/hooks/use-toast";
 import { formatCurrency } from "@/components/cockpit/use-invalidate";
 import { useCockpitInvalidate } from "../use-invalidate";
 import { Plus, Trash2, Calculator, ChevronDown } from "lucide-react";
+import { AdminOnly } from "@/components/auth/write-gate";
+import { useCanWrite } from "@/lib/auth/role-context";
+import { cn } from "@/lib/utils";
 
 /* ------------------------------------------------------------------ */
 /* Multi-Year Pricing Schedule                                         */
@@ -144,12 +147,14 @@ function NumberInput({
   min = 0,
   step,
   className,
+  disabled,
 }: {
   value: number;
   onChange: (v: number) => void;
   min?: number;
   step?: number;
   className?: string;
+  disabled?: boolean;
 }) {
   const [text, setText] = useState(() => (value ? String(value) : ""));
 
@@ -168,6 +173,7 @@ function NumberInput({
       step={step}
       value={text}
       placeholder="0"
+      disabled={disabled}
       onChange={(e) => {
         const raw = e.target.value;
         setText(raw);
@@ -188,6 +194,7 @@ function NumberField({
   min = 0,
   suffix,
   prefix,
+  disabled,
 }: {
   label: string;
   value: number;
@@ -196,6 +203,7 @@ function NumberField({
   min?: number;
   suffix?: string;
   prefix?: string;
+  disabled?: boolean;
 }) {
   return (
     <div className="space-y-1.5">
@@ -211,6 +219,7 @@ function NumberField({
           step={step}
           value={value}
           onChange={onChange}
+          disabled={disabled}
           className={`font-mono ${prefix ? "pl-7" : ""} ${suffix ? "pr-9" : ""}`}
         />
         {suffix ? (
@@ -305,6 +314,7 @@ function WorksheetSection({
 
 function Ad360LicensingCard({ dealId, deal }: { dealId: string; deal: Deal }) {
   const { toast } = useToast();
+  const canWrite = useCanWrite();
   const invalidate = useCockpitInvalidate(dealId);
   const { data: features } = useListAd360Features();
   const updateAd360 = useUpdateDeal();
@@ -361,6 +371,7 @@ function Ad360LicensingCard({ dealId, deal }: { dealId: string; deal: Deal }) {
           value={seatCount}
           step={1}
           onChange={setSeatCount}
+          disabled={!canWrite}
         />
         <div className="space-y-1.5">
           <Label className="text-xs text-muted-foreground">
@@ -370,11 +381,15 @@ function Ad360LicensingCard({ dealId, deal }: { dealId: string; deal: Deal }) {
             {(features?.data ?? []).map((f) => (
               <label
                 key={f.id}
-                className="flex items-center gap-2 text-sm cursor-pointer"
+                className={cn(
+                  "flex items-center gap-2 text-sm",
+                  canWrite ? "cursor-pointer" : "cursor-default",
+                )}
               >
                 <Checkbox
                   checked={selectedIds.has(f.id)}
                   onCheckedChange={() => toggleFeature(f.id)}
+                  disabled={!canWrite}
                 />
                 {f.label}
               </label>
@@ -389,15 +404,18 @@ function Ad360LicensingCard({ dealId, deal }: { dealId: string; deal: Deal }) {
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
             placeholder="Any customization requirements not covered above..."
+            disabled={!canWrite}
           />
         </div>
         <p className="text-xs text-muted-foreground">
           Informational only — does not affect product revenue, services
           revenue, or TCV.
         </p>
-        <Button size="sm" onClick={save} disabled={updateAd360.isPending}>
-          {updateAd360.isPending ? "Saving..." : "Save Licensing Details"}
-        </Button>
+        <AdminOnly>
+          <Button size="sm" onClick={save} disabled={updateAd360.isPending}>
+            {updateAd360.isPending ? "Saving..." : "Save Licensing Details"}
+          </Button>
+        </AdminOnly>
       </CardContent>
     </Card>
   );
@@ -413,6 +431,7 @@ export function PricingPanel({
   deal: Deal;
 }) {
   const { toast } = useToast();
+  const canWrite = useCanWrite();
   const qc = useQueryClient();
   const invalidate = useCockpitInvalidate(dealId);
   const applyToDeal = useUpdateDeal();
@@ -842,6 +861,7 @@ export function PricingPanel({
                 {formatCurrency(calc.grandTotal, currency)}
               </span>
             </div>
+            <AdminOnly>
             <p className="text-xs text-muted-foreground">
               This worksheet is a draft. Apply it to update the deal's stored Product Revenue and
               Services Revenue — and therefore its TCV.
@@ -893,6 +913,7 @@ export function PricingPanel({
                 </AlertDialogFooter>
               </AlertDialogContent>
             </AlertDialog>
+            </AdminOnly>
           </div>
         </CardContent>
       </Card>
@@ -947,34 +968,41 @@ export function PricingPanel({
                     type="number"
                     value={r.product_revenue}
                     onChange={(e) => setRow(i, { product_revenue: Number(e.target.value) })}
+                    disabled={!canWrite}
                   />
                   <Input
                     type="number"
                     value={r.services_revenue}
                     onChange={(e) => setRow(i, { services_revenue: Number(e.target.value) })}
+                    disabled={!canWrite}
                   />
                   <Input
                     type="number"
                     value={r.discount_pct}
                     onChange={(e) => setRow(i, { discount_pct: Number(e.target.value) })}
+                    disabled={!canWrite}
                   />
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => setRows((rs) => rs.filter((_, idx) => idx !== i))}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
+                  <AdminOnly>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => setRows((rs) => rs.filter((_, idx) => idx !== i))}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </AdminOnly>
                 </div>
               ))}
-              <div className="flex gap-2">
-                <Button variant="outline" size="sm" onClick={addYear}>
-                  <Plus className="h-4 w-4 mr-1" /> Add year
-                </Button>
-                <Button size="sm" onClick={save} disabled={update.isPending}>
-                  Save schedule
-                </Button>
-              </div>
+              <AdminOnly>
+                <div className="flex gap-2">
+                  <Button variant="outline" size="sm" onClick={addYear}>
+                    <Plus className="h-4 w-4 mr-1" /> Add year
+                  </Button>
+                  <Button size="sm" onClick={save} disabled={update.isPending}>
+                    Save schedule
+                  </Button>
+                </div>
+              </AdminOnly>
             </CardContent>
           </CollapsibleContent>
         </Collapsible>

@@ -27,6 +27,8 @@ import {
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { Trash2, Plus, FlaskConical } from "lucide-react";
+import { AdminOnly, ReadOnlyNotice } from "@/components/auth/write-gate";
+import { useCanWrite } from "@/lib/auth/role-context";
 
 const WEBHOOK_EVENTS = [
   "deal.created",
@@ -41,6 +43,7 @@ const WEBHOOK_EVENTS = [
 
 export function WebhooksSettings() {
   const { toast } = useToast();
+  const canWrite = useCanWrite();
   const qc = useQueryClient();
   const list = useListWebhooks();
   const create = useCreateWebhook();
@@ -79,31 +82,38 @@ export function WebhooksSettings() {
               </div>
             </div>
             {!w.isActive && <Badge variant="destructive">disabled</Badge>}
-            <Button variant="ghost" size="icon" onClick={async () => { await del.mutateAsync({ id: w.id }); await invalidate(); }}>
-              <Trash2 className="h-4 w-4" />
-            </Button>
+            <AdminOnly>
+              <Button variant="ghost" size="icon" onClick={async () => { await del.mutateAsync({ id: w.id }); await invalidate(); }}>
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            </AdminOnly>
           </div>
         ))}
-        <div className="rounded-md border border-dashed p-3 space-y-2">
-          <Input placeholder="Name" value={form.webhook_name} onChange={(e) => setForm({ ...form, webhook_name: e.target.value })} />
-          <Input placeholder="https://target.example.com/hook" value={form.target_url} onChange={(e) => setForm({ ...form, target_url: e.target.value })} />
-          <div className="grid grid-cols-2 gap-2">
-            {WEBHOOK_EVENTS.map((ev) => (
-              <label key={ev} className="flex items-center gap-2 text-xs">
-                <Checkbox
-                  checked={form.events.includes(ev)}
-                  onCheckedChange={(c) =>
-                    setForm((f) => ({ ...f, events: c ? [...f.events, ev] : f.events.filter((x) => x !== ev) }))
-                  }
-                />
-                {ev}
-              </label>
-            ))}
+        <AdminOnly>
+          <div className="rounded-md border border-dashed p-3 space-y-2">
+            <Input placeholder="Name" value={form.webhook_name} onChange={(e) => setForm({ ...form, webhook_name: e.target.value })} />
+            <Input placeholder="https://target.example.com/hook" value={form.target_url} onChange={(e) => setForm({ ...form, target_url: e.target.value })} />
+            <div className="grid grid-cols-2 gap-2">
+              {WEBHOOK_EVENTS.map((ev) => (
+                <label key={ev} className="flex items-center gap-2 text-xs">
+                  <Checkbox
+                    checked={form.events.includes(ev)}
+                    onCheckedChange={(c) =>
+                      setForm((f) => ({ ...f, events: c ? [...f.events, ev] : f.events.filter((x) => x !== ev) }))
+                    }
+                  />
+                  {ev}
+                </label>
+              ))}
+            </div>
+            <Button size="sm" onClick={add} disabled={create.isPending}>
+              <Plus className="h-4 w-4 mr-1" /> Add webhook
+            </Button>
           </div>
-          <Button size="sm" onClick={add} disabled={create.isPending}>
-            <Plus className="h-4 w-4 mr-1" /> Add webhook
-          </Button>
-        </div>
+        </AdminOnly>
+        {!canWrite && webhooks.length === 0 && (
+          <ReadOnlyNotice>No webhooks are configured.</ReadOnlyNotice>
+        )}
       </CardContent>
     </Card>
   );
@@ -113,6 +123,7 @@ const TRIGGER_EVENTS = ["health_changed", "stage_changed", "blocker_created"];
 
 export function NotificationSettings() {
   const { toast } = useToast();
+  const canWrite = useCanWrite();
   const qc = useQueryClient();
   const list = useListNotificationRules();
   const create = useCreateNotificationRule();
@@ -148,26 +159,33 @@ export function NotificationSettings() {
               <p className="text-xs text-muted-foreground">on {r.triggerEvent} → {r.channel}</p>
             </div>
             {!r.isActive && <Badge variant="outline">off</Badge>}
-            <Button variant="ghost" size="icon" onClick={async () => { await del.mutateAsync({ id: r.id }); await invalidate(); }}>
-              <Trash2 className="h-4 w-4" />
-            </Button>
+            <AdminOnly>
+              <Button variant="ghost" size="icon" onClick={async () => { await del.mutateAsync({ id: r.id }); await invalidate(); }}>
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            </AdminOnly>
           </div>
         ))}
-        <div className="rounded-md border border-dashed p-3 flex gap-2 items-end flex-wrap">
-          <Input className="flex-1 min-w-40" placeholder="Rule name" value={form.rule_name} onChange={(e) => setForm({ ...form, rule_name: e.target.value })} />
-          <Select value={form.trigger_event} onValueChange={(v) => setForm({ ...form, trigger_event: v })}>
-            <SelectTrigger className="w-44"><SelectValue /></SelectTrigger>
-            <SelectContent>{TRIGGER_EVENTS.map((e) => <SelectItem key={e} value={e}>{e}</SelectItem>)}</SelectContent>
-          </Select>
-          <Select value={form.channel} onValueChange={(v) => setForm({ ...form, channel: v })}>
-            <SelectTrigger className="w-28"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="in_app">in_app</SelectItem>
-              <SelectItem value="email">email</SelectItem>
-            </SelectContent>
-          </Select>
-          <Button size="sm" onClick={add} disabled={create.isPending}><Plus className="h-4 w-4 mr-1" /> Add</Button>
-        </div>
+        <AdminOnly>
+          <div className="rounded-md border border-dashed p-3 flex gap-2 items-end flex-wrap">
+            <Input className="flex-1 min-w-40" placeholder="Rule name" value={form.rule_name} onChange={(e) => setForm({ ...form, rule_name: e.target.value })} />
+            <Select value={form.trigger_event} onValueChange={(v) => setForm({ ...form, trigger_event: v })}>
+              <SelectTrigger className="w-44"><SelectValue /></SelectTrigger>
+              <SelectContent>{TRIGGER_EVENTS.map((e) => <SelectItem key={e} value={e}>{e}</SelectItem>)}</SelectContent>
+            </Select>
+            <Select value={form.channel} onValueChange={(v) => setForm({ ...form, channel: v })}>
+              <SelectTrigger className="w-28"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="in_app">in_app</SelectItem>
+                <SelectItem value="email">email</SelectItem>
+              </SelectContent>
+            </Select>
+            <Button size="sm" onClick={add} disabled={create.isPending}><Plus className="h-4 w-4 mr-1" /> Add</Button>
+          </div>
+        </AdminOnly>
+        {!canWrite && rules.length === 0 && (
+          <ReadOnlyNotice>No smart alert rules are configured.</ReadOnlyNotice>
+        )}
       </CardContent>
     </Card>
   );
@@ -256,9 +274,11 @@ export function CustomPatternsSettings() {
               <p className="font-medium">{p.patternName}</p>
               <p className="text-xs text-muted-foreground">weight {p.weight} · fired {p.triggerCount}×</p>
             </div>
-            <Button variant="ghost" size="icon" onClick={async () => { await del.mutateAsync({ id: p.id }); await invalidate(); }}>
-              <Trash2 className="h-4 w-4" />
-            </Button>
+            <AdminOnly>
+              <Button variant="ghost" size="icon" onClick={async () => { await del.mutateAsync({ id: p.id }); await invalidate(); }}>
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            </AdminOnly>
           </div>
         ))}
 
@@ -300,11 +320,16 @@ export function CustomPatternsSettings() {
           />
 
           <div className="flex items-center gap-2">
+            {/* Test hits a read-only, in-memory endpoint (POST /v2/custom-patterns/test)
+                that readers are explicitly allowed to call — same class as the Risk
+                Simulator. Only persisting a pattern (Save) needs gating. */}
             <Button variant="outline" size="sm" onClick={runTest} disabled={test.isPending}>
               <FlaskConical className="h-4 w-4 mr-1" /> Test against current deals
             </Button>
             {testResult && <span className="text-sm text-muted-foreground">{testResult}</span>}
-            <Button size="sm" className="ml-auto" onClick={save} disabled={create.isPending}>Save pattern</Button>
+            <AdminOnly>
+              <Button size="sm" className="ml-auto" onClick={save} disabled={create.isPending}>Save pattern</Button>
+            </AdminOnly>
           </div>
         </div>
       </CardContent>

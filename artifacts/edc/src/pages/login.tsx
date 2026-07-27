@@ -22,7 +22,7 @@ export default function Login() {
 
   const form = useForm<z.infer<typeof loginSchema>>({
     resolver: zodResolver(loginSchema),
-    defaultValues: { email: "commander", password: "DealCommander!2026" },
+    defaultValues: { email: "", password: "" },
   });
 
   const onSubmit = async (data: z.infer<typeof loginSchema>) => {
@@ -87,7 +87,7 @@ export default function Login() {
                     <FormItem>
                       <FormLabel className="text-muted-foreground uppercase text-xs tracking-wider">Identification</FormLabel>
                       <FormControl>
-                        <Input placeholder="commander@edc.local" {...field} className="bg-background/50 font-mono h-11" />
+                        <Input placeholder="commander@edc.local" autoComplete="username" {...field} className="bg-background/50 font-mono h-11" />
                       </FormControl>
                       <FormMessage />
                     </FormItem>

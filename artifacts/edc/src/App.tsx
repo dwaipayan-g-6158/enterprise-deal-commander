@@ -1,6 +1,8 @@
 import { useEffect } from "react";
 import { Switch, Route, Router as WouterRouter, useLocation, Redirect } from "wouter";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClient, QueryClientProvider, MutationCache } from "@tanstack/react-query";
+import { toast } from "@/hooks/use-toast";
+import { RoleProvider } from "@/lib/auth/role-context";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AmbientBackground } from "@/components/ambient-background";
@@ -35,6 +37,33 @@ const queryClient = new QueryClient({
       refetchOnWindowFocus: false,
     },
   },
+  // Backstop for any write control the RBAC gating sweep missed. Fires for
+  // every mutation regardless of the call site's own onError/try-catch, so a
+  // reader who finds an ungated button gets a visible explanation instead of
+  // a silent no-op.
+  mutationCache: new MutationCache({
+    onError: (error, _variables, _context, mutation) => {
+      // ApiError is not re-exported from @workspace/api-client-react's
+      // barrel (only the internal ErrorType alias is), so duck-type the
+      // status field it always sets (lib/api-client-react/custom-fetch.ts).
+      if ((error as { status?: number } | null)?.status !== 403) return;
+      if (mutation.meta?.suppressForbiddenToast) return;
+
+      // Deferred one tick: use-toast's TOAST_LIMIT is 1, and React Query
+      // runs the mutation-cache-level onError BEFORE the mutateAsync
+      // rejection reaches the calling component. Without the defer, a call
+      // site's own generic "Save failed" toast would immediately replace
+      // this specific one.
+      setTimeout(() => {
+        toast({
+          title: "Read-only access",
+          description:
+            "Your account can view everything but can't make changes. Ask an admin if you need write access.",
+          variant: "destructive",
+        });
+      }, 0);
+    },
+  }),
 });
 
 function ProtectedRoute({ component: Component, ...rest }: any) {
@@ -62,12 +91,14 @@ function ProtectedRoute({ component: Component, ...rest }: any) {
   }
 
   return (
-    <CommandPaletteProvider>
-      <Layout>
-        <CommandPalette />
-        <Component {...rest} />
-      </Layout>
-    </CommandPaletteProvider>
+    <RoleProvider user={user}>
+      <CommandPaletteProvider>
+        <Layout>
+          <CommandPalette />
+          <Component {...rest} />
+        </Layout>
+      </CommandPaletteProvider>
+    </RoleProvider>
   );
 }
 

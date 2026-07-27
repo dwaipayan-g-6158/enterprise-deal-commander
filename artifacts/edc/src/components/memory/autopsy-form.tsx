@@ -18,6 +18,7 @@ import { Combobox } from "@/components/ui/combobox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { Plus, Trash2 } from "lucide-react";
+import { useCanWrite } from "@/lib/auth/role-context";
 
 const LOSS_CATEGORIES = [
   { value: "price", label: "Price / Commercial" },
@@ -108,6 +109,7 @@ export function AutopsyForm({
   onSaved?: () => void;
 }) {
   const { toast } = useToast();
+  const canWrite = useCanWrite();
   const queryClient = useQueryClient();
   const updateMemory = useUpdateDealMemory();
   const updateDeal = useUpdateDeal();
@@ -186,6 +188,13 @@ export function AutopsyForm({
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+      {/* fieldset[disabled] propagates to every native form control inside
+          (including ListEditor's Inputs/Buttons), matching the read-only
+          treatment applied everywhere else — display:contents keeps the
+          existing grid/flex layout untouched. Radix controls that don't
+          render a native form element (Slider, Combobox) don't inherit this
+          and get an explicit disabled prop below. */}
+      <fieldset disabled={!canWrite} className="contents">
       <div className="grid grid-cols-2 gap-4">
         <div className="grid gap-2">
           <Label>Primary Loss Category</Label>
@@ -226,6 +235,7 @@ export function AutopsyForm({
             onChange={(v) => setValue("winning_competitor_id", v ? Number(v) : "", { shouldDirty: true })}
             placeholder="None"
             emptyText="No matching competitors."
+            disabled={!canWrite}
           />
         </div>
         <div className="grid gap-2">
@@ -244,7 +254,13 @@ export function AutopsyForm({
           <Label>Win-Back Potential</Label>
           <span className="font-mono text-sm text-muted-foreground">{watch("win_back_potential")}%</span>
         </div>
-        <Slider value={[watch("win_back_potential")]} onValueChange={([v]) => setValue("win_back_potential", v, { shouldDirty: true })} max={100} step={5} />
+        <Slider
+          value={[watch("win_back_potential")]}
+          onValueChange={([v]) => setValue("win_back_potential", v, { shouldDirty: true })}
+          max={100}
+          step={5}
+          disabled={!canWrite}
+        />
       </div>
 
       <div className="flex items-center gap-2">
@@ -262,6 +278,7 @@ export function AutopsyForm({
       <Button type="submit" disabled={updateMemory.isPending || formState.isSubmitting}>
         {updateMemory.isPending ? "Saving..." : "Save Autopsy"}
       </Button>
+      </fieldset>
     </form>
   );
 }

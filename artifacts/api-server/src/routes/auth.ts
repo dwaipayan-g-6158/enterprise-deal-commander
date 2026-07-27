@@ -1,6 +1,6 @@
 import { Router, type IRouter, type Request, type Response } from "express";
 import bcrypt from "bcryptjs";
-import { eq, sql } from "drizzle-orm";
+import { sql } from "drizzle-orm";
 import { db, commanders } from "@workspace/db";
 import {
   LoginBody,
@@ -9,29 +9,46 @@ import {
   GetMeResponse,
   DashboardVisitResponse,
 } from "@workspace/api-zod";
-import {
-  issueSession,
-  clearSession,
-  requireAuth,
-  getActor,
-} from "../lib/auth";
+import { issueSession, clearSession, getActor } from "../lib/auth";
 import { badRequest, unauthorized } from "../lib/http";
 
-const router: IRouter = Router();
+/**
+ * Two routers, not one, and this split is deliberate: authPublicRouter is
+ * mounted ABOVE the requireAuth/requireWriteRole gate in routes/index.ts
+ * (login has no session yet; logout just clears a cookie), authSessionRouter
+ * is mounted BELOW it with everything else. Keeping /auth/me and
+ * /auth/dashboard-visit in the same file as login/logout used to mean the
+ * whole file sat above the gate — so the day someone added, say,
+ * POST /auth/change-password here, it would have been reader-writable with
+ * no review signal. That is the exact shape of the routes/settings-audit.ts
+ * bug this RBAC change also fixes, just in a new location.
+ */
 
-router.post("/auth/login", async (req: Request, res: Response) => {
+export const authPublicRouter: IRouter = Router();
+export const authSessionRouter: IRouter = Router();
+
+authPublicRouter.post("/auth/login", async (req: Request, res: Response) => {
   const parsed = LoginBody.safeParse(req.body);
   if (!parsed.success) {
     throw badRequest("Invalid credentials payload", parsed.error.issues);
   }
   const { email, password } = parsed.data;
+  // lower() on both sides pairs with lowercasing usernames on create
+  // (routes/users.ts) — otherwise a user created as "Alice@corp.com" could
+  // only ever sign in by typing the exact original casing. This can only
+  // ever make login MORE permissive than an exact match, never less, so it
+  // cannot lock anyone out.
   const rows = await db
     .select()
     .from(commanders)
-    .where(eq(commanders.username, email))
+    .where(sql`lower(${commanders.username}) = lower(${email})`)
     .limit(1);
   const commander = rows[0];
-  if (!commander) {
+  // Same generic message whether the account doesn't exist, the password is
+  // wrong, or the account is deactivated — a distinct "account disabled"
+  // message would let an unauthenticated caller enumerate which usernames
+  // exist and are active.
+  if (!commander || !commander.isActive) {
     throw unauthorized("Invalid email or password");
   }
 
@@ -48,26 +65,25 @@ router.post("/auth/login", async (req: Request, res: Response) => {
   res.json(LoginResponse.parse({ message: "Signed in" }));
 });
 
-router.post("/auth/logout", (_req: Request, res: Response) => {
+authPublicRouter.post("/auth/logout", (_req: Request, res: Response) => {
   clearSession(res);
   res.json(LogoutResponse.parse({ message: "Signed out" }));
 });
 
-router.get("/auth/me", requireAuth, (req: Request, res: Response) => {
+authSessionRouter.get("/auth/me", (req: Request, res: Response) => {
   const actor = getActor(req);
   res.json(
     GetMeResponse.parse({
       id: actor.id,
       email: actor.username,
-      role: "commander",
+      role: actor.role,
       displayName: actor.displayName,
     }),
   );
 });
 
-router.post(
+authSessionRouter.post(
   "/auth/dashboard-visit",
-  requireAuth,
   async (req: Request, res: Response) => {
     const actor = getActor(req);
     const result = await db.execute(sql`
@@ -91,5 +107,3 @@ router.post(
     res.json(DashboardVisitResponse.parse({ previousVisitAt }));
   },
 );
-
-export default router;

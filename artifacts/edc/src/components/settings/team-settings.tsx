@@ -12,9 +12,12 @@ import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import { Trash2, Plus, Users } from "lucide-react";
+import { AdminOnly } from "@/components/auth/write-gate";
+import { useCanWrite } from "@/lib/auth/role-context";
 
 export function TeamSettings() {
   const { toast } = useToast();
+  const canWrite = useCanWrite();
   const qc = useQueryClient();
   const list = useListTeamMembers();
   const create = useCreateTeamMember();
@@ -80,47 +83,53 @@ export function TeamSettings() {
                 {m.can_be_tl && <Badge variant="outline" className="text-[10px]">TL</Badge>}
               </div>
             </div>
-            <Button
-              variant="ghost"
-              size="icon"
-              disabled={del.isPending}
-              onClick={() => remove(m.id)}
-            >
-              <Trash2 className="h-4 w-4" />
-            </Button>
+            <AdminOnly>
+              <Button
+                variant="ghost"
+                size="icon"
+                disabled={del.isPending}
+                onClick={() => remove(m.id)}
+              >
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            </AdminOnly>
           </div>
         ))}
 
         {members.length === 0 && (
-          <p className="text-sm text-muted-foreground">No team members yet. Add one below.</p>
+          <p className="text-sm text-muted-foreground">
+            {canWrite ? "No team members yet. Add one below." : "No team members yet."}
+          </p>
         )}
 
-        <div className="rounded-md border border-dashed p-3 space-y-3">
-          <Input
-            placeholder="Name"
-            value={form.name}
-            onChange={(e) => setForm({ ...form, name: e.target.value })}
-          />
-          <div className="flex gap-6">
-            <label className="flex items-center gap-2 text-sm">
-              <Checkbox
-                checked={form.can_be_am}
-                onCheckedChange={(c) => setForm((f) => ({ ...f, can_be_am: c === true }))}
-              />
-              Account Manager
-            </label>
-            <label className="flex items-center gap-2 text-sm">
-              <Checkbox
-                checked={form.can_be_tl}
-                onCheckedChange={(c) => setForm((f) => ({ ...f, can_be_tl: c === true }))}
-              />
-              Technical Lead
-            </label>
+        <AdminOnly>
+          <div className="rounded-md border border-dashed p-3 space-y-3">
+            <Input
+              placeholder="Name"
+              value={form.name}
+              onChange={(e) => setForm({ ...form, name: e.target.value })}
+            />
+            <div className="flex gap-6">
+              <label className="flex items-center gap-2 text-sm">
+                <Checkbox
+                  checked={form.can_be_am}
+                  onCheckedChange={(c) => setForm((f) => ({ ...f, can_be_am: c === true }))}
+                />
+                Account Manager
+              </label>
+              <label className="flex items-center gap-2 text-sm">
+                <Checkbox
+                  checked={form.can_be_tl}
+                  onCheckedChange={(c) => setForm((f) => ({ ...f, can_be_tl: c === true }))}
+                />
+                Technical Lead
+              </label>
+            </div>
+            <Button size="sm" onClick={add} disabled={create.isPending}>
+              <Plus className="h-4 w-4 mr-1" /> Add
+            </Button>
           </div>
-          <Button size="sm" onClick={add} disabled={create.isPending}>
-            <Plus className="h-4 w-4 mr-1" /> Add
-          </Button>
-        </div>
+        </AdminOnly>
       </CardContent>
     </Card>
   );

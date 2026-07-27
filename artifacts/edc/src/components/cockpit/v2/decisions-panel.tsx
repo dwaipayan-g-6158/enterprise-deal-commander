@@ -12,6 +12,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { Plus, Check } from "lucide-react";
+import { AdminOnly } from "@/components/auth/write-gate";
+import { useCanWrite } from "@/lib/auth/role-context";
 
 const statusColor: Record<string, string> = {
   Pending: "bg-amber-500 text-white",
@@ -22,6 +24,7 @@ const statusColor: Record<string, string> = {
 
 export function DecisionsPanel({ dealId }: { dealId: string }) {
   const { toast } = useToast();
+  const canWrite = useCanWrite();
   const qc = useQueryClient();
   const list = useListDecisions(dealId);
   const create = useCreateDecision();
@@ -57,7 +60,11 @@ export function DecisionsPanel({ dealId }: { dealId: string }) {
         <CardTitle className="text-lg">Decision Log</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
-        {decisions.length === 0 && <p className="text-sm text-muted-foreground">No decisions logged yet. Add the first one below.</p>}
+        {decisions.length === 0 && (
+          <p className="text-sm text-muted-foreground">
+            {canWrite ? "No decisions logged yet. Add the first one below." : "No decisions logged yet."}
+          </p>
+        )}
         {decisions.map((d) => (
           <div key={d.id} className="rounded-md border p-3 space-y-1">
             <div className="flex items-center justify-between gap-2">
@@ -69,27 +76,31 @@ export function DecisionsPanel({ dealId }: { dealId: string }) {
             <p className="text-sm font-medium">{d.decisionText}</p>
             <p className="text-xs text-muted-foreground">Owner: {d.owner}</p>
             {d.status !== "Completed" && (
-              <Button size="sm" variant="outline" onClick={() => complete(d.id)}>
-                <Check className="h-4 w-4 mr-1" /> Mark complete
-              </Button>
+              <AdminOnly>
+                <Button size="sm" variant="outline" onClick={() => complete(d.id)}>
+                  <Check className="h-4 w-4 mr-1" /> Mark complete
+                </Button>
+              </AdminOnly>
             )}
           </div>
         ))}
-        <div className="rounded-md border border-dashed p-3 space-y-2">
-          <Textarea
-            placeholder="Decision..."
-            rows={2}
-            value={form.decision_text}
-            onChange={(e) => setForm({ ...form, decision_text: e.target.value })}
-          />
-          <div className="flex gap-2">
-            <Input placeholder="Owner" value={form.owner} onChange={(e) => setForm({ ...form, owner: e.target.value })} />
-            <Input type="date" value={form.due_date} onChange={(e) => setForm({ ...form, due_date: e.target.value })} />
-            <Button onClick={add} disabled={create.isPending}>
-              <Plus className="h-4 w-4 mr-1" /> Log
-            </Button>
+        <AdminOnly>
+          <div className="rounded-md border border-dashed p-3 space-y-2">
+            <Textarea
+              placeholder="Decision..."
+              rows={2}
+              value={form.decision_text}
+              onChange={(e) => setForm({ ...form, decision_text: e.target.value })}
+            />
+            <div className="flex gap-2">
+              <Input placeholder="Owner" value={form.owner} onChange={(e) => setForm({ ...form, owner: e.target.value })} />
+              <Input type="date" value={form.due_date} onChange={(e) => setForm({ ...form, due_date: e.target.value })} />
+              <Button onClick={add} disabled={create.isPending}>
+                <Plus className="h-4 w-4 mr-1" /> Log
+              </Button>
+            </div>
           </div>
-        </div>
+        </AdminOnly>
       </CardContent>
     </Card>
   );

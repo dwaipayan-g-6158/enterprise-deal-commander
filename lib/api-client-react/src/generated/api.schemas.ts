@@ -40,16 +40,95 @@ export interface LoginInput {
   password: string;
 }
 
+export type AuthUserRole = typeof AuthUserRole[keyof typeof AuthUserRole];
+
+
+export const AuthUserRole = {
+  admin: 'admin',
+  reader: 'reader',
+} as const;
+
 export interface AuthUser {
   id: string;
   email: string;
-  role: string;
+  role: AuthUserRole;
   displayName: string;
 }
 
 export interface DashboardVisitResponse {
   /** @nullable */
   previousVisitAt: string | null;
+}
+
+export type UserRole = typeof UserRole[keyof typeof UserRole];
+
+
+export const UserRole = {
+  admin: 'admin',
+  reader: 'reader',
+} as const;
+
+export interface User {
+  id: string;
+  email: string;
+  displayName: string;
+  role: UserRole;
+  isActive: boolean;
+  createdAt: string;
+  /** @nullable */
+  lastDashboardVisitAt: string | null;
+}
+
+export interface UserListResponse {
+  data: User[];
+}
+
+export interface UserResponse {
+  data: User;
+}
+
+export type CreateUserInputRole = typeof CreateUserInputRole[keyof typeof CreateUserInputRole];
+
+
+export const CreateUserInputRole = {
+  admin: 'admin',
+  reader: 'reader',
+} as const;
+
+export interface CreateUserInput {
+  /** @minLength 1 */
+  email: string;
+  /**
+     * @minLength 1
+     * @maxLength 255
+     */
+  display_name: string;
+  /** @minLength 12 */
+  password: string;
+  role?: CreateUserInputRole;
+}
+
+export type UpdateUserInputRole = typeof UpdateUserInputRole[keyof typeof UpdateUserInputRole];
+
+
+export const UpdateUserInputRole = {
+  admin: 'admin',
+  reader: 'reader',
+} as const;
+
+export interface UpdateUserInput {
+  /**
+     * @minLength 1
+     * @maxLength 255
+     */
+  display_name?: string;
+  role?: UpdateUserInputRole;
+  is_active?: boolean;
+}
+
+export interface ResetPasswordInput {
+  /** @minLength 12 */
+  password: string;
 }
 
 export interface Ad360Feature {

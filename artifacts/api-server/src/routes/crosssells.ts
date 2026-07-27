@@ -13,13 +13,12 @@ import {
   UpdateCrossSellsBody,
   UpdateCrossSellsResponse,
 } from "@workspace/api-zod";
-import { requireAuth, getActor } from "../lib/auth";
+import { getActor } from "../lib/auth";
 import { badRequest, notFound } from "../lib/http";
 import { writeAudit } from "../lib/audit";
 
+// Auth + write-role enforcement is applied centrally in routes/index.ts.
 const router: IRouter = Router();
-
-router.use(requireAuth);
 
 async function ensureDeal(dealId: string) {
   const rows = await db

@@ -34,6 +34,7 @@ import {
   Loader2,
 } from "lucide-react";
 import { SNOOZE_FIELDS } from "@/components/cockpit/risk/snooze-fields";
+import { AdminOnly } from "@/components/auth/write-gate";
 
 interface CriticalAlert {
   dealId: string;
@@ -185,36 +186,38 @@ function AlertRow({
 
       {mode === "idle" && (
         <div className="mt-3 flex flex-wrap gap-2">
-          <Button
-            size="sm"
-            variant="outline"
-            disabled={pending}
-            onClick={() => run({ disposition: "acknowledge" }, "Alert acknowledged")}
-          >
-            {pending ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            ) : (
-              <Check className="h-3.5 w-3.5" />
-            )}
-            Acknowledge
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            disabled={pending}
-            onClick={() => setMode("accept")}
-          >
-            Accept risk
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            disabled={pending}
-            onClick={() => setMode("snooze")}
-          >
-            <AlarmClock className="h-3.5 w-3.5" />
-            Snooze
-          </Button>
+          <AdminOnly>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={pending}
+              onClick={() => run({ disposition: "acknowledge" }, "Alert acknowledged")}
+            >
+              {pending ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Check className="h-3.5 w-3.5" />
+              )}
+              Acknowledge
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={pending}
+              onClick={() => setMode("accept")}
+            >
+              Accept risk
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={pending}
+              onClick={() => setMode("snooze")}
+            >
+              <AlarmClock className="h-3.5 w-3.5" />
+              Snooze
+            </Button>
+          </AdminOnly>
           <Button
             size="sm"
             variant="ghost"

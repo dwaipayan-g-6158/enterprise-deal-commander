@@ -156,11 +156,41 @@ spec (it drives the generated filenames).
 
 - **Cookie session.** On login the server issues an **HS256 JWT** signed with `SESSION_SECRET`,
   stored in an `edc_session` cookie (`httpOnly`, `sameSite: lax`, `secure` in production, 7-day
-  TTL). Passwords are hashed with **bcrypt**.
-- **Login quirk:** the login field is named `email` but maps to `commanders.username`.
-- `requireAuth` middleware validates the cookie and attaches `req.actor`; all `/api/v2` routes
-  and most `/api/v1` routes require it. The public exceptions are `POST /v1/auth/login`,
-  `GET /healthz`, and the Bat-Signal share endpoint `GET /v1/share/{token}`.
+  TTL). Passwords are hashed with **bcrypt**. The token proves identity only (`sub`/`username`/
+  `name`) — it carries no role or active-state claim; see Authorization below for why.
+- **Login quirk:** the login field is named `email` but maps to `commanders.username`
+  (case-insensitively, via `lower()` on both sides).
+- `requireAuth` (`artifacts/api-server/src/lib/auth.ts`) is registered **once**, path-less, in
+  `routes/index.ts` — not per-router. It's async: on every request it resolves `commanders.role`
+  and `commanders.is_active` from the DB and attaches `req.actor`. The public exceptions are
+  `POST /v1/auth/login`, `POST /v1/auth/logout`, `GET /healthz`, and the Bat-Signal share endpoint
+  `GET /v1/share/{token}`.
+
+## Authorization (RBAC)
+
+Two roles: `admin` (full access) and `reader` (every read, zero writes — no data scoping, a
+reader sees every deal and every Settings tab). `requireWriteRole`
+(`artifacts/api-server/src/lib/rbac.ts`) is the app's entire authorization surface, mounted
+immediately after `requireAuth`: an admin's request always passes; a reader's request passes only
+for safe methods (GET/HEAD/OPTIONS) or an exact match against a small, commented allowlist of
+non-mutating POSTs (`/auth/dashboard-visit`, `/v2/nlc/parse`, `/v2/scenarios/compute`,
+`/v2/custom-patterns/test`). Everything else is `403 FORBIDDEN`. This is **deny-by-default**: a
+mutation route added tomorrow is refused to readers the moment it's registered, with no per-route
+opt-in — `routes/index.rbac.test.ts` walks every registered route and asserts this holds.
+
+Role is read from the `commanders` row on every request, **never** from the JWT: the session
+cookie lives 7 days, so a claim would let a demoted or deactivated account keep write access for
+up to a week. Sourcing it from the row means a demotion or `is_active = false` takes effect on the
+very next request. User management (create/promote/demote/deactivate/delete/reset-password) is
+`artifacts/api-server/src/routes/users.ts`, itself gated only by the same central rule (`GET
+/v1/users` is the one exception every reader can call — no secrets leave the server). It enforces
+two invariants server-side regardless of what the UI offers: you cannot act on your own account
+(demote/deactivate/delete yourself), and the last active admin cannot be demoted, deactivated, or
+deleted.
+
+The frontend's role gating (`src/lib/auth/role-context.tsx`, `src/components/auth/write-gate.tsx`)
+is UX only — it hides or disables controls a reader would otherwise click into a 403. It is not
+the security boundary; the server is.
 
 ## Key invariants
 

@@ -19,7 +19,6 @@ import {
   GetAutopsyQueryParams,
   GetAutopsyResponse,
 } from "@workspace/api-zod";
-import { requireAuth } from "../lib/auth";
 import { notFound } from "../lib/http";
 import { assembleDealIntelligence } from "../lib/intelligence";
 import { contextualAlertsFor } from "../lib/contextual-alerts";
@@ -35,9 +34,8 @@ import {
   readPortfolioAnalysisRollup,
 } from "../lib/portfolio-rollups";
 
+// Auth + write-role enforcement is applied centrally in routes/index.ts.
 const router: IRouter = Router();
-
-router.use(requireAuth);
 
 router.get(
   "/deals/:dealId/intelligence",

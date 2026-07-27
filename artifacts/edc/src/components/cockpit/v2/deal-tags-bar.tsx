@@ -17,6 +17,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { Plus, X, Trash2 } from "lucide-react";
+import { AdminOnly } from "@/components/auth/write-gate";
 
 // Palette offered when creating a tag — mirrors the app's chart/accent colors.
 const TAG_COLORS = ["#6366f1", "#10b981", "#f59e0b", "#ef4444", "#0ea5e9", "#a855f7", "#ec4899", "#64748b"];
@@ -64,17 +65,20 @@ export function DealTagsBar({ dealId }: { dealId: string }) {
           style={{ backgroundColor: t.color }}
         >
           {t.tagName}
-          <button
-            onClick={async () => {
-              await remove.mutateAsync({ dealId, tagId: t.id });
-              await refreshDeal();
-            }}
-            aria-label={`Remove ${t.tagName}`}
-          >
-            <X className="h-3 w-3" />
-          </button>
+          <AdminOnly>
+            <button
+              onClick={async () => {
+                await remove.mutateAsync({ dealId, tagId: t.id });
+                await refreshDeal();
+              }}
+              aria-label={`Remove ${t.tagName}`}
+            >
+              <X className="h-3 w-3" />
+            </button>
+          </AdminOnly>
         </span>
       ))}
+      <AdminOnly>
       <Popover>
         <PopoverTrigger asChild>
           <Button variant="outline" size="sm" className="h-6 px-2 text-xs">
@@ -181,6 +185,7 @@ export function DealTagsBar({ dealId }: { dealId: string }) {
           </div>
         </PopoverContent>
       </Popover>
+      </AdminOnly>
     </div>
   );
 }

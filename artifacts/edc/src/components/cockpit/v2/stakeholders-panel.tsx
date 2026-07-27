@@ -21,6 +21,8 @@ import { useToast } from "@/hooks/use-toast";
 import { Trash2, Plus, ShieldAlert, Users } from "lucide-react";
 import { Empty, EmptyHeader, EmptyMedia, EmptyTitle, EmptyDescription } from "@/components/ui/empty";
 import { InfoTooltip } from "@/components/ui/info-tooltip";
+import { AdminOnly } from "@/components/auth/write-gate";
+import { useCanWrite } from "@/lib/auth/role-context";
 
 const ROLE_INFO: { name: string; description: string }[] = [
   { name: "Economic Buyer", description: "Controls the budget and gives final financial sign-off on the purchase." },
@@ -48,6 +50,7 @@ const sentimentColor: Record<string, string> = {
 
 export function StakeholdersPanel({ dealId }: { dealId: string }) {
   const { toast } = useToast();
+  const canWrite = useCanWrite();
   const qc = useQueryClient();
   const list = useListStakeholders(dealId);
   const create = useCreateStakeholder();
@@ -101,7 +104,11 @@ export function StakeholdersPanel({ dealId }: { dealId: string }) {
             <EmptyHeader>
               <EmptyMedia variant="icon"><Users className="h-5 w-5" /></EmptyMedia>
               <EmptyTitle>No stakeholders mapped yet</EmptyTitle>
-              <EmptyDescription>Add a stakeholder below to start building the influence map for this deal.</EmptyDescription>
+              <EmptyDescription>
+                {canWrite
+                  ? "Add a stakeholder below to start building the influence map for this deal."
+                  : "No stakeholders have been mapped for this deal yet."}
+              </EmptyDescription>
             </EmptyHeader>
           </Empty>
         )}
@@ -121,12 +128,15 @@ export function StakeholdersPanel({ dealId }: { dealId: string }) {
               </p>
             </div>
             <Badge className={sentimentColor[s.sentiment] ?? ""}>{s.sentiment}</Badge>
-            <Button variant="ghost" size="icon" onClick={() => remove(s.id)} aria-label="Remove">
-              <Trash2 className="h-4 w-4" />
-            </Button>
+            <AdminOnly>
+              <Button variant="ghost" size="icon" onClick={() => remove(s.id)} aria-label="Remove">
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            </AdminOnly>
           </div>
         ))}
 
+        <AdminOnly>
         <div className="rounded-md border border-dashed p-3 space-y-3">
           <div className="grid grid-cols-2 gap-2">
             <Input placeholder="Name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
@@ -179,6 +189,7 @@ export function StakeholdersPanel({ dealId }: { dealId: string }) {
             </Button>
           </div>
         </div>
+        </AdminOnly>
       </CardContent>
     </Card>
   );

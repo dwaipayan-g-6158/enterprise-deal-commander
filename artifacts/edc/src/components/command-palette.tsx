@@ -11,7 +11,8 @@ import {
   CommandSeparator,
 } from "@/components/ui/command";
 import { useCommandPalette } from "@/lib/command-palette-context";
-import { useListDeals, useLogout } from "@workspace/api-client-react";
+import { useSignOut } from "@/lib/auth/use-sign-out";
+import { useListDeals } from "@workspace/api-client-react";
 import { parseNLC } from "@workspace/engine";
 import {
   LayoutDashboard,
@@ -31,7 +32,7 @@ export function CommandPalette() {
   const [query, setQuery] = useState("");
   const [, setLocation] = useLocation();
   const { theme, setTheme } = useTheme();
-  const logout = useLogout();
+  const signOut = useSignOut();
   const { data: deals } = useListDeals({ state: "all", limit: 50 });
 
   const go = (path: string) => {
@@ -162,14 +163,9 @@ export function CommandPalette() {
           </CommandItem>
           <CommandItem
             value="logout sign out"
-            onSelect={async () => {
+            onSelect={() => {
               setOpen(false);
-              try {
-                await logout.mutateAsync();
-                setLocation("/login");
-              } catch {
-                /* ignore */
-              }
+              void signOut();
             }}
           >
             <LogOut className="mr-2 h-4 w-4" />

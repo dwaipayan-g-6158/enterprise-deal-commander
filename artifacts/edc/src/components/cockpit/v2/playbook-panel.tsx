@@ -34,6 +34,7 @@ import {
   ItemSeparator,
 } from "@/components/ui/item";
 import { Collapsible, CollapsibleContent } from "@/components/ui/collapsible";
+import { AdminOnly } from "@/components/auth/write-gate";
 import {
   CheckCircle2,
   Circle,
@@ -204,57 +205,59 @@ function StepList({
                   <p className="text-xs italic text-muted-foreground">Note: {state.note}</p>
                 )}
 
-                {!terminal && (
-                  <Input
-                    value={notes[s.id] ?? ""}
-                    onChange={(e) => setNotes((n) => ({ ...n, [s.id]: e.target.value }))}
-                    placeholder="Add a note (optional)…"
-                    className="h-7 text-xs mt-1"
-                  />
-                )}
-
-                <div className="flex gap-2 mt-2 flex-wrap">
+                <AdminOnly>
                   {!terminal && (
-                    <>
-                      <Button size="sm" disabled={busy} onClick={() => act(s.id, "completed")}>
-                        {pendingKey === `${s.id}:completed` && <Spinner className="mr-1" />}
-                        Complete
-                      </Button>
-                      <Button size="sm" variant="outline" disabled={busy} onClick={() => act(s.id, "skipped")}>
-                        {pendingKey === `${s.id}:skipped` && <Spinner className="mr-1" />}
-                        Skip
-                      </Button>
-                      {status !== "blocked" && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          disabled={busy}
-                          className="text-amber-600 border-amber-500/40"
-                          onClick={() => act(s.id, "blocked")}
-                        >
-                          {pendingKey === `${s.id}:blocked` && <Spinner className="mr-1" />}
-                          Block
+                    <Input
+                      value={notes[s.id] ?? ""}
+                      onChange={(e) => setNotes((n) => ({ ...n, [s.id]: e.target.value }))}
+                      placeholder="Add a note (optional)…"
+                      className="h-7 text-xs mt-1"
+                    />
+                  )}
+
+                  <div className="flex gap-2 mt-2 flex-wrap">
+                    {!terminal && (
+                      <>
+                        <Button size="sm" disabled={busy} onClick={() => act(s.id, "completed")}>
+                          {pendingKey === `${s.id}:completed` && <Spinner className="mr-1" />}
+                          Complete
                         </Button>
-                      )}
-                    </>
-                  )}
-                  {status && (
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      disabled={busy}
-                      className="gap-1 text-muted-foreground"
-                      onClick={() => doReopen(s.id)}
-                    >
-                      {pendingKey === `${s.id}:reopen` ? (
-                        <Spinner className="h-3 w-3" />
-                      ) : (
-                        <RotateCcw className="h-3 w-3" />
-                      )}
-                      Reopen
-                    </Button>
-                  )}
-                </div>
+                        <Button size="sm" variant="outline" disabled={busy} onClick={() => act(s.id, "skipped")}>
+                          {pendingKey === `${s.id}:skipped` && <Spinner className="mr-1" />}
+                          Skip
+                        </Button>
+                        {status !== "blocked" && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={busy}
+                            className="text-amber-600 border-amber-500/40"
+                            onClick={() => act(s.id, "blocked")}
+                          >
+                            {pendingKey === `${s.id}:blocked` && <Spinner className="mr-1" />}
+                            Block
+                          </Button>
+                        )}
+                      </>
+                    )}
+                    {status && (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        disabled={busy}
+                        className="gap-1 text-muted-foreground"
+                        onClick={() => doReopen(s.id)}
+                      >
+                        {pendingKey === `${s.id}:reopen` ? (
+                          <Spinner className="h-3 w-3" />
+                        ) : (
+                          <RotateCcw className="h-3 w-3" />
+                        )}
+                        Reopen
+                      </Button>
+                    )}
+                  </div>
+                </AdminOnly>
               </div>
             </div>
           );
@@ -466,15 +469,17 @@ export function PlaybookPanel({ dealId }: { dealId: string }) {
                     </ItemContent>
                     <ItemActions>
                       {entry.status === "not_started" ? (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          disabled={start.isPending}
-                          onClick={() => handleStart(entry.playbookId)}
-                        >
-                          {startingId === entry.playbookId && <Spinner className="mr-1" />}
-                          Start playbook
-                        </Button>
+                        <AdminOnly>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={start.isPending}
+                            onClick={() => handleStart(entry.playbookId)}
+                          >
+                            {startingId === entry.playbookId && <Spinner className="mr-1" />}
+                            Start playbook
+                          </Button>
+                        </AdminOnly>
                       ) : (
                         // Decorative indicator — the whole row above is the toggle.
                         <ChevronDown

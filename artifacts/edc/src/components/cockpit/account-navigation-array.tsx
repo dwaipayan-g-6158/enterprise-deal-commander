@@ -8,6 +8,7 @@ import { Plus, Trophy, Ban } from "lucide-react";
 import { formatCurrency } from "./use-invalidate";
 import { cn } from "@/lib/utils";
 import { CreateDealSheet } from "./create-deal-sheet";
+import { AdminOnly } from "@/components/auth/write-gate";
 import { groupDeals, type StripDeal, type StripGroupId } from "./deal-strip-model";
 import {
   shouldConvertWheelToHorizontalScroll,
@@ -307,12 +308,14 @@ export function AccountNavigationArray({ activeDealId, expandedGroup, onExpandGr
             )}
           </AnimatePresence>
 
-          <motion.div layout={!reduce} className="flex-shrink-0 ml-1">
-            <Button variant="ghost" size="sm" onClick={() => setCreateOpen(true)}>
-              <Plus className="h-4 w-4 mr-1" />
-              New Deal
-            </Button>
-          </motion.div>
+          <AdminOnly>
+            <motion.div layout={!reduce} className="flex-shrink-0 ml-1">
+              <Button variant="ghost" size="sm" onClick={() => setCreateOpen(true)}>
+                <Plus className="h-4 w-4 mr-1" />
+                New Deal
+              </Button>
+            </motion.div>
+          </AdminOnly>
         </div>
         <ScrollBar orientation="horizontal" />
       </ScrollArea>

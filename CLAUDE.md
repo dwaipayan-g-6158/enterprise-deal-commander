@@ -2,7 +2,7 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-Enterprise Deal Commander (EDC) — a single-user "Deal Commander" cockpit for enterprise software deals. It tracks deal economics, technical validation gates, blockers, and cross-sell whitespace, then runs a 12-pattern intelligence engine to surface risk alerts, governance health, and an Executive Briefing Mode.
+Enterprise Deal Commander (EDC) — a "Deal Commander" cockpit for enterprise software deals. It tracks deal economics, technical validation gates, blockers, and cross-sell whitespace, then runs a 12-pattern intelligence engine to surface risk alerts, governance health, and an Executive Briefing Mode. RBAC (admin + read-only reader) lets a team see the whole pipeline; there is still no per-deal ownership or data scoping — the split is verb-level only.
 
 This is a **pnpm workspace monorepo** (Node 24, PostgreSQL 16). Use `pnpm` only — `preinstall` rejects npm/yarn.
 
@@ -38,7 +38,8 @@ Data flow: client (generated hooks) → `/api/v1` & `/api/v2` Express routes →
 
 ### Key behaviors to preserve
 
-- **Auth** is cookie-session: HS256 JWT signed with `SESSION_SECRET` + bcrypt password hash. The login field is `email` but maps to `commanders.username`.
+- **Auth** is cookie-session: HS256 JWT signed with `SESSION_SECRET` + bcrypt password hash. The login field is `email` but maps to `commanders.username` (case-insensitively). The JWT proves identity only — `commanders.role`/`is_active` are re-read from the DB on every request (`requireAuth`), never trusted from the token, so a demotion/deactivation takes effect on the very next request instead of waiting out the 7-day cookie.
+- **RBAC** is a single centralized deny-by-default gate: `requireWriteRole` (`artifacts/api-server/src/lib/rbac.ts`), mounted once in `routes/index.ts` right after `requireAuth`. Admins pass every method; readers pass only GET/HEAD/OPTIONS or an exact hit on the small `READER_WRITE_METHOD_ALLOWLIST`. Do not add per-router auth/role checks — the whole point is one gate, not one per file. `routes/index.rbac.test.ts` exhaustively walks every registered route and will fail if a new mutation route is accidentally left open to readers.
 - **Stage advancement is gated server-side**: advancing past an active RED risk pattern returns `409 STAGE_GUARDRAIL` unless an `override_reason` is supplied (persisted to `deal_stage_overrides` + audited).
 - **Audit log** carries `entity_id` (e.g. gate code) so point-in-time snapshots reconstruct historical gate state. Snapshots reconstruct **gates only** — economics/stage stay current.
 - Express **route ordering**: literal paths (`/gates/batch`) must be registered before param paths (`/gates/:gateCode`).

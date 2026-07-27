@@ -10,6 +10,8 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { SlidersHorizontal, Save } from "lucide-react";
+import { AdminOnly } from "@/components/auth/write-gate";
+import { useCanWrite } from "@/lib/auth/role-context";
 
 interface WeightRow {
   featureId: string;
@@ -31,6 +33,7 @@ const FACTOR_LABELS: Record<string, string> = {
 
 export function ScoringWeightsSettings() {
   const { toast } = useToast();
+  const canWrite = useCanWrite();
   const qc = useQueryClient();
   const list = useListScoringWeights();
   const update = useUpdateScoringWeights();
@@ -90,10 +93,12 @@ export function ScoringWeightsSettings() {
           <Badge variant={sumOk ? "secondary" : "destructive"}>
             Total: {Math.round(total)}%{sumOk ? "" : " (should be 100%)"}
           </Badge>
-          <Button disabled={!dirty || update.isPending} onClick={save} className="gap-2">
-            <Save className="w-4 h-4" />
-            {update.isPending ? "Applying..." : "Apply Weights"}
-          </Button>
+          <AdminOnly>
+            <Button disabled={!dirty || update.isPending} onClick={save} className="gap-2">
+              <Save className="w-4 h-4" />
+              {update.isPending ? "Applying..." : "Apply Weights"}
+            </Button>
+          </AdminOnly>
         </div>
 
         {rows.length === 0 && (
@@ -117,6 +122,7 @@ export function ScoringWeightsSettings() {
                 value={pct[r.featureId] ?? ""}
                 onChange={(e) => setPct((p) => ({ ...p, [r.featureId]: e.target.value }))}
                 className="font-mono"
+                disabled={!canWrite}
               />
               <span className="text-sm text-muted-foreground">%</span>
             </div>

@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { useCockpitInvalidate } from "../use-invalidate";
+import { AdminOnly } from "@/components/auth/write-gate";
 import { relativeTime, daysUntil } from "@/components/dashboard/widgets/_shared";
 import { DISPOSITION_PRESENTATION, DISPOSITION_PRIORITY } from "./disposition-presentation";
 import { snoozeFieldLabel } from "./snooze-fields";
@@ -119,17 +120,19 @@ function ManagedRiskRow({ dealId, alert }: { dealId: string; alert: Alert }) {
           </p>
         )}
       </ItemContent>
-      <ItemActions>
-        <Button
-          size="sm"
-          variant="ghost"
-          onClick={clear}
-          disabled={clearDisposition.isPending}
-          className="gap-1.5 text-xs text-muted-foreground hover:text-foreground"
-        >
-          <RotateCcw className="h-3.5 w-3.5" /> Return to alerts
-        </Button>
-      </ItemActions>
+      <AdminOnly>
+        <ItemActions>
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={clear}
+            disabled={clearDisposition.isPending}
+            className="gap-1.5 text-xs text-muted-foreground hover:text-foreground"
+          >
+            <RotateCcw className="h-3.5 w-3.5" /> Return to alerts
+          </Button>
+        </ItemActions>
+      </AdminOnly>
     </Item>
   );
 }

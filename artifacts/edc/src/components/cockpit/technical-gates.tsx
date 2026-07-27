@@ -12,6 +12,9 @@ import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { useCockpitInvalidate } from "./use-invalidate";
 import { AlertTriangle } from "lucide-react";
+import { AdminOnly } from "@/components/auth/write-gate";
+import { useCanWrite } from "@/lib/auth/role-context";
+import { cn } from "@/lib/utils";
 
 export function TechnicalGates({
   dealId,
@@ -25,6 +28,7 @@ export function TechnicalGates({
   onSaveRef?: React.MutableRefObject<(() => Promise<void>) | null>;
 }) {
   const { toast } = useToast();
+  const canWrite = useCanWrite();
   const invalidate = useCockpitInvalidate(dealId);
   const { data: gates } = useListGates(dealId);
   const { data: definitions } = useListGateDefinitions();
@@ -137,11 +141,15 @@ export function TechnicalGates({
                 return (
                   <label
                     key={gate.gateCode}
-                    className="flex items-start gap-3 p-3 bg-muted/50 rounded-md border cursor-pointer"
+                    className={cn(
+                      "flex items-start gap-3 p-3 bg-muted/50 rounded-md border",
+                      canWrite ? "cursor-pointer" : "cursor-default",
+                    )}
                   >
                     <Checkbox
                       checked={draft[gate.gateCode] ?? false}
                       onCheckedChange={(c) => handleToggle(gate.gateCode, c === true)}
+                      disabled={!canWrite}
                       className="mt-0.5"
                     />
                     <div className="flex-1">
@@ -160,9 +168,11 @@ export function TechnicalGates({
           </div>
         ))}
 
-        <Button onClick={manualSave} disabled={!dirty || updateBatch.isPending}>
-          {updateBatch.isPending ? "Saving..." : "Save Gate Progress"}
-        </Button>
+        <AdminOnly>
+          <Button onClick={manualSave} disabled={!dirty || updateBatch.isPending}>
+            {updateBatch.isPending ? "Saving..." : "Save Gate Progress"}
+          </Button>
+        </AdminOnly>
       </CardContent>
     </Card>
   );

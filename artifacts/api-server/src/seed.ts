@@ -590,9 +590,20 @@ async function seedCommander() {
   const username = process.env.COMMANDER_USERNAME ?? "commander";
   const password = process.env.COMMANDER_PASSWORD ?? "DealCommander!2026";
   const passwordHash = await bcrypt.hash(password, 10);
+  // role must be explicit: the column default is 'reader' (fail-closed for
+  // anything created outside the users API), so a fresh DB seeded without
+  // this would have zero admins and no way in. onConflictDoNothing means
+  // re-seeding an existing row won't repair its role — that's what the
+  // migration's one-time promotion step is for.
   await db
     .insert(commanders)
-    .values({ username, displayName: "Deal Commander", passwordHash })
+    .values({
+      username,
+      displayName: "Deal Commander",
+      passwordHash,
+      role: "admin",
+      isActive: true,
+    })
     .onConflictDoNothing();
   logger.info({ username }, "Default commander ensured");
 }

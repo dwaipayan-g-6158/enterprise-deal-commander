@@ -7,3 +7,4 @@
 - [Briefing export & privacy](briefing-export-privacy.md) — Briefing has 2 export paths (PNG=toPng(contentRef), Print=window.print minus print:hidden); presenter-private content must be outside contentRef AND print:hidden.
 - [EDC v2 snapshot payload](edc-snapshot-payload.md) — deal_snapshots.payload = {deal,gates,governance}; deal includes speakerNotes, so any payload-rendering UI must whitelist fields.
 - [EDC cache generation guard quirk](edc-cache-generation-guard.md) — wrap() generation guard only protects already-tracked keys; invalidatePrefix won't bump a first-ever in-flight key. Tests live in api-server (vitest run).
+- [EDC RBAC delegation (admin + reader)](edc-rbac-delegation.md) — role read from commanders.role/is_active on every request (never the JWT); one centralized deny-by-default gate (requireWriteRole) replaces 11 per-router requireAuth calls; exhaustive route-sweep test is the source of truth; users.ts last-admin invariant needs row-locking.

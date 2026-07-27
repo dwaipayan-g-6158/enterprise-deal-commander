@@ -63,6 +63,7 @@ import {
   type RiskLevel,
 } from "@/components/cockpit/risk/risk-model";
 import { cn } from "@/lib/utils";
+import { AdminOnly, ReadOnlyNotice } from "@/components/auth/write-gate";
 
 function CockpitSkeleton() {
   return (
@@ -318,9 +319,11 @@ export default function DealCockpit() {
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <Button size="sm" onClick={() => setEditOpen(true)}>
-              <Pencil className="h-4 w-4 mr-2" /> Edit
-            </Button>
+            <AdminOnly>
+              <Button size="sm" onClick={() => setEditOpen(true)}>
+                <Pencil className="h-4 w-4 mr-2" /> Edit
+              </Button>
+            </AdminOnly>
             {deal.crmRecordUrl && (
               <Button size="sm" variant="outline" asChild>
                 <a href={deal.crmRecordUrl} target="_blank" rel="noreferrer">
@@ -338,17 +341,25 @@ export default function DealCockpit() {
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
+                {/* Simulate risk stays for readers: it's a client-side/local
+                    compute, not a persisted write. */}
                 <DropdownMenuItem onClick={() => setSimOpen(true)}>
                   <Sparkles className="h-4 w-4 mr-2" /> Simulate risk
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setBatOpen(true)}>
-                  <Radio className="h-4 w-4 mr-2" /> Bat-Signal
-                </DropdownMenuItem>
+                {/* Bat-Signal mints a real, unauthenticated public share
+                    link server-side — admin only. */}
+                <AdminOnly>
+                  <DropdownMenuItem onClick={() => setBatOpen(true)}>
+                    <Radio className="h-4 w-4 mr-2" /> Bat-Signal
+                  </DropdownMenuItem>
+                </AdminOnly>
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
         </div>
       </div>
+
+      <ReadOnlyNotice />
 
       <DealTrajectory dealId={id} />
 

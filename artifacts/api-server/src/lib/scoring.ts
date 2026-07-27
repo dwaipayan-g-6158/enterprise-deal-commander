@@ -134,15 +134,24 @@ export async function buildScoringInput(dealId: string): Promise<ScoringInput | 
 export interface PersistedScore {
   score: number;
   confidence: string;
-  breakdown: unknown;
+  // Always a ScoreFactorResult[] from the engine — typed as unknown[] (not
+  // unknown) so scoreDeal's insert into the jsonb `breakdown` column, which
+  // accepts unknown[] | SQL | Placeholder, still type-checks after going
+  // through this interface.
+  breakdown: unknown[];
 }
 
 /**
- * Compute a deal's predictive score from current state and persist it. Returns
- * the score (or null if the deal no longer exists). Pass a pre-built `ctx` when
- * scoring many deals to avoid re-querying historical context per deal.
+ * Compute a deal's predictive score from current state WITHOUT persisting it.
+ * Returns null if the deal no longer exists. Pass a pre-built `ctx`/`weights`
+ * when scoring many deals to avoid re-querying them per deal.
+ *
+ * Split out of scoreDeal so a reader's GET /v2/deals/:dealId/score can get an
+ * identical number without appending a deal_scores row on every page load.
+ * Blocking the route for readers was the wrong fix — they need to see scores
+ * — so persistence is conditional instead.
  */
-export async function scoreDeal(
+export async function computeDealScore(
   dealId: string,
   ctx?: ScoringContext,
   weights?: Record<string, number>,
@@ -152,13 +161,29 @@ export async function scoreDeal(
   const context = ctx ?? (await historicalContext());
   const w = weights ?? (await getScoringWeights());
   const score = computePredictiveScore(input, context, w);
+  return { score: score.score, confidence: score.confidence, breakdown: score.breakdown };
+}
+
+/**
+ * Compute a deal's predictive score from current state AND persist it to
+ * deal_scores (append-only history). Returns the score (or null if the deal
+ * no longer exists). Pass a pre-built `ctx` when scoring many deals to avoid
+ * re-querying historical context per deal.
+ */
+export async function scoreDeal(
+  dealId: string,
+  ctx?: ScoringContext,
+  weights?: Record<string, number>,
+): Promise<PersistedScore | null> {
+  const result = await computeDealScore(dealId, ctx, weights);
+  if (!result) return null;
   await db.insert(dealScores).values({
     dealId,
-    score: score.score,
-    confidence: score.confidence,
-    breakdown: score.breakdown,
+    score: result.score,
+    confidence: result.confidence,
+    breakdown: result.breakdown,
   });
-  return { score: score.score, confidence: score.confidence, breakdown: score.breakdown };
+  return result;
 }
 
 /** (Re)score every active deal. Returns the number scored. */

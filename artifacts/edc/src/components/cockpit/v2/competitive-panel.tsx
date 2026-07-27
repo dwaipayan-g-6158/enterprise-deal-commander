@@ -22,6 +22,8 @@ import { Combobox } from "@/components/ui/combobox";
 import { useToast } from "@/hooks/use-toast";
 import { Trash2, Swords } from "lucide-react";
 import { Empty, EmptyHeader, EmptyMedia, EmptyTitle, EmptyDescription } from "@/components/ui/empty";
+import { AdminOnly } from "@/components/auth/write-gate";
+import { useCanWrite } from "@/lib/auth/role-context";
 
 const STATUSES = ["Active", "Displaced", "Lost To", "Won Against"];
 const statusColor: Record<string, string> = {
@@ -39,6 +41,7 @@ export function CompetitivePanel({
   incumbentId?: number | null;
 }) {
   const { toast } = useToast();
+  const canWrite = useCanWrite();
   const qc = useQueryClient();
   const list = useListDealCompetitors(dealId);
   const lookup = useListCompetitors();
@@ -96,7 +99,11 @@ export function CompetitivePanel({
             <EmptyHeader>
               <EmptyMedia variant="icon"><Swords className="h-5 w-5" /></EmptyMedia>
               <EmptyTitle>No competitors tracked</EmptyTitle>
-              <EmptyDescription>Add a competitor below to track win/loss outcomes for this deal.</EmptyDescription>
+              <EmptyDescription>
+                {canWrite
+                  ? "Add a competitor below to track win/loss outcomes for this deal."
+                  : "No competitive activity has been logged for this deal."}
+              </EmptyDescription>
             </EmptyHeader>
           </Empty>
         )}
@@ -108,25 +115,29 @@ export function CompetitivePanel({
                 <Badge variant="secondary">Incumbent</Badge>
               )}
             </span>
-            <Select value={c.status} onValueChange={(v) => setStatus(c.id, c.competitorId, v)}>
+            <Select value={c.status} onValueChange={(v) => setStatus(c.id, c.competitorId, v)} disabled={!canWrite}>
               <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
               <SelectContent>{STATUSES.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
             </Select>
             <Badge className={statusColor[c.status] ?? ""}>{c.status}</Badge>
-            <Button variant="ghost" size="icon" onClick={async () => { await del.mutateAsync({ dealId, id: c.id }); await invalidate(); }}>
-              <Trash2 className="h-4 w-4" />
-            </Button>
+            <AdminOnly>
+              <Button variant="ghost" size="icon" onClick={async () => { await del.mutateAsync({ dealId, id: c.id }); await invalidate(); }}>
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            </AdminOnly>
           </div>
         ))}
-        <Combobox
-          options={catalogOptions}
-          value=""
-          onChange={addCompetitor}
-          onCreate={handleCreateCompetitor}
-          placeholder="Add competitor..."
-          emptyText="No matching competitors."
-          disabled={add.isPending}
-        />
+        <AdminOnly>
+          <Combobox
+            options={catalogOptions}
+            value=""
+            onChange={addCompetitor}
+            onCreate={handleCreateCompetitor}
+            placeholder="Add competitor..."
+            emptyText="No matching competitors."
+            disabled={add.isPending}
+          />
+        </AdminOnly>
       </CardContent>
     </Card>
   );

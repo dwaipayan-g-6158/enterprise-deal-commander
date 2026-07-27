@@ -22,6 +22,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { useCockpitInvalidate } from "./use-invalidate";
 import { Trash2, CheckCircle, ShieldX } from "lucide-react";
+import { AdminOnly } from "@/components/auth/write-gate";
 
 export function BlockersPanel({ dealId }: { dealId: string }) {
   const { toast } = useToast();
@@ -83,6 +84,7 @@ export function BlockersPanel({ dealId }: { dealId: string }) {
 
   return (
     <div className="space-y-4">
+      <AdminOnly>
       <Card>
         <CardContent className="p-4 space-y-3">
           <p className="font-semibold text-sm">Log a Blocker</p>
@@ -136,6 +138,7 @@ export function BlockersPanel({ dealId }: { dealId: string }) {
           </Button>
         </CardContent>
       </Card>
+      </AdminOnly>
 
       {list.length === 0 ? (
         <Card>
@@ -160,16 +163,18 @@ export function BlockersPanel({ dealId }: { dealId: string }) {
                   <p className="text-xs text-muted-foreground mt-1">Resolution: {b.resolutionNotes}</p>
                 )}
               </div>
-              <div className="flex gap-1 shrink-0">
-                {!b.isResolved && (
-                  <Button size="sm" variant="outline" onClick={() => resolve(b.id)} disabled={updateBlocker.isPending}>
-                    Resolve
+              <AdminOnly>
+                <div className="flex gap-1 shrink-0">
+                  {!b.isResolved && (
+                    <Button size="sm" variant="outline" onClick={() => resolve(b.id)} disabled={updateBlocker.isPending}>
+                      Resolve
+                    </Button>
+                  )}
+                  <Button size="icon" variant="ghost" onClick={() => remove(b.id)} disabled={deleteBlocker.isPending}>
+                    <Trash2 className="h-4 w-4 text-muted-foreground" />
                   </Button>
-                )}
-                <Button size="icon" variant="ghost" onClick={() => remove(b.id)} disabled={deleteBlocker.isPending}>
-                  <Trash2 className="h-4 w-4 text-muted-foreground" />
-                </Button>
-              </div>
+                </div>
+              </AdminOnly>
             </CardContent>
           </Card>
         ))

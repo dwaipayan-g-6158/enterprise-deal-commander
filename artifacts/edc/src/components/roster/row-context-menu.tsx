@@ -30,6 +30,13 @@ export interface RowActions {
   onCopyLink: (row: RosterRow) => void;
   /** When set (board view, active state), adds a "Move to stage" submenu. */
   moveTo?: MoveToActions;
+  /**
+   * Readers get every read-only item (Preview, Open cockpit, Copy link) but
+   * none of the writes (Move to stage, Archive, Restore, Delete) — this one
+   * flag covers the table, board, timeline, and card views at once, since
+   * they all render through this shared menu.
+   */
+  canWrite: boolean;
 }
 
 export function RowContextMenu({
@@ -54,7 +61,7 @@ export function RowContextMenu({
         <ContextMenuItem onSelect={() => actions.onCopyLink(row)}>
           <Link2 className="mr-2 h-4 w-4" /> Copy link
         </ContextMenuItem>
-        {actions.moveTo && actions.state === "active" && (
+        {actions.moveTo && actions.state === "active" && actions.canWrite && (
           <>
             <ContextMenuSeparator />
             <ContextMenuSub>
@@ -79,18 +86,18 @@ export function RowContextMenu({
             </ContextMenuSub>
           </>
         )}
-        <ContextMenuSeparator />
-        {actions.state === "active" && (
+        {actions.canWrite && <ContextMenuSeparator />}
+        {actions.state === "active" && actions.canWrite && (
           <ContextMenuItem onSelect={() => actions.onArchive(row)}>
             <Archive className="mr-2 h-4 w-4" /> Archive
           </ContextMenuItem>
         )}
-        {(actions.state === "archived" || actions.state === "deleted") && (
+        {(actions.state === "archived" || actions.state === "deleted") && actions.canWrite && (
           <ContextMenuItem onSelect={() => actions.onRestore(row)}>
             <RotateCcw className="mr-2 h-4 w-4" /> Restore
           </ContextMenuItem>
         )}
-        {actions.state !== "deleted" && (
+        {actions.state !== "deleted" && actions.canWrite && (
           <ContextMenuItem
             onSelect={() => actions.onDelete(row)}
             className="text-destructive focus:text-destructive"

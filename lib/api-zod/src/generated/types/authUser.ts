@@ -5,10 +5,11 @@
  * Enterprise Deal Commander (EDC) Phase 1 API
  * OpenAPI spec version: 1.0.0
  */
+import type { AuthUserRole } from './authUserRole';
 
 export interface AuthUser {
   id: string;
   email: string;
-  role: string;
+  role: AuthUserRole;
   displayName: string;
 }

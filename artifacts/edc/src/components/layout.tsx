@@ -1,9 +1,8 @@
 import { useState, ReactNode } from "react";
 import { Link, useLocation } from "wouter";
 import { LogOut, LayoutDashboard, Briefcase, BarChart, Settings, Activity, TrendingUp, BookMarked, Menu, Search } from "lucide-react";
-import { useLogout, useGetMe, getGetMeQueryKey } from "@workspace/api-client-react";
-import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "./ui/button";
+import { Badge } from "@/components/ui/badge";
 import { ThemeToggle } from "./theme-toggle";
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -15,6 +14,8 @@ import { useFocusMode } from "@/lib/presence/focus-mode-context";
 import { useCommandPalette } from "@/lib/command-palette-context";
 import { pickDailyQuote } from "@/lib/quotes/quote-rotation";
 import { defaultStore } from "@/lib/storage";
+import { useSession, type Role } from "@/lib/auth/role-context";
+import { useSignOut } from "@/lib/auth/use-sign-out";
 
 const navItems = [
   { href: "/", label: "Command Center", icon: LayoutDashboard },
@@ -101,9 +102,10 @@ function SidebarQuoteLine() {
   );
 }
 
-function SidebarBody({ location, user, onNavigate, onLogout }: {
+function SidebarBody({ location, user, role, onNavigate, onLogout }: {
   location: string;
-  user: { email?: string; role?: string; displayName?: string } | undefined;
+  user: { email?: string; displayName?: string } | undefined;
+  role: Role;
   onNavigate?: () => void;
   onLogout: () => void;
 }) {
@@ -163,7 +165,17 @@ function SidebarBody({ location, user, onNavigate, onLogout }: {
             {initialsFrom(user?.displayName, user?.email)}
           </span>
           <div className="min-w-0">
-            <p className="truncate text-sm font-medium">{user?.displayName || user?.email}</p>
+            <div className="flex items-center gap-1.5">
+              <p className="truncate text-sm font-medium">{user?.displayName || user?.email}</p>
+              {/* Reader-only by design: an "Admin" badge on every admin's
+                  sidebar would be noise, since admin is the state where
+                  nothing is missing. */}
+              {role === "reader" && (
+                <Badge variant="outline" className="shrink-0 px-1 py-0 text-[10px] font-normal">
+                  Read-only
+                </Badge>
+              )}
+            </div>
             <PresenceStatusLine />
           </div>
         </div>
@@ -178,40 +190,22 @@ function SidebarBody({ location, user, onNavigate, onLogout }: {
 }
 
 export function Layout({ children }: { children: ReactNode }) {
-  const [location, setLocation] = useLocation();
-  const logout = useLogout();
-  // Skip the (uncacheable) /auth/me request when offline so it doesn't fail in a
-  // loop; the cockpit still renders from cached reads.
-  const { data: user } = useGetMe({
-    query: {
-      enabled: typeof navigator === "undefined" ? true : navigator.onLine,
-      queryKey: getGetMeQueryKey(),
-    },
-  });
+  const [location] = useLocation();
+  const signOut = useSignOut();
+  // Reads the SAME /auth/me result ProtectedRoute already fetched (via
+  // RoleProvider) instead of duplicating the query here — one fetch, one
+  // source of truth, and this now shows the right role even offline (it used
+  // to render `user` as always-undefined offline via its own disabled query).
+  const { user, role } = useSession();
   const isMobile = useIsMobile();
   const [navOpen, setNavOpen] = useState(false);
-  const queryClient = useQueryClient();
   const { setOpen: setCommandPaletteOpen } = useCommandPalette();
-
-  const handleLogout = async () => {
-    try {
-      await logout.mutateAsync();
-      queryClient.clear();
-      if ("caches" in window) {
-        const keys = await caches.keys();
-        await Promise.all(keys.filter((k) => k.includes("edc-api-reads")).map((k) => caches.delete(k)));
-      }
-      setLocation("/login");
-    } catch (e) {
-      console.error(e);
-    }
-  };
 
   return (
     <div className="flex h-screen overflow-hidden bg-background">
       {!isMobile && (
         <aside className="w-64 border-r border-border bg-card flex flex-col">
-          <SidebarBody location={location} user={user} onLogout={handleLogout} />
+          <SidebarBody location={location} user={user} role={role} onLogout={signOut} />
         </aside>
       )}
       <div className="flex-1 flex flex-col min-w-0">
@@ -231,8 +225,9 @@ export function Layout({ children }: { children: ReactNode }) {
                 <SidebarBody
                   location={location}
                   user={user}
+                  role={role}
                   onNavigate={() => setNavOpen(false)}
-                  onLogout={handleLogout}
+                  onLogout={signOut}
                 />
               </SheetContent>
             </Sheet>

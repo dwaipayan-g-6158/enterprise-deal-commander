@@ -91,7 +91,14 @@ export default function Dashboard() {
     setOpenDialog("stage");
   };
 
-  const dashboardVisit = useDashboardVisit();
+  // Readers are explicitly allowed to call this (routes/index rbac allowlist
+  // — it only ever touches the caller's OWN last_dashboard_visit_at). The
+  // suppress flag is cheap insurance: if that allowlist ever regresses, a
+  // reader would otherwise get a destructive "read-only" toast on every
+  // single dashboard load instead of just losing the welcome-back diff.
+  const dashboardVisit = useDashboardVisit({
+    mutation: { meta: { suppressForbiddenToast: true } },
+  });
   const dashboardVisitTouched = useRef(false);
   const [previousVisitAt, setPreviousVisitAt] = useState<string | null | undefined>(undefined);
 

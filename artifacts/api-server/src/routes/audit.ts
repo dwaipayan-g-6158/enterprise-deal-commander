@@ -19,13 +19,12 @@ import {
   GetSnapshotQueryParams,
   GetSnapshotResponse,
 } from "@workspace/api-zod";
-import { requireAuth, getActor } from "../lib/auth";
+import { getActor } from "../lib/auth";
 import { badRequest, notFound } from "../lib/http";
 import { toISO, getDealGates, serializeDeal } from "../lib/intelligence";
 
+// Auth + write-role enforcement is applied centrally in routes/index.ts.
 const router: IRouter = Router();
-
-router.use(requireAuth);
 
 async function ensureDeal(dealId: string) {
   const rows = await db

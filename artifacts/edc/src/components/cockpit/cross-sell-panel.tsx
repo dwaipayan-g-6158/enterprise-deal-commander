@@ -12,9 +12,13 @@ import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { useCockpitInvalidate } from "./use-invalidate";
 import { groupProductsBySuite } from "./product-picker";
+import { AdminOnly } from "@/components/auth/write-gate";
+import { useCanWrite } from "@/lib/auth/role-context";
+import { cn } from "@/lib/utils";
 
 export function CrossSellPanel({ dealId }: { dealId: string }) {
   const { toast } = useToast();
+  const canWrite = useCanWrite();
   const invalidate = useCockpitInvalidate(dealId);
   const { data: crossSells } = useListCrossSells(dealId);
   const { data: catalog } = useListProductCatalog();
@@ -73,9 +77,12 @@ export function CrossSellPanel({ dealId }: { dealId: string }) {
               {items.map((p) => (
                 <label
                   key={p.id}
-                  className="flex items-center gap-3 p-2 rounded-md hover:bg-muted/50 cursor-pointer"
+                  className={cn(
+                    "flex items-center gap-3 p-2 rounded-md hover:bg-muted/50",
+                    canWrite ? "cursor-pointer" : "cursor-default",
+                  )}
                 >
-                  <Checkbox checked={selected.has(p.id)} onCheckedChange={() => toggle(p.id)} />
+                  <Checkbox checked={selected.has(p.id)} onCheckedChange={() => toggle(p.id)} disabled={!canWrite} />
                   <div className="flex-1">
                     <div className="flex items-center gap-2">
                       <p className="text-sm font-medium">{p.productName}</p>
@@ -97,9 +104,11 @@ export function CrossSellPanel({ dealId }: { dealId: string }) {
             </div>
           ))}
         </div>
-        <Button size="sm" onClick={save} disabled={!dirty || updateCrossSells.isPending}>
-          {updateCrossSells.isPending ? "Saving..." : "Save Pitched Products"}
-        </Button>
+        <AdminOnly>
+          <Button size="sm" onClick={save} disabled={!dirty || updateCrossSells.isPending}>
+            {updateCrossSells.isPending ? "Saving..." : "Save Pitched Products"}
+          </Button>
+        </AdminOnly>
       </CardContent>
     </Card>
   );

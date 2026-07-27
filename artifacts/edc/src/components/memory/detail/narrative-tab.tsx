@@ -7,6 +7,8 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { AutopsyForm } from "@/components/memory/autopsy-form";
+import { useCanWrite } from "@/lib/auth/role-context";
+import { ReadOnlyNotice } from "@/components/auth/write-gate";
 
 interface MemoryDetail {
   id: string;
@@ -30,6 +32,7 @@ interface MemoryDetail {
 
 export function NarrativeTab({ memory: m }: { memory: MemoryDetail }) {
   const { toast } = useToast();
+  const canWrite = useCanWrite();
   const updateMemory = useUpdateDealMemory();
   const [narrative, setNarrative] = useState(m.winLossNarrative ?? "");
   const [lessons, setLessons] = useState((m.keyLessons ?? []).join("\n"));
@@ -59,9 +62,11 @@ export function NarrativeTab({ memory: m }: { memory: MemoryDetail }) {
 
   return (
     <div className="space-y-4">
+      <ReadOnlyNotice />
       <Card>
         <CardHeader><CardTitle className="text-lg">Narrative & Lessons</CardTitle></CardHeader>
         <CardContent className="space-y-4">
+          <fieldset disabled={!canWrite} className="contents">
           <div className="grid gap-2">
             <Label>Win/Loss Narrative</Label>
             <Textarea rows={4} value={narrative} onChange={(e) => setNarrative(e.target.value)} />
@@ -77,6 +82,7 @@ export function NarrativeTab({ memory: m }: { memory: MemoryDetail }) {
           <Button onClick={save} disabled={updateMemory.isPending}>
             {updateMemory.isPending ? "Saving..." : "Save"}
           </Button>
+          </fieldset>
         </CardContent>
       </Card>
 

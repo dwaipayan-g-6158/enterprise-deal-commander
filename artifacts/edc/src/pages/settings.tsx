@@ -17,11 +17,15 @@ import { TeamSettings } from "@/components/settings/team-settings";
 import { TargetsSettings } from "@/components/settings/targets-settings";
 import { ScoringWeightsSettings } from "@/components/settings/scoring-weights-settings";
 import { AchievementsSettings } from "@/components/settings/achievements-settings";
+import { UsersSettings } from "@/components/settings/users-settings";
+import { AdminOnly, ReadOnlyNotice } from "@/components/auth/write-gate";
+import { useCanWrite } from "@/lib/auth/role-context";
 
 export default function Settings() {
+  const canWrite = useCanWrite();
   const { data: response, isLoading } = useListEngineThresholds();
   const thresholds = response?.data || [];
-  
+
   const [localValues, setLocalValues] = useState<Record<string, string>>({});
   const updateThresholds = useUpdateEngineThresholds();
   const queryClient = useQueryClient();
@@ -67,8 +71,13 @@ export default function Settings() {
         <p className="text-muted-foreground mt-2">Engine tuning, automation, and integrations</p>
       </div>
 
+      <ReadOnlyNotice>
+        You can see every tab and setting, but only an admin can change engine tuning,
+        automation, or team configuration.
+      </ReadOnlyNotice>
+
       <Tabs defaultValue="thresholds" className="w-full">
-        <TabsList>
+        <TabsList className="h-auto w-fit flex-wrap justify-start gap-1">
           <TabsTrigger value="thresholds">Thresholds</TabsTrigger>
           <TabsTrigger value="weights">Score Weights</TabsTrigger>
           <TabsTrigger value="patterns">Custom Patterns</TabsTrigger>
@@ -77,15 +86,18 @@ export default function Settings() {
           <TabsTrigger value="targets">Targets</TabsTrigger>
           <TabsTrigger value="team">Team</TabsTrigger>
           <TabsTrigger value="achievements">Achievements</TabsTrigger>
+          <TabsTrigger value="users">Users</TabsTrigger>
         </TabsList>
 
         <TabsContent value="thresholds" className="pt-4 space-y-4">
-          <div className="flex justify-end">
-            <Button onClick={handleSave} disabled={!hasChanges || updateThresholds.isPending} className="gap-2">
-              <Save className="w-4 h-4" />
-              {updateThresholds.isPending ? "Applying..." : "Apply Changes"}
-            </Button>
-          </div>
+          <AdminOnly>
+            <div className="flex justify-end">
+              <Button onClick={handleSave} disabled={!hasChanges || updateThresholds.isPending} className="gap-2">
+                <Save className="w-4 h-4" />
+                {updateThresholds.isPending ? "Applying..." : "Apply Changes"}
+              </Button>
+            </div>
+          </AdminOnly>
           <Card>
         <CardHeader>
           <div className="flex items-center gap-3">
@@ -111,6 +123,7 @@ export default function Settings() {
                   value={localValues[t.parameterKey] || ""}
                   onChange={e => setLocalValues({ ...localValues, [t.parameterKey]: e.target.value })}
                   className="font-mono"
+                  disabled={!canWrite}
                 />
               </div>
             </div>
@@ -139,6 +152,9 @@ export default function Settings() {
         </TabsContent>
         <TabsContent value="achievements" className="pt-4">
           <AchievementsSettings />
+        </TabsContent>
+        <TabsContent value="users" className="pt-4">
+          <UsersSettings />
         </TabsContent>
       </Tabs>
     </div>

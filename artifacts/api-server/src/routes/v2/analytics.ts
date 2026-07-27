@@ -47,7 +47,8 @@ import {
 import { GetDealScoreParams, GetPricingBenchmarksQueryParams, ParseNlcCommandBody } from "@workspace/api-zod";
 import { notFound } from "../../lib/http";
 import { toISO, getHealthWeights } from "../../lib/intelligence";
-import { scoreDeal, rescoreActiveDeals } from "../../lib/scoring";
+import { getActor } from "../../lib/auth";
+import { computeDealScore, scoreDeal, rescoreActiveDeals } from "../../lib/scoring";
 import { cachedIntel, computeSummary } from "../../lib/portfolio";
 import { computeMemoryHealth } from "../../lib/memory-health";
 import { computeCompetitorIntel, computePlaybookEffectiveness, percentiles } from "../../lib/memory-intel";
@@ -76,7 +77,11 @@ function daysBetween(from: Date | string | null, to = new Date()): number {
 
 router.get("/deals/:dealId/score", async (req: Request, res: Response) => {
   const { dealId } = GetDealScoreParams.parse(req.params);
-  const score = await scoreDeal(dealId);
+  // Readers get an identical number; they just don't append to deal_scores.
+  // A GET must not silently grow an append-only history table every time a
+  // reader loads a deal page.
+  const isAdmin = getActor(req).role === "admin";
+  const score = isAdmin ? await scoreDeal(dealId) : await computeDealScore(dealId);
   if (!score) throw notFound("Deal not found");
   res.json({ data: { ...score, computedAt: new Date().toISOString() } });
 });
@@ -941,9 +946,17 @@ router.get("/analytics/engagement", async (req: Request, res: Response) => {
   // would misrepresent things that actually happened weeks ago.
   const isFirstEverEvaluation = existingRows.length === 0;
 
-  for (const def of ACHIEVEMENT_DEFS) {
-    if (trueNow[def.code] && !existingCodes.has(def.code)) {
-      await db.insert(commanderAchievements).values({ achievementCode: def.code }).onConflictDoNothing();
+  // commander_achievements has no per-commander column at all (its PK is
+  // achievement_code alone) — the ledger is app-global, not per-user. A
+  // reader's page load must not be able to mint a row here: that would be a
+  // reader silently earning the owner's achievement. Readers still see the
+  // full achievement list below (locked/earned as of the last admin
+  // evaluation) — only the write is gated.
+  if (getActor(req).role === "admin") {
+    for (const def of ACHIEVEMENT_DEFS) {
+      if (trueNow[def.code] && !existingCodes.has(def.code)) {
+        await db.insert(commanderAchievements).values({ achievementCode: def.code }).onConflictDoNothing();
+      }
     }
   }
 

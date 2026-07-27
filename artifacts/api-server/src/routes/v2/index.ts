@@ -22,7 +22,6 @@ import {
   GetDealSnapshotParams,
   GetDealSnapshotResponse,
 } from "@workspace/api-zod";
-import { requireAuth } from "../../lib/auth";
 import { notFound } from "../../lib/http";
 import { toISO } from "../../lib/intelligence";
 import crudRouter from "./crud";
@@ -31,11 +30,10 @@ import configRouter from "./config";
 import exportsRouter from "./exports";
 import meddpiccRouter from "./meddpicc";
 
+// Auth + write-role enforcement is applied centrally in routes/index.ts.
 const router: IRouter = Router();
 
-router.use(requireAuth);
-
-// V2 Sovereign Intelligence sub-routers (auth applied above).
+// V2 Sovereign Intelligence sub-routers.
 router.use(crudRouter);
 router.use(analyticsRouter);
 router.use(configRouter);

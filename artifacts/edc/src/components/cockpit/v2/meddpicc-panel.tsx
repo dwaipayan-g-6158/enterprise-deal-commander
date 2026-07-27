@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useCanWrite } from "@/lib/auth/role-context";
 
 interface Question {
   questionOrder: number;
@@ -97,6 +98,7 @@ function QuestionRow({
   answer: Answer | undefined;
   onScore: (score: number, note: string | null) => void;
 }) {
+  const canWrite = useCanWrite();
   const [noteDraft, setNoteDraft] = useState(answer?.note ?? "");
 
   return (
@@ -120,6 +122,7 @@ function QuestionRow({
               type="button"
               size="sm"
               variant="outline"
+              disabled={!canWrite}
               className={cn("h-7 w-9 px-0", isSelected ? style.solid : style.wash)}
               onClick={() => onScore(n, noteDraft || null)}
             >
@@ -147,6 +150,7 @@ function QuestionRow({
         }}
         placeholder="Notes (optional)"
         className="h-16 text-xs"
+        disabled={!canWrite}
       />
     </div>
   );

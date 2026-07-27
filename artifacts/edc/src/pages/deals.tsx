@@ -48,6 +48,8 @@ import { ToastAction } from "@/components/ui/toast";
 import type { RowActions } from "@/components/roster/row-context-menu";
 import { terminalOutcome, type BoardStage } from "@/components/roster/model/board";
 import { cn } from "@/lib/utils";
+import { useCanWrite } from "@/lib/auth/role-context";
+import { AdminOnly } from "@/components/auth/write-gate";
 import type { FilterOption } from "@/components/roster/multi-select-filter";
 import { COLUMNS } from "@/components/roster/model/roster-columns";
 import type { ColumnId, RosterRow } from "@/components/roster/model/roster-types";
@@ -68,6 +70,7 @@ function distinctOptions(values: string[]): FilterOption[] {
 export default function Deals() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const canWrite = useCanWrite();
 
   const {
     view,
@@ -268,6 +271,7 @@ export default function Deals() {
     onDelete: (row) => runSingle("delete", row.id),
     onRestore: (row) => runSingle("restore", row.id),
     onCopyLink: copyLink,
+    canWrite,
   };
 
   const someSelected = selected.size > 0;
@@ -280,7 +284,11 @@ export default function Deals() {
     : (filters.closure ?? "open") === "closed"
       ? "No closed deals yet. Your first win will show up here."
       : filters.state === "active"
-        ? "Your active pipeline is empty. Time to find the next opportunity."
+        // R5: a reader has no "Create your first deal" button below this
+        // message, so the CTA half of the sentence would point at nothing.
+        ? canWrite
+          ? "Your active pipeline is empty. Time to find the next opportunity."
+          : "Your active pipeline is empty."
         : `No ${filters.state} deals yet.`;
 
   return (
@@ -298,9 +306,11 @@ export default function Deals() {
             Active pipeline and technical validation states
           </p>
         </div>
-        <Button className="gap-2 shrink-0" onClick={() => setCreateOpen(true)}>
-          <Plus className="h-4 w-4" /> <span className="hidden sm:inline">New Deal</span>
-        </Button>
+        <AdminOnly>
+          <Button className="gap-2 shrink-0" onClick={() => setCreateOpen(true)}>
+            <Plus className="h-4 w-4" /> <span className="hidden sm:inline">New Deal</span>
+          </Button>
+        </AdminOnly>
       </div>
 
       <SavedViewTabs
@@ -348,17 +358,17 @@ export default function Deals() {
         <div className="flex items-center gap-3 rounded-md border bg-muted/40 px-4 py-2 flex-wrap">
           <span className="text-sm font-medium">{selected.size} selected</span>
           <div className="flex gap-2 ml-auto flex-wrap">
-            {filters.state === "active" && (
+            {filters.state === "active" && canWrite && (
               <Button size="sm" variant="outline" onClick={() => setConfirm("archive")}>
                 <Archive className="h-4 w-4 mr-2" /> Archive
               </Button>
             )}
-            {(filters.state === "archived" || filters.state === "deleted") && (
+            {(filters.state === "archived" || filters.state === "deleted") && canWrite && (
               <Button size="sm" variant="outline" onClick={() => runBulk("restore")} disabled={restoreDeal.isPending}>
                 <RotateCcw className="h-4 w-4 mr-2" /> Restore
               </Button>
             )}
-            {filters.state !== "deleted" && (
+            {filters.state !== "deleted" && canWrite && (
               <Button size="sm" variant="destructive" onClick={() => setConfirm("delete")}>
                 <Trash2 className="h-4 w-4 mr-2" /> Delete
               </Button>
@@ -393,7 +403,7 @@ export default function Deals() {
           <div className="flex flex-col items-center gap-3 text-center text-muted-foreground">
             <Inbox className="h-8 w-8" />
             <p className="text-sm">{emptyMessage}</p>
-            {filters.state === "active" && !hasActiveFilters && (
+            {filters.state === "active" && !hasActiveFilters && canWrite && (
               <Button size="sm" onClick={() => setCreateOpen(true)}>
                 <Plus className="h-4 w-4 mr-2" /> Create your first deal
               </Button>
@@ -410,7 +420,7 @@ export default function Deals() {
               <RosterBoard
                 rows={derived.flat}
                 stages={stagesData?.data ?? []}
-                readOnly={filters.state !== "active"}
+                readOnly={filters.state !== "active" || !canWrite}
                 stageFilter={filters.stage}
                 bandBy={boardBand}
                 onCardClick={(row) => setPreviewDealId(row.id)}

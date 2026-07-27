@@ -2,13 +2,12 @@ import { Router, type IRouter, type Request, type Response } from "express";
 import { eq } from "drizzle-orm";
 import { db, enterpriseDeals, batSignals } from "@workspace/db";
 import { CreateBatSignalParams } from "@workspace/api-zod";
-import { requireAuth, getActor } from "../lib/auth";
+import { getActor } from "../lib/auth";
 import { notFound } from "../lib/http";
 import { writeAudit } from "../lib/audit";
 
+// Auth + write-role enforcement is applied centrally in routes/index.ts.
 const router: IRouter = Router();
-
-router.use(requireAuth);
 
 const EXPIRY_MS = 48 * 60 * 60 * 1000;
 

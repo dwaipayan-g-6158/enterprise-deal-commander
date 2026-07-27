@@ -38,6 +38,7 @@ import {
   ShieldOff,
   Zap,
 } from "lucide-react";
+import { AdminOnly } from "@/components/auth/write-gate";
 import { type DealRisk } from "./risk/risk-model";
 import { RiskScoreCard } from "./risk/risk-score-card";
 import { ManagedRisks } from "./risk/managed-risks";
@@ -248,30 +249,32 @@ function AlertCard({ dealId, alert }: { dealId: string; alert: Alert }) {
         </Collapsible>
 
         {/* Action buttons */}
-        <div className="flex flex-wrap gap-2 pt-1">
-          <Button size="sm" variant="outline" onClick={() => apply("acknowledge")} disabled={setDisposition.isPending} className="gap-1.5">
-            <Check className="h-3.5 w-3.5" /> Acknowledge
-          </Button>
-          <SnoozePopover
-            pending={setDisposition.isPending}
-            onConfirm={(snooze_duration_days, snooze_until_field_change) =>
-              apply("snooze", { snooze_duration_days, snooze_until_field_change })
-            }
-          />
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => setShowAccept((s) => !s)}
-            className={cn(
-              "gap-1.5",
-              isRed
-                ? "border-destructive/40 text-destructive hover:bg-destructive/5 hover:border-destructive"
-                : "border-amber-500/40 text-amber-600 dark:text-amber-400 hover:bg-amber-500/5 hover:border-amber-500",
-            )}
-          >
-            <ShieldOff className="h-3.5 w-3.5" /> Accept Risk
-          </Button>
-        </div>
+        <AdminOnly>
+          <div className="flex flex-wrap gap-2 pt-1">
+            <Button size="sm" variant="outline" onClick={() => apply("acknowledge")} disabled={setDisposition.isPending} className="gap-1.5">
+              <Check className="h-3.5 w-3.5" /> Acknowledge
+            </Button>
+            <SnoozePopover
+              pending={setDisposition.isPending}
+              onConfirm={(snooze_duration_days, snooze_until_field_change) =>
+                apply("snooze", { snooze_duration_days, snooze_until_field_change })
+              }
+            />
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setShowAccept((s) => !s)}
+              className={cn(
+                "gap-1.5",
+                isRed
+                  ? "border-destructive/40 text-destructive hover:bg-destructive/5 hover:border-destructive"
+                  : "border-amber-500/40 text-amber-600 dark:text-amber-400 hover:bg-amber-500/5 hover:border-amber-500",
+              )}
+            >
+              <ShieldOff className="h-3.5 w-3.5" /> Accept Risk
+            </Button>
+          </div>
+        </AdminOnly>
 
         {showAccept && (
           <div className="space-y-2 rounded-md border bg-muted/40 p-3">
@@ -293,23 +296,25 @@ function AlertCard({ dealId, alert }: { dealId: string; alert: Alert }) {
         )}
 
         {relevantChecklists.length > 0 && !alert.intervention && (
-          <div className="flex gap-2 items-center pt-1">
-            <Select value={checklistId} onValueChange={setChecklistId}>
-              <SelectTrigger className="h-8 text-xs">
-                <SelectValue placeholder="Select playbook" />
-              </SelectTrigger>
-              <SelectContent>
-                {relevantChecklists.map((c) => (
-                  <SelectItem key={c.id} value={String(c.id)}>
-                    {c.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Button size="sm" variant="secondary" onClick={launch} disabled={!checklistId || launchIntervention.isPending}>
-              Launch
-            </Button>
-          </div>
+          <AdminOnly>
+            <div className="flex gap-2 items-center pt-1">
+              <Select value={checklistId} onValueChange={setChecklistId}>
+                <SelectTrigger className="h-8 text-xs">
+                  <SelectValue placeholder="Select playbook" />
+                </SelectTrigger>
+                <SelectContent>
+                  {relevantChecklists.map((c) => (
+                    <SelectItem key={c.id} value={String(c.id)}>
+                      {c.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Button size="sm" variant="secondary" onClick={launch} disabled={!checklistId || launchIntervention.isPending}>
+                Launch
+              </Button>
+            </div>
+          </AdminOnly>
         )}
       </CardContent>
     </Card>

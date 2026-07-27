@@ -32,15 +32,17 @@ import {
   ArchiveDealParams,
   ArchiveDealResponse,
 } from "@workspace/api-zod";
-import { requireAuth, getActor } from "../lib/auth";
+import { getActor } from "../lib/auth";
 import { badRequest, notFound, conflict, stageGuardrail, archiveGuardrail } from "../lib/http";
 import { serializeDeal, assembleDealIntelligence } from "../lib/intelligence";
 import { writeAudit } from "../lib/audit";
 import { emitDealEvent } from "../lib/events";
 
+// Auth + write-role enforcement is applied ONCE, centrally, in
+// routes/index.ts (requireAuth + requireWriteRole). Do not re-add
+// router.use(requireAuth) here — see the comment block above the gate in
+// routes/index.ts for why a per-router copy is worse than none.
 const router: IRouter = Router();
-
-router.use(requireAuth);
 
 router.get("/deals", async (req: Request, res: Response) => {
   const q = ListDealsQueryParams.parse(req.query);

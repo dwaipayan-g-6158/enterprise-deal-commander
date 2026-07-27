@@ -7,6 +7,8 @@ import { Input } from "@/components/ui/input";
 import { DatePicker } from "@/components/ui/date-picker";
 import { useToast } from "@/hooks/use-toast";
 import { Target } from "lucide-react";
+import { AdminOnly } from "@/components/auth/write-gate";
+import { useCanWrite } from "@/lib/auth/role-context";
 
 interface PipelineTargetRow {
   id: string;
@@ -21,6 +23,7 @@ function quarterStart(d = new Date()): string {
 
 export function TargetsSettings() {
   const { toast } = useToast();
+  const canWrite = useCanWrite();
   const qc = useQueryClient();
   const list = useListPipelineTargets();
   const upsert = useUpsertPipelineTarget();
@@ -59,28 +62,32 @@ export function TargetsSettings() {
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
-        <div className="flex flex-wrap items-end gap-3 rounded-md border border-dashed p-3">
-          <div>
-            <label className="text-xs text-muted-foreground uppercase tracking-wider">Quarter start</label>
-            <DatePicker value={period} onChange={setPeriod} placeholder="Quarter start" />
+        <AdminOnly>
+          <div className="flex flex-wrap items-end gap-3 rounded-md border border-dashed p-3">
+            <div>
+              <label className="text-xs text-muted-foreground uppercase tracking-wider">Quarter start</label>
+              <DatePicker value={period} onChange={setPeriod} placeholder="Quarter start" />
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground uppercase tracking-wider">Target (USD)</label>
+              <Input
+                type="number"
+                value={value}
+                onChange={(e) => setValue(e.target.value)}
+                placeholder="5000000"
+              />
+            </div>
+            <Button disabled={!value || upsert.isPending} onClick={save}>
+              {upsert.isPending ? "Saving..." : "Save"}
+            </Button>
           </div>
-          <div>
-            <label className="text-xs text-muted-foreground uppercase tracking-wider">Target (USD)</label>
-            <Input
-              type="number"
-              value={value}
-              onChange={(e) => setValue(e.target.value)}
-              placeholder="5000000"
-            />
-          </div>
-          <Button disabled={!value || upsert.isPending} onClick={save}>
-            {upsert.isPending ? "Saving..." : "Save"}
-          </Button>
-        </div>
+        </AdminOnly>
 
         <div className="space-y-1">
           {targets.length === 0 && (
-            <p className="text-sm text-muted-foreground">No targets set yet. Add one above.</p>
+            <p className="text-sm text-muted-foreground">
+              {canWrite ? "No targets set yet. Add one above." : "No targets set yet."}
+            </p>
           )}
           {targets.map((t) => (
             <div
