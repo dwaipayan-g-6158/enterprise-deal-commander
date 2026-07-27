@@ -32,7 +32,7 @@ interface MetricCardProps {
 function MetricCard({ icon, label, value, subtitle, valueClassName, delayMs }: MetricCardProps) {
   return (
     <Card
-      className="animate-in fade-in slide-in-from-bottom-2 fill-mode-both duration-300 transition-shadow hover:shadow-md"
+      className="animate-in fade-in fill-mode-both duration-300 transition-shadow hover:shadow-md"
       style={{ animationDelay: `${delayMs}ms` }}
     >
       <CardContent className="p-4 space-y-1">
@@ -70,7 +70,7 @@ export function PortfolioSummaryCards({ summary }: { summary: PortfolioSummary }
       />
 
       <MetricCard
-        delayMs={100}
+        delayMs={40}
         icon={<Link2 className="h-3.5 w-3.5" />}
         label="Top Correlation Cluster"
         value={
@@ -95,7 +95,7 @@ export function PortfolioSummaryCards({ summary }: { summary: PortfolioSummary }
       />
 
       <MetricCard
-        delayMs={200}
+        delayMs={80}
         icon={<DollarSign className="h-3.5 w-3.5" />}
         label="Correlated Exposure"
         value={compactValue(summary.correlatedExposureTcv, summary.reportingCurrency)}
@@ -103,7 +103,7 @@ export function PortfolioSummaryCards({ summary }: { summary: PortfolioSummary }
       />
 
       <MetricCard
-        delayMs={300}
+        delayMs={120}
         icon={<AlertOctagon className="h-3.5 w-3.5" />}
         label="Critical Deals"
         value={summary.redDealCount}

@@ -1,138 +1,52 @@
-# Implementation Plan: Clickable Weighted Pipeline & Avg Score tiles
+# Portfolio page — eliminate the hard-reload loading flash
 
-## Overview
+Status: **Implemented and verified** (2026-07-27).
 
-The dashboard's Pipeline Vital Signs row (`VitalSignsBar`) has 5 tiles. Total TCV and Red
-Alerts are clickable — they open a detail dialog (`TotalTcvDialog`, `HealthStatusDialog`) via a
-shared `clickable()` role="button" helper. Weighted Pipeline and Avg Score are plain, inert
-`Card`s. This plan makes those two tiles clickable, each opening a new detail dialog modeled on
-the existing `TotalTcvDialog`.
+## Context
 
-No backend or API-contract changes are needed: `useListDeals` (TCV, health, stage,
-`winProbabilityPct`) and the already-shipped `useGetRosterEnrichment` hook (per-deal `score`)
-together carry every field required to build both dialogs client-side, the same way
-`TotalTcvDialog` already re-fetches `useListDeals` independently of the tile bar.
+On a hard reload of `/portfolio`, a bare "Correlating risk patterns…" line flashed for a split second before the real page appeared. The cause was a **shape swap**, not a missing transition — three frames rendered in sequence with two hard cuts:
 
-## Architecture Decisions
+| # | What rendered | Source |
+|---|---|---|
+| 1 | Full-screen `Warming up…`, no sidebar | `App.tsx` — `useGetMe` pending |
+| 2 | `p-8 space-y-2` + one line of text, top-left | `portfolio.tsx` — `useGetPortfolioAnalysis` pending |
+| 3 | `p-8 max-w-[1600px] mx-auto space-y-8` — full page | `portfolio.tsx` loaded state |
 
-- **Reuse existing hooks, no codegen.** `useListDeals` + `useGetRosterEnrichment` (already used by
-  `DealRoster`) supply TCV, health, stage, `winProbabilityPct`, and `score`. No new API route, no
-  `pnpm --filter @workspace/api-spec run codegen` needed. This keeps both tasks frontend-only.
-- **Mirror the backend's weighted-pipeline fallback.** `/analytics/vital-signs` computes each
-  deal's contribution as `tcv * (score ?? winProbabilityPct ?? 30) / 100`. The new
-  `WeightedPipelineDialog` must replicate that exact fallback chain per deal so its per-deal
-  breakdown is directionally consistent with the aggregate number shown on the tile (see Risks —
-  it will not reconcile to the cent, since the tile's cap-less aggregate and the dialog's
-  `limit: 200` deal fetch are independent queries).
-- **Follow the established dialog shell.** New dialogs use the same `Dialog`/`DialogContent`
-  layout, `compactCurrency`/currency-formatting conventions, and click-through-to-deal row pattern
-  as `TotalTcvDialog`, not a new visual language.
-- **Score color convention.** Reuse the existing `>=70 emerald / >=40 amber / else red` scale from
-  `components/roster/cells.tsx` for score coloring in the Avg Score dialog, rather than inventing
-  a new one (three different scoreColor scales already exist elsewhere in the codebase — don't add
-  a fourth).
+A second, larger shift also existed after frame 3: `ProductMixSection` fired its own `useGetProductMix` query on mount (serialised behind `portfolio-analysis`), replacing a small text card with two tall cards.
 
-## Task List
+**Outcome:** hard reload of `/portfolio` now goes shell skeleton → portfolio skeleton → content fade-in, with CLS = 0 after first paint.
 
-### Phase 1: Weighted Pipeline tile
+## Scope (as approved)
 
-- [ ] **Task 1: Weighted Pipeline tile opens a breakdown dialog**
+3 files:
+- `artifacts/edc/src/pages/portfolio.tsx` — `PortfolioSkeleton`, parallelized `useGetProductMix`, fade-only entrance.
+- `artifacts/edc/src/App.tsx` — standalone `AppShellSkeleton` replacing the bare `Warming up…` / `null` branches.
+- `artifacts/edc/src/components/cockpit/portfolio-summary-cards.tsx` — dropped the `slide-in-from-bottom-2` stagger so the 4 summary cards don't pop in one-by-one after the geometry-matched skeleton disappears.
 
-  **Description:** Make the "Weighted Pipeline" tile in `VitalSignsBar` clickable, opening a new
-  `WeightedPipelineDialog` that shows the weighted-pipeline total, a by-health breakdown of
-  weighted contribution, and the top deals by weighted contribution (TCV × win probability),
-  each row linking to its deal.
+## Architecture decisions
 
-  **Acceptance criteria:**
-  - [ ] The Weighted Pipeline `Card` has the same `cardCls` + `clickable()` + `aria-haspopup="dialog"`
-        treatment as the Total TCV card (mouse click and keyboard Enter/Space both open it; it's
-        reachable by Tab).
-  - [ ] The dialog shows: weighted pipeline total, total TCV, blended win-rate
-        (`weightedPipeline / totalTCV`), a RED/YELLOW/GREEN weighted-contribution breakdown, and a
-        "top contributing deals" list (deal name, account, weighted contribution) sorted descending.
-  - [ ] Clicking a deal row closes the dialog and navigates to `/deals/:id` (matches
-        `TotalTcvDialog`'s `goToDeal`).
-  - [ ] Deals with no `score` and no `winProbabilityPct` fall back to 30% (matching the backend's
-        `?? 30` default) rather than being dropped or shown as 0%.
+- Skeletons are local to their page (house pattern — matches `CockpitSkeleton` in `deal-cockpit.tsx`). No shared `PageSkeleton` abstraction for a 2-page change.
+- CSS `animate-in`/`tw-animate-css`, not framer-motion — matches house vocabulary and is covered by the global `prefers-reduced-motion` kill-switch (`index.css:227-234`).
+- Loaded content uses `animate-in fade-in duration-300` (no slide) — geometry is already matched by the skeleton, so a slide would read as a jump.
+- `Layout` could not be reused for the shell skeleton (`useCommandPalette()` throws before `CommandPaletteProvider` mounts) — `AppShellSkeleton` is standalone, mirroring `layout.tsx`'s chrome class-for-class.
+- Frame 1's content (shell skeleton) is a strict subset of frame 2's (page skeleton) at identical coordinates — the transition is additive, not a swap.
+- No artificial delay before showing a skeleton — on hard reload the alternative is a blank white document.
+- `hidden md:flex` (768px) for the shell's sidebar, not `useIsMobile()` — exact breakpoint match, and correct on the very first paint (the hook returns `false` initially).
 
-  **Verification:**
-  - [ ] `pnpm --filter @workspace/edc exec tsc --noEmit` (or `pnpm run typecheck` from repo root)
-        passes.
-  - [ ] Manual: `pnpm --filter @workspace/api-server run dev` + `pnpm --filter @workspace/edc run dev`,
-        load `/`, click the Weighted Pipeline tile — dialog opens with non-empty breakdown and top
-        deals; click a deal row — navigates to that deal's page.
-  - [ ] Manual: Tab to the tile, press Enter — dialog opens; Escape closes it.
+## Verification performed
 
-  **Dependencies:** None.
+- `pnpm --filter @workspace/edc run typecheck` — clean.
+- Chrome DevTools MCP performance trace on a throttled (4× CPU / Slow 4G) reload of `/portfolio`: **CLS after FCP = 0.00**.
+- Network waterfall: `/api/v1/intelligence/portfolio-analysis` and `/api/v1/intelligence/product-mix` now resolve concurrently (previously serialized).
+- Screenshots (via a `fetch` delay injected through `initScript`, since Vite dev's ~300 unbundled module requests dominate DevTools network/CPU throttling and made the real loading window uncatchable otherwise) confirm:
+  - `PortfolioSkeleton` renders with matching geometry (4 summary cards, heatmap, `PersonalityLine` in the header slot).
+  - `AppShellSkeleton` renders with the sidebar silhouette, and its title bar aligns pixel-for-pixel with the Portfolio skeleton's title bar — confirming the additive-transition design.
+  - 767px shows the mobile header (no sidebar silhouette); 768px shows the full sidebar silhouette.
+  - 390×844 mobile viewport confirmed via accessibility-tree snapshot (single header, no duplicates).
+- Offline path: the `if (!offline)` conditional wrapping the shell-skeleton branches was not touched by this change (only the return values inside it were swapped), so the existing offline bypass is preserved by construction. Live re-test wasn't possible — the DevTools MCP "Offline" preset throttles bandwidth but does not flip `navigator.onLine` in this environment.
 
-  **Files likely touched:**
-  - `artifacts/edc/src/components/dashboard/weighted-pipeline-dialog.tsx` (new)
-  - `artifacts/edc/src/components/dashboard/widgets/vital-signs-bar.tsx` (edit)
-  - `artifacts/edc/src/pages/dashboard.tsx` (edit)
+## Follow-ups (out of scope, noted but not actioned)
 
-  **Estimated scope:** Medium (1 new file, 2 edited).
-
-### Checkpoint: Weighted Pipeline
-
-- [ ] Typecheck clean, dialog verified end-to-end in the browser, no regression to the other four
-      Vital Signs tiles (Total TCV, Active Deals/stale link, Red Alerts still open their existing
-      dialogs correctly).
-
-### Phase 2: Avg Score tile
-
-- [ ] **Task 2: Avg Score tile opens a distribution dialog**
-
-  **Description:** Make the "Avg Score" tile clickable, opening a new `AvgScoreDialog` that shows
-  the portfolio average score, a score-band distribution (Strong/Moderate/Weak, using the existing
-  70/40 thresholds), and a "deals to watch" list of the lowest-scoring active deals, each row
-  linking to its deal.
-
-  **Acceptance criteria:**
-  - [ ] The Avg Score `Card` has the same `cardCls` + `clickable()` + `aria-haspopup="dialog"`
-        treatment as Total TCV / Red Alerts.
-  - [ ] The dialog shows: avg score, count of scored vs. unscored active deals, a score-band
-        breakdown (counts and/or TCV per band using the emerald/amber/red convention from
-        `roster/cells.tsx`), and a "lowest scoring deals" list sorted ascending by score (deals with
-        no score excluded from the ranking, shown separately or omitted — not sorted as if score
-        were 0).
-  - [ ] Clicking a deal row closes the dialog and navigates to `/deals/:id`.
-
-  **Verification:**
-  - [ ] Typecheck passes (`pnpm run typecheck`).
-  - [ ] Manual: click Avg Score tile — dialog opens with correct counts (cross-check against the
-        Deal Roster widget's per-deal Score column for a couple of deals); click a deal row —
-        navigates correctly.
-  - [ ] Manual: keyboard open/close works same as Task 1.
-
-  **Dependencies:** None functionally, but implemented after Task 1 so both new `OpenDialog` union
-  members and both new `onOpen*` props land in `dashboard.tsx` / `vital-signs-bar.tsx` without
-  merge churn on the same lines.
-
-  **Files likely touched:**
-  - `artifacts/edc/src/components/dashboard/avg-score-dialog.tsx` (new)
-  - `artifacts/edc/src/components/dashboard/widgets/vital-signs-bar.tsx` (edit)
-  - `artifacts/edc/src/pages/dashboard.tsx` (edit)
-
-  **Estimated scope:** Medium (1 new file, 2 edited).
-
-### Checkpoint: Complete
-
-- [ ] Both tiles clickable and keyboard-accessible, both dialogs verified end-to-end, typecheck and
-      build clean, no regression to existing dashboard tiles/dialogs.
-- [ ] Ready for review.
-
-## Risks and Mitigations
-
-| Risk | Impact | Mitigation |
-|------|--------|------------|
-| Per-deal weighted-contribution sum in the dialog won't exactly match the tile's aggregate (independent queries, `limit: 200` cap, live data drift between fetches) | Low — cosmetic mismatch of a few % at most | Mirror the backend's exact fallback formula (`score ?? winProbabilityPct ?? 30`) so the numbers are directionally right; don't force-reconcile to the tile's headline figure |
-| `useGetRosterEnrichment` returns `score: null` for deals never scored | Low | Treat `null` as "unscored" explicitly in both dialogs (excluded from score-based sorting/averaging, not coerced to 0) |
-| Scope creep into redesigning the Active Deals tile or adding a backend endpoint | Medium | Out of scope — this plan only touches the 2 requested tiles and adds zero new API surface |
-
-## Open Questions
-
-- Should the Weighted Pipeline dialog's footer link go to `/portfolio` (like `TotalTcvDialog`) or
-  `/deals`? Defaulting to `/portfolio` for consistency unless you'd prefer `/deals`.
-- Should the Avg Score dialog also surface the *highest*-scoring deals, or is "deals to watch"
-  (lowest scorers) the more useful default view? Defaulting to lowest-scorers-first since that's
-  the actionable direction (matches `StaleDealsDialog`'s "here's what needs attention" framing).
+- `dashboard.tsx`'s skeleton omits `max-w-[1600px] mx-auto`, so content snaps narrower on load.
+- `settings.tsx` and `share.tsx` still use bare-text loading states.
+- `ProductMixSection`'s own loading branch (`components/cockpit/product-mix-section.tsx`) is still bare text; not a visible issue for Portfolio anymore since the query is now parallelized and gated, but other consumers of that component would still see it.
