@@ -17,8 +17,9 @@ import { runPipelineSimulation, type SimDeal } from "@workspace/engine";
 const router: IRouter = Router();
 
 // See the comment on the identically-named const in routes/v2/analytics.ts —
-// archived deals still count in the export.
-const activeFilter = isNull(enterpriseDeals.deletedAt);
+// archived deals still count in the export. Named notDeletedFilter (not
+// activeFilter) because that's literally all it excludes.
+const notDeletedFilter = isNull(enterpriseDeals.deletedAt);
 
 function csvCell(v: unknown): string {
   const s = v == null ? "" : String(v);
@@ -51,7 +52,7 @@ async function activeDealRows() {
     })
     .from(enterpriseDeals)
     .leftJoin(pipelineStages, eq(enterpriseDeals.salesStageId, pipelineStages.id))
-    .where(activeFilter)
+    .where(notDeletedFilter)
     .orderBy(desc(enterpriseDeals.productRevenue));
 }
 

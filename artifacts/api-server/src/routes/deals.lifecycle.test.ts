@@ -9,6 +9,7 @@ import {
   servicesTiers,
   pipelineStages,
   dealAuditLog,
+  dealSnapshots,
 } from "@workspace/db";
 import router from "./deals";
 
@@ -148,6 +149,29 @@ describe("POST /deals/:id/restore — undoes one level", () => {
     const { thrown } = await callRestore("00000000-0000-0000-0000-000000000000");
     expect(thrown?.status).toBe(404);
   });
+
+  it("does not create a snapshot when a deleted-and-archived deal restores back to still-archived", async () => {
+    const id = await createDeal("still-archived-restore", "Closed-Lost", {
+      archivedAt: new Date(),
+      deletedAt: new Date(),
+    });
+
+    const countBefore = (
+      await db.select().from(dealSnapshots).where(eq(dealSnapshots.dealId, id))
+    ).length;
+
+    const { thrown } = await callRestore(id);
+    expect(thrown).toBeUndefined();
+
+    const flags = await readFlags(id);
+    expect(flags.deletedAt).toBeNull();
+    expect(flags.archivedAt).not.toBeNull(); // still archived — the no-op case
+
+    const countAfter = (
+      await db.select().from(dealSnapshots).where(eq(dealSnapshots.dealId, id))
+    ).length;
+    expect(countAfter).toBe(countBefore);
+  });
 });
 
 describe("DELETE /deals/:id — archived → deleted transition", () => {
@@ -218,6 +242,44 @@ describe("POST /deals/:id/archive — idempotency", () => {
     const id = await createDeal("archive-deleted", "Closed-Lost", { deletedAt: new Date() });
     const { thrown } = await callArchive(id);
     expect(thrown?.status).toBe(404);
+  });
+});
+
+async function callUpdate(id: string, body: Record<string, unknown>) {
+  const handler = getHandler("put", "/deals/:id");
+  let captured: unknown;
+  let thrown: (Error & { status?: number; code?: string }) | undefined;
+  const fakeReq = { params: { id }, body, actor } as unknown as Request;
+  const fakeRes = { json: (b: unknown) => { captured = b; } } as unknown as Response;
+  try {
+    await handler(fakeReq, fakeRes);
+  } catch (err) {
+    thrown = err as Error & { status?: number; code?: string };
+  }
+  return { captured, thrown };
+}
+
+describe("PUT/PATCH /deals/:id — archived deal can't leave its closed stage", () => {
+  it("409s when moving an archived deal's sales_stage_id to an open stage", async () => {
+    const id = await createDeal("archived-stage-move", "Closed-Lost", { archivedAt: new Date() });
+    const stages = await db.select().from(pipelineStages);
+    const discovery = stages.find((s) => s.stageName === "Discovery");
+    if (!discovery) throw new Error('Seed data missing pipeline stage "Discovery"');
+
+    const before = await db
+      .select({ salesStageId: enterpriseDeals.salesStageId })
+      .from(enterpriseDeals)
+      .where(eq(enterpriseDeals.id, id));
+
+    const { thrown } = await callUpdate(id, { sales_stage_id: discovery.id });
+    expect(thrown?.status).toBe(409);
+    expect(thrown?.code).toBe("ARCHIVE_GUARDRAIL");
+
+    const after = await db
+      .select({ salesStageId: enterpriseDeals.salesStageId })
+      .from(enterpriseDeals)
+      .where(eq(enterpriseDeals.id, id));
+    expect(after[0].salesStageId).toBe(before[0].salesStageId);
   });
 });
 

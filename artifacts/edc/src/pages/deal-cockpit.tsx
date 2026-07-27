@@ -301,6 +301,8 @@ export default function DealCockpit() {
                 variant="outline"
                 className="border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-400 font-medium"
               >
+                {/* Deletion outranks archival for display when a deal is both — it's the
+                    more severe/final state, so a deleted-and-archived deal shows "Deleted." */}
                 {deal.deletedAt ? "Deleted" : "Archived"}
               </Badge>
             )}

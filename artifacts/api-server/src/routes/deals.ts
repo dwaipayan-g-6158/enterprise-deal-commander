@@ -521,10 +521,26 @@ const updateDealHandler = async (req: Request, res: Response) => {
     body.sales_stage_id !== existing.salesStageId
   ) {
     const stageRows = await db
-      .select({ id: pipelineStages.id, sortOrder: pipelineStages.sortOrder })
+      .select({ id: pipelineStages.id, sortOrder: pipelineStages.sortOrder, stageName: pipelineStages.stageName })
       .from(pipelineStages);
     const fromStage = stageRows.find((s) => s.id === existing.salesStageId);
     const toStage = stageRows.find((s) => s.id === body.sales_stage_id);
+
+    // Archived implies closed (enforced at archive time in the /archive
+    // handler below) — that invariant would otherwise silently break if an
+    // archived deal could be PATCHed to an open stage without first being
+    // restored. Guard it here too, not just at archive time.
+    if (
+      existing.archivedAt &&
+      toStage &&
+      toStage.stageName !== "Closed-Won" &&
+      toStage.stageName !== "Closed-Lost"
+    ) {
+      throw archiveGuardrail(
+        "Restore this deal before moving it out of a closed stage.",
+      );
+    }
+
     const isAdvancing =
       !!fromStage && !!toStage && toStage.sortOrder > fromStage.sortOrder;
     if (isAdvancing) {
@@ -684,7 +700,17 @@ router.post("/deals/:id/restore", async (req: Request, res: Response) => {
     newValue: clearingDeleted ? "restored" : "unarchived",
     changedBy: actor.displayName,
   });
-  emitDealEvent("deal.restored", { dealId: id, actor: actor.displayName });
+  // Still archived after this operation (the deleted-and-archived → Archived
+  // case)? Then nothing new happened for a snapshot or health check to
+  // capture — the deal was already archived, and shouldSkipSnapshot /
+  // shouldSkipHealthReconcile exist specifically to avoid wasted work on
+  // archived deals. A restore that lands on genuine Active (from
+  // deleted-only or archived-only) DOES emit normally — the deal is live
+  // again and a fresh snapshot/health-check is wanted there.
+  const stillArchived = clearingDeleted && existing.archivedAt !== null;
+  if (!stillArchived) {
+    emitDealEvent("deal.restored", { dealId: id, actor: actor.displayName });
+  }
   const data = await serializeDeal(id);
   res.json(RestoreDealResponse.parse({ data }));
 });
