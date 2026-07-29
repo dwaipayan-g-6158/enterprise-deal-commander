@@ -2,6 +2,7 @@ import { useId, type ReactNode } from "react";
 import type { Deal, Intelligence } from "@workspace/api-client-react";
 import { CheckCircle, AlertTriangle, ShieldAlert, Lock } from "lucide-react";
 import { formatCurrency } from "./use-invalidate";
+import { formatDate, formatDateTime } from "@/lib/format";
 import { PETAL_PATHS, VIEW_BOX } from "@/components/edc-logo-mark";
 
 // The branded document rendered on screen, captured to PNG (html-to-image),
@@ -69,18 +70,17 @@ function SectionHeader({ children }: { children: ReactNode }) {
   );
 }
 
+// Literal `text-[#hex]`/`bg-[#hex]` classes, NOT built from a template string
+// interpolating BRIEFING_HEALTH_HEX — Tailwind's build-time class scanner only
+// picks up whole class-name tokens that appear literally in source, so an
+// interpolated arbitrary-value class silently fails to generate any CSS (the
+// same reason conversion-matrix.tsx uses inline rgba() instead of a dynamic
+// Tailwind opacity class). BRIEFING_HEALTH_HEX stays the source of truth the
+// values are copied from; keep the two in sync by hand.
 function healthTone(health: string) {
-  if (health === "RED") return { text: "text-[#DC2626]", dot: "bg-[#DC2626]" };
-  if (health === "YELLOW") return { text: "text-[#D97706]", dot: "bg-[#D97706]" };
-  return { text: "text-[#059669]", dot: "bg-[#059669]" };
-}
-
-function formatDate(iso: string) {
-  return new Date(iso).toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
+  if (health === "RED") return { text: "text-[#DC2626]", dot: "bg-[#DC2626]" }; // BRIEFING_HEALTH_HEX.RED
+  if (health === "YELLOW") return { text: "text-[#D97706]", dot: "bg-[#D97706]" }; // BRIEFING_HEALTH_HEX.YELLOW
+  return { text: "text-[#0284C7]", dot: "bg-[#0284C7]" }; // BRIEFING_HEALTH_HEX.GREEN
 }
 
 export function BriefingReport({
@@ -119,18 +119,8 @@ export function BriefingReport({
           .filter(Boolean)
           .join(" · ");
 
-  const reportDateLabel = new Date().toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
-  const generatedAt = new Date().toLocaleString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
+  const reportDateLabel = formatDate(new Date(), "");
+  const generatedAt = formatDateTime(new Date(), "");
 
   return (
     <div className="text-slate-700">
@@ -302,7 +292,7 @@ export function BriefingReport({
       <div className="mt-9">
         <SectionHeader>Risk Posture</SectionHeader>
         {alerts.length === 0 ? (
-          <div className="flex items-center gap-2 break-inside-avoid text-[#059669]">
+          <div className="flex items-center gap-2 break-inside-avoid text-[#0284C7]">
             <CheckCircle className="h-5 w-5" />
             <span className="text-lg">No active risk patterns.</span>
           </div>
@@ -352,7 +342,7 @@ export function BriefingReport({
           {snapshotAsOf && (
             <>
               {" "}
-              · Snapshot as of {new Date(snapshotAsOf).toLocaleString()}
+              · Snapshot as of {formatDateTime(snapshotAsOf, "—")}
               {snapshotReconstructed ? " (reconstructed)" : ""}
             </>
           )}

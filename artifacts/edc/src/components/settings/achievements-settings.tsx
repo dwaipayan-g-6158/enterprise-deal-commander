@@ -2,6 +2,7 @@ import { useGetEngagement } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Trophy } from "lucide-react";
+import { formatDate } from "@/lib/format";
 
 interface Achievement {
   code: string;
@@ -46,7 +47,7 @@ export function AchievementsSettings() {
                 {!a.locked && <p className="text-xs text-muted-foreground">{a.description}</p>}
                 {!a.locked && a.earnedAt && (
                   <p className="text-xs text-muted-foreground">
-                    Earned {new Date(a.earnedAt).toLocaleDateString()}
+                    Earned {formatDate(a.earnedAt, "—")}
                   </p>
                 )}
               </li>

@@ -8,12 +8,14 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { DatePicker } from "@/components/ui/date-picker";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { Plus, Check } from "lucide-react";
 import { AdminOnly } from "@/components/auth/write-gate";
 import { useCanWrite } from "@/lib/auth/role-context";
+import { formatDate } from "@/lib/format";
 
 const statusColor: Record<string, string> = {
   Pending: "bg-amber-500 text-white",
@@ -70,7 +72,7 @@ export function DecisionsPanel({ dealId }: { dealId: string }) {
             <div className="flex items-center justify-between gap-2">
               <Badge className={statusColor[d.status] ?? ""}>{d.status}</Badge>
               <span className="text-xs text-muted-foreground">
-                {d.decidedAt?.slice(0, 10)}{d.dueDate ? ` · due ${d.dueDate}` : ""}
+                {formatDate(d.decidedAt)}{d.dueDate ? ` · due ${formatDate(d.dueDate)}` : ""}
               </span>
             </div>
             <p className="text-sm font-medium">{d.decisionText}</p>
@@ -94,7 +96,12 @@ export function DecisionsPanel({ dealId }: { dealId: string }) {
             />
             <div className="flex gap-2">
               <Input placeholder="Owner" value={form.owner} onChange={(e) => setForm({ ...form, owner: e.target.value })} />
-              <Input type="date" value={form.due_date} onChange={(e) => setForm({ ...form, due_date: e.target.value })} />
+              <DatePicker
+                className="w-[170px]"
+                value={form.due_date}
+                onChange={(v) => setForm({ ...form, due_date: v })}
+                placeholder="Due date"
+              />
               <Button onClick={add} disabled={create.isPending}>
                 <Plus className="h-4 w-4 mr-1" /> Log
               </Button>

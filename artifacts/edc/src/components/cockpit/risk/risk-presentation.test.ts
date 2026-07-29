@@ -1,6 +1,12 @@
 import { describe, it, expect } from "vitest";
 import { Ban, ShieldAlert, AlertTriangle, Info } from "lucide-react";
-import { priorityPresentation, dimensionBarSegments, abbreviateDimension, radarData } from "./risk-presentation";
+import {
+  priorityPresentation,
+  dimensionBarSegments,
+  abbreviateDimension,
+  radarData,
+  formatExplanationValue,
+} from "./risk-presentation";
 import type { RiskActionPriority } from "./risk-model";
 
 describe("priorityPresentation", () => {
@@ -94,6 +100,28 @@ describe("abbreviateDimension", () => {
   it("returns the raw name for an unknown dimension", () => {
     expect(abbreviateDimension("Unknown Dimension")).toBe("Unknown Dimension");
     expect(abbreviateDimension("")).toBe("");
+  });
+});
+
+describe("formatExplanationValue", () => {
+  it("humanizes a bare ISO date inside a real engine explanation value", () => {
+    expect(formatExplanationValue("2026-08-30")).toBe("30/08/2026");
+  });
+
+  it("leaves non-date strings unchanged", () => {
+    expect(formatExplanationValue("(none)")).toBe("(none)");
+    expect(formatExplanationValue("Negotiation")).toBe("Negotiation");
+  });
+
+  it("stringifies numbers and booleans", () => {
+    expect(formatExplanationValue(45)).toBe("45");
+    expect(formatExplanationValue(true)).toBe("true");
+    expect(formatExplanationValue(false)).toBe("false");
+  });
+
+  it("renders null/undefined as empty, preserving String(i.value ?? \"\")", () => {
+    expect(formatExplanationValue(null)).toBe("");
+    expect(formatExplanationValue(undefined)).toBe("");
   });
 });
 

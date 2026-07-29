@@ -21,6 +21,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
+import { DatePicker } from "@/components/ui/date-picker";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -32,6 +33,7 @@ import {
 } from "@/components/ui/select";
 import { ShieldAlert, AlertTriangle, RotateCcw, ArrowRight, Sparkles } from "lucide-react";
 import { formatCurrency } from "./use-invalidate";
+import { HEALTH_BADGE_CLASS } from "@/lib/semantic-colors";
 
 interface SimState {
   sales_stage: string;
@@ -50,9 +52,9 @@ function HealthBadge({ status }: { status: "RED" | "YELLOW" | "GREEN" }) {
       variant={status === "RED" ? "destructive" : status === "YELLOW" ? "default" : "secondary"}
       className={
         status === "YELLOW"
-          ? "bg-amber-500 text-white"
+          ? HEALTH_BADGE_CLASS.YELLOW
           : status === "GREEN"
-            ? "bg-emerald-500 text-white"
+            ? HEALTH_BADGE_CLASS.GREEN
             : ""
       }
     >
@@ -226,10 +228,10 @@ export function RiskSimulator({
               </div>
               <div className="grid gap-2">
                 <Label>Expected Close</Label>
-                <Input
-                  type="date"
+                <DatePicker
                   value={sim.expected_close_date}
-                  onChange={(e) => set("expected_close_date", e.target.value)}
+                  onChange={(v) => set("expected_close_date", v)}
+                  placeholder="Pick a date"
                 />
               </div>
             </div>

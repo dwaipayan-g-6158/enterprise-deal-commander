@@ -49,6 +49,7 @@ import { useFlowSankey } from "./use-flow";
 import { InfoTooltip } from "@/components/ui/info-tooltip";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { money } from "@/lib/format";
+import { OUTCOME_RGB } from "@/lib/semantic-colors";
 import type { TransitionBreakdown } from "@workspace/engine";
 
 interface SankeyNodeRaw {
@@ -83,8 +84,8 @@ interface StageGlyph {
   rgb: string;
 }
 const PIPELINE_RGB = "95,141,247"; // matches --primary (hsl(222,90%,67%)) in index.css
-const WON_RGB = "5,150,105"; // deep emerald — matches conversion-matrix "win" / breakdown "won"
-const LOST_RGB = "239,68,68"; // red — matches conversion-matrix "loss" / breakdown "lost"
+const WON_RGB = OUTCOME_RGB.won; // deep emerald — matches conversion-matrix "win" / breakdown "won"
+const LOST_RGB = OUTCOME_RGB.lost; // slate — matches conversion-matrix "loss" / breakdown "lost"; NOT red, which is reserved for live HIGH risk
 const FALLBACK_GLYPH: StageGlyph = { Icon: Circle, rgb: "148,163,184" };
 
 const STAGE_ICON_RULES: { test: RegExp; Icon: LucideIcon; rgb: string }[] = [

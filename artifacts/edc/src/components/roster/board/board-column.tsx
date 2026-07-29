@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 import { compactCurrency } from "@/components/dashboard/widgets/_shared";
+import { OUTCOME_CLASS } from "@/lib/semantic-colors";
 import { TerminalStageBadge } from "../cells";
 import { BoardCard, DEAL_DND_MIME } from "./board-card";
 import type { BoardColumn as BoardColumnData, BoardStage } from "../model/board";
@@ -132,8 +133,8 @@ export function BoardColumn({
       className={cn(
         "flex w-[300px] shrink-0 flex-col rounded-lg border bg-muted/20 transition-opacity",
         isOver && droppable && "ring-2 ring-primary",
-        isOver && closable && stage.terminal === "won" && "ring-2 ring-emerald-500/70",
-        isOver && closable && stage.terminal === "lost" && "ring-2 ring-rose-500/70",
+        isOver && closable && stage.terminal === "won" && `ring-2 ${OUTCOME_CLASS.won.ring}`,
+        isOver && closable && stage.terminal === "lost" && `ring-2 ${OUTCOME_CLASS.lost.ring}`,
         terminal && "bg-muted/40",
         // Read-only terminal columns can't receive a close — fade while dragging.
         terminal && !closable && dragActive && !isOver && "opacity-60",

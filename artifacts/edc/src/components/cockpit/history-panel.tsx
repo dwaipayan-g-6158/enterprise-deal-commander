@@ -8,6 +8,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Camera, ChevronRight } from "lucide-react";
 import { SnapshotViewer } from "./snapshot-viewer";
+import { formatDateTime } from "@/lib/format";
+import { HEALTH_CLASS } from "@/lib/semantic-colors";
 
 const compactNumber = new Intl.NumberFormat("en-US", {
   notation: "compact",
@@ -15,10 +17,10 @@ const compactNumber = new Intl.NumberFormat("en-US", {
 });
 
 const HEALTH_COLORS: Record<string, string> = {
-  GREEN: "text-emerald-500",
-  YELLOW: "text-amber-500",
-  AMBER: "text-amber-500",
-  RED: "text-red-500",
+  GREEN: HEALTH_CLASS.GREEN.text,
+  YELLOW: HEALTH_CLASS.YELLOW.text,
+  AMBER: HEALTH_CLASS.YELLOW.text,
+  RED: HEALTH_CLASS.RED.text,
 };
 
 function healthClass(status: string | null | undefined) {
@@ -84,7 +86,7 @@ export function HistoryPanel({ dealId }: { dealId: string }) {
                         {snapshotLabel(s.reason, s.triggerEvent)}
                       </p>
                       <p className="text-xs text-muted-foreground">
-                        {new Date(s.snapshotAt).toLocaleString()}
+                        {formatDateTime(s.snapshotAt, "—")}
                         {s.salesStage ? ` · ${s.salesStage}` : ""}
                       </p>
                     </div>
@@ -122,7 +124,7 @@ export function HistoryPanel({ dealId }: { dealId: string }) {
                     <div className="flex justify-between gap-2">
                       <span className="font-medium">{e.summary}</span>
                       <span className="text-xs text-muted-foreground whitespace-nowrap">
-                        {new Date(e.occurredAt).toLocaleString()}
+                        {formatDateTime(e.occurredAt, "—")}
                       </span>
                     </div>
                     <p className="text-xs text-muted-foreground font-mono">
@@ -161,7 +163,7 @@ export function HistoryPanel({ dealId }: { dealId: string }) {
                         </span>
                       </span>
                       <span className="text-xs text-muted-foreground whitespace-nowrap">
-                        {new Date(t.changedAt).toLocaleString()}
+                        {formatDateTime(t.changedAt, "—")}
                       </span>
                     </div>
                     {t.reason ? (

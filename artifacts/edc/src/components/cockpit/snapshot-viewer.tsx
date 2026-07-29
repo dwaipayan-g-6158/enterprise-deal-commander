@@ -14,6 +14,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Check, Circle, AlertCircle } from "lucide-react";
 import { formatCurrency } from "./use-invalidate";
+import { formatDate, formatDateTime } from "@/lib/format";
+import { HEALTH_BADGE_CLASS } from "@/lib/semantic-colors";
 
 interface SnapshotDeal {
   dealName?: string;
@@ -52,9 +54,9 @@ interface SnapshotPayload {
 }
 
 const HEALTH_BADGE: Record<string, string> = {
-  GREEN: "bg-emerald-500 hover:bg-emerald-600 text-white",
-  YELLOW: "bg-amber-500 hover:bg-amber-600 text-white",
-  AMBER: "bg-amber-500 hover:bg-amber-600 text-white",
+  GREEN: HEALTH_BADGE_CLASS.GREEN,
+  YELLOW: HEALTH_BADGE_CLASS.YELLOW,
+  AMBER: HEALTH_BADGE_CLASS.YELLOW,
 };
 
 const SEVERITY_COLORS: Record<string, string> = {
@@ -126,7 +128,7 @@ export function SnapshotViewer({
           </DialogTitle>
           <DialogDescription>
             {snapshot
-              ? `Captured ${new Date(snapshot.snapshotAt).toLocaleString()} · ${snapshot.reason}`
+              ? `Captured ${formatDateTime(snapshot.snapshotAt, "—")} · ${snapshot.reason}`
               : "Read-only view of this deal's state at the time of the snapshot."}
           </DialogDescription>
         </DialogHeader>
@@ -160,7 +162,7 @@ export function SnapshotViewer({
                   />
                   <Row
                     label="Expected Close"
-                    value={deal.expectedCloseDate ?? "—"}
+                    value={formatDate(deal.expectedCloseDate, "—")}
                   />
                 </div>
               </section>

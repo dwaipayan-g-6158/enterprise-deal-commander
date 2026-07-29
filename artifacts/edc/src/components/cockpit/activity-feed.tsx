@@ -1,5 +1,6 @@
 import { useListAudit, useListChanges } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { formatDateTime } from "@/lib/format";
 
 export function ActivityFeed({ dealId }: { dealId: string }) {
   const { data: audit } = useListAudit(dealId);
@@ -23,7 +24,7 @@ export function ActivityFeed({ dealId }: { dealId: string }) {
                 <li key={idx} className="text-sm border-l-2 border-primary/40 pl-3">
                   <p>{c.line}</p>
                   <p className="text-xs text-muted-foreground">
-                    {c.field} · {new Date(c.at).toLocaleString()}
+                    {c.field} · {formatDateTime(c.at, "—")}
                   </p>
                 </li>
               ))}
@@ -46,7 +47,7 @@ export function ActivityFeed({ dealId }: { dealId: string }) {
                   <div className="flex justify-between gap-2">
                     <span className="font-medium">{a.fieldChanged}</span>
                     <span className="text-xs text-muted-foreground">
-                      {new Date(a.changedAt).toLocaleString()}
+                      {formatDateTime(a.changedAt, "—")}
                     </span>
                   </div>
                   <p className="text-xs text-muted-foreground font-mono">

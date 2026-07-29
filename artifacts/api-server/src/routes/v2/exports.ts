@@ -90,6 +90,9 @@ router.get("/export/deals", async (req: Request, res: Response) => {
         r.productRevenue,
         r.servicesRevenue,
         r.currency,
+        // Deliberately raw ISO (YYYY-MM-DD), not DD/MM/YYYY like the rest of
+        // the product — CSV is for spreadsheet import, where an unambiguous,
+        // locale-independent, Excel-safe date beats a display format.
         r.expectedCloseDate,
         r.winProbabilityPct,
       ]
@@ -104,6 +107,43 @@ router.get("/export/deals", async (req: Request, res: Response) => {
 
 function fmtMoney(n: number): string {
   return "$" + Math.round(n).toLocaleString("en-US");
+}
+
+// DD/MM/YYYY (+ optional , HH:MM). Mirrors formatDate/formatDateTime in
+// artifacts/edc/src/lib/format.ts — duplicated by hand for the same reason as
+// LOGO_PETAL_PATHS below: this route runs server-side with no access to the
+// frontend bundle, and api-server has no date library (see the supply-chain
+// policy in pnpm-workspace.yaml). Keep the two in sync. Same date-only vs.
+// instant split as the frontend helper — a bare "YYYY-MM-DD" is formatted by
+// string surgery (never passed through `Date`, which would read it as UTC
+// midnight and shift it a day in negative-offset zones); anything else is a
+// real instant read with local getters.
+const DATE_ONLY_RE = /^(\d{4})-(\d{2})-(\d{2})$/;
+const pad2 = (n: number) => String(n).padStart(2, "0");
+
+function fmtDate(v: string | Date | null | undefined): string {
+  if (v == null) return "";
+  if (typeof v === "string") {
+    const s = v.trim();
+    const m = DATE_ONLY_RE.exec(s);
+    if (m) {
+      const y = Number(m[1]);
+      const mo = Number(m[2]);
+      const d = Number(m[3]);
+      if (y === 0 || mo < 1 || mo > 12 || d < 1 || d > 31) return "";
+      return `${pad2(d)}/${pad2(mo)}/${y}`;
+    }
+  }
+  const d = v instanceof Date ? v : new Date(v);
+  if (Number.isNaN(d.getTime())) return "";
+  return `${pad2(d.getDate())}/${pad2(d.getMonth() + 1)}/${d.getFullYear()}`;
+}
+
+function fmtDateTime(v: string | Date | null | undefined): string {
+  if (v == null) return "";
+  const d = v instanceof Date ? v : new Date(v);
+  if (Number.isNaN(d.getTime())) return "";
+  return `${fmtDate(d)}, ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
 }
 
 async function pipelineFacts() {
@@ -167,7 +207,7 @@ function logoSvg(size: number): string {
 }
 
 function letterhead(title: string, subtitle: string): string {
-  const generated = new Date().toLocaleString("en-US", { dateStyle: "long", timeStyle: "short" });
+  const generated = fmtDateTime(new Date());
   return (
     `<header class="ltr-head">` +
     `<div class="ltr-brand">${logoSvg(28)}<span class="ltr-word">Enterprise Deal Commander</span></div>` +
@@ -324,7 +364,7 @@ router.get("/digest/preview", async (_req: Request, res: Response) => {
       ? `<ul class="digest-list">${overdue
           .map(
             (d) =>
-              `<li>${esc(d.decisionText)} &mdash; <i>${esc(d.owner)}</i>${d.dueDate ? ` (due ${esc(d.dueDate)})` : ""}</li>`,
+              `<li>${esc(d.decisionText)} &mdash; <i>${esc(d.owner)}</i>${d.dueDate ? ` (due ${esc(fmtDate(d.dueDate))})` : ""}</li>`,
           )
           .join("")}</ul>`
       : "<p>No pending decisions.</p>") +

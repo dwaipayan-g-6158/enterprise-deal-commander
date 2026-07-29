@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { Radio, Copy, Check } from "lucide-react";
+import { formatDateTime } from "@/lib/format";
 
 export function BatSignalDialog({
   dealId,
@@ -78,7 +79,7 @@ export function BatSignalDialog({
               </div>
             </div>
             <p className="text-xs text-muted-foreground">
-              Expires {new Date(result.expiresAt).toLocaleString()}
+              Expires {formatDateTime(result.expiresAt, "—")}
             </p>
           </div>
         )}

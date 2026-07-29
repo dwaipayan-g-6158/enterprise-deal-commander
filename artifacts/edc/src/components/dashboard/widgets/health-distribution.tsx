@@ -2,6 +2,7 @@ import { useGetVitalSigns } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { HealthDonut } from "@/components/cockpit/charts/health-donut";
 import { compactCurrency, type Health } from "./_shared";
+import { HEALTH_CLASS } from "@/lib/semantic-colors";
 
 interface VitalSignsData {
   baseline: { redAlerts: number } | null;
@@ -15,9 +16,9 @@ interface Props {
 }
 
 const LEGEND: { band: Health; label: string; dot: string }[] = [
-  { band: "GREEN", label: "Green", dot: "bg-emerald-500" },
-  { band: "YELLOW", label: "Yellow", dot: "bg-amber-500" },
-  { band: "RED", label: "Red", dot: "bg-red-500" },
+  { band: "GREEN", label: "Green", dot: HEALTH_CLASS.GREEN.dot },
+  { band: "YELLOW", label: "Yellow", dot: HEALTH_CLASS.YELLOW.dot },
+  { band: "RED", label: "Red", dot: HEALTH_CLASS.RED.dot },
 ];
 
 // Widget 2 — Health Distribution. Donut (hole carries the total) plus the ratio
@@ -64,14 +65,14 @@ export function HealthDistribution({ counts, tcvAtRisk, reportingCurrency, onSel
 
         <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t pt-3 text-xs">
           <span className="text-muted-foreground">
-            <span className="font-mono font-medium text-emerald-500">{pctHealthy}%</span> healthy ·{" "}
+            <span className={`font-mono font-medium ${HEALTH_CLASS.GREEN.text}`}>{pctHealthy}%</span> healthy ·{" "}
             <span className="font-mono font-medium text-red-500">
               {compactCurrency(tcvAtRisk, reportingCurrency)}
             </span>{" "}
             at risk
           </span>
           {redDelta != null && redDelta !== 0 && (
-            <span className={`font-medium ${redDelta > 0 ? "text-red-500" : "text-emerald-500"}`}>
+            <span className={`font-medium ${redDelta > 0 ? "text-red-500" : HEALTH_CLASS.GREEN.text}`}>
               {redDelta > 0 ? "+" : ""}
               {redDelta} RED this week
             </span>

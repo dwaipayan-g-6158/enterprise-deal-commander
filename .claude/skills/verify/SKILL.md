@@ -30,10 +30,13 @@ just drive the already-running app:
 ## Cold start (only if nothing is listening)
 
 1. Confirm Postgres is up: `Get-Service -Name "postgresql*"` → `postgresql-x64-17` should be `Running`.
+   It listens on **5433**, not the Postgres default 5432 — that port is permanently owned by
+   the unrelated `dealmap-postgres` Docker container on this host (see `edc-local-windows-run`
+   memory for why).
 2. Build + run the API server (PowerShell, not Git Bash — avoids `export`/path-mangling issues):
    ```powershell
    pnpm --filter @workspace/api-server run build
-   $env:DATABASE_URL='postgres://postgres:postgres@localhost:5432/edc'; $env:SESSION_SECRET='local-dev-secret-edc-2026'; $env:PORT='5000'; $env:NODE_ENV='development'; node --enable-source-maps artifacts/api-server/dist/index.mjs
+   $env:DATABASE_URL='postgres://postgres:postgres@localhost:5433/edc'; $env:SESSION_SECRET='local-dev-secret-edc-2026'; $env:PORT='5000'; $env:NODE_ENV='development'; node --enable-source-maps artifacts/api-server/dist/index.mjs
    ```
 3. Run the frontend (PowerShell only — Git Bash mangles `BASE_PATH=/`):
    ```powershell

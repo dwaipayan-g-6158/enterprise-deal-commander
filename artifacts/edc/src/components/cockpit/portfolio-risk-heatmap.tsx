@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { Grid3x3, ArrowUpRight } from "lucide-react";
+import { RISK_LEVEL_CLASS } from "@/lib/semantic-colors";
 
 type Axis = "accountManager" | "technicalLead";
 
@@ -21,15 +22,15 @@ function compactValue(n: number, currency: string): string {
 }
 
 // riskScore bands mirror the PRD semantic ramp (and the Whitespace heatmap):
-// emerald → amber → orange → rose. Tint stays low-opacity so it reads as data.
+// sky → amber → orange → red. Tint stays low-opacity so it reads as data.
+// NOTE: thresholds here (26/61/81) are a pre-existing mismatch with
+// classifyRisk's 25/50/75 used everywhere else — left as-is, out of scope for
+// this colour change; only the class strings are sourced from the shared map.
 function riskBand(score: number): { cell: string; label: string } {
-  if (score >= 81)
-    return { cell: "bg-rose-500/15 border-rose-500/30 text-rose-700 dark:text-rose-300 hover:bg-rose-500/25", label: "Critical" };
-  if (score >= 61)
-    return { cell: "bg-orange-500/15 border-orange-500/30 text-orange-700 dark:text-orange-300 hover:bg-orange-500/25", label: "Elevated" };
-  if (score >= 26)
-    return { cell: "bg-amber-500/15 border-amber-500/30 text-amber-700 dark:text-amber-300 hover:bg-amber-500/25", label: "Moderate" };
-  return { cell: "bg-emerald-500/15 border-emerald-500/30 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/25", label: "Low" };
+  if (score >= 81) return { cell: RISK_LEVEL_CLASS.HIGH.cell, label: "Critical" };
+  if (score >= 61) return { cell: RISK_LEVEL_CLASS.ELEVATED.cell, label: "Elevated" };
+  if (score >= 26) return { cell: RISK_LEVEL_CLASS.MODERATE.cell, label: "Moderate" };
+  return { cell: RISK_LEVEL_CLASS.LOW.cell, label: "Low" };
 }
 
 const SEP = "␟";
@@ -230,11 +231,17 @@ export function PortfolioRiskHeatmap({
 }
 
 function HeatLegend() {
+  // Literal classes, NOT built by appending "/40" to RISK_LEVEL_CLASS.*.fill —
+  // Tailwind's build-time class scanner needs the whole "bg-{color}-500/40"
+  // token to appear literally in source to generate it; a runtime-concatenated
+  // string is invisible to it (same reason healthTone in briefing-report.tsx
+  // hardcodes its hex classes instead of interpolating BRIEFING_HEALTH_HEX).
+  // Kept in sync by hand with RISK_LEVEL_CLASS's colors (sky/amber/orange/red).
   const items = [
-    { label: "Low (0–25)", cls: "bg-emerald-500/40" },
+    { label: "Low (0–25)", cls: "bg-sky-500/40" },
     { label: "Moderate (26–60)", cls: "bg-amber-500/40" },
     { label: "Elevated (61–80)", cls: "bg-orange-500/40" },
-    { label: "Critical (81–100)", cls: "bg-rose-500/40" },
+    { label: "Critical (81–100)", cls: "bg-red-500/40" },
   ];
   return (
     <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t pt-3 text-xs text-muted-foreground">

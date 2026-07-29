@@ -3,6 +3,7 @@ import { useParams } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { AlertTriangle, ShieldAlert, Activity, CheckCircle } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { HEALTH_BADGE_CLASS, RISK_LEVEL_CLASS } from "@/lib/semantic-colors";
 
 export default function Share() {
   const params = useParams();
@@ -41,7 +42,7 @@ export default function Share() {
               <CardTitle className="text-2xl font-bold mb-1">{card.dealName}</CardTitle>
               <p className="text-muted-foreground">{card.accountName}</p>
             </div>
-            <Badge variant={card.healthStatus === 'RED' ? 'destructive' : card.healthStatus === 'YELLOW' ? 'default' : 'secondary'} className={`text-sm px-3 py-1 ${card.healthStatus === 'YELLOW' ? 'bg-amber-500 text-white' : card.healthStatus === 'GREEN' ? 'bg-emerald-500 text-white' : ''}`}>
+            <Badge variant={card.healthStatus === 'RED' ? 'destructive' : card.healthStatus === 'YELLOW' ? 'default' : 'secondary'} className={`text-sm px-3 py-1 ${card.healthStatus === 'YELLOW' ? HEALTH_BADGE_CLASS.YELLOW : card.healthStatus === 'GREEN' ? HEALTH_BADGE_CLASS.GREEN : ''}`}>
               {card.healthStatus}
             </Badge>
           </div>
@@ -78,9 +79,9 @@ export default function Share() {
                 ))}
               </div>
             ) : (
-              <div className="p-4 rounded-md border bg-emerald-500/5 flex items-center gap-3">
-                <CheckCircle className="w-5 h-5 text-emerald-500" />
-                <span className="text-sm font-medium text-emerald-600">No critical risk patterns detected.</span>
+              <div className={`p-4 rounded-md border flex items-center gap-3 ${RISK_LEVEL_CLASS.LOW.bg}`}>
+                <CheckCircle className={`w-5 h-5 ${RISK_LEVEL_CLASS.LOW.text}`} />
+                <span className={`text-sm font-medium ${RISK_LEVEL_CLASS.LOW.text}`}>No critical risk patterns detected.</span>
               </div>
             )}
           </div>

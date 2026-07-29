@@ -1,16 +1,17 @@
 import { Pie, PieChart, Cell, Label } from "recharts";
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart";
+import { HEALTH_HSL } from "@/lib/semantic-colors";
 
 const config: ChartConfig = {
-  GREEN: { label: "Green", color: "hsl(var(--chart-2))" },
-  YELLOW: { label: "Yellow", color: "hsl(38 92% 50%)" },
-  RED: { label: "Red", color: "hsl(var(--destructive))" },
+  GREEN: { label: "Green", color: HEALTH_HSL.GREEN },
+  YELLOW: { label: "Yellow", color: HEALTH_HSL.YELLOW },
+  RED: { label: "Red", color: HEALTH_HSL.RED },
 };
 
 const FILL: Record<string, string> = {
-  GREEN: "hsl(var(--chart-2))",
-  YELLOW: "hsl(38 92% 50%)",
-  RED: "hsl(var(--destructive))",
+  GREEN: HEALTH_HSL.GREEN,
+  YELLOW: HEALTH_HSL.YELLOW,
+  RED: HEALTH_HSL.RED,
 };
 
 // Donut (not pie) so the hole can carry the portfolio total in the centre.

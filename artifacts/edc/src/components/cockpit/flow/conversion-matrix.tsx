@@ -3,21 +3,24 @@ import { useListPipelineStages } from "@workspace/api-client-react";
 import type { MatrixCell } from "@workspace/engine";
 import { InfoTooltip } from "@/components/ui/info-tooltip";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { OUTCOME_RGB } from "@/lib/semantic-colors";
 
 // Inline rgba colors to avoid Tailwind JIT dynamic opacity class generation failures.
-// win=deep emerald(5,150,105), forward=emerald(16,185,129), stagnation=amber(245,158,11),
-// regression=orange(249,115,22), loss=red(239,68,68).
+// win=deep emerald, forward=emerald(16,185,129) — plain progression, unrelated
+// to the won/lost outcome scale — stagnation=amber(245,158,11),
+// regression=orange(249,115,22), loss=slate (NOT red — red is reserved for
+// live HIGH risk, never a lost outcome; see lib/semantic-colors.ts).
 //
 // kind is decided by the engine's terminal-flag check BEFORE any sortOrder
 // comparison (see computeConversionMatrix in @workspace/engine): a move into
-// Closed-Lost is always "loss" (red), never "forward" (green), regardless of
-// where Closed-Lost sorts among the other stages.
+// Closed-Lost is always "loss", never "forward" (green), regardless of where
+// Closed-Lost sorts among the other stages.
 const KIND_RGB: Record<MatrixCell["kind"], string> = {
-  win: "5,150,105",
+  win: OUTCOME_RGB.won,
   forward: "16,185,129",
   stagnation: "245,158,11",
   regression: "249,115,22",
-  loss: "239,68,68",
+  loss: OUTCOME_RGB.lost,
 };
 const KIND_LABEL: Record<MatrixCell["kind"], string> = {
   win: "Win",

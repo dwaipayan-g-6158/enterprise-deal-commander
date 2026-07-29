@@ -10,6 +10,7 @@ import {
 } from "recharts";
 import { ChevronDown } from "lucide-react";
 import { useGetDealTrajectory } from "@workspace/api-client-react";
+import { HEALTH_HSL, HEALTH_RGB } from "@/lib/semantic-colors";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -74,11 +75,13 @@ const HEALTH_LABEL: Record<NonNullable<Health>, string> = {
 };
 
 // Inline colors (used for the recharts dot/label fill, where a Tailwind class
-// can't reach). These mirror HEALTH_DOT's emerald/amber/red.
+// can't reach). These mirror HEALTH_CLASS's sky/amber/red — NOT --chart-2,
+// which is a plain categorical series token (see METRIC_COLOR.tcv below) and
+// must not double as a health colour.
 const HEALTH_HEX: Record<NonNullable<Health>, string> = {
-  RED: "hsl(var(--destructive))",
-  YELLOW: "hsl(38 92% 50%)",
-  GREEN: "hsl(var(--chart-2))",
+  RED: HEALTH_HSL.RED,
+  YELLOW: HEALTH_HSL.YELLOW,
+  GREEN: HEALTH_HSL.GREEN,
 };
 
 const HEALTH_RANK: Record<NonNullable<Health>, number> = {
@@ -303,9 +306,9 @@ function stageSegments(rows: ChartRow[]): StageSegment[] {
 }
 
 const RAIL_TINT: Record<NonNullable<Health>, string> = {
-  RED: "rgba(239,68,68,.12)",
-  YELLOW: "rgba(245,158,11,.14)",
-  GREEN: "rgba(16,185,129,.12)",
+  RED: `rgba(${HEALTH_RGB.RED},.12)`,
+  YELLOW: `rgba(${HEALTH_RGB.YELLOW},.14)`,
+  GREEN: `rgba(${HEALTH_RGB.GREEN},.12)`,
 };
 
 // ---- Custom tooltip (rich, shows all metrics at hovered time) ----------------

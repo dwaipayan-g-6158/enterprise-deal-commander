@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { cn } from "@/lib/utils";
+import { formatExplanationValue } from "./risk/risk-presentation";
 import {
   useSetDisposition,
   useLaunchIntervention,
@@ -224,7 +225,7 @@ function AlertCard({ dealId, alert }: { dealId: string; alert: Alert }) {
                 {alert.explanation.inputs.map((i, idx) => (
                   <div key={idx} className="flex justify-between py-0.5">
                     <span>{i.label}</span>
-                    <span className="font-mono text-muted-foreground">{String(i.value ?? "")}</span>
+                    <span className="font-mono text-muted-foreground">{formatExplanationValue(i.value)}</span>
                   </div>
                 ))}
               </div>

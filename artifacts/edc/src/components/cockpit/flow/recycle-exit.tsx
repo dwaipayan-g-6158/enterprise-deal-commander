@@ -3,6 +3,7 @@ import { useListPipelineStages } from "@workspace/api-client-react";
 import type { RecycleExit as RecycleExitData, WaterfallStep } from "@workspace/engine";
 import { InfoTooltip } from "@/components/ui/info-tooltip";
 import { money } from "@/lib/format";
+import { OUTCOME_CLASS } from "@/lib/semantic-colors";
 
 // Terminal stages don't have deals "leaving" them in the normal sense (there's
 // nowhere further to recycle from or exit to), so by-stage recycle/exit rate
@@ -12,9 +13,10 @@ const isTerminalStageName = (name: string) => name === "Closed-Won" || name === 
 
 // Waterfall rows are colored by semantic outcome (kind), not by the sign of
 // the delta — "Won" is a good outcome and reads green even though it's a
-// subtraction from the open-pipeline bucket; "Lost" reads red for the same
-// reason. "ending" (Still open) is a running total, not a delta, so it's
-// rendered as a plain, unsigned subtotal.
+// subtraction from the open-pipeline bucket; "Lost" reads slate (neutral, not
+// red — red is reserved for live HIGH risk, never a lost outcome) for the
+// same reason. "ending" (Still open) is a running total, not a delta, so
+// it's rendered as a plain, unsigned subtotal.
 function WaterfallRow({ step }: { step: WaterfallStep }) {
   const abs = Math.abs(step.delta);
   if (step.kind === "ending") {
@@ -25,7 +27,8 @@ function WaterfallRow({ step }: { step: WaterfallStep }) {
       </div>
     );
   }
-  const color = step.kind === "won" ? "text-emerald-500" : step.kind === "lost" ? "text-red-500" : "text-foreground";
+  const color =
+    step.kind === "won" ? OUTCOME_CLASS.won.icon : step.kind === "lost" ? OUTCOME_CLASS.lost.icon : "text-foreground";
   const prefix = step.delta > 0 ? "+" : step.delta < 0 ? "-" : "";
   return (
     <div className="flex justify-between text-sm tabular-nums">
@@ -104,8 +107,8 @@ function ExitRateTable({
           {entries.map(({ stageId, won, lost }) => (
             <tr key={stageId}>
               <td className="text-muted-foreground py-0.5">{stageName(stageId)}</td>
-              <td className="text-right font-mono tabular-nums pl-3 text-emerald-500">{won}%</td>
-              <td className="text-right font-mono tabular-nums pl-3 text-red-500">{lost}%</td>
+              <td className={`text-right font-mono tabular-nums pl-3 ${OUTCOME_CLASS.won.icon}`}>{won}%</td>
+              <td className={`text-right font-mono tabular-nums pl-3 ${OUTCOME_CLASS.lost.icon}`}>{lost}%</td>
             </tr>
           ))}
         </tbody>

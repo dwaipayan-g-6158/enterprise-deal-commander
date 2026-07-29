@@ -5,6 +5,7 @@ import { Calendar as CalendarIcon } from "lucide-react"
 import type { Matcher } from "react-day-picker"
 
 import { cn } from "@/lib/utils"
+import { formatDate } from "@/lib/format"
 import { Button } from "@/components/ui/button"
 import { Calendar } from "@/components/ui/calendar"
 import {
@@ -21,6 +22,10 @@ export interface DatePickerProps {
   min?: string
   disabled?: boolean
   id?: string
+  /** Merged onto the trigger Button — the default is `w-full`, so a picker
+   *  dropped into a flex row (not a `grid gap-2` block) needs an explicit
+   *  width here or it eats the row. */
+  className?: string
 }
 
 // Parse a "YYYY-MM-DD" string into a local Date (no timezone shift).
@@ -57,6 +62,7 @@ function DatePicker({
   min,
   disabled,
   id,
+  className,
 }: DatePickerProps) {
   const [open, setOpen] = React.useState(false)
 
@@ -81,11 +87,12 @@ function DatePicker({
           disabled={disabled}
           className={cn(
             "w-full justify-start text-left font-normal",
-            !selected && "text-muted-foreground"
+            !selected && "text-muted-foreground",
+            className
           )}
         >
           <CalendarIcon className="mr-2 h-4 w-4" />
-          {selected ? selected.toLocaleDateString() : placeholder}
+          {formatDate(value) ?? placeholder}
         </Button>
       </PopoverTrigger>
       <PopoverContent className="w-auto p-0" align="start">

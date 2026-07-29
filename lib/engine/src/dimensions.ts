@@ -27,6 +27,20 @@ const STAGE_ORDER: Record<string, number> = {
 
 const CRITICAL_GATES = ["G3_PERFORMANCE_PASSED", "G5_CTO_SIGNED_OFF"];
 
+/**
+ * `pricing_models` has no `code` column and no write route — `modelName` is
+ * the display string AND the stable identity key, handed straight to the
+ * engine by every server join (see RawDeal.pricing_model in ./index). Hoisted
+ * here so there is exactly one spelling instead of one hardcoded literal per
+ * call site.
+ */
+export const PRICING_MODEL = {
+  ANNUAL: "Annual Subscription",
+  MULTI_YEAR: "Multi-Year Committed",
+  PERPETUAL: "Perpetual License",
+  USAGE_BASED: "Usage-Based",
+} as const;
+
 /** Weighted-mean of signal raw scores, normalized by the weights actually present. */
 function weightedDimensionScore(signals: DimensionSignal[]): number {
   const totalWeight = signals.reduce((sum, s) => sum + s.weight, 0);
@@ -451,9 +465,9 @@ export function scoreFinancialStructure(i: {
   let termRisk = 0;
   const term = i.termYears;
   const model = i.pricingModel;
-  if (model === "Perpetual License") termRisk = 20;
-  else if (model === "Annual Subscription" && tcv >= 1000000) termRisk = 30;
-  else if (model === "Multi-Year Committed" && term < 2 && tcv >= 500000) termRisk = 25;
+  if (model === PRICING_MODEL.PERPETUAL) termRisk = 20;
+  else if (model === PRICING_MODEL.ANNUAL && tcv >= 1000000) termRisk = 30;
+  else if (model === PRICING_MODEL.MULTI_YEAR && term < 2 && tcv >= 500000) termRisk = 25;
   signals.push({
     factor: `${model}, ${term}-year term, ${tcv} TCV`,
     rawScore: termRisk,

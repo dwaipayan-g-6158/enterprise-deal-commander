@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Link } from "wouter";
 import { money } from "@/lib/format";
+import { OUTCOME_CLASS } from "@/lib/semantic-colors";
 
 interface MemoryDetail {
   id: string;
@@ -62,7 +63,7 @@ export function ConnectionsTab({ memory: m }: { memory: MemoryDetail }) {
             <div key={s.id} className="flex items-center justify-between text-sm">
               <Link href={`/memory/${s.id}`} className="hover:underline">{s.dealName} · {s.accountName}</Link>
               <span className="flex items-center gap-2">
-                <Badge className={s.outcome === "Won" ? "bg-emerald-500 text-white" : "bg-destructive text-white"}>{s.outcome}</Badge>
+                <Badge className={s.outcome === "Won" ? OUTCOME_CLASS.won.badge : OUTCOME_CLASS.lost.badge}>{s.outcome}</Badge>
                 <span className="font-mono text-muted-foreground">{money(s.finalTcv)}</span>
               </span>
             </div>

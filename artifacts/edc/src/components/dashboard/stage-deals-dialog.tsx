@@ -13,13 +13,12 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { ChevronRight, Layers } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { rowMotion } from "./widgets/_shared";
-
-type Health = "GREEN" | "YELLOW" | "RED";
+import { HEALTH_CLASS, type Health } from "@/lib/semantic-colors";
 
 const HEALTH_DOT: Record<Health, string> = {
-  GREEN: "bg-emerald-500",
-  YELLOW: "bg-amber-500",
-  RED: "bg-red-500",
+  GREEN: HEALTH_CLASS.GREEN.dot,
+  YELLOW: HEALTH_CLASS.YELLOW.dot,
+  RED: HEALTH_CLASS.RED.dot,
 };
 
 interface StageDealsDialogProps {

@@ -14,13 +14,9 @@ import {
 import { useMediaQuery } from "@/hooks/use-media-query";
 import type { RiskDimension, RiskLevel } from "./risk-model";
 import { radarData } from "./risk-presentation";
+import { classifyRisk, RISK_LEVEL_HSL } from "@/lib/semantic-colors";
 
-const LEVEL_COLOR: Record<RiskLevel, string> = {
-  HIGH:     "hsl(var(--destructive))",
-  ELEVATED: "hsl(25 95% 53%)",
-  MODERATE: "hsl(38 92% 50%)",
-  LOW:      "hsl(142 71% 45%)",
-};
+const LEVEL_COLOR: Record<RiskLevel, string> = RISK_LEVEL_HSL;
 
 function buildConfig(level: RiskLevel): ChartConfig {
   return {
@@ -28,12 +24,12 @@ function buildConfig(level: RiskLevel): ChartConfig {
   };
 }
 
-// Score → HSL color matching RISK_LEVEL_CLASS thresholds.
+// Score → HSL color. De-duplicated onto the same classifyRisk() thresholds
+// (25/50/75) that back RISK_LEVEL_CLASS everywhere else, instead of a second
+// hand-rolled ladder — the two were already equivalent, this just makes that
+// guaranteed rather than coincidental.
 function scoreColor(score: number): string {
-  if (score > 75) return "hsl(0 72% 51%)";
-  if (score > 50) return "hsl(25 95% 53%)";
-  if (score > 25) return "hsl(38 92% 50%)";
-  return "hsl(142 71% 45%)";
+  return RISK_LEVEL_HSL[classifyRisk(score)];
 }
 
 export function RiskRadar({

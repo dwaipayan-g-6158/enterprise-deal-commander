@@ -19,6 +19,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { formatCurrency } from "@/components/cockpit/use-invalidate";
+import { OUTCOME_CLASS } from "@/lib/semantic-colors";
 import { Trophy, Ban } from "lucide-react";
 import type { BoardStage } from "../model/board";
 import type { RosterRow } from "../model/roster-types";
@@ -70,7 +71,11 @@ export function CloseDealDialog({
       <DialogContent animation="spotlight">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            {isLost ? <Ban className="h-5 w-5 text-rose-500" /> : <Trophy className="h-5 w-5 text-emerald-500" />}
+            {isLost ? (
+              <Ban className={`h-5 w-5 ${OUTCOME_CLASS.lost.icon}`} />
+            ) : (
+              <Trophy className={`h-5 w-5 ${OUTCOME_CLASS.won.icon}`} />
+            )}
             Mark deal {outcome === "won" ? "Won" : "Lost"}
           </DialogTitle>
           <DialogDescription>

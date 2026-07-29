@@ -4,6 +4,7 @@ import { RISK_LEVEL_CLASS, RISK_LEVEL_LABEL, type DealRisk } from "./risk-model"
 import { DimensionBars } from "./dimension-bars";
 import { RecommendedActions } from "./recommended-actions";
 import { RiskRadar } from "./risk-radar";
+import { humanizeIsoDates } from "@/lib/format";
 
 export function RiskScoreCard({ risk, className }: { risk: DealRisk; className?: string }) {
   const cls = RISK_LEVEL_CLASS[risk.riskLevel];
@@ -76,7 +77,7 @@ export function RiskScoreCard({ risk, className }: { risk: DealRisk; className?:
                           {d.dimension}
                         </span>
                       </td>
-                      <td className="px-3 py-2 align-top leading-snug">{d.factor}</td>
+                      <td className="px-3 py-2 align-top leading-snug">{humanizeIsoDates(d.factor)}</td>
                       <td className="px-3 py-2 align-top text-right font-mono tabular-nums text-muted-foreground w-14">
                         {Number.isFinite(d.impact) ? d.impact : "—"}
                       </td>

@@ -107,7 +107,7 @@ export function PortfolioSummaryCards({ summary }: { summary: PortfolioSummary }
         icon={<AlertOctagon className="h-3.5 w-3.5" />}
         label="Critical Deals"
         value={summary.redDealCount}
-        valueClassName={summary.redDealCount > 0 ? "text-rose-600 dark:text-rose-400" : undefined}
+        valueClassName={summary.redDealCount > 0 ? "text-red-600 dark:text-red-400" : undefined}
         subtitle={`of ${summary.totalDealCount} monitored with a critical (RED) alert`}
       />
     </div>

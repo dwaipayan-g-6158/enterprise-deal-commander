@@ -2,6 +2,7 @@ import { useCompareDealMemory } from "@workspace/api-client-react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Badge } from "@/components/ui/badge";
 import { money } from "@/lib/format";
+import { OUTCOME_CLASS } from "@/lib/semantic-colors";
 
 const ROWS: { label: string; key: string; format?: (v: unknown) => string; best?: "max" | "min" }[] = [
   { label: "Outcome", key: "outcome" },
@@ -56,7 +57,7 @@ export function ComparisonSheet({
                       return (
                         <td key={r.id} className={`p-2 border-b ${isBest ? "text-emerald-600 font-medium" : isWorst ? "text-destructive" : ""}`}>
                           {row.key === "outcome" ? (
-                            <Badge className={raw === "Won" ? "bg-emerald-500 text-white" : "bg-destructive text-white"}>{String(raw)}</Badge>
+                            <Badge className={raw === "Won" ? OUTCOME_CLASS.won.badge : OUTCOME_CLASS.lost.badge}>{String(raw)}</Badge>
                           ) : row.format ? (
                             row.format(raw)
                           ) : (

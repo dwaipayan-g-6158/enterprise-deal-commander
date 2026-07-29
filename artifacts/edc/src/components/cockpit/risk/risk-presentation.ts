@@ -1,5 +1,8 @@
 import { Ban, ShieldAlert, AlertTriangle, Info, type LucideIcon } from "lucide-react";
 import type { RiskActionPriority, RiskDimension } from "./risk-model";
+// Relative, not "@/" — this file's vitest config has no resolve.alias (see
+// close-timeline-model.ts for the same note).
+import { humanizeIsoDates } from "../../../lib/format";
 
 // ---------------------------------------------------------------------------
 // Radar helpers
@@ -70,6 +73,18 @@ export function priorityPresentation(priority: RiskActionPriority | string): Pri
     default:
       return { Icon: Info, className: "text-muted-foreground" };
   }
+}
+
+/**
+ * Render-boundary formatter for a `@workspace/engine` explanation input/factor
+ * value. The engine is pure/isomorphic and must never format dates itself
+ * (see lib/engine dimensions.ts / risk-v2.ts "PURITY" comments) — so any bare
+ * YYYY-MM-DD it emits inside a string is humanized here instead. Value-shape
+ * detection rather than label-sniffing, so it also covers any future engine
+ * string carrying an ISO date with no further code change.
+ */
+export function formatExplanationValue(v: unknown): string {
+  return typeof v === "string" ? humanizeIsoDates(v) : v == null ? "" : String(v);
 }
 
 const clampPct = (n: number): number => Math.max(0, Math.min(100, n));

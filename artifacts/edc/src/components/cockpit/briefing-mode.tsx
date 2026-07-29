@@ -12,6 +12,7 @@ import { toBlob } from "html-to-image";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { DatePicker } from "@/components/ui/date-picker";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Popover,
@@ -520,11 +521,10 @@ function BriefingDealContent({ deal, intel }: { deal: Deal; intel: Intelligence 
       <div className="max-w-5xl mx-auto px-8 flex items-center gap-2 flex-wrap print:hidden">
         <div className="flex items-center gap-2 mr-auto">
           <History className="h-4 w-4 text-muted-foreground" />
-          <Input
-            type="date"
+          <DatePicker
             max={today}
             value={date}
-            onChange={(e) => setDate(e.target.value)}
+            onChange={setDate}
             className="w-auto h-9"
           />
           {isHistorical && (

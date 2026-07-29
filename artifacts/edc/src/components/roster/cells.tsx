@@ -4,9 +4,11 @@ import { Link } from "wouter";
 import { Trophy, Ban } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import { shortDate, daysUntil } from "@/components/dashboard/widgets/_shared";
+import { daysUntil } from "@/components/dashboard/widgets/_shared";
+import { formatDate } from "@/lib/format";
 import { formatCurrency } from "@/components/cockpit/use-invalidate";
 import { RISK_LEVEL_CLASS, RISK_LEVEL_LABEL, type RiskLevel } from "@/components/cockpit/risk/risk-model";
+import { HEALTH_BADGE_CLASS, HEALTH_CLASS, OUTCOME_CLASS } from "@/lib/semantic-colors";
 import { VELOCITY_LABEL } from "./model/velocity";
 import { terminalOutcome } from "./model/board";
 import type { ColumnId, Health, RosterRow, VelocityBucket } from "./model/roster-types";
@@ -20,8 +22,8 @@ export function HealthBadge({ health }: { health: string }) {
     <Badge
       variant={health === "RED" ? "destructive" : health === "YELLOW" ? "default" : "secondary"}
       className={cn(
-        health === "YELLOW" && "bg-amber-500 hover:bg-amber-600 text-white",
-        health === "GREEN" && "bg-emerald-500 hover:bg-emerald-600 text-white",
+        health === "YELLOW" && HEALTH_BADGE_CLASS.YELLOW,
+        health === "GREEN" && HEALTH_BADGE_CLASS.GREEN,
       )}
     >
       {health}
@@ -112,7 +114,7 @@ export function TcvCell({ row }: { row: RosterRow }) {
 }
 
 export function CloseDateCell({ iso }: { iso: string | null | undefined }) {
-  const label = shortDate(iso);
+  const label = formatDate(iso);
   const overdue = (daysUntil(iso) ?? 1) < 0;
   return <span className={cn("font-mono text-xs tabular-nums", overdue ? "text-red-500" : "text-muted-foreground")}>{label ?? "—"}</span>;
 }
@@ -144,7 +146,11 @@ export function TerminalStageBadge({ stage }: { stage: string | null | undefined
     return (
       <span
         title="Closed-Won"
-        className="inline-flex items-center gap-1 rounded-sm bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-700 dark:text-emerald-400"
+        className={cn(
+          "inline-flex items-center gap-1 rounded-sm px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide",
+          OUTCOME_CLASS.won.bg,
+          OUTCOME_CLASS.won.text,
+        )}
       >
         <Trophy className="h-3 w-3" aria-hidden /> Won
       </span>
@@ -153,7 +159,11 @@ export function TerminalStageBadge({ stage }: { stage: string | null | undefined
   return (
     <span
       title="Closed-Lost"
-      className="inline-flex items-center gap-1 rounded-sm bg-rose-500/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-rose-700 dark:text-rose-400"
+      className={cn(
+        "inline-flex items-center gap-1 rounded-sm px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide",
+        OUTCOME_CLASS.lost.bg,
+        OUTCOME_CLASS.lost.text,
+      )}
     >
       <Ban className="h-3 w-3" aria-hidden /> Lost
     </span>
@@ -208,15 +218,18 @@ export function RosterCellContent({ columnId, row }: { columnId: ColumnId; row: 
   }
 }
 
+// GREEN/LOW are deliberately "" (no border) — not derived from HEALTH_CLASS/
+// RISK_LEVEL_CLASS, whose LOW row now carries a real (sky) borderL. Preserve
+// the existing "no border for the healthy case" behavior explicitly.
 export const HEALTH_BORDER: Record<Health, string> = {
-  RED: "border-l-2 border-l-red-500",
-  YELLOW: "border-l-2 border-l-amber-500",
+  RED: `border-l-2 ${HEALTH_CLASS.RED.borderL}`,
+  YELLOW: `border-l-2 ${HEALTH_CLASS.YELLOW.borderL}`,
   GREEN: "",
 };
 
 export const RISK_BORDER: Record<RiskLevel, string> = {
-  HIGH: "border-l-2 border-l-red-500",
-  ELEVATED: "border-l-2 border-l-orange-500",
-  MODERATE: "border-l-2 border-l-amber-500",
+  HIGH: `border-l-2 ${RISK_LEVEL_CLASS.HIGH.borderL}`,
+  ELEVATED: `border-l-2 ${RISK_LEVEL_CLASS.ELEVATED.borderL}`,
+  MODERATE: `border-l-2 ${RISK_LEVEL_CLASS.MODERATE.borderL}`,
   LOW: "",
 };

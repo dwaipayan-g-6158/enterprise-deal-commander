@@ -4,6 +4,8 @@
 // net product revenue (after that year's discount) plus services. Otherwise it
 // falls back to the V1 flat calculation.
 
+import { PRICING_MODEL } from "./dimensions";
+
 export interface PricingYear {
   yearNumber: number;
   productRevenue: number;
@@ -35,7 +37,7 @@ export function calculateFlatTCV(input: FlatPricingInput): number {
   const base = Number(input.productRevenue) || 0;
   const services = Number(input.servicesRevenue) || 0;
   const term = Number(input.contractTermYears) || 1;
-  if (input.pricingModel === "Multi-Year Committed") {
+  if (input.pricingModel === PRICING_MODEL.MULTI_YEAR) {
     return base * term + services;
   }
   return base + services;

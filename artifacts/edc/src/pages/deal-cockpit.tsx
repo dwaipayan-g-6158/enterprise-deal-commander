@@ -55,6 +55,7 @@ import { MeddpiccPanel } from "@/components/cockpit/v2/meddpicc-panel";
 import { PricingPanel } from "@/components/cockpit/v2/pricing-panel";
 import { DealTagsBar } from "@/components/cockpit/v2/deal-tags-bar";
 import { formatCurrency } from "@/components/cockpit/use-invalidate";
+import { formatDate } from "@/lib/format";
 import {
   extractDealRisk,
   healthToRiskLevel,
@@ -440,7 +441,7 @@ export default function DealCockpit() {
               <div className="flex justify-between">
                 <span className="text-muted-foreground text-sm">Landed</span>
                 <span className="font-mono">
-                  {(deal.landedAt ?? deal.createdAt)?.slice(0, 10) ?? "—"}
+                  {formatDate(deal.landedAt ?? deal.createdAt, "—")}
                   {(() => {
                     const landed = deal.landedAt ?? deal.createdAt;
                     if (!landed) return null;

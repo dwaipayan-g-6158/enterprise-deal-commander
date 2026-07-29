@@ -15,6 +15,7 @@ import {
   type Deal,
 } from "@workspace/api-client-react";
 import { ProductPicker } from "./product-picker";
+import { isPerpetualModel, clampTerm, revenueHint } from "./deal-form-helpers";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   Sheet,
@@ -137,6 +138,7 @@ export function EditDealSheet({
       estimated_log_sources: deal.estimatedLogSources ?? "",
     },
   });
+  const isPerpetual = isPerpetualModel(models?.data, watch("pricing_model_id"));
 
   const autosaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const undoDataRef = useRef<FormState | null>(null);
@@ -178,8 +180,7 @@ export function EditDealSheet({
       services_tier_id: Number(values.services_tier_id),
       product_revenue: Number(values.product_revenue),
       services_revenue: Number(values.services_revenue),
-      contract_term_years: Number(values.contract_term_years),
-      deal_currency: "USD",
+      contract_term_years: clampTerm(values.contract_term_years),
       expected_close_date: values.expected_close_date || null,
       landed_at: values.landed_at || null,
       win_probability_pct:
@@ -420,19 +421,68 @@ export function EditDealSheet({
 
           <div className="grid grid-cols-2 gap-4">
             <div className="grid gap-2">
-              <Label>Product Revenue</Label>
-              <Input type="number" step="any" {...register("product_revenue", { valueAsNumber: true })} />
+              <div className="flex items-baseline justify-between gap-2">
+                <Label htmlFor="edit-product-revenue">Product Revenue</Label>
+                {revenueHint(watch("product_revenue")) && (
+                  <span
+                    id="edit-product-revenue-hint"
+                    className="text-xs text-muted-foreground font-mono tabular-nums"
+                  >
+                    {revenueHint(watch("product_revenue"))}
+                  </span>
+                )}
+              </div>
+              <Input
+                id="edit-product-revenue"
+                type="number"
+                step="any"
+                aria-describedby="edit-product-revenue-hint"
+                {...register("product_revenue", { valueAsNumber: true })}
+              />
             </div>
             <div className="grid gap-2">
-              <Label>Services Revenue</Label>
-              <Input type="number" step="any" {...register("services_revenue", { valueAsNumber: true })} />
+              <div className="flex items-baseline justify-between gap-2">
+                <Label htmlFor="edit-services-revenue">Services Revenue</Label>
+                {revenueHint(watch("services_revenue")) && (
+                  <span
+                    id="edit-services-revenue-hint"
+                    className="text-xs text-muted-foreground font-mono tabular-nums"
+                  >
+                    {revenueHint(watch("services_revenue"))}
+                  </span>
+                )}
+              </div>
+              <Input
+                id="edit-services-revenue"
+                type="number"
+                step="any"
+                aria-describedby="edit-services-revenue-hint"
+                {...register("services_revenue", { valueAsNumber: true })}
+              />
             </div>
           </div>
 
           <div className="grid grid-cols-2 gap-4">
             <div className="grid gap-2">
-              <Label>Term (yrs)</Label>
-              <Input type="number" min={1} max={10} {...register("contract_term_years", { valueAsNumber: true })} />
+              <div className="flex items-baseline justify-between gap-2">
+                <Label htmlFor="edit-term" className={isPerpetual ? "text-muted-foreground" : undefined}>
+                  Term (yrs)
+                </Label>
+              </div>
+              <Input
+                id="edit-term"
+                type="number"
+                min={1}
+                max={10}
+                disabled={isPerpetual}
+                aria-describedby={isPerpetual ? "edit-term-na" : undefined}
+                {...register("contract_term_years", { valueAsNumber: true })}
+              />
+              {isPerpetual && (
+                <p id="edit-term-na" className="text-xs text-muted-foreground">
+                  Not applicable for Perpetual License.
+                </p>
+              )}
             </div>
             <div className="grid gap-2">
               <Label>Win %</Label>

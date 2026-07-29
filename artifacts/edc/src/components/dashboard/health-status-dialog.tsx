@@ -15,8 +15,7 @@ import { ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { rowMotion } from "./widgets/_shared";
 import { terminalOutcome } from "@/components/roster/model/board";
-
-type Health = "GREEN" | "YELLOW" | "RED";
+import { HEALTH_CLASS, type Health } from "@/lib/semantic-colors";
 
 const HEALTH_META: Record<
   Health,
@@ -24,18 +23,18 @@ const HEALTH_META: Record<
 > = {
   GREEN: {
     label: "Green",
-    dot: "bg-emerald-500",
-    activeBtn: "border-emerald-500 bg-emerald-500/10 text-emerald-600",
+    dot: HEALTH_CLASS.GREEN.dot,
+    activeBtn: `border-sky-500 ${HEALTH_CLASS.GREEN.bg} ${HEALTH_CLASS.GREEN.text}`,
   },
   YELLOW: {
     label: "Yellow",
-    dot: "bg-amber-500",
-    activeBtn: "border-amber-500 bg-amber-500/10 text-amber-600",
+    dot: HEALTH_CLASS.YELLOW.dot,
+    activeBtn: `border-amber-500 ${HEALTH_CLASS.YELLOW.bg} ${HEALTH_CLASS.YELLOW.text}`,
   },
   RED: {
     label: "Red",
-    dot: "bg-red-500",
-    activeBtn: "border-red-500 bg-red-500/10 text-red-600",
+    dot: HEALTH_CLASS.RED.dot,
+    activeBtn: `border-red-500 ${HEALTH_CLASS.RED.bg} ${HEALTH_CLASS.RED.text}`,
   },
 };
 

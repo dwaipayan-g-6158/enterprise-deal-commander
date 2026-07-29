@@ -1,4 +1,20 @@
-export type RiskLevel = "LOW" | "MODERATE" | "ELEVATED" | "HIGH";
+// RiskLevel, classifyRisk, RISK_LEVEL_LABEL, RISK_LEVEL_CLASS and
+// healthToRiskLevel moved to lib/semantic-colors.ts (the single source of
+// truth for risk/health/outcome colour, alongside the terminal-outcome and
+// chart-form representations) and re-exported here so existing importers of
+// this module keep their import path unchanged.
+//
+// Relative, not "@/" — this module is value-imported by risk-model.test.ts,
+// which runs under vitest's standalone config (no resolve.alias); see the
+// same note in close-timeline-model.ts.
+export {
+  classifyRisk,
+  RISK_LEVEL_LABEL,
+  RISK_LEVEL_CLASS,
+  healthToRiskLevel,
+} from "../../../lib/semantic-colors";
+import type { RiskLevel } from "../../../lib/semantic-colors";
+export type { RiskLevel };
 
 export interface RiskDimension {
   name: string;
@@ -22,7 +38,6 @@ export interface DealRisk {
   compositeScore: number;
   riskLevel: RiskLevel;
   riskLabel?: string;
-  riskColor?: string;
   dimensions?: RiskDimension[];
   topDrivers?: RiskDriver[];
   recommendedActions?: RiskAction[];
@@ -37,30 +52,6 @@ export function extractDealRisk(intel: unknown): DealRisk | null {
   const r = raw as Partial<DealRisk>;
   if (typeof r.compositeScore !== "number" || !r.riskLevel) return null;
   return r as DealRisk;
-}
-
-export function classifyRisk(score: number): RiskLevel {
-  if (score <= 25) return "LOW";
-  if (score <= 50) return "MODERATE";
-  if (score <= 75) return "ELEVATED";
-  return "HIGH";
-}
-
-export const RISK_LEVEL_LABEL: Record<RiskLevel, string> = {
-  LOW: "Low Risk", MODERATE: "Moderate Risk", ELEVATED: "Elevated Risk", HIGH: "High Risk",
-};
-
-/** Theme-aware Tailwind utility classes per level (named utilities + dark variants; no raw hex). */
-export const RISK_LEVEL_CLASS: Record<RiskLevel, { text: string; bg: string; border: string; fill: string; dot: string }> = {
-  LOW:      { text: "text-emerald-600 dark:text-emerald-400", bg: "bg-emerald-500/12", border: "border-emerald-500/40", fill: "bg-emerald-500", dot: "bg-emerald-500" },
-  MODERATE: { text: "text-amber-600 dark:text-amber-400",     bg: "bg-amber-500/12",   border: "border-amber-500/40",   fill: "bg-amber-500",   dot: "bg-amber-500" },
-  ELEVATED: { text: "text-orange-600 dark:text-orange-400",   bg: "bg-orange-500/12",  border: "border-orange-500/40",  fill: "bg-orange-500",  dot: "bg-orange-500" },
-  HIGH:     { text: "text-red-600 dark:text-red-400",         bg: "bg-red-500/12",     border: "border-red-500/40",     fill: "bg-red-500",     dot: "bg-red-500" },
-};
-
-/** Legacy 3-state health → a risk level, for fallback rendering when `risk` is absent. */
-export function healthToRiskLevel(h: "GREEN" | "YELLOW" | "RED"): RiskLevel {
-  return h === "RED" ? "HIGH" : h === "YELLOW" ? "MODERATE" : "LOW";
 }
 
 export const ACTION_PRIORITY_RANK: Record<RiskActionPriority, number> = {

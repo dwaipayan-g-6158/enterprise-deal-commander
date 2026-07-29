@@ -2,11 +2,12 @@ import { useListDeals } from "@workspace/api-client-react";
 import { useLocation } from "wouter";
 import { Badge } from "@/components/ui/badge";
 import { formatCurrency } from "@/components/cockpit/use-invalidate";
+import { HEALTH_BADGE_CLASS } from "@/lib/semantic-colors";
 
 const healthColor: Record<string, string> = {
   RED: "bg-destructive text-white",
-  YELLOW: "bg-amber-500 text-white",
-  GREEN: "bg-emerald-500 text-white",
+  YELLOW: HEALTH_BADGE_CLASS.YELLOW,
+  GREEN: HEALTH_BADGE_CLASS.GREEN,
 };
 
 /**

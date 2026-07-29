@@ -17,6 +17,7 @@ import { useCockpitInvalidate } from "../use-invalidate";
 import { AdminOnly } from "@/components/auth/write-gate";
 import { relativeTime, daysUntil } from "@/components/dashboard/widgets/_shared";
 import { DISPOSITION_PRESENTATION, DISPOSITION_PRIORITY } from "./disposition-presentation";
+import { formatExplanationValue } from "./risk-presentation";
 import { snoozeFieldLabel } from "./snooze-fields";
 
 function severityChipClass(severity: string) {
@@ -78,7 +79,7 @@ function ManagedRiskRow({ dealId, alert }: { dealId: string; alert: Alert }) {
                 {alert.explanation.inputs.map((i, idx) => (
                   <div key={idx} className="flex justify-between gap-2">
                     <span className="text-muted-foreground">{i.label}</span>
-                    <span className="font-mono">{String(i.value ?? "")}</span>
+                    <span className="font-mono">{formatExplanationValue(i.value)}</span>
                   </div>
                 ))}
                 <p className="text-muted-foreground pt-1">

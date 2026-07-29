@@ -10,7 +10,8 @@ import { ArrowLeft } from "lucide-react";
 import { HistoryPanel } from "@/components/cockpit/history-panel";
 import { NarrativeTab } from "@/components/memory/detail/narrative-tab";
 import { ConnectionsTab } from "@/components/memory/detail/connections-tab";
-import { money } from "@/lib/format";
+import { money, formatDate } from "@/lib/format";
+import { OUTCOME_CLASS } from "@/lib/semantic-colors";
 
 const TABS = [
   { id: "overview", label: "Overview" },
@@ -48,7 +49,7 @@ export default function MemoryDetail() {
           <p className="text-muted-foreground text-lg">{m.accountName}</p>
         </div>
         <div className="flex items-center gap-3">
-          <Badge className={m.outcome === "Won" ? "bg-emerald-500 text-white" : "bg-destructive text-white"}>{m.outcome}</Badge>
+          <Badge className={m.outcome === "Won" ? OUTCOME_CLASS.won.badge : OUTCOME_CLASS.lost.badge}>{m.outcome}</Badge>
           <span className="text-2xl font-bold font-mono tabular-nums">{money(m.finalTcv)}</span>
         </div>
       </div>
@@ -86,7 +87,7 @@ export default function MemoryDetail() {
               </div>
               <div className="flex justify-between py-2">
                 <span className="text-muted-foreground text-sm">Archived</span>
-                <span className="font-mono">{new Date(m.archivedAt).toLocaleDateString()}</span>
+                <span className="font-mono">{formatDate(m.archivedAt, "—")}</span>
               </div>
               {m.tags && m.tags.length > 0 && (
                 <div className="flex flex-wrap gap-1 pt-2">

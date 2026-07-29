@@ -4,10 +4,11 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatCurrency } from "@/components/cockpit/use-invalidate";
-import { shortDate } from "@/components/dashboard/widgets/_shared";
+import { formatDate } from "@/lib/format";
 import { HealthBadge, ScoreCell, VelocityCell, LastActivityCell } from "./cells";
 import { useDealPreview } from "./hooks/use-deal-preview";
 import { extractDealRisk, sortActions } from "@/components/cockpit/risk/risk-model";
+import { HEALTH_CLASS } from "@/lib/semantic-colors";
 import type { RosterRow } from "./model/roster-types";
 
 function Stat({ label, children }: { label: string; children: React.ReactNode }) {
@@ -20,9 +21,9 @@ function Stat({ label, children }: { label: string; children: React.ReactNode })
 }
 
 const SEV_DOT: Record<string, string> = {
-  RED: "bg-red-500",
-  YELLOW: "bg-amber-500",
-  GREEN: "bg-emerald-500",
+  RED: HEALTH_CLASS.RED.dot,
+  YELLOW: HEALTH_CLASS.YELLOW.dot,
+  GREEN: HEALTH_CLASS.GREEN.dot,
 };
 
 // Shared detail body for the preview panel and inline row expansion. The header
@@ -71,7 +72,7 @@ export function PreviewContent({
           <Stat label="Velocity">
             <VelocityCell bucket={row.velocity} delta={row.deltaDays} />
           </Stat>
-          <Stat label="Close">{shortDate(row.expectedCloseDate) ?? "—"}</Stat>
+          <Stat label="Close">{formatDate(row.expectedCloseDate) ?? "—"}</Stat>
           <Stat label="Last activity">
             <LastActivityCell days={row.daysSinceLastActivity} />
           </Stat>

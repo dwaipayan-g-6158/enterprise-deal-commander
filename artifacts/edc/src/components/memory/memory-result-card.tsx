@@ -3,6 +3,7 @@ import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Link } from "wouter";
 import { money } from "@/lib/format";
+import { OUTCOME_CLASS } from "@/lib/semantic-colors";
 
 type MemoryResult = {
   id: string;
@@ -40,7 +41,7 @@ export function MemoryResultCard({
             </Link>
             <span className="text-muted-foreground font-normal">· {m.accountName}</span>
           </span>
-          <Badge className={m.outcome === "Won" ? "bg-emerald-500 text-white" : "bg-destructive text-white"}>
+          <Badge className={m.outcome === "Won" ? OUTCOME_CLASS.won.badge : OUTCOME_CLASS.lost.badge}>
             {m.outcome}
           </Badge>
         </CardTitle>

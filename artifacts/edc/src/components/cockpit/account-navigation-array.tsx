@@ -15,17 +15,24 @@ import {
   lerpScrollPosition,
   clampScrollTarget,
 } from "./wheel-horizontal-scroll";
+import { HEALTH_CLASS, OUTCOME_CLASS } from "@/lib/semantic-colors";
 
+// Sourced from the shared HEALTH_CLASS map (lib/semantic-colors.ts) — this
+// used to be a private Record hardcoding GREEN as emerald, the exact
+// collision this file was reported for: a low-risk open deal and a
+// Closed-Won deal both rendered "border-l-emerald-500". Won/lost accent
+// colours (below, in renderCard/ClusterTab) now come from OUTCOME_CLASS
+// instead, so the two channels can no longer collide by construction.
 const healthBorder: Record<string, string> = {
-  RED: "border-l-destructive",
-  YELLOW: "border-l-amber-500",
-  GREEN: "border-l-emerald-500",
+  RED: HEALTH_CLASS.RED.borderL,
+  YELLOW: HEALTH_CLASS.YELLOW.borderL,
+  GREEN: HEALTH_CLASS.GREEN.borderL,
 };
 
 const healthText: Record<string, string> = {
-  RED: "text-destructive",
-  YELLOW: "text-amber-600 dark:text-amber-400",
-  GREEN: "text-emerald-600 dark:text-emerald-400",
+  RED: HEALTH_CLASS.RED.text,
+  YELLOW: HEALTH_CLASS.YELLOW.text,
+  GREEN: HEALTH_CLASS.GREEN.text,
 };
 
 // A deal known to have the fields the strip renders. useListDeals returns a
@@ -187,9 +194,7 @@ export function AccountNavigationArray({ activeDealId, expandedGroup, onExpandGr
   const renderCard = (deal: StripDealItem, index: number, accent?: "won" | "lost") => {
     const active = deal.id === activeDealId;
     const borderClass = accent
-      ? accent === "won"
-        ? "border-l-emerald-500"
-        : "border-l-rose-500"
+      ? OUTCOME_CLASS[accent].borderL
       : healthBorder[deal.healthStatus] ?? "border-l-border";
     const tcvClass = accent
       ? "text-muted-foreground"
@@ -394,9 +399,9 @@ function ClusterTab({
       className={cn(
         "flex-shrink-0 self-stretch flex w-[52px] flex-col items-center justify-center gap-1 rounded-md border px-1 py-1.5",
         leading && "ml-2",
-        won
-          ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-700 dark:text-emerald-400"
-          : "bg-rose-500/10 border-rose-500/20 text-rose-700 dark:text-rose-400",
+        OUTCOME_CLASS[outcome].bg,
+        OUTCOME_CLASS[outcome].border,
+        OUTCOME_CLASS[outcome].text,
       )}
     >
       {won ? <Trophy className="h-4 w-4" aria-hidden /> : <Ban className="h-4 w-4" aria-hidden />}
@@ -406,7 +411,7 @@ function ClusterTab({
       <span
         className={cn(
           "rounded-full px-1.5 font-mono text-[11px] leading-[15px]",
-          won ? "bg-emerald-500/15" : "bg-rose-500/15",
+          OUTCOME_CLASS[outcome].bg,
         )}
       >
         {count}
