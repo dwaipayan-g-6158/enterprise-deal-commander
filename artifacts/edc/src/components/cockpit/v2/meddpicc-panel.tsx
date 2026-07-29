@@ -62,6 +62,12 @@ const RAG_BADGE: Record<Score["ragStatus"], string> = {
   Green: "bg-emerald-500 text-white",
 };
 
+// Bucket 1 ("Strong No") uses destructive/red, matching RAG_BADGE.Red above —
+// both represent the same "Red" MEDDPICC concept and previously disagreed
+// (rose here vs. bg-destructive there). This does not conflict with this
+// file staying outside the shared risk ramp (semantic-colors.ts's warning
+// against blanket emerald/rose replacement protects the "good" emerald
+// channel and the terminal-outcome rule, not internal consistency of red).
 const SCORE_STYLE: Record<number, { label: string; dot: string; wash: string; solid: string }> = {
   3: {
     label: "Strong Yes",
@@ -77,9 +83,9 @@ const SCORE_STYLE: Record<number, { label: string; dot: string; wash: string; so
   },
   1: {
     label: "Strong No",
-    dot: "bg-rose-500",
-    wash: "bg-rose-500/10 border-rose-500/20 text-rose-700 dark:text-rose-400",
-    solid: "bg-rose-600 text-white border-rose-600",
+    dot: "bg-destructive",
+    wash: "bg-destructive/10 border-destructive/20 text-destructive",
+    solid: "bg-destructive text-destructive-foreground border-destructive",
   },
   0: {
     label: "Unknown",
@@ -216,7 +222,7 @@ export function MeddpiccPanel({ dealId }: { dealId: string }) {
           Strong No: {score.strongNoCount}
         </span>
         <span className="flex items-center gap-1.5">
-          <span className="h-2 w-2 rounded-full border border-dashed border-slate-400" />
+          <span className={cn("h-2 w-2 rounded-full border", SCORE_STYLE[0].wash)} />
           Unknown: {score.unknownCount}
         </span>
       </div>

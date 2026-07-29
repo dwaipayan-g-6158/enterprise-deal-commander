@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { useForm } from "react-hook-form";
+import { useForm, Controller } from "react-hook-form";
 import {
   useUpdateDeal,
   useListPipelineStages,
@@ -15,7 +15,7 @@ import {
   type Deal,
 } from "@workspace/api-client-react";
 import { ProductPicker } from "./product-picker";
-import { isPerpetualModel, clampTerm, revenueHint } from "./deal-form-helpers";
+import { isPerpetualModel, clampTerm, clampRevenue, revenueHint } from "./deal-form-helpers";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   Sheet,
@@ -27,6 +27,7 @@ import {
 } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { NumberInput } from "@/components/ui/number-input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
@@ -115,7 +116,7 @@ export function EditDealSheet({
     label: d.name,
   }));
 
-  const { register, handleSubmit, setValue, watch, reset, formState } = useForm<FormState>({
+  const { register, control, handleSubmit, setValue, watch, reset, formState } = useForm<FormState>({
     defaultValues: {
       deal_name: deal.dealName,
       account_name: deal.accountName,
@@ -178,8 +179,8 @@ export function EditDealSheet({
       sales_stage_id: Number(values.sales_stage_id),
       pricing_model_id: Number(values.pricing_model_id),
       services_tier_id: Number(values.services_tier_id),
-      product_revenue: Number(values.product_revenue),
-      services_revenue: Number(values.services_revenue),
+      product_revenue: clampRevenue(values.product_revenue),
+      services_revenue: clampRevenue(values.services_revenue),
       contract_term_years: clampTerm(values.contract_term_years),
       expected_close_date: values.expected_close_date || null,
       landed_at: values.landed_at || null,
@@ -233,8 +234,11 @@ export function EditDealSheet({
           message: apiErr.message ?? "Stage advancement is blocked by active risk patterns.",
           patternCodes: apiErr.patternCodes ?? [],
         });
+      } else {
+        // Otherwise stay silent — don't interrupt the user mid-edit on auto-save.
+        // Still log so an unexpected 400/500 isn't invisible in devtools.
+        console.warn("Auto-save failed", err);
       }
-      // Otherwise stay silent — don't interrupt the user mid-edit on auto-save.
     }
   };
 
@@ -432,12 +436,19 @@ export function EditDealSheet({
                   </span>
                 )}
               </div>
-              <Input
-                id="edit-product-revenue"
-                type="number"
-                step="any"
-                aria-describedby="edit-product-revenue-hint"
-                {...register("product_revenue", { valueAsNumber: true })}
+              <Controller
+                control={control}
+                name="product_revenue"
+                render={({ field }) => (
+                  <NumberInput
+                    id="edit-product-revenue"
+                    min={0}
+                    step="any"
+                    value={field.value}
+                    onChange={field.onChange}
+                    aria-describedby="edit-product-revenue-hint"
+                  />
+                )}
               />
             </div>
             <div className="grid gap-2">
@@ -452,12 +463,19 @@ export function EditDealSheet({
                   </span>
                 )}
               </div>
-              <Input
-                id="edit-services-revenue"
-                type="number"
-                step="any"
-                aria-describedby="edit-services-revenue-hint"
-                {...register("services_revenue", { valueAsNumber: true })}
+              <Controller
+                control={control}
+                name="services_revenue"
+                render={({ field }) => (
+                  <NumberInput
+                    id="edit-services-revenue"
+                    min={0}
+                    step="any"
+                    value={field.value}
+                    onChange={field.onChange}
+                    aria-describedby="edit-services-revenue-hint"
+                  />
+                )}
               />
             </div>
           </div>

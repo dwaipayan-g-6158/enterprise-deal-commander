@@ -31,6 +31,17 @@ export function clampTerm(v: unknown): number {
   return Math.min(10, Math.max(1, n));
 }
 
+/** Clamp into the server's `product_revenue`/`services_revenue` contract
+ *  (number, minimum 0). Every non-finite input (NaN from an emptied
+ *  `valueAsNumber` field, Infinity, a stray string) collapses to `0` rather
+ *  than reaching the API as `null`, which the generated Zod body rejects
+ *  (`.optional()`, not `.nullish()`). Mirrors clampTerm above. */
+export function clampRevenue(v: unknown): number {
+  const n = Number(v);
+  if (!Number.isFinite(n)) return 0;
+  return Math.max(0, n);
+}
+
 /** Live "= $10K" style hint for a revenue field. `null` (render nothing) for
  *  empty/invalid input, exactly `0`, and anything under 1000 — below that
  *  threshold the compact form just restates what was typed (`$400`). */

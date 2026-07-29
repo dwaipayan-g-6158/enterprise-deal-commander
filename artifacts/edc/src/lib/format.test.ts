@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { formatDate, formatDateTime, humanizeIsoDates } from "./format";
+import {
+  formatDate,
+  formatDateTime,
+  humanizeIsoDates,
+  parseLocalISODate,
+  toLocalISODate,
+  todayISO,
+} from "./format";
 
 describe("formatDate — date-only strings (never constructs a Date)", () => {
   it("formats a plain calendar day", () => {
@@ -66,6 +73,48 @@ describe("formatDate/formatDateTime — empty and invalid input", () => {
     for (const bad of ["n/a", "tomorrow", "0000-00-00", "2026-13-40", new Date("nope")]) {
       expect(formatDate(bad as never)).toBeNull();
     }
+  });
+});
+
+describe("toLocalISODate/parseLocalISODate — local calendar round-trip", () => {
+  it("formats a locally-constructed Date's own parts, not a UTC instant", () => {
+    // The bug this guards against: new Date(2026, 6, 1).toISOString().slice(0, 10)
+    // shifts to the previous UTC day in any positive-offset timezone (e.g. IST),
+    // yielding "2026-06-30" instead of "2026-07-01".
+    expect(toLocalISODate(new Date(2026, 6, 1))).toBe("2026-07-01");
+  });
+
+  it("zero-pads single-digit month/day", () => {
+    expect(toLocalISODate(new Date(2026, 0, 5))).toBe("2026-01-05");
+  });
+
+  it("parses a YYYY-MM-DD string back into the same local Date, no shift", () => {
+    const parsed = parseLocalISODate("2026-08-30");
+    expect(parsed?.getFullYear()).toBe(2026);
+    expect(parsed?.getMonth()).toBe(7);
+    expect(parsed?.getDate()).toBe(30);
+  });
+
+  it("round-trips through both directions", () => {
+    const iso = "2026-12-05";
+    expect(toLocalISODate(parseLocalISODate(iso) as Date)).toBe(iso);
+  });
+
+  it("returns undefined for missing/malformed input", () => {
+    expect(parseLocalISODate(undefined)).toBeUndefined();
+    expect(parseLocalISODate("")).toBeUndefined();
+    expect(parseLocalISODate("2026-08")).toBeUndefined();
+    expect(parseLocalISODate("not-a-date")).toBeUndefined();
+  });
+});
+
+describe("todayISO", () => {
+  it("matches toLocalISODate(new Date()) — a local calendar day, not UTC", () => {
+    expect(todayISO()).toBe(toLocalISODate(new Date()));
+  });
+
+  it("is a YYYY-MM-DD string", () => {
+    expect(todayISO()).toMatch(/^\d{4}-\d{2}-\d{2}$/);
   });
 });
 

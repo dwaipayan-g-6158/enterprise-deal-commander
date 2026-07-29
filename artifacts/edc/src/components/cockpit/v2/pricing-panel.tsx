@@ -12,6 +12,7 @@ import { calculateFlatTCV } from "@workspace/engine";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { NumberInput } from "@/components/ui/number-input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
@@ -134,55 +135,6 @@ function loadWorksheet(dealId: string, productRevenue: number): Worksheet {
   } catch {
     return seeded;
   }
-}
-
-/**
- * Controlled number input that avoids the native "0" + typed digit => "0400" leading-zero bug by
- * tracking the raw typed string and showing a blank box with a faint "0" placeholder instead of a
- * literal 0. An empty box counts as 0.
- */
-function NumberInput({
-  value,
-  onChange,
-  min = 0,
-  step,
-  className,
-  disabled,
-}: {
-  value: number;
-  onChange: (v: number) => void;
-  min?: number;
-  step?: number;
-  className?: string;
-  disabled?: boolean;
-}) {
-  const [text, setText] = useState(() => (value ? String(value) : ""));
-
-  // Resync when the value changes from outside (deal switch, product-revenue seed, reset link).
-  useEffect(() => {
-    const parsed = text.trim() === "" ? 0 : Number(text);
-    if (parsed !== value) setText(value ? String(value) : "");
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [value]);
-
-  return (
-    <Input
-      type="number"
-      inputMode="decimal"
-      min={min}
-      step={step}
-      value={text}
-      placeholder="0"
-      disabled={disabled}
-      onChange={(e) => {
-        const raw = e.target.value;
-        setText(raw);
-        const n = raw.trim() === "" ? 0 : Number(raw);
-        onChange(Number.isFinite(n) ? n : 0);
-      }}
-      className={className}
-    />
-  );
 }
 
 /** Small labelled number input with stepper, used throughout the worksheet. */

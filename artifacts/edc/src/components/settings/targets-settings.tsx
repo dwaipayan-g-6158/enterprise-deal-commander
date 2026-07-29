@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { DatePicker } from "@/components/ui/date-picker";
+import { toLocalISODate } from "@/lib/format";
 import { useToast } from "@/hooks/use-toast";
 import { Target } from "lucide-react";
 import { AdminOnly } from "@/components/auth/write-gate";
@@ -18,7 +19,10 @@ interface PipelineTargetRow {
 
 function quarterStart(d = new Date()): string {
   const q = Math.floor(d.getMonth() / 3);
-  return new Date(d.getFullYear(), q * 3, 1).toISOString().slice(0, 10);
+  // Local parts in, local parts out — toISOString() here would shift to the
+  // previous UTC day in any positive-offset timezone (e.g. IST), posting the
+  // previous quarter's last day as the default periodStart.
+  return toLocalISODate(new Date(d.getFullYear(), q * 3, 1));
 }
 
 export function TargetsSettings() {

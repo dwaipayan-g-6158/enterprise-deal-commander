@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { useListDeals } from "@workspace/api-client-react";
+import { useListDeals, useGetRosterEnrichment } from "@workspace/api-client-react";
 import { useLocation } from "wouter";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import { Button } from "@/components/ui/button";
@@ -15,7 +15,7 @@ import {
   lerpScrollPosition,
   clampScrollTarget,
 } from "./wheel-horizontal-scroll";
-import { HEALTH_CLASS, OUTCOME_CLASS } from "@/lib/semantic-colors";
+import { HEALTH_CLASS, OUTCOME_CLASS, RISK_LEVEL_CLASS, type RiskLevel } from "@/lib/semantic-colors";
 
 // Sourced from the shared HEALTH_CLASS map (lib/semantic-colors.ts) — this
 // used to be a private Record hardcoding GREEN as emerald, the exact
@@ -23,6 +23,14 @@ import { HEALTH_CLASS, OUTCOME_CLASS } from "@/lib/semantic-colors";
 // Closed-Won deal both rendered "border-l-emerald-500". Won/lost accent
 // colours (below, in renderCard/ClusterTab) now come from OUTCOME_CLASS
 // instead, so the two channels can no longer collide by construction.
+//
+// These are now a FALLBACK, not the primary path: useListDeals carries no
+// risk level, so renderCard prefers the 4-state riskLevel from the roster
+// enrichment query (below) and only falls back to 3-state health when that
+// hasn't loaded (or the enrichment fetch fails) — matching roster-table.tsx's
+// `row.riskLevel ? RISK_BORDER[row.riskLevel] : HEALTH_BORDER[...]` pattern.
+// Without this, an ELEVATED deal painted amber here (from health YELLOW)
+// while the cockpit header right next to it painted the same deal orange.
 const healthBorder: Record<string, string> = {
   RED: HEALTH_CLASS.RED.borderL,
   YELLOW: HEALTH_CLASS.YELLOW.borderL,
@@ -63,7 +71,17 @@ export function AccountNavigationArray({ activeDealId, expandedGroup, onExpandGr
   const [, navigate] = useLocation();
   const [createOpen, setCreateOpen] = useState(false);
   const { data } = useListDeals({ state: "active", limit: 500 });
+  const enrichQuery = useGetRosterEnrichment();
   const reduce = !!useReducedMotion();
+
+  const riskLevelById = new Map<string, RiskLevel>(
+    (
+      (enrichQuery.data?.data as { deals?: { id: string; riskLevel?: RiskLevel | null }[] } | undefined)
+        ?.deals ?? []
+    )
+      .filter((e) => e.riskLevel)
+      .map((e) => [e.id, e.riskLevel as RiskLevel]),
+  );
 
   const groups = groupDeals<StripDealItem>((data?.data ?? []) as StripDealItem[]);
   const openCount = groups.open.length;
@@ -193,12 +211,17 @@ export function AccountNavigationArray({ activeDealId, expandedGroup, onExpandGr
 
   const renderCard = (deal: StripDealItem, index: number, accent?: "won" | "lost") => {
     const active = deal.id === activeDealId;
+    const riskLevel = riskLevelById.get(deal.id);
     const borderClass = accent
       ? OUTCOME_CLASS[accent].borderL
-      : healthBorder[deal.healthStatus] ?? "border-l-border";
+      : riskLevel
+        ? RISK_LEVEL_CLASS[riskLevel].borderL
+        : healthBorder[deal.healthStatus] ?? "border-l-border";
     const tcvClass = accent
       ? "text-muted-foreground"
-      : healthText[deal.healthStatus] ?? "text-muted-foreground";
+      : riskLevel
+        ? RISK_LEVEL_CLASS[riskLevel].text
+        : healthText[deal.healthStatus] ?? "text-muted-foreground";
     return (
       <motion.button
         key={deal.id}

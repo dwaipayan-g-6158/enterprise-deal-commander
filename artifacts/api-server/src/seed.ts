@@ -702,7 +702,12 @@ async function seedDeals() {
     { dealId: d1.id, categoryId: catId("Technical"), severityId: sevId("High"), description: "Performance benchmark not yet scheduled with customer infra team." },
   ]);
 
-  // Deal 2: Healthy validation-stage deal (EUR) with services
+  // Deal 2: Healthy validation-stage deal (EUR) with services. EUR is
+  // deliberate, not a stray inconsistency with the other seeded deals' USD:
+  // this is the only seeded deal whose fxRate != 1, so it's the sole
+  // end-to-end exercise of the EUR->USD normalization and MISSING_FX_RATE
+  // paths in lib/engine/src/index.ts (see the seeded fxRates below and
+  // getFxRate in lib/intelligence.ts). Do not flip this to USD.
   const [d2] = await db
     .insert(enterpriseDeals)
     .values({

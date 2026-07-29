@@ -5,7 +5,7 @@ import { Calendar as CalendarIcon } from "lucide-react"
 import type { Matcher } from "react-day-picker"
 
 import { cn } from "@/lib/utils"
-import { formatDate } from "@/lib/format"
+import { formatDate, parseLocalISODate, toLocalISODate } from "@/lib/format"
 import { Button } from "@/components/ui/button"
 import { Calendar } from "@/components/ui/calendar"
 import {
@@ -28,32 +28,6 @@ export interface DatePickerProps {
   className?: string
 }
 
-// Parse a "YYYY-MM-DD" string into a local Date (no timezone shift).
-function parseISODate(value?: string): Date | undefined {
-  if (!value) return undefined
-  const parts = value.split("-")
-  if (parts.length !== 3) return undefined
-  const year = Number(parts[0])
-  const month = Number(parts[1])
-  const day = Number(parts[2])
-  if (
-    Number.isNaN(year) ||
-    Number.isNaN(month) ||
-    Number.isNaN(day)
-  ) {
-    return undefined
-  }
-  return new Date(year, month - 1, day)
-}
-
-// Format a Date into "YYYY-MM-DD" using local date parts (avoids toISOString TZ shift).
-function formatISODate(date: Date): string {
-  const year = date.getFullYear()
-  const month = String(date.getMonth() + 1).padStart(2, "0")
-  const day = String(date.getDate()).padStart(2, "0")
-  return `${year}-${month}-${day}`
-}
-
 function DatePicker({
   value,
   onChange,
@@ -66,9 +40,9 @@ function DatePicker({
 }: DatePickerProps) {
   const [open, setOpen] = React.useState(false)
 
-  const selected = parseISODate(value)
-  const minDate = parseISODate(min)
-  const maxDate = parseISODate(max)
+  const selected = parseLocalISODate(value)
+  const minDate = parseLocalISODate(min)
+  const maxDate = parseLocalISODate(max)
 
   const disabledMatcher = React.useMemo<Matcher | undefined>(() => {
     if (minDate && maxDate) return { before: minDate, after: maxDate }
@@ -103,7 +77,7 @@ function DatePicker({
           disabled={disabledMatcher}
           onSelect={(date) => {
             if (date) {
-              onChange(formatISODate(date))
+              onChange(toLocalISODate(date))
             }
             setOpen(false)
           }}

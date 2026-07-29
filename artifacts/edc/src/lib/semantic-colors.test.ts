@@ -3,6 +3,7 @@ import {
   classifyRisk,
   healthToRiskLevel,
   RISK_LEVEL_CLASS,
+  RISK_LEVEL_SHORT_LABEL,
   HEALTH_CLASS,
   OUTCOME_CLASS,
   RISK_LEVEL_HSL,
@@ -23,6 +24,12 @@ describe("key completeness", () => {
       for (const slot of ["text", "bg", "border", "fill", "dot", "borderL", "cell"] as const) {
         expect(cls[slot]).toBeTruthy();
       }
+    }
+  });
+
+  it("RISK_LEVEL_SHORT_LABEL has every level", () => {
+    for (const level of RISK_LEVELS) {
+      expect(RISK_LEVEL_SHORT_LABEL[level]).toBeTruthy();
     }
   });
 

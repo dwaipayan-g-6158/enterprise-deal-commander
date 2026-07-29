@@ -9,6 +9,7 @@ import {
   type Intelligence,
 } from "@workspace/api-client-react";
 import { toBlob } from "html-to-image";
+import { todayISO } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -463,7 +464,7 @@ function BriefingDealView({
 
 function BriefingDealContent({ deal, intel }: { deal: Deal; intel: Intelligence }) {
   const { toast } = useToast();
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayISO();
   const [date, setDate] = useState<string>(today);
   const isHistorical = date !== today;
   const { data: snapshot } = useGetSnapshot(deal.id, { date });

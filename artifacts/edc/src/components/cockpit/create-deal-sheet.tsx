@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useForm } from "react-hook-form";
+import { useForm, Controller } from "react-hook-form";
 import { useLocation } from "wouter";
 import {
   useCreateDeal,
@@ -16,7 +16,8 @@ import {
   getListComplianceDriversQueryKey,
 } from "@workspace/api-client-react";
 import { ProductPicker } from "./product-picker";
-import { isPerpetualModel, clampTerm, revenueHint } from "./deal-form-helpers";
+import { isPerpetualModel, clampTerm, clampRevenue, revenueHint } from "./deal-form-helpers";
+import { todayISO } from "@/lib/format";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   Sheet,
@@ -28,6 +29,7 @@ import {
 } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { NumberInput } from "@/components/ui/number-input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
@@ -115,7 +117,7 @@ export function CreateDealSheet({
     services_revenue: 0,
     contract_term_years: 1,
     expected_close_date: "",
-    landed_at: new Date().toISOString().slice(0, 10),
+    landed_at: todayISO(),
     win_probability_pct: "",
     committed: false,
     manager_strategic_blueprint: "",
@@ -124,7 +126,7 @@ export function CreateDealSheet({
     estimated_log_sources: "",
   };
 
-  const { register, handleSubmit, setValue, watch, reset } = useForm<FormState>({
+  const { register, control, handleSubmit, setValue, watch, reset } = useForm<FormState>({
     defaultValues,
   });
   const isPerpetual = isPerpetualModel(models?.data, watch("pricing_model_id"));
@@ -193,8 +195,8 @@ export function CreateDealSheet({
       sales_stage_id: Number(values.sales_stage_id),
       pricing_model_id: Number(values.pricing_model_id),
       services_tier_id: Number(values.services_tier_id),
-      product_revenue: Number(values.product_revenue),
-      services_revenue: Number(values.services_revenue),
+      product_revenue: clampRevenue(values.product_revenue),
+      services_revenue: clampRevenue(values.services_revenue),
       contract_term_years: clampTerm(values.contract_term_years),
       deal_currency: "USD",
       expected_close_date: values.expected_close_date || null,
@@ -358,12 +360,19 @@ export function CreateDealSheet({
                   </span>
                 )}
               </div>
-              <Input
-                id="create-product-revenue"
-                type="number"
-                step="any"
-                aria-describedby="create-product-revenue-hint"
-                {...register("product_revenue", { valueAsNumber: true })}
+              <Controller
+                control={control}
+                name="product_revenue"
+                render={({ field }) => (
+                  <NumberInput
+                    id="create-product-revenue"
+                    min={0}
+                    step="any"
+                    value={field.value}
+                    onChange={field.onChange}
+                    aria-describedby="create-product-revenue-hint"
+                  />
+                )}
               />
             </div>
             <div className="grid gap-2">
@@ -378,12 +387,19 @@ export function CreateDealSheet({
                   </span>
                 )}
               </div>
-              <Input
-                id="create-services-revenue"
-                type="number"
-                step="any"
-                aria-describedby="create-services-revenue-hint"
-                {...register("services_revenue", { valueAsNumber: true })}
+              <Controller
+                control={control}
+                name="services_revenue"
+                render={({ field }) => (
+                  <NumberInput
+                    id="create-services-revenue"
+                    min={0}
+                    step="any"
+                    value={field.value}
+                    onChange={field.onChange}
+                    aria-describedby="create-services-revenue-hint"
+                  />
+                )}
               />
             </div>
           </div>

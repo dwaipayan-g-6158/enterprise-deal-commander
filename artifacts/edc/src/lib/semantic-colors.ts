@@ -39,6 +39,14 @@ export const RISK_LEVEL_LABEL: Record<RiskLevel, string> = {
   HIGH: "High Risk",
 };
 
+/** Space-constrained form of RISK_LEVEL_LABEL (heatmap cells, legends). */
+export const RISK_LEVEL_SHORT_LABEL: Record<RiskLevel, string> = {
+  LOW: "Low",
+  MODERATE: "Moderate",
+  ELEVATED: "Elevated",
+  HIGH: "High",
+};
+
 /** Legacy 3-state health -> a risk level, for fallback rendering when the
  *  richer `risk` payload is absent. */
 export function healthToRiskLevel(h: Health): RiskLevel {

@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { Grid3x3, ArrowUpRight } from "lucide-react";
-import { RISK_LEVEL_CLASS } from "@/lib/semantic-colors";
+import { RISK_LEVEL_CLASS, RISK_LEVEL_SHORT_LABEL, classifyRisk } from "@/lib/semantic-colors";
 
 type Axis = "accountManager" | "technicalLead";
 
@@ -23,14 +23,11 @@ function compactValue(n: number, currency: string): string {
 
 // riskScore bands mirror the PRD semantic ramp (and the Whitespace heatmap):
 // sky → amber → orange → red. Tint stays low-opacity so it reads as data.
-// NOTE: thresholds here (26/61/81) are a pre-existing mismatch with
-// classifyRisk's 25/50/75 used everywhere else — left as-is, out of scope for
-// this colour change; only the class strings are sourced from the shared map.
+// Thresholds/labels come from the shared classifyRisk (0-25/26-50/51-75/76-100)
+// so the heatmap can never drift from every other risk-level surface again.
 function riskBand(score: number): { cell: string; label: string } {
-  if (score >= 81) return { cell: RISK_LEVEL_CLASS.HIGH.cell, label: "Critical" };
-  if (score >= 61) return { cell: RISK_LEVEL_CLASS.ELEVATED.cell, label: "Elevated" };
-  if (score >= 26) return { cell: RISK_LEVEL_CLASS.MODERATE.cell, label: "Moderate" };
-  return { cell: RISK_LEVEL_CLASS.LOW.cell, label: "Low" };
+  const level = classifyRisk(score);
+  return { cell: RISK_LEVEL_CLASS[level].cell, label: RISK_LEVEL_SHORT_LABEL[level] };
 }
 
 const SEP = "␟";
@@ -236,12 +233,13 @@ function HeatLegend() {
   // token to appear literally in source to generate it; a runtime-concatenated
   // string is invisible to it (same reason healthTone in briefing-report.tsx
   // hardcodes its hex classes instead of interpolating BRIEFING_HEALTH_HEX).
-  // Kept in sync by hand with RISK_LEVEL_CLASS's colors (sky/amber/orange/red).
+  // Kept in sync by hand with RISK_LEVEL_CLASS's colors (sky/amber/orange/red)
+  // and with classifyRisk's boundaries (25/50/75).
   const items = [
     { label: "Low (0–25)", cls: "bg-sky-500/40" },
-    { label: "Moderate (26–60)", cls: "bg-amber-500/40" },
-    { label: "Elevated (61–80)", cls: "bg-orange-500/40" },
-    { label: "Critical (81–100)", cls: "bg-red-500/40" },
+    { label: "Moderate (26–50)", cls: "bg-amber-500/40" },
+    { label: "Elevated (51–75)", cls: "bg-orange-500/40" },
+    { label: "High (76–100)", cls: "bg-red-500/40" },
   ];
   return (
     <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t pt-3 text-xs text-muted-foreground">

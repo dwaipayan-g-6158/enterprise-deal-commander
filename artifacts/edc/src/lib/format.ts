@@ -1,13 +1,14 @@
 // ---- Dates ------------------------------------------------------------
 //
 // Renders every absolute date as DD/MM/YYYY (DD/MM/YYYY, HH:MM for
-// timestamps). Hand-rolled rather than date-fns (declared in package.json
-// but never imported anywhere in the repo — see git history for why: the
-// risk here is *parsing*, not formatting, so date-fns's format() would still
-// need a hand-written date-only parser feeding it; api-server needs the
-// identical format and has no date library; and Intl/ICU output is
-// version-dependent, so byte-deterministic hand-built strings are testable
-// where toLocaleDateString("en-GB") is not).
+// timestamps). Hand-rolled rather than date-fns (which was declared in
+// package.json but never imported anywhere in the repo, and has since been
+// removed — see git history for why: the risk here is *parsing*, not
+// formatting, so date-fns's format() would still need a hand-written
+// date-only parser feeding it; api-server needs the identical format and has
+// no date library; and Intl/ICU output is version-dependent, so
+// byte-deterministic hand-built strings are testable where
+// toLocaleDateString("en-GB") is not).
 //
 // THE CRITICAL RULE: new Date("2026-08-30") parses as UTC midnight, so
 // reading local getters off it is off-by-one in every negative-offset zone.
@@ -16,6 +17,14 @@
 // else (a full ISO timestamp, a Date, a number) is a real instant and is
 // read with local getters, which is correct and matches this app's existing
 // toLocaleString() behaviour for timestamps.
+//
+// This does NOT prohibit the opposite direction: building a `Date` from local
+// *parts* (new Date(year, month, day), or plain `new Date()`) and reading
+// local getters off it is always safe — the off-by-one only bites when a
+// string is handed to the `Date` constructor and re-interpreted as UTC. See
+// parseLocalISODate/toLocalISODate/todayISO below, which round-trip a Date
+// through local parts for callers (date pickers, "today" defaults) that need
+// a calendar day rather than a UTC instant.
 export type DateInput = string | number | Date | null | undefined;
 
 const DATE_ONLY_RE = /^(\d{4})-(\d{2})-(\d{2})$/;
@@ -103,4 +112,36 @@ export function round2(n: unknown): number {
  */
 export function formatNum(n: unknown): string {
   return round2(n).toLocaleString("en-US", { maximumFractionDigits: 2 });
+}
+
+// ---- Local-calendar round-trip ----------------------------------------
+//
+// For callers that need "today" (or a picked date) as a LOCAL calendar day,
+// not a UTC instant — `new Date().toISOString().slice(0, 10)` is UTC and
+// drifts a day from the local date near midnight in any non-UTC timezone.
+
+/** Parse a "YYYY-MM-DD" string into a local Date (no timezone shift), or
+ *  `undefined` for a missing/malformed string. */
+export function parseLocalISODate(value?: string): Date | undefined {
+  if (!value) return undefined;
+  const parts = value.split("-");
+  if (parts.length !== 3) return undefined;
+  const year = Number(parts[0]);
+  const month = Number(parts[1]);
+  const day = Number(parts[2]);
+  if (Number.isNaN(year) || Number.isNaN(month) || Number.isNaN(day)) return undefined;
+  return new Date(year, month - 1, day);
+}
+
+/** Format a Date into "YYYY-MM-DD" using local date parts (avoids toISOString TZ shift). */
+export function toLocalISODate(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+/** Today's local calendar date as "YYYY-MM-DD". */
+export function todayISO(): string {
+  return toLocalISODate(new Date());
 }

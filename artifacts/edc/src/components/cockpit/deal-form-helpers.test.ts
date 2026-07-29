@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isPerpetualModel, clampTerm, revenueHint } from "./deal-form-helpers";
+import { isPerpetualModel, clampTerm, clampRevenue, revenueHint } from "./deal-form-helpers";
 
 const MODELS = [
   { id: 1, modelName: "Annual Subscription" },
@@ -57,6 +57,33 @@ describe("clampTerm", () => {
       expect(Number.isInteger(result)).toBe(true);
       expect(result).toBeGreaterThanOrEqual(1);
       expect(result).toBeLessThanOrEqual(10);
+    }
+  });
+});
+
+describe("clampRevenue", () => {
+  const cases: [unknown, number][] = [
+    [0, 0],
+    [400, 400],
+    [1234.56, 1234.56],
+    [-5, 0],
+    [-Infinity, 0],
+    [NaN, 0],
+    [Infinity, 0],
+    ["", 0],
+    [undefined, 0],
+  ];
+  it.each(cases)("clampRevenue(%p) === %p", (input, expected) => {
+    expect(clampRevenue(input)).toBe(expected);
+  });
+
+  it("always satisfies the server contract (number, minimum 0)", () => {
+    // Mirrors UpdateDealBody.product_revenue/services_revenue:
+    // zod.number().min(0).optional() (lib/api-zod/src/generated/api.ts).
+    for (const [input] of cases) {
+      const result = clampRevenue(input);
+      expect(Number.isFinite(result)).toBe(true);
+      expect(result).toBeGreaterThanOrEqual(0);
     }
   });
 });
