@@ -7,6 +7,7 @@
  */
 
 export type SearchDealMemoryParams = {
+dealId?: string;
 q?: string;
 outcome?: string;
 competitor?: string;

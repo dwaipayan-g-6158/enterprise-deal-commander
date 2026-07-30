@@ -20,7 +20,6 @@ import {
   GetAutopsyResponse,
 } from "@workspace/api-zod";
 import { notFound } from "../lib/http";
-import { assembleDealIntelligence } from "../lib/intelligence";
 import { contextualAlertsFor } from "../lib/contextual-alerts";
 import { cache, CacheKeys, CacheTtl } from "../lib/cache";
 import {
@@ -33,6 +32,7 @@ import {
   readSummaryRollup,
   readPortfolioAnalysisRollup,
 } from "../lib/portfolio-rollups";
+import { notDeletedFilter } from "../lib/deal-filters";
 
 // Auth + write-role enforcement is applied centrally in routes/index.ts.
 const router: IRouter = Router();
@@ -243,9 +243,20 @@ router.get("/intelligence/product-mix", async (_req: Request, res: Response) => 
   );
 });
 
+const UNCLASSIFIED_ARCHETYPE_NAME = "Unclassified";
+
 router.get("/analytics/autopsy", async (req: Request, res: Response) => {
   const q = GetAutopsyQueryParams.parse(req.query);
 
+  // leftJoin (was innerJoin): a deal can reach Closed-Lost with no archetype
+  // set (the server has never required one on close — see the loss archetype
+  // being merely client-side-enforced on CloseDealDialog), and an innerJoin
+  // silently dropped every such deal from this whole tab. Those deals now
+  // land in a synthetic "Unclassified" bucket instead of disappearing.
+  const filters = [eq(pipelineStages.stageName, "Closed-Lost"), notDeletedFilter];
+  if (q.archetypeId != null) {
+    filters.push(eq(enterpriseDeals.lossArchetypeId, q.archetypeId));
+  }
   const lostRows = await db
     .select({
       id: enterpriseDeals.id,
@@ -257,18 +268,17 @@ router.get("/analytics/autopsy", async (req: Request, res: Response) => {
     })
     .from(enterpriseDeals)
     .innerJoin(pipelineStages, eq(enterpriseDeals.salesStageId, pipelineStages.id))
-    .innerJoin(
-      lossArchetypes,
-      eq(enterpriseDeals.lossArchetypeId, lossArchetypes.id),
-    )
-    .where(eq(pipelineStages.stageName, "Closed-Lost"));
+    .leftJoin(lossArchetypes, eq(enterpriseDeals.lossArchetypeId, lossArchetypes.id))
+    .where(and(...filters));
 
-  const filtered = q.archetypeId
-    ? lostRows.filter((r) => r.lossArchetypeId === q.archetypeId)
-    : lostRows;
+  // cachedIntel (not assembleDealIntelligence) so this tab shares the same
+  // cache tier the roster/summary already warm, and Promise.all instead of a
+  // sequential await-in-a-loop — the previous version serialized one
+  // full intelligence assembly per lost deal.
+  const intelResults = await Promise.all(lostRows.map((r) => cachedIntel(r.id)));
 
   const groups = new Map<
-    number,
+    number | null,
     {
       name: string;
       deals: Intel[];
@@ -281,12 +291,12 @@ router.get("/analytics/autopsy", async (req: Request, res: Response) => {
       }[];
     }
   >();
-  for (const row of filtered) {
-    const intel = await assembleDealIntelligence(row.id);
-    if (!intel) continue;
-    const aid = row.lossArchetypeId!;
+  lostRows.forEach((row, i) => {
+    const intel = intelResults[i];
+    if (!intel) return;
+    const aid = row.lossArchetypeId;
     if (!groups.has(aid)) {
-      groups.set(aid, { name: row.archetypeName, deals: [], lostDeals: [] });
+      groups.set(aid, { name: row.archetypeName ?? UNCLASSIFIED_ARCHETYPE_NAME, deals: [], lostDeals: [] });
     }
     const g = groups.get(aid)!;
     g.deals.push(intel);
@@ -297,7 +307,7 @@ router.get("/analytics/autopsy", async (req: Request, res: Response) => {
       salesStage: row.salesStage,
       tcv: intel.financials.calculatedTCV,
     });
-  }
+  });
 
   const byArchetype = [...groups.entries()].map(([archetypeId, group]) => {
     const lossCount = group.deals.length;
@@ -321,8 +331,11 @@ router.get("/analytics/autopsy", async (req: Request, res: Response) => {
     const patternsThatFired = [...patternCounts.entries()]
       .map(([code, count]) => ({ code, share: count / Math.max(1, lossCount) }))
       .sort((a, b) => b.share - a.share);
+    // Gate GROUP 2 specifically (was `<= 2`, which also matched an
+    // incomplete group-1 gate) — "Never Passed Gate 2" means group 2 itself
+    // was never completed, not "some earlier gate was incomplete".
     const neverPassedGate2 = group.deals.filter((d) =>
-      d.technicalTrack.gates.some((g) => g.gateGroup <= 2 && !g.isCompleted),
+      d.technicalTrack.gates.some((g) => g.gateGroup === 2 && !g.isCompleted),
     ).length;
     return {
       archetypeId,

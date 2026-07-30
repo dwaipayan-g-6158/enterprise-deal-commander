@@ -46,8 +46,9 @@ export function SearchTab({
   if (outcome !== "all") params.outcome = outcome;
   if (competitor !== "all") params.competitor = competitor;
   if (pricingModel !== "all") params.pricingModel = pricingModel;
-  const { data, isLoading } = useSearchDealMemory(params as never);
+  const { data, isLoading, isError } = useSearchDealMemory(params as never);
   const results = data?.data ?? [];
+  const hasActiveFilter = Boolean(params.q || params.outcome || params.competitor || params.pricingModel);
 
   const runSearch = () => recordQuery(q);
 
@@ -163,9 +164,17 @@ export function SearchTab({
           {isLoading ? "Searching…" : `${results.length} result${results.length === 1 ? "" : "s"}${facets ? ` of ${facets.total} archived deals` : ""}`}
         </p>
 
-        {!isLoading && results.length === 0 && (
+        {isError && (
+          <p className="text-destructive text-sm">
+            Something went wrong searching the archive. Try refreshing the page.
+          </p>
+        )}
+
+        {!isLoading && !isError && results.length === 0 && (
           <p className="text-muted-foreground text-sm">
-            No archived deals yet. Deals are archived here automatically when they reach Closed-Won or Closed-Lost.
+            {hasActiveFilter
+              ? "Nothing matched those filters. Try adjusting them."
+              : "No archived deals yet. Deals are archived here automatically when they reach Closed-Won or Closed-Lost."}
           </p>
         )}
 

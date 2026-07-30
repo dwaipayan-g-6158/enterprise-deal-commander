@@ -701,6 +701,11 @@ async function seedDeals() {
   await db.insert(dealBlockers).values([
     { dealId: d1.id, categoryId: catId("Technical"), severityId: sevId("High"), description: "Performance benchmark not yet scheduled with customer infra team." },
   ]);
+  // Mirror the incumbent competitor into the Competitive Landscape join table,
+  // same as seedIncumbentCompetitor in routes/deals.ts does for real deal
+  // create/update — without this, closing this deal archives an empty
+  // competitorsFaced (post-mortem.ts only reads deal_competitors).
+  await db.insert(dealCompetitors).values({ dealId: d1.id, competitorId: competitorId("Quest"), status: "Active" }).onConflictDoNothing();
 
   // Deal 2: Healthy validation-stage deal (EUR) with services. EUR is
   // deliberate, not a stray inconsistency with the other seeded deals' USD:
@@ -745,6 +750,7 @@ async function seedDeals() {
     { dealId: d2.id, productId: productId("DATA_SECURITY_PLUS") },
     { dealId: d2.id, productId: productId("CLOUD_SECURITY_PLUS") },
   ]);
+  await db.insert(dealCompetitors).values({ dealId: d2.id, competitorId: competitorId("Splunk"), status: "Active" }).onConflictDoNothing();
 
   // Deal 3: Procurement stage, near close, mega deal, stale
   const [d3] = await db
@@ -784,6 +790,7 @@ async function seedDeals() {
   await db.insert(dealBlockers).values([
     { dealId: d3.id, categoryId: catId("Legal"), severityId: sevId("Medium"), description: "Liability cap redline pending customer counsel review." },
   ]);
+  await db.insert(dealCompetitors).values({ dealId: d3.id, competitorId: competitorId("Microsoft Entra"), status: "Active" }).onConflictDoNothing();
 
   // Deal 4: Closed-Lost with archetype
   const [d4] = await db

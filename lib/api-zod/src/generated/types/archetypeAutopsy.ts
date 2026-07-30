@@ -9,7 +9,8 @@ import type { PatternShare } from './patternShare';
 import type { ProductMixDeal } from './productMixDeal';
 
 export interface ArchetypeAutopsy {
-  archetypeId: number;
+  /** @nullable */
+  archetypeId: number | null;
   archetypeName: string;
   lossCount: number;
   avgGateCompletionPct: number;

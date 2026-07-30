@@ -2,10 +2,17 @@ import { useState } from "react";
 import { useGetPricingBenchmarks, useGetMemoryFacets, useGetPlaybookEffectiveness } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Skeleton } from "@/components/ui/skeleton";
 import { money } from "@/lib/format";
 
 interface Percentiles { p25: number; median: number; p75: number; p90: number }
-interface PricingBenchmarks { sampleSize: number; tcv: Percentiles; cycleDays: Percentiles }
+interface PricingBenchmarks {
+  sampleSize: number;
+  tcvSampleSize: number;
+  cycleSampleSize: number;
+  tcv: Percentiles;
+  cycleDays: Percentiles;
+}
 interface FacetsPayload { pricingModels: { value: string; count: number }[]; servicesTiers: { value: string; count: number }[] }
 interface PlaybookEffectiveness {
   withPlaybookCount: number;
@@ -14,10 +21,21 @@ interface PlaybookEffectiveness {
   withoutPlaybookWinRatePct: number | null;
 }
 
-function PercentileRow({ label, p, format }: { label: string; p: Percentiles; format: (n: number) => string }) {
+function PercentileRow({ label, p, format, sampleSize, totalSampleSize }: {
+  label: string;
+  p: Percentiles;
+  format: (n: number) => string;
+  sampleSize: number;
+  totalSampleSize: number;
+}) {
   return (
     <div className="grid grid-cols-5 gap-2 text-sm py-2 border-b last:border-b-0">
-      <span className="text-muted-foreground">{label}</span>
+      <span className="text-muted-foreground">
+        {label}
+        {sampleSize < totalSampleSize && (
+          <span className="block text-xs">(from {sampleSize} of {totalSampleSize})</span>
+        )}
+      </span>
       <span className="font-mono text-right">{format(p.p25)}</span>
       <span className="font-mono text-right font-medium">{format(p.median)}</span>
       <span className="font-mono text-right">{format(p.p75)}</span>
@@ -29,15 +47,16 @@ function PercentileRow({ label, p, format }: { label: string; p: Percentiles; fo
 export function PricingTab() {
   const [pricingModel, setPricingModel] = useState("all");
   const [servicesTier, setServicesTier] = useState("all");
-  const [outcome, setOutcome] = useState("Won");
+  const [outcome, setOutcome] = useState("all");
 
   const facetsQuery = useGetMemoryFacets();
   const facets = facetsQuery.data?.data as FacetsPayload | undefined;
 
-  const params: Record<string, string> = { outcome };
+  const params: Record<string, string> = {};
+  if (outcome !== "all") params.outcome = outcome;
   if (pricingModel !== "all") params.pricingModel = pricingModel;
   if (servicesTier !== "all") params.servicesTier = servicesTier;
-  const { data } = useGetPricingBenchmarks(params as never);
+  const { data, isLoading, isError } = useGetPricingBenchmarks(params as never);
   const bench = data?.data as PricingBenchmarks | undefined;
 
   const { data: effData } = useGetPlaybookEffectiveness();
@@ -52,6 +71,7 @@ export function PricingTab() {
             <Select value={outcome} onValueChange={setOutcome}>
               <SelectTrigger className="w-32"><SelectValue /></SelectTrigger>
               <SelectContent>
+                <SelectItem value="all">Any outcome</SelectItem>
                 <SelectItem value="Won">Won</SelectItem>
                 <SelectItem value="Lost">Lost</SelectItem>
               </SelectContent>
@@ -72,7 +92,11 @@ export function PricingTab() {
             </Select>
           </div>
 
-          {!bench || bench.sampleSize === 0 ? (
+          {isLoading ? (
+            <Skeleton className="h-32 w-full" />
+          ) : isError ? (
+            <p className="text-sm text-destructive">Something went wrong loading pricing benchmarks. Try refreshing the page.</p>
+          ) : !bench || bench.sampleSize === 0 ? (
             <p className="text-sm text-muted-foreground">Nothing matched those filters. Try adjusting them.</p>
           ) : (
             <>
@@ -80,8 +104,8 @@ export function PricingTab() {
               <div className="grid grid-cols-5 gap-2 text-xs font-medium text-muted-foreground uppercase tracking-wider pb-1 border-b">
                 <span></span><span className="text-right">P25</span><span className="text-right">Median</span><span className="text-right">P75</span><span className="text-right">P90</span>
               </div>
-              <PercentileRow label="Total Contract Value" p={bench.tcv} format={money} />
-              <PercentileRow label="Cycle Time (days)" p={bench.cycleDays} format={(n) => String(n)} />
+              <PercentileRow label="Total Contract Value" p={bench.tcv} format={money} sampleSize={bench.tcvSampleSize} totalSampleSize={bench.sampleSize} />
+              <PercentileRow label="Cycle Time (days)" p={bench.cycleDays} format={(n) => String(n)} sampleSize={bench.cycleSampleSize} totalSampleSize={bench.sampleSize} />
             </>
           )}
         </CardContent>
@@ -93,11 +117,11 @@ export function PricingTab() {
           <CardContent className="grid grid-cols-2 gap-4 text-sm">
             <div>
               <p className="text-muted-foreground">With a playbook ({eff.withPlaybookCount} deals)</p>
-              <p className="text-2xl font-bold font-mono">{eff.withPlaybookWinRatePct ?? "—"}%</p>
+              <p className="text-2xl font-bold font-mono">{eff.withPlaybookWinRatePct != null ? `${eff.withPlaybookWinRatePct}%` : "—"}</p>
             </div>
             <div>
               <p className="text-muted-foreground">Without a playbook ({eff.withoutPlaybookCount} deals)</p>
-              <p className="text-2xl font-bold font-mono">{eff.withoutPlaybookWinRatePct ?? "—"}%</p>
+              <p className="text-2xl font-bold font-mono">{eff.withoutPlaybookWinRatePct != null ? `${eff.withoutPlaybookWinRatePct}%` : "—"}</p>
             </div>
           </CardContent>
         </Card>

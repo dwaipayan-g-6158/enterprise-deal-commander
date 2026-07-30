@@ -5,7 +5,7 @@ import { HealthDashboard } from "@/components/memory/health-dashboard";
 import { ComparisonSheet } from "@/components/memory/comparison-sheet";
 import { CompetitorsTab } from "@/components/memory/competitors-tab";
 import { PricingTab } from "@/components/memory/pricing-tab";
-import { AdvisorTab } from "@/components/memory/advisor-tab";
+import { AdvisorTab, type Message } from "@/components/memory/advisor-tab";
 import { RevivalTab } from "@/components/memory/revival-tab";
 import { PersonalityLine } from "@/components/personality-line";
 
@@ -22,6 +22,9 @@ export default function Memory() {
   const [tab, setTab] = useState("search");
   const [selected, setSelected] = useState<string[]>([]);
   const [compareOpen, setCompareOpen] = useState(false);
+  // Lifted here (not local to AdvisorTab) so the conversation survives
+  // switching away from and back to the Ask Advisor tab.
+  const [advisorMessages, setAdvisorMessages] = useState<Message[]>([]);
 
   const toggleSelect = (id: string) =>
     setSelected((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : prev.length >= 4 ? prev : [...prev, id]));
@@ -47,7 +50,7 @@ export default function Memory() {
       {tab === "revival" && <RevivalTab />}
       {tab === "competitors" && <CompetitorsTab />}
       {tab === "pricing" && <PricingTab />}
-      {tab === "ask" && <AdvisorTab />}
+      {tab === "ask" && <AdvisorTab messages={advisorMessages} onMessagesChange={setAdvisorMessages} />}
       <ComparisonSheet ids={selected} open={compareOpen} onOpenChange={setCompareOpen} />
     </div>
   );

@@ -68,8 +68,8 @@ import { getActor } from "../../lib/auth";
 import { notFound, badRequest } from "../../lib/http";
 import { logSettingsChange } from "../../lib/settings-audit";
 import { emitDealEvent } from "../../lib/events";
-import { classifyAdvisorIntent, confidenceFor, composeNoDataAnswer, type AdvisorCitation } from "../../lib/advisor";
-import { computeCompetitorIntel } from "../../lib/memory-intel";
+import { classifyAdvisorIntent, confidenceFor, composeNoDataAnswer, withLowSampleCaveat, type AdvisorCitation } from "../../lib/advisor";
+import { computeCompetitorIntel, percentiles } from "../../lib/memory-intel";
 import { selectRevivalCandidates } from "../../lib/revival";
 import { getThresholds } from "../../lib/intelligence";
 import { num } from "../../lib/engine-config";
@@ -766,6 +766,12 @@ router.get("/memory/search", async (req: Request, res: Response) => {
   const term = (q.q ?? "").trim();
 
   const extraFilters = [];
+  // deal_memory.deal_id is unique (see post-mortem.ts's onConflictDoUpdate
+  // target), so this always resolves to at most one row — the caller no
+  // longer needs to page through the outcome-scoped LIMIT 50 list to find a
+  // specific deal's record (which silently missed anything past the 50th
+  // most recently archived).
+  if (q.dealId) extraFilters.push(sql`AND deal_id = ${q.dealId}`);
   if (q.outcome) extraFilters.push(sql`AND outcome = ${q.outcome}`);
   if (q.competitor) extraFilters.push(sql`AND competitors_faced @> ARRAY[${q.competitor}]::text[]`);
   if (q.pricingModel) extraFilters.push(sql`AND pricing_model = ${q.pricingModel}`);
@@ -881,32 +887,29 @@ router.get("/memory/ask", async (req: Request, res: Response) => {
     const encounters = memory.filter((m) => m.competitorsFaced?.includes(intent.competitor));
     if (!intel) return res.json({ data: composeNoDataAnswer() });
     const citations = cite(encounters);
-    return res.json({
-      data: {
-        answer: `Against ${intel.name}, the historical win rate is ${intel.winRatePct}% across ${intel.encounterCount} archived encounters.${intel.topLossCategory ? ` The most common loss reason is "${intel.topLossCategory}".` : ""}`,
-        confidence: confidenceFor(citations.length),
-        citations,
-      },
-    });
+    const answer = {
+      answer: `Against ${intel.name}, the historical win rate is ${intel.winRatePct}% across ${intel.encounterCount} archived encounters.${intel.topLossCategory ? ` The most common loss reason is "${intel.topLossCategory}".` : ""}`,
+      confidence: confidenceFor(citations.length),
+      citations,
+    };
+    return res.json({ data: intel.lowConfidence ? withLowSampleCaveat(answer, intel.encounterCount) : answer });
   }
 
   if (intent.type === "pricing") {
     const won = memory.filter((m) => m.outcome === "Won" && Number(m.finalTcv) > 0);
-    if (won.length < 3) return res.json({ data: composeNoDataAnswer() });
-    const tcvs = won.map((m) => Number(m.finalTcv)).sort((a, b) => a - b);
-    const median = tcvs[Math.floor(tcvs.length / 2)];
+    if (won.length === 0) return res.json({ data: composeNoDataAnswer() });
+    const median = percentiles(won.map((m) => Number(m.finalTcv))).median;
     const citations = cite(won);
-    return res.json({
-      data: {
-        answer: `Across ${won.length} won archived deals, the median total contract value is $${Math.round(median).toLocaleString("en-US")}. Check the Pricing tab for percentile breakdowns filtered by pricing model or services tier.`,
-        confidence: confidenceFor(citations.length),
-        citations,
-      },
-    });
+    const answer = {
+      answer: `Across ${won.length} won archived deals, the median total contract value is $${Math.round(median).toLocaleString("en-US")}. Check the Pricing tab for percentile breakdowns filtered by pricing model or services tier.`,
+      confidence: confidenceFor(citations.length),
+      citations,
+    };
+    return res.json({ data: won.length < 3 ? withLowSampleCaveat(answer, won.length) : answer });
   }
 
   if (intent.type === "biggest") {
-    const sorted = [...memory].sort((a, b) => Number(b.finalTcv) - Number(a.finalTcv)).slice(0, 3);
+    const sorted = [...memory].sort((a, b) => (Number(b.finalTcv) || 0) - (Number(a.finalTcv) || 0)).slice(0, 3);
     const citations = cite(sorted);
     if (citations.length === 0) return res.json({ data: composeNoDataAnswer() });
     const top = sorted[0];
@@ -1020,19 +1023,30 @@ router.put("/memory/:id", async (req: Request, res: Response) => {
   if (!existingRows[0]) throw notFound("Memory not found");
   const existing = existingRows[0];
 
+  // `"x" in b` (not `b.x ?? existing.x`) so an explicit null CLEARS a field.
+  // `??` treats an explicit null the same as "field omitted" and silently
+  // falls back to the existing value — so a narrative/category/competitor/
+  // timeline, once set, could never be unset again. Presence-checking the
+  // key distinguishes "omitted → keep existing" from "sent null → clear".
   const merged = {
-    primaryLossCategory: b.primary_loss_category ?? existing.primaryLossCategory,
-    lossSubcategory: b.loss_subcategory ?? existing.lossSubcategory,
-    lossNarrative: b.loss_narrative ?? existing.lossNarrative,
-    winningCompetitorId: b.winning_competitor_id ?? existing.winningCompetitorId,
+    primaryLossCategory: "primary_loss_category" in b ? (b.primary_loss_category ?? null) : existing.primaryLossCategory,
+    lossSubcategory: "loss_subcategory" in b ? (b.loss_subcategory ?? null) : existing.lossSubcategory,
+    lossNarrative: "loss_narrative" in b ? (b.loss_narrative ?? null) : existing.lossNarrative,
+    winningCompetitorId: "winning_competitor_id" in b ? (b.winning_competitor_id ?? null) : existing.winningCompetitorId,
     winBackPotential: b.win_back_potential ?? existing.winBackPotential,
-    winBackTimeline: b.win_back_timeline ?? existing.winBackTimeline,
+    winBackTimeline: "win_back_timeline" in b ? (b.win_back_timeline ?? null) : existing.winBackTimeline,
     causalChain: b.causal_chain ?? existing.causalChain,
     decisionMakerEngaged: b.decision_maker_engaged ?? existing.decisionMakerEngaged,
     championIdentified: b.champion_identified ?? existing.championIdentified,
     productGaps: b.product_gaps ?? existing.productGaps,
   };
   const isAutopsyUpdate = Object.keys(b).some((k) => k !== "win_loss_narrative" && k !== "key_lessons" && k !== "tags");
+  const qualityScore = computeAutopsyQualityScore(merged);
+  // Only stamp autopsyCompletedAt (and fire the activity event) when the save
+  // actually captured something — an autopsy body with every field blank/
+  // cleared used to still mark the autopsy "complete" and inflate the Loss
+  // Dashboard's autopsyCompletenessPct.
+  const autopsyCaptured = isAutopsyUpdate && qualityScore > 0;
 
   const [row] = await db
     .update(dealMemory)
@@ -1041,13 +1055,13 @@ router.put("/memory/:id", async (req: Request, res: Response) => {
       keyLessons: b.key_lessons ?? undefined,
       tags: b.tags ?? undefined,
       ...merged,
-      qualityScore: computeAutopsyQualityScore(merged),
-      autopsyCompletedAt: isAutopsyUpdate ? new Date() : undefined,
+      qualityScore,
+      autopsyCompletedAt: autopsyCaptured ? new Date() : undefined,
     })
     .where(eq(dealMemory.id, id))
     .returning();
   if (!row) throw notFound("Memory not found");
-  if (isAutopsyUpdate) {
+  if (autopsyCaptured) {
     emitDealEvent("deal.autopsy_captured", {
       dealId: row.dealId,
       actor: getActor(req).displayName,

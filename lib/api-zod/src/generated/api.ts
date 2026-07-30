@@ -1268,7 +1268,7 @@ export const GetAutopsyQueryParams = zod.object({
 export const GetAutopsyResponse = zod.object({
   "data": zod.object({
   "byArchetype": zod.array(zod.object({
-  "archetypeId": zod.number(),
+  "archetypeId": zod.number().nullable(),
   "archetypeName": zod.string(),
   "lossCount": zod.number(),
   "avgGateCompletionPct": zod.number(),
@@ -2130,6 +2130,7 @@ export const GetProductGapsResponse = zod.object({
   "productName": zod.string().nullish(),
   "dealCount": zod.number(),
   "lostTcv": zod.number(),
+  "openTcv": zod.number(),
   "openBlockerCount": zod.number(),
   "deals": zod.array(zod.object({
   "dealId": zod.string(),
@@ -2218,17 +2219,63 @@ export const GetDealTrajectoryResponse = zod.object({
 
 
 export const GetLossRiskResponse = zod.object({
-  "data": zod.record(zod.string(), zod.unknown())
+  "data": zod.object({
+  "deals": zod.array(zod.object({
+  "dealId": zod.string(),
+  "dealName": zod.string(),
+  "accountName": zod.string(),
+  "score": zod.number(),
+  "matchedPatterns": zod.array(zod.object({
+  "code": zod.string(),
+  "lethality": zod.number()
+}))
+})),
+  "lostDealCount": zod.number()
+})
 })
 
 
 export const GetCompetitiveLossResponse = zod.object({
-  "data": zod.record(zod.string(), zod.unknown())
+  "data": zod.object({
+  "byCompetitor": zod.array(zod.object({
+  "competitorId": zod.number(),
+  "name": zod.string(),
+  "lossCount": zod.number(),
+  "lossTcv": zod.number(),
+  "topArchetype": zod.string().nullable()
+})),
+  "matrix": zod.array(zod.object({
+  "suite": zod.string(),
+  "competitorName": zod.string(),
+  "losses": zod.number(),
+  "wins": zod.number()
+}))
+})
 })
 
 
 export const GetLossDashboardResponse = zod.object({
-  "data": zod.record(zod.string(), zod.unknown())
+  "data": zod.object({
+  "lossPulse": zod.number().nullable(),
+  "lossPulseComponents": zod.object({
+  "autopsyCompletenessPct": zod.number(),
+  "avgQualityScore": zod.number().nullable(),
+  "lossRatePct": zod.number().nullable()
+}),
+  "volume": zod.object({
+  "lossCount": zod.number(),
+  "lossValue": zod.number()
+}),
+  "compositionByCategory": zod.array(zod.object({
+  "category": zod.string(),
+  "count": zod.number(),
+  "value": zod.number()
+})),
+  "topPatterns": zod.array(zod.object({
+  "code": zod.string(),
+  "share": zod.number()
+}))
+})
 })
 
 
@@ -2370,6 +2417,7 @@ export const ListDealMemoryResponse = zod.object({
 
 
 export const SearchDealMemoryQueryParams = zod.object({
+  "dealId": zod.coerce.string().optional(),
   "q": zod.coerce.string().optional(),
   "outcome": zod.coerce.string().optional(),
   "competitor": zod.coerce.string().optional(),
@@ -2556,12 +2604,12 @@ export const UpdateDealMemoryBody = zod.object({
   "win_loss_narrative": zod.string().nullish(),
   "key_lessons": zod.array(zod.string()).optional(),
   "tags": zod.array(zod.string()).optional(),
-  "primary_loss_category": zod.enum(['price', 'product', 'competitive', 'timing', 'relationship', 'process']).optional(),
-  "loss_subcategory": zod.string().max(updateDealMemoryBodyLossSubcategoryMax).optional(),
-  "loss_narrative": zod.string().optional(),
-  "winning_competitor_id": zod.number().optional(),
+  "primary_loss_category": zod.union([zod.literal('price'),zod.literal('product'),zod.literal('competitive'),zod.literal('timing'),zod.literal('relationship'),zod.literal('process'),zod.literal(null)]).nullish(),
+  "loss_subcategory": zod.string().max(updateDealMemoryBodyLossSubcategoryMax).nullish(),
+  "loss_narrative": zod.string().nullish(),
+  "winning_competitor_id": zod.number().nullish(),
   "win_back_potential": zod.number().min(updateDealMemoryBodyWinBackPotentialMin).max(updateDealMemoryBodyWinBackPotentialMax).optional(),
-  "win_back_timeline": zod.enum(['immediate', 'short_term', 'long_term', 'none']).optional(),
+  "win_back_timeline": zod.union([zod.literal('immediate'),zod.literal('short_term'),zod.literal('long_term'),zod.literal('none'),zod.literal(null)]).nullish(),
   "causal_chain": zod.array(zod.string()).max(updateDealMemoryBodyCausalChainMax).optional(),
   "decision_maker_engaged": zod.boolean().optional(),
   "champion_identified": zod.boolean().optional(),

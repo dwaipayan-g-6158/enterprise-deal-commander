@@ -4,6 +4,7 @@ import {
   db,
   enterpriseDeals,
   pipelineStages,
+  pricingModels,
   dealTechnicalGates,
   dealScores,
   dealActivityLog,
@@ -44,7 +45,14 @@ import {
   type TransitionRec,
   type OpenDeal,
 } from "@workspace/engine";
-import { GetDealScoreParams, GetPricingBenchmarksQueryParams, ParseNlcCommandBody } from "@workspace/api-zod";
+import {
+  GetDealScoreParams,
+  GetPricingBenchmarksQueryParams,
+  ParseNlcCommandBody,
+  GetLossRiskResponse,
+  GetCompetitiveLossResponse,
+  GetLossDashboardResponse,
+} from "@workspace/api-zod";
 import { notFound } from "../../lib/http";
 import { toISO, getHealthWeights } from "../../lib/intelligence";
 import { getActor } from "../../lib/auth";
@@ -54,19 +62,10 @@ import { computeMemoryHealth } from "../../lib/memory-health";
 import { computeCompetitorIntel, computePlaybookEffectiveness, percentiles } from "../../lib/memory-intel";
 import { pickLatestPerDeal, computeScoreDelta } from "../../lib/roster-enrichment";
 import { clusterProductGaps } from "../../lib/product-gaps";
+import { notDeletedFilter, termAwareTcv } from "../../lib/deal-filters";
+import { computeLossDashboardMetrics } from "../../lib/loss-dashboard";
 
 const router: IRouter = Router();
-
-// Just "not soft-deleted" — archived deals are real, historical deals that
-// still count in every analytics number below — that's the whole point of
-// archiving vs. deleting. See
-// docs/superpowers/plans/2026-07-27-archive-lifecycle-and-semantics.md.
-// Named notDeletedFilter (not activeFilter) precisely because it does NOT
-// exclude archived deals — contrast with lib/scoring.ts and
-// lib/subscribers/index.ts, which each define their OWN separate
-// activeFilter/activeDealIds that DO exclude archived deals on purpose (a
-// closed deal's score/snapshot is frozen).
-const notDeletedFilter = isNull(enterpriseDeals.deletedAt);
 
 function daysBetween(from: Date | string | null, to = new Date()): number {
   if (!from) return 0;
@@ -718,15 +717,25 @@ router.get("/analytics/roster", async (_req: Request, res: Response) => {
 // deals, augmented by unresolved Technical blockers, into a "what to build/fix"
 // register with TCV-at-risk. Computed on read — no new tables.
 router.get("/analytics/product-gaps", async (_req: Request, res: Response) => {
+  // Joined to enterpriseDeals (never hard-deleted, so innerJoin is safe) for
+  // termAwareTcv — deal_memory.finalTcv was a flat sum, which disagreed with
+  // Archetypes/Competitive for a multi-year deal. notDeletedFilter excludes a
+  // soft-deleted deal's archived gaps from the TCV-at-risk math, same as
+  // every other Autopsy tab.
   const lostMemories = await db
     .select({
       dealId: dealMemory.dealId,
       dealName: dealMemory.dealName,
-      finalTcv: dealMemory.finalTcv,
       productGaps: dealMemory.productGaps,
+      productRevenue: enterpriseDeals.productRevenue,
+      servicesRevenue: enterpriseDeals.servicesRevenue,
+      contractTermYears: enterpriseDeals.contractTermYears,
+      pricingModel: pricingModels.modelName,
     })
     .from(dealMemory)
-    .where(eq(dealMemory.outcome, "Lost"));
+    .innerJoin(enterpriseDeals, eq(dealMemory.dealId, enterpriseDeals.id))
+    .leftJoin(pricingModels, eq(enterpriseDeals.pricingModelId, pricingModels.id))
+    .where(and(eq(dealMemory.outcome, "Lost"), notDeletedFilter));
 
   const techBlockers = await db
     .select({
@@ -735,11 +744,14 @@ router.get("/analytics/product-gaps", async (_req: Request, res: Response) => {
       description: dealBlockers.description,
       productRevenue: enterpriseDeals.productRevenue,
       servicesRevenue: enterpriseDeals.servicesRevenue,
+      contractTermYears: enterpriseDeals.contractTermYears,
+      pricingModel: pricingModels.modelName,
     })
     .from(dealBlockers)
     .innerJoin(enterpriseDeals, eq(dealBlockers.dealId, enterpriseDeals.id))
     .innerJoin(blockerCategories, eq(dealBlockers.categoryId, blockerCategories.id))
-    .where(and(eq(dealBlockers.isResolved, false), eq(blockerCategories.categoryName, "Technical")));
+    .leftJoin(pricingModels, eq(enterpriseDeals.pricingModelId, pricingModels.id))
+    .where(and(eq(dealBlockers.isResolved, false), eq(blockerCategories.categoryName, "Technical"), notDeletedFilter));
 
   const catalog = await db
     .select({ id: productCatalog.id, productName: productCatalog.productName, code: productCatalog.code })
@@ -749,14 +761,14 @@ router.get("/analytics/product-gaps", async (_req: Request, res: Response) => {
     lostMemories.map((m) => ({
       dealId: m.dealId,
       dealName: m.dealName,
-      finalTcv: m.finalTcv == null ? null : Number(m.finalTcv),
+      finalTcv: termAwareTcv(m),
       productGaps: (m.productGaps as string[] | null) ?? [],
     })),
     techBlockers.map((b) => ({
       dealId: b.dealId,
       dealName: b.dealName,
       description: b.description,
-      tcv: (Number(b.productRevenue) || 0) + (Number(b.servicesRevenue) || 0),
+      tcv: termAwareTcv(b),
     })),
     catalog,
   );
@@ -1031,6 +1043,12 @@ router.get("/analytics/pricing-benchmarks", async (req: Request, res: Response) 
   res.json({
     data: {
       sampleSize: rows.length,
+      // Separate from sampleSize: rows with a null/zero TCV or cycle time are
+      // excluded from their respective percentiles, so the two counts can be
+      // smaller than the matched-row total. Surfacing both keeps a full sample
+      // of empty values from looking like a healthy "$0 across N deals".
+      tcvSampleSize: tcvs.length,
+      cycleSampleSize: cycles.length,
       tcv: percentiles(tcvs),
       cycleDays: percentiles(cycles),
     },
@@ -1086,7 +1104,7 @@ router.get("/analytics/loss-risk", async (_req: Request, res: Response) => {
     .filter((r): r is NonNullable<typeof r> => r != null && r.score > 0)
     .sort((a, b) => b.score - a.score);
 
-  res.json({ data: { deals, lostDealCount: lostDeals.length } });
+  res.json(GetLossRiskResponse.parse({ data: { deals, lostDealCount: lostDeals.length } }));
 });
 
 /* ------------------------------------------- Closed-Lost Autopsy: Competitive */
@@ -1103,14 +1121,19 @@ router.get("/analytics/competitive-loss", async (_req: Request, res: Response) =
       competitorId: dealCompetitors.competitorId,
       competitorName: competitors.name,
       status: dealCompetitors.status,
+      salesStage: pipelineStages.stageName,
       productRevenue: enterpriseDeals.productRevenue,
       servicesRevenue: enterpriseDeals.servicesRevenue,
+      contractTermYears: enterpriseDeals.contractTermYears,
+      pricingModel: pricingModels.modelName,
       lossArchetypeId: enterpriseDeals.lossArchetypeId,
     })
     .from(dealCompetitors)
     .innerJoin(competitors, eq(dealCompetitors.competitorId, competitors.id))
     .innerJoin(enterpriseDeals, eq(dealCompetitors.dealId, enterpriseDeals.id))
-    .where(inArray(dealCompetitors.status, ["Lost To", "Won Against"]));
+    .innerJoin(pipelineStages, eq(enterpriseDeals.salesStageId, pipelineStages.id))
+    .leftJoin(pricingModels, eq(enterpriseDeals.pricingModelId, pricingModels.id))
+    .where(and(notDeletedFilter, inArray(dealCompetitors.status, ["Lost To", "Won Against"])));
 
   const archetypeRows = await db.select().from(lossArchetypes);
   const archetypeName = (id: number | null) =>
@@ -1135,9 +1158,18 @@ router.get("/analytics/competitive-loss", async (_req: Request, res: Response) =
   const matrix = new Map<string, { suite: string; competitorName: string; losses: number; wins: number }>();
 
   for (const r of rows) {
-    const tcv = (Number(r.productRevenue) || 0) + (Number(r.servicesRevenue) || 0);
-    const isLoss = r.status === "Lost To";
-    if (isLoss) {
+    // A "Lost To"/"Won Against" competitor tag used to be booked as a win or
+    // loss immediately, even on a deal that hadn't closed yet — so an open
+    // deal already flagged "Won Against" inflated a competitor's win count
+    // before the deal ever reached Closed-Won. Only count a row once the
+    // deal has ACTUALLY closed in the direction its status claims; anything
+    // else (open, or closed the other way) is excluded entirely.
+    const isClosedLoss = r.salesStage === "Closed-Lost" && r.status === "Lost To";
+    const isClosedWin = r.salesStage === "Closed-Won" && r.status === "Won Against";
+    if (!isClosedLoss && !isClosedWin) continue;
+
+    const tcv = termAwareTcv(r);
+    if (isClosedLoss) {
       const c = byCompetitor.get(r.competitorId) ?? {
         competitorId: r.competitorId,
         name: r.competitorName,
@@ -1154,7 +1186,7 @@ router.get("/analytics/competitive-loss", async (_req: Request, res: Response) =
     for (const suite of suitesByDeal.get(r.dealId) ?? []) {
       const key = `${suite}::${r.competitorName}`;
       const cell = matrix.get(key) ?? { suite, competitorName: r.competitorName, losses: 0, wins: 0 };
-      if (isLoss) cell.losses++;
+      if (isClosedLoss) cell.losses++;
       else cell.wins++;
       matrix.set(key, cell);
     }
@@ -1174,7 +1206,7 @@ router.get("/analytics/competitive-loss", async (_req: Request, res: Response) =
     })
     .sort((a, b) => b.lossTcv - a.lossTcv);
 
-  res.json({ data: { byCompetitor: byCompetitorList, matrix: [...matrix.values()] } });
+  res.json(GetCompetitiveLossResponse.parse({ data: { byCompetitor: byCompetitorList, matrix: [...matrix.values()] } }));
 });
 
 /* -------------------------------------------- Closed-Lost Autopsy: Dashboard */
@@ -1184,16 +1216,36 @@ router.get("/analytics/competitive-loss", async (_req: Request, res: Response) =
 // a tuned/weighted model. False precision would be worse than an honest
 // average at the loss volumes this single-user product will ever see.
 router.get("/analytics/loss-dashboard", async (_req: Request, res: Response) => {
-  const memory = await db.select().from(dealMemory);
-  const lost = memory.filter((m) => m.outcome === "Lost");
-  const won = memory.filter((m) => m.outcome === "Won");
-
-  const lostDeals = await db
-    .select({ id: enterpriseDeals.id })
+  // Stage is the canonical loss cohort (not deal_memory.outcome — the two can
+  // disagree whenever the post-mortem subscriber missed a row), with
+  // dealMemory as a left-joined enrichment. termAwareTcv (not
+  // deal_memory.finalTcv's flat sum) so this tab's TCV agrees with Archetypes
+  // and Competitive for multi-year deals, and notDeletedFilter so an archived
+  // loss doesn't disappear from one tab but not another.
+  const lostRows = await db
+    .select({
+      dealId: enterpriseDeals.id,
+      productRevenue: enterpriseDeals.productRevenue,
+      servicesRevenue: enterpriseDeals.servicesRevenue,
+      contractTermYears: enterpriseDeals.contractTermYears,
+      pricingModel: pricingModels.modelName,
+      primaryLossCategory: dealMemory.primaryLossCategory,
+      autopsyCompletedAt: dealMemory.autopsyCompletedAt,
+      qualityScore: dealMemory.qualityScore,
+    })
     .from(enterpriseDeals)
     .innerJoin(pipelineStages, eq(enterpriseDeals.salesStageId, pipelineStages.id))
+    .leftJoin(pricingModels, eq(enterpriseDeals.pricingModelId, pricingModels.id))
+    .leftJoin(dealMemory, eq(dealMemory.dealId, enterpriseDeals.id))
     .where(and(notDeletedFilter, eq(pipelineStages.stageName, "Closed-Lost")));
-  const lostIntel = await Promise.all(lostDeals.map((d) => cachedIntel(d.id)));
+
+  const [{ n: wonCount }] = await db
+    .select({ n: sql<number>`count(*)::int` })
+    .from(enterpriseDeals)
+    .innerJoin(pipelineStages, eq(enterpriseDeals.salesStageId, pipelineStages.id))
+    .where(and(notDeletedFilter, eq(pipelineStages.stageName, "Closed-Won")));
+
+  const lostIntel = await Promise.all(lostRows.map((r) => cachedIntel(r.dealId)));
   const alertCodeLists = lostIntel
     .filter((i): i is NonNullable<typeof i> => i != null)
     .map((i) => [...i.governance.alerts, ...i.governance.managedAlerts].map((a) => a.code));
@@ -1202,44 +1254,17 @@ router.get("/analytics/loss-dashboard", async (_req: Request, res: Response) => 
     .slice(0, 10)
     .map((p) => ({ code: p.code, share: p.lethality }));
 
-  const lossCount = lost.length;
-  const lossValue = lost.reduce((s, m) => s + (Number(m.finalTcv) || 0), 0);
-
-  const byCategory = new Map<string, { count: number; value: number }>();
-  for (const m of lost) {
-    const cat = m.primaryLossCategory ?? "uncategorized";
-    const cur = byCategory.get(cat) ?? { count: 0, value: 0 };
-    cur.count++;
-    cur.value += Number(m.finalTcv) || 0;
-    byCategory.set(cat, cur);
-  }
-  const compositionByCategory = [...byCategory.entries()]
-    .map(([category, v]) => ({ category, count: v.count, value: v.value }))
-    .sort((a, b) => b.value - a.value);
-
-  const completed = lost.filter((m) => m.autopsyCompletedAt != null);
-  const autopsyCompletenessPct = lossCount > 0 ? Math.round((completed.length / lossCount) * 100) : 0;
-  const avgQualityScore =
-    completed.length > 0
-      ? Math.round(completed.reduce((s, m) => s + (m.qualityScore ?? 0), 0) / completed.length)
-      : null;
-  const decided = lost.length + won.length;
-  const lossRatePct = decided > 0 ? Math.round((lost.length / decided) * 100) : null;
-
-  const components = [autopsyCompletenessPct, avgQualityScore, lossRatePct != null ? 100 - lossRatePct : null].filter(
-    (c): c is number => c != null,
+  const metrics = computeLossDashboardMetrics(
+    lostRows.map((r) => ({
+      tcv: termAwareTcv(r),
+      primaryLossCategory: r.primaryLossCategory,
+      autopsyCompletedAt: r.autopsyCompletedAt,
+      qualityScore: r.qualityScore,
+    })),
+    wonCount,
   );
-  const lossPulse = components.length > 0 ? Math.round(components.reduce((s, c) => s + c, 0) / components.length) : null;
 
-  res.json({
-    data: {
-      lossPulse,
-      lossPulseComponents: { autopsyCompletenessPct, avgQualityScore, lossRatePct },
-      volume: { lossCount, lossValue },
-      compositionByCategory,
-      topPatterns,
-    },
-  });
+  res.json(GetLossDashboardResponse.parse({ data: { ...metrics, topPatterns } }));
 });
 
 /* ------------------------------------------- Deal Trajectory (time-series) */

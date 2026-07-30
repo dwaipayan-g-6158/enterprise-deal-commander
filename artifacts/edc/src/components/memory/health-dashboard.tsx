@@ -25,10 +25,13 @@ function MetricCard({ label, value, sub }: { label: string; value: string; sub?:
 }
 
 export function HealthDashboard() {
-  const { data, isLoading } = useGetMemoryHealth();
+  const { data, isLoading, isError } = useGetMemoryHealth();
   const health = data?.data as MemoryHealth | undefined;
 
   if (isLoading) return <Skeleton className="h-48 w-full" />;
+  if (isError) {
+    return <p className="text-sm text-destructive">Something went wrong loading archive health. Try refreshing the page.</p>;
+  }
   if (!health || health.totalArchived === 0) {
     return <p className="text-sm text-muted-foreground">No archived deals yet — health metrics populate once deals close.</p>;
   }

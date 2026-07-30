@@ -6,7 +6,10 @@
  * OpenAPI spec version: 1.0.0
  */
 
-export type DealMemoryUpdatePrimaryLossCategory = typeof DealMemoryUpdatePrimaryLossCategory[keyof typeof DealMemoryUpdatePrimaryLossCategory];
+/**
+ * @nullable
+ */
+export type DealMemoryUpdatePrimaryLossCategory = typeof DealMemoryUpdatePrimaryLossCategory[keyof typeof DealMemoryUpdatePrimaryLossCategory] | null;
 
 
 export const DealMemoryUpdatePrimaryLossCategory = {

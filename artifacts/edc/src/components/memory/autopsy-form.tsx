@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -101,11 +101,16 @@ export function AutopsyForm({
   dealId,
   dealName,
   memoryRow,
+  lossArchetypeId,
   onSaved,
 }: {
   dealId: string;
   dealName: string;
   memoryRow: MemoryRow | undefined;
+  // The deal's CURRENT loss archetype (enterprise_deals.loss_archetype_id —
+  // it doesn't live on deal_memory). Without this the select always rendered
+  // unset, even for a deal that already had one recorded.
+  lossArchetypeId?: number | null;
   onSaved?: () => void;
 }) {
   const { toast } = useToast();
@@ -120,6 +125,14 @@ export function AutopsyForm({
 
   const [causalChain, setCausalChain] = useState<string[]>([]);
   const [productGaps, setProductGaps] = useState<string[]>([]);
+  // Snapshot of causalChain/productGaps as loaded, so onSubmit can tell
+  // "the user actually edited this list" from "still exactly what was
+  // loaded" — these two fields are plain useState, not react-hook-form
+  // fields, so they don't get formState.dirtyFields tracking for free.
+  const listBaselineRef = useRef<{ causalChain: string[]; productGaps: string[] }>({
+    causalChain: [],
+    productGaps: [],
+  });
 
   const { register, handleSubmit, setValue, watch, reset, formState } = useForm<FormState>({
     defaultValues: {
@@ -146,35 +159,80 @@ export function AutopsyForm({
       win_back_timeline: memoryRow.winBackTimeline ?? "none",
       decision_maker_engaged: memoryRow.decisionMakerEngaged ?? false,
       champion_identified: memoryRow.championIdentified ?? false,
-      loss_archetype_id: "",
+      // Was always "" regardless of the deal's actual archetype — the field
+      // lives on enterprise_deals, not this deal_memory row, and the caller
+      // never passed it in.
+      loss_archetype_id: lossArchetypeId ?? "",
     });
-    setCausalChain(memoryRow.causalChain ?? []);
-    setProductGaps(memoryRow.productGaps ?? []);
+    const loadedCausalChain = memoryRow.causalChain ?? [];
+    const loadedProductGaps = memoryRow.productGaps ?? [];
+    setCausalChain(loadedCausalChain);
+    setProductGaps(loadedProductGaps);
+    listBaselineRef.current = { causalChain: loadedCausalChain, productGaps: loadedProductGaps };
+    // lossArchetypeId is fetched via a separate query (useGetDeal) than
+    // memoryRow, so it can resolve after this effect's first run — included
+    // in the deps so the select re-syncs once it arrives.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [memoryRow?.id]);
+  }, [memoryRow?.id, lossArchetypeId]);
 
   const onSubmit = async (values: FormState) => {
     if (!memoryRow) return;
     try {
-      await updateMemory.mutateAsync({
-        id: memoryRow.id,
-        data: {
-          primary_loss_category: values.primary_loss_category || undefined,
-          loss_subcategory: values.loss_subcategory || undefined,
-          loss_narrative: values.loss_narrative || undefined,
-          winning_competitor_id: values.winning_competitor_id ? Number(values.winning_competitor_id) : undefined,
-          win_back_potential: values.win_back_potential,
-          win_back_timeline: values.win_back_timeline || undefined,
-          causal_chain: causalChain.filter((c) => c.trim().length > 0),
-          decision_maker_engaged: values.decision_maker_engaged,
-          champion_identified: values.champion_identified,
-          product_gaps: productGaps.filter((p) => p.trim().length > 0),
-        } as never,
-      });
-      if (values.loss_archetype_id) {
+      // Only send a field the user actually TOUCHED (react-hook-form's
+      // dirtyFields for the registered/setValue-driven fields; a manual
+      // baseline comparison for causalChain/productGaps, which are plain
+      // useState). Previously every field was sent unconditionally on every
+      // save — including win_back_potential defaulting to 0 and
+      // win_back_timeline defaulting to "none" — so even a save with nothing
+      // touched still counted as 4/10 "filled" fields server-side
+      // (computeAutopsyQualityScore treats 0 and "none" as real answers, not
+      // blanks) and got stamped autopsyCompletedAt. Sending only dirty
+      // fields means an untouched Save produces an empty body, which the
+      // server correctly treats as no autopsy update at all.
+      // Explicit null (not omitted) for a touched-then-cleared field — an
+      // omitted key means "leave existing value alone" server-side; null
+      // means "clear it" (routes/v2/crud.ts's `"x" in b` merge).
+      const dirty = formState.dirtyFields;
+      const data: Record<string, unknown> = {};
+      if (dirty.primary_loss_category) data.primary_loss_category = values.primary_loss_category || null;
+      if (dirty.loss_subcategory) data.loss_subcategory = values.loss_subcategory || null;
+      if (dirty.loss_narrative) data.loss_narrative = values.loss_narrative || null;
+      if (dirty.winning_competitor_id) {
+        data.winning_competitor_id = values.winning_competitor_id ? Number(values.winning_competitor_id) : null;
+      }
+      if (dirty.win_back_potential) data.win_back_potential = values.win_back_potential;
+      if (dirty.win_back_timeline) data.win_back_timeline = values.win_back_timeline || null;
+      if (dirty.decision_maker_engaged) data.decision_maker_engaged = values.decision_maker_engaged;
+      if (dirty.champion_identified) data.champion_identified = values.champion_identified;
+
+      const trimmedCausalChain = causalChain.filter((c) => c.trim().length > 0);
+      if (JSON.stringify(trimmedCausalChain) !== JSON.stringify(listBaselineRef.current.causalChain)) {
+        data.causal_chain = trimmedCausalChain;
+      }
+      const trimmedProductGaps = productGaps.filter((p) => p.trim().length > 0);
+      if (JSON.stringify(trimmedProductGaps) !== JSON.stringify(listBaselineRef.current.productGaps)) {
+        data.product_gaps = trimmedProductGaps;
+      }
+
+      const archetypeChanged = !!dirty.loss_archetype_id && values.loss_archetype_id !== "";
+      if (Object.keys(data).length === 0 && !archetypeChanged) {
+        toast({ title: "Nothing to save", description: "No fields were changed." });
+        onSaved?.();
+        return;
+      }
+
+      if (Object.keys(data).length > 0) {
+        await updateMemory.mutateAsync({ id: memoryRow.id, data: data as never });
+      }
+      if (archetypeChanged) {
         await updateDeal.mutateAsync({ id: dealId, data: { loss_archetype_id: Number(values.loss_archetype_id) } as never });
       }
-      await queryClient.invalidateQueries({ queryKey: getSearchDealMemoryQueryKey({ outcome: "Lost" }) });
+      // Unscoped key (no params) — invalidates every deal-memory search
+      // variant (this sheet's dealId lookup, the Knowledge Hub search tab's
+      // arbitrary filters), not just the one-time { outcome: "Lost" } shape
+      // this used to pass, which wouldn't even match the dealId-scoped query
+      // this component now uses (TanStack matches on the full params object).
+      await queryClient.invalidateQueries({ queryKey: getSearchDealMemoryQueryKey() });
       toast({ title: "Autopsy saved", description: `Loss capture recorded for ${dealName}.` });
       onSaved?.();
     } catch {

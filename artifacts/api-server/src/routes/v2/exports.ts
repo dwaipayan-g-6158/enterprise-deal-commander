@@ -1,5 +1,5 @@
 import { Router, type IRouter, type Request, type Response } from "express";
-import { desc, eq, isNull } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 import {
   db,
   enterpriseDeals,
@@ -7,6 +7,7 @@ import {
   dealDecisions,
 } from "@workspace/db";
 import { runPipelineSimulation, type SimDeal } from "@workspace/engine";
+import { notDeletedFilter } from "../../lib/deal-filters";
 
 /**
  * Non-JSON output routes (V2 F14 reports, F15 digest, F17 export). These return
@@ -15,11 +16,6 @@ import { runPipelineSimulation, type SimDeal } from "@workspace/engine";
  * links / print windows). The parent v2 router already applies requireAuth.
  */
 const router: IRouter = Router();
-
-// See the comment on the identically-named const in routes/v2/analytics.ts —
-// archived deals still count in the export. Named notDeletedFilter (not
-// activeFilter) because that's literally all it excludes.
-const notDeletedFilter = isNull(enterpriseDeals.deletedAt);
 
 function csvCell(v: unknown): string {
   const s = v == null ? "" : String(v);

@@ -106,6 +106,24 @@ export function money(n: unknown): string {
   return "$" + Math.round(Number(n) || 0).toLocaleString("en-US");
 }
 
+/**
+ * Compact USD for a tile/table figure: "$2.34M", "$450K", "$999" — was
+ * copy-pasted verbatim across the Closed-Lost Autopsy tab's panels
+ * (archetype-breakdown, competitive-loss-panel, loss-dashboard-panel), each
+ * missing the negative case (a negative TCV fell through to an uncompacted
+ * "$-5000" instead of "-$5K"). Consolidated here; not for `compactValue` in
+ * components/cockpit/* — that one takes a currency code and is a distinct,
+ * unrelated helper.
+ */
+export function compactUSD(n: number): string {
+  const v = Number(n) || 0;
+  const sign = v < 0 ? "-" : "";
+  const abs = Math.abs(v);
+  if (abs >= 1_000_000) return `${sign}$${(abs / 1_000_000).toFixed(2)}M`;
+  if (abs >= 1_000) return `${sign}$${Math.round(abs / 1_000)}K`;
+  return `${sign}$${Math.round(abs)}`;
+}
+
 /** Round to at most 2 decimal places (e.g. 23.6667 -> 23.67). */
 export function round2(n: unknown): number {
   return Math.round((Number(n) || 0) * 100) / 100;

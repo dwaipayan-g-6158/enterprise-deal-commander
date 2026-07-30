@@ -956,7 +956,8 @@ export interface PatternShare {
 }
 
 export interface ArchetypeAutopsy {
-  archetypeId: number;
+  /** @nullable */
+  archetypeId: number | null;
   archetypeName: string;
   lossCount: number;
   avgGateCompletionPct: number;
@@ -972,6 +973,85 @@ export interface Autopsy {
 
 export interface AutopsyResponse {
   data: Autopsy;
+}
+
+export interface LossRiskMatchedPattern {
+  code: string;
+  lethality: number;
+}
+
+export interface LossRiskDeal {
+  dealId: string;
+  dealName: string;
+  accountName: string;
+  score: number;
+  matchedPatterns: LossRiskMatchedPattern[];
+}
+
+export interface LossRisk {
+  deals: LossRiskDeal[];
+  lostDealCount: number;
+}
+
+export interface LossRiskResponse {
+  data: LossRisk;
+}
+
+export interface CompetitorLoss {
+  competitorId: number;
+  name: string;
+  lossCount: number;
+  lossTcv: number;
+  /** @nullable */
+  topArchetype: string | null;
+}
+
+export interface CompetitiveLossMatrixCell {
+  suite: string;
+  competitorName: string;
+  losses: number;
+  wins: number;
+}
+
+export interface CompetitiveLoss {
+  byCompetitor: CompetitorLoss[];
+  matrix: CompetitiveLossMatrixCell[];
+}
+
+export interface CompetitiveLossResponse {
+  data: CompetitiveLoss;
+}
+
+export interface LossDashboardCategoryComposition {
+  category: string;
+  count: number;
+  value: number;
+}
+
+export type LossDashboardLossPulseComponents = {
+  autopsyCompletenessPct: number;
+  /** @nullable */
+  avgQualityScore: number | null;
+  /** @nullable */
+  lossRatePct: number | null;
+};
+
+export type LossDashboardVolume = {
+  lossCount: number;
+  lossValue: number;
+};
+
+export interface LossDashboard {
+  /** @nullable */
+  lossPulse: number | null;
+  lossPulseComponents: LossDashboardLossPulseComponents;
+  volume: LossDashboardVolume;
+  compositionByCategory: LossDashboardCategoryComposition[];
+  topPatterns: PatternShare[];
+}
+
+export interface LossDashboardResponse {
+  data: LossDashboard;
 }
 
 export interface AuditLog {
@@ -1672,7 +1752,10 @@ export interface DealMemory {
   autopsyCompletedAt?: string | null;
 }
 
-export type DealMemoryUpdatePrimaryLossCategory = typeof DealMemoryUpdatePrimaryLossCategory[keyof typeof DealMemoryUpdatePrimaryLossCategory];
+/**
+ * @nullable
+ */
+export type DealMemoryUpdatePrimaryLossCategory = typeof DealMemoryUpdatePrimaryLossCategory[keyof typeof DealMemoryUpdatePrimaryLossCategory] | null;
 
 
 export const DealMemoryUpdatePrimaryLossCategory = {
@@ -1684,7 +1767,10 @@ export const DealMemoryUpdatePrimaryLossCategory = {
   process: 'process',
 } as const;
 
-export type DealMemoryUpdateWinBackTimeline = typeof DealMemoryUpdateWinBackTimeline[keyof typeof DealMemoryUpdateWinBackTimeline];
+/**
+ * @nullable
+ */
+export type DealMemoryUpdateWinBackTimeline = typeof DealMemoryUpdateWinBackTimeline[keyof typeof DealMemoryUpdateWinBackTimeline] | null;
 
 
 export const DealMemoryUpdateWinBackTimeline = {
@@ -1699,16 +1785,23 @@ export interface DealMemoryUpdate {
   win_loss_narrative?: string | null;
   key_lessons?: string[];
   tags?: string[];
+  /** @nullable */
   primary_loss_category?: DealMemoryUpdatePrimaryLossCategory;
-  /** @maxLength 80 */
-  loss_subcategory?: string;
-  loss_narrative?: string;
-  winning_competitor_id?: number;
+  /**
+     * @maxLength 80
+     * @nullable
+     */
+  loss_subcategory?: string | null;
+  /** @nullable */
+  loss_narrative?: string | null;
+  /** @nullable */
+  winning_competitor_id?: number | null;
   /**
      * @minimum 0
      * @maximum 100
      */
   win_back_potential?: number;
+  /** @nullable */
   win_back_timeline?: DealMemoryUpdateWinBackTimeline;
   /** @maxItems 5 */
   causal_chain?: string[];
@@ -1771,6 +1864,7 @@ export interface ProductGapCluster {
   productName?: string | null;
   dealCount: number;
   lostTcv: number;
+  openTcv: number;
   openBlockerCount: number;
   deals: ProductGapDeal[];
 }
@@ -2402,6 +2496,7 @@ export const GetFlowSankeyMode = {
 } as const;
 
 export type SearchDealMemoryParams = {
+dealId?: string;
 q?: string;
 outcome?: string;
 competitor?: string;

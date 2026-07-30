@@ -83,6 +83,7 @@ export function registerPostMortem(): () => void {
       0,
       Math.round((Date.now() - new Date(deal.createdAt).getTime()) / 86_400_000),
     );
+    const competitorsFaced = competitorRows.map((r) => r.name).filter((n): n is string => !!n);
 
     await db
       .insert(dealMemory)
@@ -97,13 +98,19 @@ export function registerPostMortem(): () => void {
         totalGatesCompleted: gates?.n ?? 0,
         totalBlockersEncountered: blockers?.n ?? 0,
         totalDaysActive: daysActive,
-        competitorsFaced: competitorRows.map((r) => r.name).filter((n): n is string => !!n),
+        competitorsFaced,
       })
       .onConflictDoUpdate({
         target: dealMemory.dealId,
         set: {
           outcome,
           finalTcv: String(finalTcv),
+          // Refresh these on every re-close too — otherwise a deal whose
+          // competitors/pricing/tier were only linked after its first
+          // archival keeps a stale (often empty) snapshot forever.
+          pricingModel: deal.pricingModel ?? null,
+          servicesTier: deal.servicesTier ?? null,
+          competitorsFaced,
           totalGatesCompleted: gates?.n ?? 0,
           totalBlockersEncountered: blockers?.n ?? 0,
           totalDaysActive: daysActive,
