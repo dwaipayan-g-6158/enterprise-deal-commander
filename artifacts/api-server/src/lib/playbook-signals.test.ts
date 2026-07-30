@@ -384,3 +384,92 @@ describe("supersedeStalePlaybookAssignments", () => {
     expect(after2.status).toBe("Completed");
   });
 });
+
+describe("recomputeAssignment", () => {
+  it("never resurrects a Superseded assignment back to Active when one of its steps is actioned", async () => {
+    const stages = await db.select().from(pipelineStages).orderBy(asc(pipelineStages.sortOrder));
+    const discovery = stages.find((s) => s.stageName === "Discovery")!;
+    const validation = stages.find((s) => s.stageName === "Validation")!;
+    const [discoveryPlaybook] = await db
+      .select()
+      .from(playbooks)
+      .where(eq(playbooks.applicableStage, discovery.stageName))
+      .limit(1);
+
+    const dealId = await createDeal();
+    const [assignment] = await db
+      .insert(dealPlaybookAssignments)
+      .values({ dealId, playbookId: discoveryPlaybook.id })
+      .returning({ id: dealPlaybookAssignments.id });
+
+    // Deal advances past Discovery -> the Discovery assignment goes terminal.
+    await supersedeStalePlaybookAssignments(dealId, validation.sortOrder);
+    const [superseded] = await db
+      .select({ status: dealPlaybookAssignments.status })
+      .from(dealPlaybookAssignments)
+      .where(eq(dealPlaybookAssignments.id, assignment.id));
+    expect(superseded.status).toBe("Superseded");
+
+    // Someone now tidies up a leftover Discovery step (or the MEDDPICC gate
+    // sync touches it). recomputeAssignment must NOT flip the row back to
+    // "Active" -- doing so would silently re-arm the H9 scoring bug, with the
+    // superseded playbook counting against the deal forever.
+    const discoverySteps = await db
+      .select({ id: playbookSteps.id })
+      .from(playbookSteps)
+      .where(eq(playbookSteps.playbookId, discoveryPlaybook.id))
+      .orderBy(asc(playbookSteps.stepOrder));
+    await db.insert(playbookStepCompletions).values({
+      assignmentId: assignment.id,
+      stepId: discoverySteps[0].id,
+      status: "completed",
+      skipped: false,
+    });
+    await recomputeAssignment(assignment.id);
+
+    const [after] = await db
+      .select({ status: dealPlaybookAssignments.status })
+      .from(dealPlaybookAssignments)
+      .where(eq(dealPlaybookAssignments.id, assignment.id));
+    expect(after.status).toBe("Superseded");
+
+    // ...and the deal's aggregate still behaves as if it has no playbook.
+    const signals = await getPlaybookSignals(dealId);
+    expect(signals.hasPlaybook).toBe(false);
+  });
+
+  it("still flips an Active assignment to Completed once every step is terminal", async () => {
+    const stages = await db.select().from(pipelineStages).orderBy(asc(pipelineStages.sortOrder));
+    const discovery = stages.find((s) => s.stageName === "Discovery")!;
+    const [discoveryPlaybook] = await db
+      .select()
+      .from(playbooks)
+      .where(eq(playbooks.applicableStage, discovery.stageName))
+      .limit(1);
+
+    const dealId = await createDeal();
+    const [assignment] = await db
+      .insert(dealPlaybookAssignments)
+      .values({ dealId, playbookId: discoveryPlaybook.id })
+      .returning({ id: dealPlaybookAssignments.id });
+    const discoverySteps = await db
+      .select({ id: playbookSteps.id })
+      .from(playbookSteps)
+      .where(eq(playbookSteps.playbookId, discoveryPlaybook.id));
+    await db.insert(playbookStepCompletions).values(
+      discoverySteps.map((s) => ({
+        assignmentId: assignment.id,
+        stepId: s.id,
+        status: "completed",
+        skipped: false,
+      })),
+    );
+    await recomputeAssignment(assignment.id);
+
+    const [after] = await db
+      .select({ status: dealPlaybookAssignments.status })
+      .from(dealPlaybookAssignments)
+      .where(eq(dealPlaybookAssignments.id, assignment.id));
+    expect(after.status).toBe("Completed");
+  });
+});

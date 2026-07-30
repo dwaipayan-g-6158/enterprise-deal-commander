@@ -457,6 +457,12 @@ export async function recomputeAssignment(assignmentId: string): Promise<void> {
     .where(eq(dealPlaybookAssignments.id, assignmentId))
     .limit(1);
   if (!assignment) return;
+  // "Superseded" is terminal: the deal has advanced past this playbook's stage
+  // and `getPlaybookSignals` deliberately stops counting it. Actioning one of
+  // its leftover steps (directly, or via the MEDDPICC gate sync) must NOT
+  // resurrect it to "Active" -- that would silently re-arm the H9 bug where a
+  // stale playbook keeps dragging the deal's score down with no way to clear it.
+  if (assignment.status === "Superseded") return;
   const steps = await db
     .select({ id: playbookSteps.id })
     .from(playbookSteps)
