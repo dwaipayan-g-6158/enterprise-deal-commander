@@ -277,6 +277,29 @@ describe("scoreTemporalPressure", () => {
     // 100% complete must be in the lowest risk bucket (daysPerPoint effectively infinite).
     expect(scoreAt(100)).toBe(5);
   });
+
+  // Task 13 — sweep version of the invariant above (Task 1b/3's fix): a single
+  // (daysToClose, progressPct) example isn't enough to rule out a regression at
+  // a DIFFERENT point on the curve, e.g. a different daysPerPoint bucket
+  // boundary or the daysToClose<=0 special case. Loop over a representative
+  // range of daysToClose (negative/overdue, zero, and several positive
+  // horizons) and confirm non-increasing risk holds across the whole
+  // progressPct range for every one of them.
+  it("[invariant] closeDateRisk is non-increasing in progressPct, for every daysToClose in a representative range", () => {
+    for (const daysToClose of [-10, 0, 5, 15, 30, 60, 90]) {
+      const scores = [];
+      for (let progressPct = 0; progressPct <= 100; progressPct += 10) {
+        const r = scoreTemporalPressure({
+          salesStage: "Commercial", daysInStage: 10, daysToClose,
+          expectedCloseDate: "2026-12-31", progressPct, benchmarkMedianDays: 30,
+        });
+        scores.push(r.signals.find((s) => s.factor.includes("days to close"))!.rawScore);
+      }
+      for (let i = 1; i < scores.length; i++) {
+        expect(scores[i]).toBeLessThanOrEqual(scores[i - 1]);
+      }
+    }
+  });
 });
 
 describe("scoreFinancialStructure", () => {
