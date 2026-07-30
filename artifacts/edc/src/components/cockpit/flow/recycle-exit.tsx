@@ -15,15 +15,34 @@ const isTerminalStageName = (name: string) => name === "Closed-Won" || name === 
 // the delta — "Won" is a good outcome and reads green even though it's a
 // subtraction from the open-pipeline bucket; "Lost" reads slate (neutral, not
 // red — red is reserved for live HIGH risk, never a lost outcome) for the
-// same reason. "ending" (Still open) is a running total, not a delta, so
-// it's rendered as a plain, unsigned subtotal.
+// same reason. "ending" (Still open) is a running total, not a delta, so it's
+// rendered as a plain, unsigned subtotal — EXCEPT when it is negative.
+// `computeRecycleExit` deliberately leaves that residual unclamped (Task 9) so
+// a genuine reconciliation fault surfaces instead of hiding behind
+// Math.max(0, …) — e.g. a Closed-Lost deal reopened and later closed Won,
+// counted in both exit buckets. Rendering it as an ordinary positive number
+// would throw away exactly the signal the unclamp exists to expose, so it gets
+// its sign, a destructive color, and an explanation.
 function WaterfallRow({ step }: { step: WaterfallStep }) {
   const abs = Math.abs(step.delta);
   if (step.kind === "ending") {
+    const isAnomalous = step.delta < 0;
     return (
       <div className="flex justify-between text-sm tabular-nums font-semibold pt-2 mt-1 border-t border-border/60">
-        <span>{step.label}</span>
-        <span className="font-mono">{money(abs)}</span>
+        <span className="flex items-center gap-1.5">
+          {step.label}
+          {isAnomalous && (
+            <InfoTooltip>
+              A negative &ldquo;still open&rdquo; value is impossible from clean data — closed value
+              exceeds everything ever created. This points to a data reconciliation issue, most often
+              a deal counted in both exit buckets (closed Lost, reopened, then closed Won).
+            </InfoTooltip>
+          )}
+        </span>
+        <span className={`font-mono ${isAnomalous ? "text-destructive" : ""}`}>
+          {isAnomalous ? "-" : ""}
+          {money(abs)}
+        </span>
       </div>
     );
   }
