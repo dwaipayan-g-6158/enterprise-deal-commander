@@ -68,6 +68,10 @@ router.get("/deals/:dealId/audit", async (req: Request, res: Response) => {
   const data = rows.map((r) => ({
     id: r.id,
     entityType: r.entityType,
+    // Exposed so the client can tell rows of one batch apart: a batch gate
+    // save writes every row with fieldChanged="is_completed" and one shared
+    // changed_at, so entityId (the gate code) is the only discriminator.
+    entityId: r.entityId,
     fieldChanged: r.fieldChanged,
     oldValue: r.oldValue,
     newValue: r.newValue,

@@ -1,190 +1,162 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   useListDealActivity,
-  useListDealHealthHistory,
-  useListDealSnapshots,
+  useListAudit,
+  useGetDeal,
+  useListPipelineStages,
+  useListPricingModels,
+  useListServicesTiers,
+  useGetDealIntelligence,
 } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Camera, ChevronRight } from "lucide-react";
-import { SnapshotViewer } from "./snapshot-viewer";
-import { formatDateTime } from "@/lib/format";
-import { HEALTH_CLASS } from "@/lib/semantic-colors";
+import { Button } from "@/components/ui/button";
+import { FileEdit, History } from "lucide-react";
+import { TimelineList } from "./history/timeline-list";
+import { activityToRows, auditToRows, type AuditLookups } from "./history/adapters";
 
-const compactNumber = new Intl.NumberFormat("en-US", {
-  notation: "compact",
-  maximumFractionDigits: 1,
-});
+// Phase 2 durable history view, plus the Phase 1 field-level audit trail that
+// used to live in a separate "Activity" sub-tab.
+//
+// Those were two adjacent sub-tabs both showing reverse-chronological lists of
+// things that changed, so you had to guess which one held your answer — and
+// neither was complete: the audit log records cross-sell/disposition/
+// intervention/blocker-delete but NOT MEDDPICC/playbook/autopsy/health, while
+// the activity log records the reverse. They're a narrative layer and its
+// field-level evidence, so they're one destination with two view modes rather
+// than peers. They are deliberately NOT interleaved: audit rows are timestamped
+// by Postgres now() in the request handler and activity rows by a Node Date in
+// an async subscriber, so the two clocks can't be ordered against each other
+// reliably.
+//
+// The old "Health Timeline" card is gone: the activity-logger writes a row for
+// every event type including health.changed, so each transition was already in
+// the stream — its from/to and reason are folded into those rows from the same
+// event's metadata (see adapters.readHealthMeta).
+//
+// SNAPSHOTS ARE INTENTIONALLY NOT SURFACED HERE. Capture is untouched and fully
+// intact server-side (lib/subscribers/snapshot-service.ts and the /api/v2
+// snapshot endpoints), and snapshot data still reaches the UI — just not as a
+// list: deal-trajectory.tsx charts it above the tab strip, and Briefing Mode
+// replays deal state by DATE, which is how people actually ask the question.
+// A per-instant snapshot list asked users to navigate by capture timestamp, an
+// axis nobody thinks in, and the hourly job made it ~3:1 noise. The read-only
+// point-in-time viewer that used to open from it has been removed; recover it
+// from git history if a forensic view is ever wanted (see the payload privacy
+// rule in .agents/memory/edc-snapshot-payload.md before rendering one).
 
-const HEALTH_COLORS: Record<string, string> = {
-  GREEN: HEALTH_CLASS.GREEN.text,
-  YELLOW: HEALTH_CLASS.YELLOW.text,
-  AMBER: HEALTH_CLASS.YELLOW.text,
-  RED: HEALTH_CLASS.RED.text,
-};
+const PAGE = 50;
+const MAX_PAGE = 200; // server clamp (clampLimit in routes/v2/index.ts)
 
-function healthClass(status: string | null | undefined) {
-  if (!status) return "text-muted-foreground";
-  return HEALTH_COLORS[status] ?? "text-muted-foreground";
-}
-
-function snapshotLabel(reason: string, triggerEvent: string | null | undefined) {
-  if (reason === "periodic") return "Periodic snapshot";
-  if (triggerEvent) return triggerEvent.replace(/[._]/g, " ");
-  return reason.replace(/^event:/, "").replace(/[._]/g, " ");
-}
-
-/**
- * Phase 2 durable history view. Reads the event-sourced activity stream, the
- * health-transition timeline, and the durable point-in-time snapshots from the
- * `/api/v2` endpoints (edc_v2 schema). Snapshots are openable as a full
- * read-only "time machine" view. This is intentionally separate from the
- * Phase 1 audit `ActivityFeed`.
- */
 export function HistoryPanel({ dealId }: { dealId: string }) {
-  const { data: activity } = useListDealActivity(dealId, { limit: 50 });
-  const { data: health } = useListDealHealthHistory(dealId, { limit: 50 });
-  const { data: snapshots } = useListDealSnapshots(dealId, { limit: 50 });
+  const [mode, setMode] = useState<"timeline" | "changes">("timeline");
+  const [limit, setLimit] = useState(PAGE);
 
-  const [selectedSnapshot, setSelectedSnapshot] = useState<string | null>(null);
+  // This panel is re-rendered with a new dealId (cockpit arrow-key nav
+  // navigates between /deals/:id without unmounting), so per-deal UI state has
+  // to be reset explicitly rather than relying on a remount.
+  useEffect(() => {
+    setLimit(PAGE);
+  }, [dealId]);
 
-  const events = activity?.data ?? [];
-  const transitions = health?.data ?? [];
-  const snaps = snapshots?.data ?? [];
+  const activity = useListDealActivity(dealId, { limit });
+  // limit: 200 deliberately — the generated query key includes params, so this
+  // shares one cache entry with engine-recompute.ts's useListAudit(id, {limit:
+  // 200}) instead of adding a third key for the same endpoint, and it lifts the
+  // 50-row default at the same time.
+  const audit = useListAudit(dealId, { limit: MAX_PAGE });
+
+  const { data: dealRes } = useGetDeal(dealId);
+  const { data: intelRes } = useGetDealIntelligence(dealId);
+  const { data: stages } = useListPipelineStages();
+  const { data: models } = useListPricingModels();
+  const { data: tiers } = useListServicesTiers();
+
+  const lookups: AuditLookups = useMemo(
+    () => ({
+      stages: stages?.data,
+      pricingModels: models?.data,
+      servicesTiers: tiers?.data,
+      currency: dealRes?.data?.dealCurrency ?? "USD",
+      gateLabels: Object.fromEntries(
+        (intelRes?.data?.technicalTrack.gates ?? []).map((g) => [g.gateCode, g.label]),
+      ),
+    }),
+    [stages, models, tiers, dealRes, intelRes],
+  );
+
+  const timelineRows = useMemo(
+    () => activityToRows(activity.data?.data ?? []),
+    [activity.data],
+  );
+  const changeRows = useMemo(
+    () => auditToRows(audit.data?.data ?? [], lookups),
+    [audit.data, lookups],
+  );
+
+  const active = mode === "timeline" ? activity : audit;
+  const state = active.isLoading ? "loading" : active.isError ? "error" : "ready";
 
   return (
     <div className="space-y-4">
       <Card>
-        <CardHeader>
-          <CardTitle className="text-lg flex items-center gap-2">
-            <Camera className="h-5 w-5 text-muted-foreground" />
-            Snapshots
-          </CardTitle>
+        <CardHeader className="pb-3">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <CardTitle className="text-lg">History</CardTitle>
+            {/* Narrative vs field-level evidence — a refinement within one
+                destination, not two places to look. */}
+            <div className="flex items-center gap-1 rounded-md border p-0.5">
+              <Button
+                variant={mode === "timeline" ? "secondary" : "ghost"}
+                size="sm"
+                className="h-7 gap-1.5 px-2.5 text-xs"
+                onClick={() => setMode("timeline")}
+              >
+                <History className="h-3.5 w-3.5" /> Timeline
+              </Button>
+              <Button
+                variant={mode === "changes" ? "secondary" : "ghost"}
+                size="sm"
+                className="h-7 gap-1.5 px-2.5 text-xs"
+                onClick={() => setMode("changes")}
+              >
+                <FileEdit className="h-3.5 w-3.5" /> Field changes
+              </Button>
+            </div>
+          </div>
         </CardHeader>
         <CardContent>
-          {snaps.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              No snapshots yet. History starts building from here.
-            </p>
+          {mode === "timeline" ? (
+            <TimelineList
+              rows={timelineRows}
+              state={state}
+              onRetry={() => activity.refetch()}
+              total={activity.data?.meta?.total}
+              onShowAll={limit < MAX_PAGE ? () => setLimit(MAX_PAGE) : undefined}
+              label="Deal timeline"
+              empty={{
+                icon: History,
+                title: "Nothing has happened yet",
+                description:
+                  "Stage moves, gate sign-offs, blockers and health changes will show up here as this deal progresses.",
+              }}
+            />
           ) : (
-            <ul className="divide-y">
-              {snaps.map((s) => (
-                <li key={s.id}>
-                  <button
-                    type="button"
-                    onClick={() => setSelectedSnapshot(s.id)}
-                    className="w-full flex items-center gap-3 py-2.5 text-left hover:bg-muted/40 rounded-md px-2 -mx-2 transition-colors"
-                  >
-                    <Badge
-                      variant={s.healthStatus === "RED" ? "destructive" : "secondary"}
-                      className="shrink-0 w-16 justify-center"
-                    >
-                      {s.healthStatus}
-                    </Badge>
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm font-medium capitalize truncate">
-                        {snapshotLabel(s.reason, s.triggerEvent)}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        {formatDateTime(s.snapshotAt, "—")}
-                        {s.salesStage ? ` · ${s.salesStage}` : ""}
-                      </p>
-                    </div>
-                    {s.calculatedTcv != null && (
-                      <span className="text-sm font-mono text-muted-foreground whitespace-nowrap hidden sm:block">
-                        TCV {compactNumber.format(Number(s.calculatedTcv))}
-                      </span>
-                    )}
-                    <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
-                  </button>
-                </li>
-              ))}
-            </ul>
+            <TimelineList
+              rows={changeRows}
+              state={state}
+              onRetry={() => audit.refetch()}
+              total={audit.data?.meta?.total}
+              label="Field changes"
+              empty={{
+                icon: FileEdit,
+                title: "No field edits recorded",
+                description:
+                  "Every saved edit to this deal's values lands here, grouped by save. Not every field is tracked, so the Timeline may show activity this list doesn't.",
+              }}
+            />
           )}
         </CardContent>
       </Card>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-lg">Activity Stream</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {events.length === 0 ? (
-              <p className="text-sm text-muted-foreground">
-                It's quiet here. Activity will show up as this deal moves.
-              </p>
-            ) : (
-              <ul className="space-y-3">
-                {events.map((e) => (
-                  <li
-                    key={e.id}
-                    className="text-sm border-l-2 border-primary/40 pl-3"
-                  >
-                    <div className="flex justify-between gap-2">
-                      <span className="font-medium">{e.summary}</span>
-                      <span className="text-xs text-muted-foreground whitespace-nowrap">
-                        {formatDateTime(e.occurredAt, "—")}
-                      </span>
-                    </div>
-                    <p className="text-xs text-muted-foreground font-mono">
-                      {e.eventType}
-                      {e.entityId ? ` · ${e.entityId}` : ""}
-                    </p>
-                    <p className="text-xs text-muted-foreground">by {e.actor}</p>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-lg">Health Timeline</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {transitions.length === 0 ? (
-              <p className="text-sm text-muted-foreground">
-                No transitions yet. Health's held steady throughout.
-              </p>
-            ) : (
-              <ul className="space-y-3">
-                {transitions.map((t) => (
-                  <li key={t.id} className="text-sm">
-                    <div className="flex justify-between gap-2">
-                      <span className="font-mono font-medium">
-                        <span className={healthClass(t.fromStatus)}>
-                          {t.fromStatus ?? "—"}
-                        </span>
-                        {" → "}
-                        <span className={healthClass(t.toStatus)}>
-                          {t.toStatus}
-                        </span>
-                      </span>
-                      <span className="text-xs text-muted-foreground whitespace-nowrap">
-                        {formatDateTime(t.changedAt, "—")}
-                      </span>
-                    </div>
-                    {t.reason ? (
-                      <p className="text-xs text-muted-foreground">{t.reason}</p>
-                    ) : null}
-                    <p className="text-xs text-muted-foreground">by {t.actor}</p>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </CardContent>
-        </Card>
-      </div>
-
-      <SnapshotViewer
-        snapshotId={selectedSnapshot}
-        open={selectedSnapshot !== null}
-        onOpenChange={(open) => {
-          if (!open) setSelectedSnapshot(null);
-        }}
-      />
     </div>
   );
 }

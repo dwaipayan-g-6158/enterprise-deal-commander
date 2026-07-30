@@ -18,6 +18,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
@@ -144,7 +145,7 @@ export function RiskSimulator({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="grid md:grid-cols-2 gap-6">
+        <div className="grid md:grid-cols-2 gap-6 md:gap-10">
           {/* Controls */}
           <div className="space-y-4">
             <div className="grid gap-2">
@@ -263,7 +264,14 @@ export function RiskSimulator({
             </Button>
           </div>
 
-          {/* Results */}
+          {/* Results — spacing-only gutter (no vertical divider): md:gap-10
+              on the parent grid keeps this pane clear of the controls
+              (previously a bare 24px gutter let a wide Select popover, or
+              even just the "New risks" heading, visually collide with the
+              Services Tier field next to it). Keep this gap >= 32px —
+              select.tsx's Services Tier popover width-cap addresses the same
+              collision, so the two fixes are coupled; shrinking the gap
+              re-opens it. */}
           <div className="space-y-4">
             <div className="rounded-lg border p-4 space-y-3">
               <div className="flex items-center justify-between">
@@ -302,37 +310,41 @@ export function RiskSimulator({
             </div>
 
             {added.length > 0 && (
-              <div className="space-y-2">
-                <p className="text-xs uppercase tracking-wider text-destructive font-medium">
-                  New risks ({added.length})
-                </p>
-                {added.map((a) => (
-                  <div key={a.code} className="flex items-start gap-2 text-sm">
-                    {a.severity === "RED" ? (
-                      <ShieldAlert className="h-4 w-4 text-destructive shrink-0 mt-0.5" />
-                    ) : (
-                      <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0 mt-0.5" />
-                    )}
-                    <span>{a.message}</span>
-                  </div>
-                ))}
-              </div>
+              <Card className="border-l-4 border-l-destructive">
+                <CardContent className="p-4 space-y-2">
+                  <p className="text-xs uppercase tracking-wider text-destructive font-medium">
+                    New risks ({added.length})
+                  </p>
+                  {added.map((a) => (
+                    <div key={a.code} className="flex items-start gap-2 text-sm">
+                      {a.severity === "RED" ? (
+                        <ShieldAlert className="h-4 w-4 text-destructive shrink-0 mt-0.5" />
+                      ) : (
+                        <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0 mt-0.5" />
+                      )}
+                      <span>{a.message}</span>
+                    </div>
+                  ))}
+                </CardContent>
+              </Card>
             )}
 
             {removed.length > 0 && (
-              <div className="space-y-2">
-                <p className="text-xs uppercase tracking-wider text-emerald-500 font-medium">
-                  Cleared ({removed.length})
-                </p>
-                {removed.map((a) => (
-                  <div
-                    key={a.code}
-                    className="flex items-start gap-2 text-sm text-muted-foreground line-through"
-                  >
-                    <span>{a.message}</span>
-                  </div>
-                ))}
-              </div>
+              <Card className="border-l-4 border-l-emerald-500">
+                <CardContent className="p-4 space-y-2">
+                  <p className="text-xs uppercase tracking-wider text-emerald-500 font-medium">
+                    Cleared ({removed.length})
+                  </p>
+                  {removed.map((a) => (
+                    <div
+                      key={a.code}
+                      className="flex items-start gap-2 text-sm text-muted-foreground line-through"
+                    >
+                      <span>{a.message}</span>
+                    </div>
+                  ))}
+                </CardContent>
+              </Card>
             )}
 
             <div className="space-y-2">

@@ -9,10 +9,15 @@
 // close-timeline-model.ts.
 import { ArrowDown, ArrowUp } from "lucide-react";
 import type { Target, Transition } from "framer-motion";
-import { formatDate } from "../../../lib/format";
+import { humanizeCode, relativeTime } from "../../../lib/format";
 import { HEALTH_CLASS, type Health } from "../../../lib/semantic-colors";
 
 export type { Health };
+
+// humanizeCode/relativeTime moved to lib/format.ts (cockpit code needs them
+// too and shouldn't import dashboard-widget internals). Re-exported so the
+// existing importers of this module keep their import path unchanged.
+export { humanizeCode, relativeTime };
 
 // Sourced from the shared HEALTH_CLASS map (lib/semantic-colors.ts) instead
 // of a local Record literal — this pair used to hardcode GREEN as emerald,
@@ -47,30 +52,6 @@ export function fullCurrency(n: number, currency = "USD"): string {
     currency,
     maximumFractionDigits: 0,
   }).format(Number(n) || 0);
-}
-
-/** "PREMATURE_COMMERCIAL_DISCONNECT" → "Premature Commercial Disconnect". */
-export function humanizeCode(code: string): string {
-  return code
-    .toLowerCase()
-    .split(/[_\s]+/)
-    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-    .join(" ");
-}
-
-export function relativeTime(iso: string | null | undefined): string {
-  if (!iso) return "";
-  const then = new Date(iso).getTime();
-  if (Number.isNaN(then)) return "";
-  const sec = Math.round((Date.now() - then) / 1000);
-  if (sec < 60) return "just now";
-  const min = Math.round(sec / 60);
-  if (min < 60) return `${min}m ago`;
-  const hr = Math.round(min / 60);
-  if (hr < 24) return `${hr}h ago`;
-  const day = Math.round(hr / 24);
-  if (day < 7) return `${day}d ago`;
-  return formatDate(iso) ?? "";
 }
 
 /**

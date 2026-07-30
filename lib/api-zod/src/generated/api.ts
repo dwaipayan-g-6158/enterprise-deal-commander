@@ -1307,6 +1307,7 @@ export const ListAuditResponse = zod.object({
   "data": zod.array(zod.object({
   "id": zod.string(),
   "entityType": zod.string(),
+  "entityId": zod.string().nullish(),
   "fieldChanged": zod.string(),
   "oldValue": zod.string().nullish(),
   "newValue": zod.string().nullish(),

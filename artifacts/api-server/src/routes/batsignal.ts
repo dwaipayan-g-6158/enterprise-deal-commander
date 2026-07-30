@@ -40,10 +40,15 @@ router.post(
       changedBy: actor.displayName,
     });
 
-    const domain = (process.env.APP_DOMAIN ?? "").split(",")[0]?.trim();
-    const shareUrl = domain
-      ? `https://${domain}/share/${token}`
-      : `/share/${token}`;
+    // APP_ORIGIN is the full public origin (scheme + host) users hit in
+    // their browser — NOT the API server's own port, which differs from it
+    // in local dev (frontend :5173 proxies /api to the server on :5000).
+    // Falls back to a relative path when unset, same as before this was
+    // ever configured. TODO(catalyst): revisit once this app is served
+    // from Zoho Catalyst — a custom domain and/or a URL sub-path may need
+    // to be accounted for here.
+    const origin = (process.env.APP_ORIGIN ?? "").split(",")[0]?.trim();
+    const shareUrl = origin ? `${origin}/share/${token}` : `/share/${token}`;
 
     res.status(201).json({
       data: { shareUrl, expiresAt: expiresAt.toISOString() },

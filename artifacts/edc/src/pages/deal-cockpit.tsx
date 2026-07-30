@@ -34,7 +34,6 @@ import { TechnicalGates } from "@/components/cockpit/technical-gates";
 import { BlockersPanel } from "@/components/cockpit/blockers-panel";
 import { CrossSellPanel } from "@/components/cockpit/cross-sell-panel";
 import { NextBestAction } from "@/components/cockpit/next-best-action";
-import { ActivityFeed } from "@/components/cockpit/activity-feed";
 import { HistoryPanel } from "@/components/cockpit/history-panel";
 import { BriefingMode } from "@/components/cockpit/briefing-mode";
 import { RiskSimulator } from "@/components/cockpit/risk-simulator";
@@ -272,7 +271,6 @@ export default function DealCockpit() {
       case "stakeholders": return <StakeholdersPanel dealId={id} />;
       case "pricing": return <PricingPanel dealId={id} currency={deal.dealCurrency} deal={deal} />;
       case "crosssell": return <CrossSellPanel dealId={id} />;
-      case "activity": return <ActivityFeed dealId={id} />;
       case "decisions": return <DecisionsPanel dealId={id} />;
       case "history": return <HistoryPanel dealId={id} />;
       default: return null;
