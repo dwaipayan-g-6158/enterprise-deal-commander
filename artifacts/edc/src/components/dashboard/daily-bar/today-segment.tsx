@@ -9,6 +9,7 @@ import {
 } from "@workspace/api-client-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { relativeTime } from "@/components/dashboard/widgets/_shared";
+import { activityTitle } from "@/lib/activity-title";
 import { defaultStore } from "@/lib/storage";
 import { isDismissedToday, dismissToday } from "@/lib/reflection/dismiss";
 
@@ -45,9 +46,16 @@ function stageTransitionLabel(
 
 /**
  * One itemized activity row, mirroring the dashboard's Recent Activity list
- * shape (`pages/dashboard.tsx`): summary + relative time share the top line
+ * shape (`pages/dashboard.tsx`): title + relative time share the top line
  * (time pinned `shrink-0` so it's never truncated away), deal name (and stage
  * transition, when present) on a second, truncatable line below.
+ *
+ * Titles go through activityTitle rather than `event.summary` for the same
+ * reason the dashboard card does. Note this is currently a no-op here: the
+ * segment below only ever passes deal.stage_changed and playbook.step_changed
+ * events, whose server summaries activityTitle returns untouched. It's wired up
+ * anyway because this component accepts any ActivityEvent, and deal.updated is
+ * the one type whose raw summary is a camelCase key dump.
  */
 function ActivityRow({
   event,
@@ -67,7 +75,7 @@ function ActivityRow({
           onClick={() => onNavigate(event.dealId)}
           className="min-w-0 flex-1 text-left leading-snug break-words hover:text-primary transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm"
         >
-          {event.summary}
+          {activityTitle(event, { maxNamedFields: 3 })}
         </button>
         <span className="shrink-0 whitespace-nowrap text-xs leading-snug text-muted-foreground">
           {relativeTime(event.occurredAt)}

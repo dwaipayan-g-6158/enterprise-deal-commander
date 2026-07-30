@@ -4,13 +4,16 @@
 // picks up *.test.ts, so anything reachable from adapters.test.ts must import
 // by relative path (same constraint documented in
 // components/dashboard/widgets/_shared.tsx and lib/close-timeline-model.ts).
+import { formatDate, humanizeCode, humanizeIsoDates } from "../../../lib/format";
+// activityTitle/fieldLabel live in lib/ because the dashboard's Recent Activity
+// card and the two DailyBar popovers render the same event feed and must say the
+// same thing about it — see lib/activity-title.ts.
 import {
-  formatDate,
-  humanizeCode,
-  humanizeField,
-  humanizeEventType,
-  humanizeIsoDates,
-} from "../../../lib/format";
+  activityTitle,
+  changedFieldNames,
+  fieldLabel,
+  humanizeCamelField,
+} from "../../../lib/activity-title";
 
 export type TimelineKind =
   | "field"
@@ -83,29 +86,6 @@ export interface AuditLookups {
 }
 
 // ---- Value formatting --------------------------------------------------
-
-/**
- * Audit columns whose humanizeField() output reads badly. Only overrides — a
- * field absent here falls through to humanizeField, so this stays short.
- *
- * Kept next to the audit adapter rather than in lib/format.ts because it is
- * this log's vocabulary, not a general rule: humanizeField has to stay generic
- * for the camelCase activity-stream path (humanizeCamelField) too.
- */
-const AUDIT_FIELD_LABELS: Record<string, string> = {
-  // "Win Probability Pct" — the unit is already in the formatted value.
-  win_probability_pct: "Win Probability",
-  // Acronyms humanizeField can't know about; it would title-case them to
-  // "Crm Record Url" / "Ad360 Seat Count".
-  crm_record_url: "CRM Record URL",
-  ad360_seat_count: "AD360 Seat Count",
-  ad360_feature_notes: "AD360 Feature Notes",
-};
-
-/** An audit column name as a person reads it. */
-function fieldLabel(field: string): string {
-  return AUDIT_FIELD_LABELS[field] ?? humanizeField(field);
-}
 
 const MONEY_FIELDS = new Set([
   "product_revenue",
@@ -337,23 +317,6 @@ export function readHealthMeta(
   };
 }
 
-/** Field names in `deal.updated` metadata are camelCase (Object.keys(updates)). */
-function changedFieldNames(metadata: Record<string, unknown> | null | undefined): string[] {
-  const raw = metadata?.changedFields;
-  if (!Array.isArray(raw)) return [];
-  return raw.filter((f): f is string => typeof f === "string" && f.length > 0);
-}
-
-/**
- * "salesStageId" → "Sales Stage" (camelCase counterpart of fieldLabel).
- * Goes through fieldLabel, not humanizeField, so the Timeline's deal.updated
- * detail lines read identically to the same field in Field changes —
- * "crmRecordUrl" and "crm_record_url" both land on "CRM Record URL".
- */
-function humanizeCamelField(field: string): string {
-  return fieldLabel(field.replace(/([a-z0-9])([A-Z])/g, "$1_$2").toLowerCase());
-}
-
 /**
  * Map the v2 activity stream onto timeline rows, folding each health
  * transition in from its own metadata.
@@ -370,7 +333,10 @@ export function activityToRows(events: ActivityRowInput[]): TimelineRow[] {
     const row: TimelineRow = {
       id: `act:${e.id}`,
       kind,
-      title: e.summary?.trim() || humanizeEventType(e.eventType),
+      // maxNamedFields defaults to 1: these rows expand to list the fields, so
+      // the title only has to disambiguate the single-field case. The dashboard
+      // and DailyBar rows can't expand and pass a higher number.
+      title: activityTitle(e),
       at: e.occurredAt,
       actor: e.actor,
       details: [],
@@ -389,17 +355,11 @@ export function activityToRows(events: ActivityRowInput[]): TimelineRow[] {
     }
 
     if (e.eventType === "deal.updated") {
-      // The server summary for this event is Object.keys(updates).join(", "),
-      // i.e. a raw camelCase dump ("Updated dealName, accountName, ..."), so
-      // this is the one event whose title is better derived client-side.
-      const fields = changedFieldNames(e.metadata);
-      if (fields.length > 0) {
-        row.title =
-          fields.length === 1
-            ? `Changed ${humanizeCamelField(fields[0])}`
-            : `Updated ${fields.length} fields`;
-        row.details = fields.map((f) => ({ label: humanizeCamelField(f) }));
-      }
+      // activityTitle already replaced the raw camelCase dump in the title;
+      // this adds the per-field detail lines only this view can expand into.
+      row.details = changedFieldNames(e.metadata).map((f) => ({
+        label: humanizeCamelField(f),
+      }));
       return row;
     }
 

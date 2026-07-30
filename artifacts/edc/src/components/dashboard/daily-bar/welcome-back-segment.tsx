@@ -5,6 +5,7 @@ import {
   getListPortfolioActivityQueryKey,
 } from "@workspace/api-client-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { activityTitle } from "@/lib/activity-title";
 
 // Daily Bar segment — Welcome Back (formerly the "Last session you:" box in
 // `dashboard-hero.tsx`, PRD 4.2). Same activity-since-previous-visit query as
@@ -51,7 +52,7 @@ export function WelcomeBackSegment({
         <ul className="space-y-1">
           {activity.slice(0, 5).map((e) => (
             <li key={e.id} className="text-sm text-muted-foreground">
-              ✓ {e.summary}
+              ✓ {activityTitle(e, { maxNamedFields: 3 })}
             </li>
           ))}
         </ul>
