@@ -371,16 +371,22 @@ export function scoreTemporalPressure(i: {
 
   // Signal 4.2: Close Date Proximity vs. Progress (weight 0.45)
   let closeDateRisk = 0;
-  if (i.daysToClose !== null && i.daysToClose >= 0) {
+  if (i.daysToClose !== null) {
     const daysLeft = i.daysToClose;
-    const progressRemaining = 100 - i.progressPct;
-    const daysPerPoint = daysLeft / Math.max(1, progressRemaining);
-    if (daysPerPoint >= 3) closeDateRisk = 5;
-    else if (daysPerPoint >= 2) closeDateRisk = 20;
-    else if (daysPerPoint >= 1) closeDateRisk = 50;
-    else if (daysPerPoint >= 0.5) closeDateRisk = 75;
-    else closeDateRisk = 95;
-    if (daysLeft <= 0 && i.progressPct < 100) closeDateRisk = 100;
+    if (daysLeft <= 0 && i.progressPct < 100) {
+      // Overdue (negative) or exactly due today, and not yet complete: maximal
+      // risk. Handled before the daysPerPoint ladder so a negative daysLeft
+      // (an overdue deal — Task 3/M14) can't fall through to a lower bucket.
+      closeDateRisk = 100;
+    } else {
+      const progressRemaining = 100 - i.progressPct;
+      const daysPerPoint = daysLeft / Math.max(1, progressRemaining); // Task 1b's fix
+      if (daysPerPoint >= 3) closeDateRisk = 5;
+      else if (daysPerPoint >= 2) closeDateRisk = 20;
+      else if (daysPerPoint >= 1) closeDateRisk = 50;
+      else if (daysPerPoint >= 0.5) closeDateRisk = 75;
+      else closeDateRisk = 95;
+    }
   } else if (ACTIVE_STAGES_FOR_DATE(i.salesStage)) {
     closeDateRisk = 35;
   }

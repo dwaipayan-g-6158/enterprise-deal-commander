@@ -674,6 +674,14 @@ describe("intelligence engine — TCV calculation", () => {
   });
 });
 
+describe("intelligence engine — daysToClose sign", () => {
+  it("daysToClose is negative (not clamped to 0) for a deal past its expected close date", () => {
+    const deal = makeDeal({ expected_close_date: daysAgo(2) });
+    const out = processDealIntelligence(deal, [], [], DEFAULTS);
+    expect(out.financials.daysToClose).toBeLessThan(0);
+  });
+});
+
 describe("intelligence engine — currency normalization", () => {
   it("applies an fx rate of 1 and emits no data-quality note when currencies match", () => {
     const deal = makeDeal({

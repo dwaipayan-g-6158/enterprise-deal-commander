@@ -30,7 +30,7 @@ const activeFilter = and(isNull(enterpriseDeals.deletedAt), isNull(enterpriseDea
 
 function daysBetween(from: Date | string | null, to = new Date()): number {
   if (!from) return 0;
-  return Math.max(0, Math.round((to.getTime() - new Date(from).getTime()) / 86_400_000));
+  return Math.max(0, Math.floor((to.getTime() - new Date(from).getTime()) / 86_400_000));
 }
 
 export async function historicalContext(): Promise<ScoringContext> {

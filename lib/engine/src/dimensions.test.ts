@@ -219,6 +219,15 @@ describe("scoreTemporalPressure", () => {
     expect(closeSignal?.rawScore).toBe(100);
   });
 
+  it("an overdue deal (negative daysToClose) scores maximal close-date risk, not the flat no-date bucket", () => {
+    const overdue = scoreTemporalPressure({
+      salesStage: "Commercial", daysInStage: 40, daysToClose: -10,
+      expectedCloseDate: "2026-07-01", progressPct: 60, benchmarkMedianDays: 30,
+    });
+    const closeSignal = overdue.signals.find((s) => s.factor.includes("days to close"))!;
+    expect(closeSignal.rawScore).toBe(100);
+  });
+
   it("no benchmark falls back to absolute-day thresholds", () => {
     const r = scoreTemporalPressure({ ...base, benchmarkMedianDays: null, daysInStage: 90 });
     expect(r.score).toBeGreaterThan(0);

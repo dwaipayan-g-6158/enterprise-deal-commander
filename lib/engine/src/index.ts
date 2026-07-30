@@ -1138,7 +1138,6 @@ export function processDealIntelligence(
     daysToClose = Math.floor(
       (new Date(deal.expected_close_date).getTime() - now.getTime()) / DAY,
     );
-    if (daysToClose < 0) daysToClose = 0;
   }
 
   // Whole-days since the most recently completed gate (reuses the same `now`/DAY
