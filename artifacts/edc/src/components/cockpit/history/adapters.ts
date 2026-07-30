@@ -76,6 +76,7 @@ export interface AuditLookups {
   stages?: { id: number; stageName: string }[];
   pricingModels?: { id: number; modelName: string }[];
   servicesTiers?: { id: number; tierName: string }[];
+  lossArchetypes?: { id: number; archetypeName: string }[];
   currency?: string;
   /** Gate code → human label, for naming rows of a batch gate save. */
   gateLabels?: Record<string, string>;
@@ -83,12 +84,37 @@ export interface AuditLookups {
 
 // ---- Value formatting --------------------------------------------------
 
+/**
+ * Audit columns whose humanizeField() output reads badly. Only overrides — a
+ * field absent here falls through to humanizeField, so this stays short.
+ *
+ * Kept next to the audit adapter rather than in lib/format.ts because it is
+ * this log's vocabulary, not a general rule: humanizeField has to stay generic
+ * for the camelCase activity-stream path (humanizeCamelField) too.
+ */
+const AUDIT_FIELD_LABELS: Record<string, string> = {
+  // "Win Probability Pct" — the unit is already in the formatted value.
+  win_probability_pct: "Win Probability",
+  // Acronyms humanizeField can't know about; it would title-case them to
+  // "Crm Record Url" / "Ad360 Seat Count".
+  crm_record_url: "CRM Record URL",
+  ad360_seat_count: "AD360 Seat Count",
+  ad360_feature_notes: "AD360 Feature Notes",
+};
+
+/** An audit column name as a person reads it. */
+function fieldLabel(field: string): string {
+  return AUDIT_FIELD_LABELS[field] ?? humanizeField(field);
+}
+
 const MONEY_FIELDS = new Set([
   "product_revenue",
   "services_revenue",
   "calculated_tcv",
   "normalized_tcv",
 ]);
+
+const PERCENT_FIELDS = new Set(["win_probability_pct"]);
 
 const DATE_FIELDS = new Set([
   "expected_close_date",
@@ -109,7 +135,9 @@ function fkName(field: string, raw: string, lookups: AuditLookups): string | nul
         ? lookups.pricingModels?.map((m) => ({ id: m.id, name: m.modelName }))
         : field === "services_tier_id"
           ? lookups.servicesTiers?.map((t) => ({ id: t.id, name: t.tierName }))
-          : undefined;
+          : field === "loss_archetype_id"
+            ? lookups.lossArchetypes?.map((a) => ({ id: a.id, name: a.archetypeName }))
+            : undefined;
   return table?.find((r) => r.id === id)?.name ?? null;
 }
 
@@ -151,6 +179,11 @@ export function formatAuditValue(
     }
   }
 
+  if (PERCENT_FIELDS.has(field)) {
+    const n = Number(value);
+    if (Number.isFinite(n)) return `${n}%`;
+  }
+
   if (DATE_FIELDS.has(field)) return formatDate(value, value);
 
   return value;
@@ -185,7 +218,7 @@ function detailLabel(row: AuditRowInput, lookups: AuditLookups): string {
   if (row.entityType === "gate" && row.entityId) {
     return lookups.gateLabels?.[row.entityId] ?? humanizeCode(row.entityId);
   }
-  return humanizeField(row.fieldChanged);
+  return fieldLabel(row.fieldChanged);
 }
 
 /** Title for a change-set that turned out to hold exactly one audit row. */
@@ -204,7 +237,7 @@ function singleRowTitle(row: AuditRowInput, lookups: AuditLookups): string {
   }
   if (entityType === "cross_sell") return "Cross-sell products updated";
   if (f === "stage_override") return "Stage guardrail overridden";
-  return `Changed ${humanizeField(f)}`;
+  return `Changed ${fieldLabel(f)}`;
 }
 
 /** Title for a change-set of many rows, e.g. a batch gate save. */
@@ -311,9 +344,14 @@ function changedFieldNames(metadata: Record<string, unknown> | null | undefined)
   return raw.filter((f): f is string => typeof f === "string" && f.length > 0);
 }
 
-/** "salesStageId" → "Sales Stage" (camelCase counterpart of humanizeField). */
+/**
+ * "salesStageId" → "Sales Stage" (camelCase counterpart of fieldLabel).
+ * Goes through fieldLabel, not humanizeField, so the Timeline's deal.updated
+ * detail lines read identically to the same field in Field changes —
+ * "crmRecordUrl" and "crm_record_url" both land on "CRM Record URL".
+ */
 function humanizeCamelField(field: string): string {
-  return humanizeField(field.replace(/([a-z0-9])([A-Z])/g, "$1_$2").toLowerCase());
+  return fieldLabel(field.replace(/([a-z0-9])([A-Z])/g, "$1_$2").toLowerCase());
 }
 
 /**

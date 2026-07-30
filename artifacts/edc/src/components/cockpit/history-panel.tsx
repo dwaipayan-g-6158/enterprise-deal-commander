@@ -6,6 +6,7 @@ import {
   useListPipelineStages,
   useListPricingModels,
   useListServicesTiers,
+  useListLossArchetypes,
   useGetDealIntelligence,
 } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -70,18 +71,20 @@ export function HistoryPanel({ dealId }: { dealId: string }) {
   const { data: stages } = useListPipelineStages();
   const { data: models } = useListPricingModels();
   const { data: tiers } = useListServicesTiers();
+  const { data: archetypes } = useListLossArchetypes();
 
   const lookups: AuditLookups = useMemo(
     () => ({
       stages: stages?.data,
       pricingModels: models?.data,
       servicesTiers: tiers?.data,
+      lossArchetypes: archetypes?.data,
       currency: dealRes?.data?.dealCurrency ?? "USD",
       gateLabels: Object.fromEntries(
         (intelRes?.data?.technicalTrack.gates ?? []).map((g) => [g.gateCode, g.label]),
       ),
     }),
-    [stages, models, tiers, dealRes, intelRes],
+    [stages, models, tiers, archetypes, dealRes, intelRes],
   );
 
   const timelineRows = useMemo(
@@ -151,7 +154,7 @@ export function HistoryPanel({ dealId }: { dealId: string }) {
                 icon: FileEdit,
                 title: "No field edits recorded",
                 description:
-                  "Every saved edit to this deal's values lands here, grouped by save. Not every field is tracked, so the Timeline may show activity this list doesn't.",
+                  "Every saved edit to this deal's values lands here, grouped by save. Playbook steps, MEDDPICC answers and health changes aren't field edits — look for those on the Timeline.",
               }}
             />
           )}
