@@ -16,8 +16,14 @@ import {
   dealMemory,
   dealCompetitors,
   competitors,
+  dealMeddpiccScores,
 } from "@workspace/db";
-import { computeMeddpiccScoreForDeal, getMeddpiccAssessment, upsertMeddpiccAnswer } from "./meddpicc";
+import {
+  computeMeddpiccScoreForDeal,
+  getMeddpiccAssessment,
+  recalculateMeddpiccAssessment,
+  upsertMeddpiccAnswer,
+} from "./meddpicc";
 import { cache } from "./cache";
 
 const ACTOR = "vitest";
@@ -85,6 +91,14 @@ async function completionRowCount(assignmentId: string, stepName: string): Promi
   return rows.length;
 }
 
+async function scoreRowCount(dealId: string): Promise<number> {
+  const rows = await db
+    .select({ id: dealMeddpiccScores.id })
+    .from(dealMeddpiccScores)
+    .where(eq(dealMeddpiccScores.dealId, dealId));
+  return rows.length;
+}
+
 async function poll<T>(fn: () => Promise<T>, predicate: (v: T) => boolean, timeoutMs = 10_000): Promise<T> {
   const start = Date.now();
   let last = await fn();
@@ -117,10 +131,11 @@ describe("MEDDPICC playbook gate", () => {
     for (let order = 1; order <= 8; order++) {
       await upsertMeddpiccAnswer(dealId, order, { score: 3 }, ACTOR);
     }
-    // The real PATCH route recomputes the assessment right after every
-    // upsert (that recompute is what surfaces the new score to the caller) —
-    // mirror that here, since this test calls the lib function directly.
-    await getMeddpiccAssessment(dealId);
+    // The real PATCH route recalculates (persists + syncs the gate) right
+    // after every upsert — mirror that here via recalculateMeddpiccAssessment,
+    // since this test calls the lib function directly and needs the gate
+    // sync side effect that only the write path triggers.
+    await recalculateMeddpiccAssessment(dealId);
 
     const status = await poll(
       () => stepStatus(assignmentId, MEDDPICC_STEP_NAME),
@@ -150,8 +165,10 @@ describe("MEDDPICC playbook gate", () => {
     }
     // Confirm the score actually reached Green before asserting the skip was
     // respected — otherwise this test would pass vacuously even if the
-    // auto-complete check were broken (it would just never have run).
-    const assessment = await getMeddpiccAssessment(dealId);
+    // auto-complete check were broken (it would just never have run). Uses
+    // recalculateMeddpiccAssessment (not the read-only getMeddpiccAssessment)
+    // because this test needs the gate-sync attempt to actually fire.
+    const assessment = await recalculateMeddpiccAssessment(dealId);
     expect(assessment?.score.ragStatus).toBe("Green");
 
     const status = await stepStatus(assignmentId, MEDDPICC_STEP_NAME);
@@ -243,8 +260,10 @@ describe("MEDDPICC playbook gate", () => {
     // + Paper Process(1, gate only) + Identify Pain(3) + Champion(3) +
     // Competition(3) = 19 of 24 (79%) — Green (>75) — with Metrics (the one
     // manual-only question) left completely unanswered. No upsertMeddpiccAnswer
-    // call happens anywhere in this test.
-    const assessment = await getMeddpiccAssessment(dealId);
+    // call happens anywhere in this test. Uses recalculateMeddpiccAssessment
+    // since the gate-sync side effect (auto-completing the step below) is
+    // what this test is verifying.
+    const assessment = await recalculateMeddpiccAssessment(dealId);
     expect(assessment?.score.ragStatus).toBe("Green");
     expect(assessment?.answers.find((a) => a.questionOrder === 1)?.source).toBe("unanswered");
 
@@ -262,7 +281,10 @@ describe("MEDDPICC playbook gate", () => {
     for (let order = 1; order <= 8; order++) {
       await upsertMeddpiccAnswer(dealId, order, { score: 3 }, ACTOR);
     }
-    let assessment = await getMeddpiccAssessment(dealId);
+    // recalculateMeddpiccAssessment (not the read-only getMeddpiccAssessment)
+    // throughout this test — the assertions below depend on the gate-sync
+    // side effect (completing, then reopening, the playbook step).
+    let assessment = await recalculateMeddpiccAssessment(dealId);
     expect(assessment?.score.ragStatus).toBe("Green");
     expect(await stepStatus(assignmentId, MEDDPICC_STEP_NAME)).toBe("completed");
 
@@ -272,7 +294,7 @@ describe("MEDDPICC playbook gate", () => {
     // Drop two Q-tagged questions (1 and 3) to zero: 9/15 (60%) is Amber (<75).
     await upsertMeddpiccAnswer(dealId, 1, { score: 0 }, ACTOR);
     await upsertMeddpiccAnswer(dealId, 3, { score: 0 }, ACTOR);
-    assessment = await getMeddpiccAssessment(dealId);
+    assessment = await recalculateMeddpiccAssessment(dealId);
     expect(assessment?.score.ragStatus).not.toBe("Green");
     expect(await stepStatus(assignmentId, MEDDPICC_STEP_NAME)).toBeUndefined();
   });
@@ -295,10 +317,22 @@ describe("MEDDPICC playbook gate", () => {
       notes: "Reviewed manually, marking done regardless of score",
     });
 
-    const assessment = await getMeddpiccAssessment(dealId);
+    // recalculateMeddpiccAssessment — the assertion below is that the
+    // gate-sync attempt actually fires and still leaves the human's
+    // completion untouched, not merely that no sync happened at all.
+    const assessment = await recalculateMeddpiccAssessment(dealId);
     expect(assessment?.score.ragStatus).toBe("Red"); // brand-new deal, no signals set up
 
     const status = await stepStatus(assignmentId, MEDDPICC_STEP_NAME);
     expect(status).toBe("completed"); // untouched — a human's decision, not the system's
+  });
+
+  it("getMeddpiccAssessment (read path) does not append a new dealMeddpiccScores row", async () => {
+    const dealId = await createDiscoveryDeal(`Acct ${Date.now()}-g`);
+    await getMeddpiccAssessment(dealId);
+    const countAfterFirst = await scoreRowCount(dealId);
+    await getMeddpiccAssessment(dealId);
+    const countAfterSecond = await scoreRowCount(dealId);
+    expect(countAfterSecond).toBe(countAfterFirst);
   });
 });

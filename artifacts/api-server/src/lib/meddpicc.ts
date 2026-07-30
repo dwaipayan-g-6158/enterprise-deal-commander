@@ -102,7 +102,18 @@ async function loadEffectiveAnswers(dealId: string, accountName: string): Promis
   });
 }
 
-export async function computeMeddpiccScoreForDeal(dealId: string): Promise<MeddpiccScoreResult | null> {
+interface ComputedAssessment {
+  deal: DealForMeddpicc;
+  result: MeddpiccScoreResult;
+  effectiveAnswers: MeddpiccAnswerView[];
+}
+
+/**
+ * Pure scoring computation shared by the read and write paths below: loads
+ * the deal, its effective (manual-or-computed) answers, and thresholds, then
+ * runs the pure `computeMeddpiccScore`. Performs NO writes.
+ */
+async function computeAssessment(dealId: string): Promise<ComputedAssessment | null> {
   const deal = await loadDeal(dealId);
   if (!deal) return null;
 
@@ -115,6 +126,34 @@ export async function computeMeddpiccScoreForDeal(dealId: string): Promise<Meddp
 
   const stageBucket = stageBucketForStageName(deal.stageName ?? "");
   const result = computeMeddpiccScore(answers, stageBucket, thresholds);
+
+  return { deal, result, effectiveAnswers };
+}
+
+/**
+ * Compute a deal's current MEDDPICC score from live state WITHOUT persisting
+ * a deal_meddpicc_scores row or syncing the playbook gate. Returns null if
+ * the deal no longer exists.
+ *
+ * Split out of computeMeddpiccScoreForDeal so a reader's GET
+ * /v1/deals/:dealId/meddpicc can see an identical score without appending a
+ * deal_meddpicc_scores row (and re-syncing the playbook gate) on every page
+ * load. This mirrors the computeDealScore/scoreDeal split in scoring.ts.
+ */
+export async function assessMeddpicc(dealId: string): Promise<MeddpiccScoreResult | null> {
+  const computed = await computeAssessment(dealId);
+  return computed?.result ?? null;
+}
+
+/**
+ * Compute a deal's MEDDPICC score AND persist it to deal_meddpicc_scores
+ * (append-only history), then sync the playbook gate. Returns null if the
+ * deal no longer exists.
+ */
+export async function computeMeddpiccScoreForDeal(dealId: string): Promise<MeddpiccScoreResult | null> {
+  const computed = await computeAssessment(dealId);
+  if (!computed) return null;
+  const { result } = computed;
 
   await db.insert(dealMeddpiccScores).values({
     dealId,
@@ -159,14 +198,37 @@ export interface MeddpiccAssessment {
   score: MeddpiccScoreResult;
 }
 
+/**
+ * Read-only: the current MEDDPICC assessment (questions + effective answers +
+ * computed score) WITHOUT persisting a new deal_meddpicc_scores row or
+ * syncing the playbook gate. Used by GET /v1/deals/:dealId/meddpicc, which
+ * readers may call on every page view.
+ */
 export async function getMeddpiccAssessment(dealId: string): Promise<MeddpiccAssessment | null> {
   const deal = await loadDeal(dealId);
   if (!deal) return null;
 
   const [answers, score] = await Promise.all([
     loadEffectiveAnswers(dealId, deal.accountName),
-    computeMeddpiccScoreForDeal(dealId),
+    assessMeddpicc(dealId),
   ]);
+  if (!score) return null;
+
+  return { questions: QUESTION_CATALOG, answers, score };
+}
+
+/**
+ * The MEDDPICC assessment AND a fresh persisted deal_meddpicc_scores row +
+ * playbook-gate sync. Used by PATCH /v1/deals/:dealId/meddpicc right after an
+ * answer actually changes, where a new persisted history point and a gate
+ * re-check are correct.
+ */
+export async function recalculateMeddpiccAssessment(dealId: string): Promise<MeddpiccAssessment | null> {
+  const deal = await loadDeal(dealId);
+  if (!deal) return null;
+
+  const [answers] = await Promise.all([loadEffectiveAnswers(dealId, deal.accountName)]);
+  const score = await computeMeddpiccScoreForDeal(dealId);
   if (!score) return null;
 
   return { questions: QUESTION_CATALOG, answers, score };
