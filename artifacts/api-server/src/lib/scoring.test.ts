@@ -1,7 +1,19 @@
+import { randomUUID } from "node:crypto";
 import { describe, it, expect, afterAll } from "vitest";
 import { eq } from "drizzle-orm";
-import { db, pool, enterpriseDeals, pricingModels, servicesTiers, pipelineStages, dealScores, dealTechnicalGates } from "@workspace/db";
-import { computeDealScore, scoreDeal, buildScoringInput } from "./scoring";
+import {
+  db,
+  pool,
+  enterpriseDeals,
+  pricingModels,
+  servicesTiers,
+  pipelineStages,
+  dealScores,
+  dealTechnicalGates,
+  dealMemory,
+  velocityBenchmarks,
+} from "@workspace/db";
+import { computeDealScore, scoreDeal, buildScoringInput, historicalContext } from "./scoring";
 
 const createdDealIds: string[] = [];
 
@@ -148,5 +160,76 @@ describe("buildScoringInput — TCV calculation", () => {
     // Fails today: calculatedTCV is inlined as productRevenue + servicesRevenue
     // (1,200,000), dropping the x3 term multiplier that calculateFlatTCV applies.
     expect(input?.calculatedTCV).toBe(3_200_000);
+  });
+});
+
+describe("historicalContext — winRateByProfile", () => {
+  const testPricingModel = `Test Profile ${Date.now()}`;
+  const memoryDealIds: string[] = [];
+
+  afterAll(async () => {
+    for (const id of memoryDealIds) {
+      await db.delete(dealMemory).where(eq(dealMemory.dealId, id));
+    }
+  });
+
+  it("historicalContext populates winRateByProfile keyed by pricing model", async () => {
+    // Seed a deterministic 2-won / 1-lost mix under a synthetic pricing model
+    // name so the computed ratio is exact and unaffected by pre-existing seed
+    // rows under real pricing model names (e.g. "Annual Subscription").
+    const rows = [
+      { outcome: "Won" as const },
+      { outcome: "Won" as const },
+      { outcome: "Lost" as const },
+    ];
+    for (const row of rows) {
+      const id = randomUUID();
+      memoryDealIds.push(id);
+      await db.insert(dealMemory).values({
+        dealId: id,
+        accountName: "Win Rate Test Acct",
+        dealName: "Win Rate Test Deal",
+        outcome: row.outcome,
+        finalTcv: "100000.00",
+        pricingModel: testPricingModel,
+      });
+    }
+
+    const ctx = await historicalContext();
+    expect(ctx.winRateByProfile).toBeDefined();
+    expect(ctx.winRateByProfile?.[testPricingModel]).toBeCloseTo(2 / 3);
+  });
+
+  it("buildScoringInput's profileKey matches a key winRateByProfile can resolve", async () => {
+    const dealId = await createDeal();
+    const input = await buildScoringInput(dealId);
+    const ctx = await historicalContext();
+    // profileKey must be exactly the pricing model name — no stage prefix.
+    expect(input?.profileKey).not.toContain("|");
+    expect(ctx.winRateByProfile).toBeDefined();
+  });
+});
+
+describe("computeDealScore — stageBenchmarkDays / confidence", () => {
+  const benchmarkStageName = "Discovery";
+
+  afterAll(async () => {
+    await db.delete(velocityBenchmarks).where(eq(velocityBenchmarks.stageName, benchmarkStageName));
+  });
+
+  it("confidence reaches HIGH when daysToClose, avgWonTCV, and stageBenchmarkDays are all available", async () => {
+    // This dev DB's velocity_benchmarks rollup is empty (nothing in the repo
+    // populates it yet — it's a maintained rollup fed by a job outside this
+    // task's scope), so seed the one row computeDealScore needs to resolve a
+    // non-null stageBenchmarkDays for a Discovery-stage deal.
+    await db
+      .insert(velocityBenchmarks)
+      .values({ stageName: benchmarkStageName, medianDays: "45.00", sampleSize: 10 });
+
+    const dealId = await createDeal(); // Discovery stage per the existing helper
+    // Give it an expected close date so daysToClose is non-null:
+    await db.update(enterpriseDeals).set({ expectedCloseDate: "2026-12-31" }).where(eq(enterpriseDeals.id, dealId));
+    const score = await computeDealScore(dealId);
+    expect(score?.confidence).toBe("HIGH");
   });
 });

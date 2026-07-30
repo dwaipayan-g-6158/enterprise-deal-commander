@@ -20,7 +20,7 @@ export interface ScoringInput {
   calculatedTCV: number;
   /** Days until expected close, or null when no close date is set. */
   daysToClose: number | null;
-  /** Deal profile key for historical win-rate lookup (e.g. "Commercial|Multi-Year"). */
+  /** Deal profile key for historical win-rate lookup (e.g. "Multi-Year Committed"). */
   profileKey: string;
   // Playbook execution (optional — populated server-side from the edc_v2 playbook
   // engine). When there is no active assignment these are undefined and the
