@@ -30,6 +30,41 @@ async function createDeal(): Promise<string> {
   return deal.id;
 }
 
+// Parameterizes pricing-model lookup by modelName (rather than createDeal's
+// "just take the first row") so the multi-year term multiplier is exercised
+// deterministically regardless of seed ordering.
+async function createMultiYearDeal(opts: {
+  productRevenue: number;
+  servicesRevenue: number;
+  termYears: number;
+}): Promise<string> {
+  const pricingRows = await db.select().from(pricingModels);
+  const pricing = pricingRows.find((p) => p.modelName === "Multi-Year Committed");
+  if (!pricing) throw new Error('Seed data missing pricing model "Multi-Year Committed"');
+  const [tier] = await db.select().from(servicesTiers).limit(1);
+  const stages = await db.select().from(pipelineStages);
+  const stage = stages.find((s) => s.stageName === "Discovery");
+  if (!stage) throw new Error('Seed data missing pipeline stage "Discovery"');
+
+  const [deal] = await db
+    .insert(enterpriseDeals)
+    .values({
+      dealName: `Scoring Multi-Year Test ${Date.now()}`,
+      accountName: `Scoring Multi-Year Acct ${Date.now()}`,
+      accountManager: "AM",
+      technicalLead: "TL",
+      salesStageId: stage.id,
+      pricingModelId: pricing.id,
+      servicesTierId: tier.id,
+      contractTermYears: opts.termYears,
+      productRevenue: opts.productRevenue.toFixed(2),
+      servicesRevenue: opts.servicesRevenue.toFixed(2),
+    })
+    .returning({ id: enterpriseDeals.id });
+  createdDealIds.push(deal.id);
+  return deal.id;
+}
+
 async function scoreRowCount(dealId: string): Promise<number> {
   const rows = await db.select({ id: dealScores.id }).from(dealScores).where(eq(dealScores.dealId, dealId));
   return rows.length;
@@ -103,5 +138,15 @@ describe("buildScoringInput — gate code matching", () => {
     ]);
     const input = await buildScoringInput(dealId);
     expect(input?.executiveAgreed).toBe(true);
+  });
+});
+
+describe("buildScoringInput — TCV calculation", () => {
+  it("buildScoringInput's calculatedTCV honors the Multi-Year Committed term multiplier", async () => {
+    const dealId = await createMultiYearDeal({ productRevenue: 1_000_000, servicesRevenue: 200_000, termYears: 3 });
+    const input = await buildScoringInput(dealId);
+    // Fails today: calculatedTCV is inlined as productRevenue + servicesRevenue
+    // (1,200,000), dropping the x3 term multiplier that calculateFlatTCV applies.
+    expect(input?.calculatedTCV).toBe(3_200_000);
   });
 });

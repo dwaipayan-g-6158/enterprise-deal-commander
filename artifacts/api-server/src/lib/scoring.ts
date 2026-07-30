@@ -13,6 +13,7 @@ import {
 } from "@workspace/db";
 import {
   computePredictiveScore,
+  calculateFlatTCV,
   type ScoringInput,
   type ScoringContext,
 } from "@workspace/engine";
@@ -72,6 +73,7 @@ export async function buildScoringInput(dealId: string): Promise<ScoringInput | 
     .select({
       productRevenue: enterpriseDeals.productRevenue,
       servicesRevenue: enterpriseDeals.servicesRevenue,
+      contractTermYears: enterpriseDeals.contractTermYears,
       stageEnteredAt: enterpriseDeals.stageEnteredAt,
       expectedCloseDate: enterpriseDeals.expectedCloseDate,
       salesStageId: enterpriseDeals.salesStageId,
@@ -118,7 +120,12 @@ export async function buildScoringInput(dealId: string): Promise<ScoringInput | 
     executiveAgreed,
     totalBlockerCount,
     highBlockerCount,
-    calculatedTCV: productRevenue + servicesRevenue,
+    calculatedTCV: calculateFlatTCV({
+      productRevenue,
+      servicesRevenue,
+      contractTermYears: deal.contractTermYears,
+      pricingModel: deal.pricingModel ?? "",
+    }),
     daysToClose: deal.expectedCloseDate
       ? daysBetween(new Date(), new Date(deal.expectedCloseDate))
       : null,
