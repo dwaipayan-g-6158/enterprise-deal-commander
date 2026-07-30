@@ -81,6 +81,13 @@ export function formatDateTime(value: DateInput, fallback?: string): string | nu
   return p ? `${pad2(p.d)}/${pad2(p.mo)}/${pad4(p.y)}, ${pad2(p.h)}:${pad2(p.mi)}` : (fallback ?? null);
 }
 
+/** "22:05" (24h), or `fallback` for missing/invalid input. For rows already
+ *  grouped under a day heading, where repeating the date would be noise. */
+export function formatTime(value: DateInput, fallback = "—"): string {
+  const p = dateParts(value);
+  return p ? `${pad2(p.h)}:${pad2(p.mi)}` : fallback;
+}
+
 /**
  * Rewrites bare YYYY-MM-DD tokens inside free text to DD/MM/YYYY. Used only
  * at the render boundary for @workspace/engine explanation strings, which
@@ -112,6 +119,84 @@ export function round2(n: unknown): number {
  */
 export function formatNum(n: unknown): string {
   return round2(n).toLocaleString("en-US", { maximumFractionDigits: 2 });
+}
+
+// ---- Humanizing raw identifiers ---------------------------------------
+//
+// The audit log and the v2 activity log both store raw machine identifiers
+// (`sales_stage_id`, `deal.stage_changed`), and those used to be rendered
+// verbatim in the Record tab. These turn them into something a person reads.
+// humanizeCode/relativeTime were originally defined in
+// components/dashboard/widgets/_shared.tsx and live here now so cockpit code
+// doesn't have to import dashboard-widget internals; _shared.tsx re-exports
+// them so its existing importers are unaffected.
+
+/** "PREMATURE_COMMERCIAL_DISCONNECT" → "Premature Commercial Disconnect". */
+export function humanizeCode(code: string): string {
+  return code
+    .toLowerCase()
+    .split(/[_\s]+/)
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(" ");
+}
+
+/**
+ * A `deal_audit_log.field_changed` column name as a person would say it:
+ * "sales_stage_id" → "Sales Stage", "is_completed" → "Completed".
+ * A trailing `_id` is dropped because the audit row stores the raw foreign
+ * key and it's the resolved *name* that gets displayed next to this label.
+ */
+export function humanizeField(field: string): string {
+  return humanizeCode(field.replace(/_id$/, "").replace(/^is_/, ""));
+}
+
+/** "deal.stage_changed" → "Stage changed". Fallback when no summary exists. */
+export function humanizeEventType(eventType: string): string {
+  const dot = eventType.indexOf(".");
+  const tail = dot === -1 ? eventType : eventType.slice(dot + 1);
+  const words = tail.replace(/[_.]+/g, " ").trim();
+  return words.charAt(0).toUpperCase() + words.slice(1);
+}
+
+/** "just now" / "5m ago" / "3h ago" / "2d ago", then DD/MM/YYYY past a week. */
+export function relativeTime(iso: string | null | undefined): string {
+  if (!iso) return "";
+  const then = new Date(iso).getTime();
+  if (Number.isNaN(then)) return "";
+  const sec = Math.round((Date.now() - then) / 1000);
+  if (sec < 60) return "just now";
+  const min = Math.round(sec / 60);
+  if (min < 60) return `${min}m ago`;
+  const hr = Math.round(min / 60);
+  if (hr < 24) return `${hr}h ago`;
+  const day = Math.round(hr / 24);
+  if (day < 7) return `${day}d ago`;
+  return formatDate(iso) ?? "";
+}
+
+/**
+ * Day-group heading for a timeline: "Today" / "Yesterday" / "15/07/2026".
+ * Deliberately falls back to the house DD/MM/YYYY rather than inventing a
+ * second date format (e.g. "Mon 15 Jul") — per this file's header rule, one
+ * absolute format for the whole app. Compares local midnight to local
+ * midnight, like daysUntil in dashboard/widgets/_shared.tsx.
+ */
+export function dayLabel(value: DateInput): string {
+  const p = dateParts(value);
+  if (!p) return "Unknown date";
+  const target = new Date(p.y, p.mo - 1, p.d);
+  const now = new Date();
+  const todayMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const diffDays = Math.round((target.getTime() - todayMidnight.getTime()) / 86_400_000);
+  if (diffDays === 0) return "Today";
+  if (diffDays === -1) return "Yesterday";
+  return formatDate(value, "Unknown date");
+}
+
+/** Stable "YYYY-MM-DD" bucket key for grouping a timeline by calendar day. */
+export function dayKey(value: DateInput): string {
+  const p = dateParts(value);
+  return p ? `${pad4(p.y)}-${pad2(p.mo)}-${pad2(p.d)}` : "unknown";
 }
 
 // ---- Local-calendar round-trip ----------------------------------------

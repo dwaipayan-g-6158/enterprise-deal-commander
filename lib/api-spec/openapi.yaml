@@ -2980,6 +2980,11 @@ components:
       properties:
         id: { type: string }
         entityType: { type: string }
+        # Which specific entity the row is about — the gate code for gate rows,
+        # the blocker id for blocker rows, null for whole-deal rows. Without it
+        # a batch gate save (one writeAudit, one timestamp, every row
+        # fieldChanged=is_completed) is indistinguishable row-to-row.
+        entityId: { type: ["string", "null"] }
         fieldChanged: { type: string }
         oldValue: { type: ["string", "null"] }
         newValue: { type: ["string", "null"] }

@@ -977,6 +977,8 @@ export interface AutopsyResponse {
 export interface AuditLog {
   id: string;
   entityType: string;
+  /** @nullable */
+  entityId?: string | null;
   fieldChanged: string;
   /** @nullable */
   oldValue?: string | null;

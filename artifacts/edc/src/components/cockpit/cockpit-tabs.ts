@@ -24,10 +24,13 @@ export const COCKPIT_GROUPS: TabGroup[] = [
       { id: "pricing", label: "Pricing" },
       { id: "crosssell", label: "Cross-Sell" },
   ] },
+  // No separate "Activity" sub-tab: it showed the Phase 1 audit log beside the
+  // History tab's Phase 2 activity stream — two adjacent reverse-chronological
+  // lists of changes, neither complete on its own. Both now live in "History"
+  // as Timeline / Field changes view modes (see history-panel.tsx).
   { id: "record", label: "Record", icon: ScrollText, subs: [
-      { id: "activity", label: "Activity" },
-      { id: "decisions", label: "Decisions" },
       { id: "history", label: "History" },
+      { id: "decisions", label: "Decisions" },
   ] },
 ];
 
