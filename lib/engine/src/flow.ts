@@ -59,12 +59,23 @@ export function computeFunnel(
   stages: StageDef[],
 ): FunnelRow[] {
   const active = [...stages].filter((s) => !s.terminal).sort((a, b) => a.sortOrder - b.sortOrder);
-  const totalValue = deals.reduce((sum, d) => sum + d.tcv, 0) || 1;
+  const activeStageIds = new Set(active.map((s) => s.id));
+  // Scoped to active (non-terminal) stages only, matching the inStage/dealCount
+  // scoping below — otherwise pctOfPipeline values sum to far less than 100%
+  // whenever closed/terminal deals are present in `deals`.
+  const totalValue = deals.filter((d) => activeStageIds.has(d.stageId)).reduce((sum, d) => sum + d.tcv, 0) || 1;
 
-  // Count of deals that ever entered each active stage (for conversion).
-  const enteredCount = new Map<number, number>();
+  // Count of DISTINCT deals that ever entered each active stage (for
+  // conversion) — a plain transition tally would double-count a deal that
+  // recycles backward and re-enters the same stage, pushing convToNextPct
+  // above 100%.
+  const enteredDealsByStage = new Map<number, Set<string>>();
   for (const t of transitions) {
-    if (t.toStageId != null) enteredCount.set(t.toStageId, (enteredCount.get(t.toStageId) ?? 0) + 1);
+    if (t.toStageId != null) {
+      const set = enteredDealsByStage.get(t.toStageId) ?? new Set<string>();
+      set.add(t.dealId);
+      enteredDealsByStage.set(t.toStageId, set);
+    }
   }
   // Average residence time per stage, from transitions leaving that stage.
   const residSum = new Map<number, number>();
@@ -81,8 +92,8 @@ export function computeFunnel(
     const next = active[i + 1];
     // Use transition-derived entry count only (no inStage.length fallback) so that
     // convToNextPct is null — not a misleading 0% — when there is no transition history.
-    const enteredThis = enteredCount.get(stage.id);
-    const enteredNext = next ? (enteredCount.get(next.id) ?? 0) : null;
+    const enteredThis = enteredDealsByStage.get(stage.id)?.size;
+    const enteredNext = next ? (enteredDealsByStage.get(next.id)?.size ?? 0) : null;
     const n = residN.get(stage.id) ?? 0;
     return {
       stageId: stage.id,
@@ -91,7 +102,7 @@ export function computeFunnel(
       totalValue: inStage.reduce((s, d) => s + d.tcv, 0),
       convToNextPct:
         enteredThis != null && enteredThis > 0 && enteredNext != null
-          ? round1((enteredNext / enteredThis) * 100)
+          ? Math.min(100, round1((enteredNext / enteredThis) * 100))
           : null,
       avgDaysInStage: n > 0 ? Math.round((residSum.get(stage.id) ?? 0) / n) : null,
       pctOfPipeline: round1((inStage.reduce((s, d) => s + d.tcv, 0) / totalValue) * 100),
@@ -320,7 +331,7 @@ export function computeRecycleExit(transitions: TransitionRec[], stages: StageDe
   const created = transitions.filter((t) => t.transitionType === "create").reduce((s, t) => s + t.tcv, 0);
   const won = transitions.filter((t) => t.transitionType === "exit_won").reduce((s, t) => s + t.tcv, 0);
   const lost = transitions.filter((t) => t.transitionType === "exit_lost").reduce((s, t) => s + t.tcv, 0);
-  const stillOpen = Math.max(0, created - won - lost);
+  const stillOpen = created - won - lost;
   const waterfall: WaterfallStep[] = [
     { label: "Created", delta: Math.round(created), kind: "created" },
     { label: "Won", delta: -Math.round(won), kind: "won" },
