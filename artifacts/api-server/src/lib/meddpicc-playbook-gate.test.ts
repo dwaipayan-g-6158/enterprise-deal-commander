@@ -266,10 +266,12 @@ describe("MEDDPICC playbook gate", () => {
     expect(assessment?.score.ragStatus).toBe("Green");
     expect(await stepStatus(assignmentId, MEDDPICC_STEP_NAME)).toBe("completed");
 
-    // Drop Metrics back down — 21/24 (88%) is still Green, so also drop
-    // Economic Buyer to land well under the 75% threshold.
+    // For Discovery (Qualification bucket), stagePct only counts stageTag-"Q" questions:
+    // 1 (Metrics), 3 (DecisionCriteria), 4 (DecisionProcess), 6 (IdentifyPain), 8 (Competition)
+    // = 5 questions, 15 max points. Start at 15/15 (100% Green).
+    // Drop two Q-tagged questions (1 and 3) to zero: 9/15 (60%) is Amber (<75).
     await upsertMeddpiccAnswer(dealId, 1, { score: 0 }, ACTOR);
-    await upsertMeddpiccAnswer(dealId, 2, { score: 0 }, ACTOR);
+    await upsertMeddpiccAnswer(dealId, 3, { score: 0 }, ACTOR);
     assessment = await getMeddpiccAssessment(dealId);
     expect(assessment?.score.ragStatus).not.toBe("Green");
     expect(await stepStatus(assignmentId, MEDDPICC_STEP_NAME)).toBeUndefined();
