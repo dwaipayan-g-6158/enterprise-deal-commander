@@ -65,4 +65,38 @@ describe("scoreLossRisk", () => {
     const result = scoreLossRisk(["A", "B", "C", "D"], allDeadly);
     expect(result.score).toBeLessThanOrEqual(100);
   });
+
+  it("score is stable (monotonically non-decreasing) as the lost cohort grows with UNRELATED patterns", () => {
+    const active = ["GHOST_PIPELINE"];
+    const cohortA = computePatternLethality([["GHOST_PIPELINE"]]);
+    // cohortB adds two more lost deals, each contributing one UNRELATED
+    // distinct pattern to the catalog (NO_CLOSE_DATE, STALLED_VALIDATION) —
+    // but GHOST_PIPELINE still fires on every lost deal, so its OWN
+    // lethality (lostCount / total) is unchanged at 100%. This isolates the
+    // bug under test (an ever-growing catalog of unrelated patterns
+    // shrinking the score) from the unrelated, expected behavior of
+    // computePatternLethality's share re-estimating when a pattern's own
+    // hit rate genuinely changes with more data.
+    const cohortB = computePatternLethality([
+      ["GHOST_PIPELINE"],
+      ["GHOST_PIPELINE", "NO_CLOSE_DATE"],
+      ["GHOST_PIPELINE", "STALLED_VALIDATION"],
+    ]);
+    const a = scoreLossRisk(active, cohortA);
+    const b = scoreLossRisk(active, cohortB);
+    expect(b.score).toBe(a.score); // GHOST_PIPELINE's own lethality (100% in both cases) is unchanged
+    expect(a.score).toBe(100);
+  });
+
+  it("score reflects the single most-lethal MATCHED pattern, not a sum diluted by the full catalog", () => {
+    // Cohort of 10 lost deals: GHOST_PIPELINE fired on 8 of them (80% lethality),
+    // NO_CLOSE_DATE fired on 2 (20%). Active deal fires both.
+    const lostCodes = [
+      ...Array(8).fill(["GHOST_PIPELINE"]),
+      ...Array(2).fill(["NO_CLOSE_DATE"]),
+    ];
+    const lethality = computePatternLethality(lostCodes);
+    const result = scoreLossRisk(["GHOST_PIPELINE", "NO_CLOSE_DATE"], lethality);
+    expect(result.score).toBe(80);
+  });
 });
