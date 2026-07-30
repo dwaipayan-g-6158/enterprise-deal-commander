@@ -402,9 +402,16 @@ export function scoreTemporalPressure(i: {
     closeDateRisk = 35;
   }
   signals.push({
+    // `daysToClose` is signed (negative = already past the expected close date,
+    // Task 3/M14), so the label has to read naturally for both signs rather than
+    // rendering the nonsensical "-8 days to close". Both branches keep the
+    // distinctive "progress remaining" suffix, which is how tests locate this
+    // signal (the array is re-sorted by weighted score, so position isn't stable).
     factor:
       i.daysToClose !== null
-        ? `${i.daysToClose} days to close, ${100 - i.progressPct}% progress remaining`
+        ? i.daysToClose < 0
+          ? `${Math.abs(i.daysToClose)} days overdue, ${100 - i.progressPct}% progress remaining`
+          : `${i.daysToClose} days to close, ${100 - i.progressPct}% progress remaining`
         : "No close date set",
     rawScore: closeDateRisk,
     weight: 0.45,

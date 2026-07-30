@@ -219,6 +219,45 @@ describe("intelligence engine — 12 risk patterns", () => {
     ).not.toContain("CLOSE_DATE_PRESSURE");
   });
 
+  // Task 3/M14 made `daysToClose` signed (negative = already past the expected
+  // close date). These two patterns interpolate it into their prose, so an
+  // overdue deal used to read "close date is -8 days away".
+  it("phrases an overdue close date as OVERDUE, never as a negative 'days away'", () => {
+    const gates = [makeGate("G1", true), makeGate("G2", false), makeGate("G3", false)];
+    const overdue = makeDeal({ expected_close_date: daysAgo(8) });
+    const momentum: OwnMomentum = { recentRate: 0, earlierRate: 2, dropPct: 100 };
+    const out = processDealIntelligence(overdue, gates, [], DEFAULTS, {
+      ownMomentum: momentum,
+    });
+    const messages = [...out.governance.alerts, ...out.governance.managedAlerts];
+    const pressure = messages.find((a) => a.code === "CLOSE_DATE_PRESSURE")!;
+    const collision = messages.find((a) => a.code === "SLOW_MOTION_COLLISION")!;
+
+    for (const msg of [pressure.message, collision.message]) {
+      expect(msg).toMatch(/\d+ days OVERDUE/);
+      expect(msg).not.toContain("days away");
+      expect(msg).not.toMatch(/-\d+ days/);
+    }
+
+    // A future close date still reads as "N days away", with no stray sign.
+    const upcoming = processDealIntelligence(
+      makeDeal({ expected_close_date: daysFromNow(10) }),
+      gates,
+      [],
+      DEFAULTS,
+      { ownMomentum: momentum },
+    );
+    const upcomingMessages = [
+      ...upcoming.governance.alerts,
+      ...upcoming.governance.managedAlerts,
+    ];
+    for (const code of ["CLOSE_DATE_PRESSURE", "SLOW_MOTION_COLLISION"]) {
+      const msg = upcomingMessages.find((a) => a.code === code)!.message;
+      expect(msg).toMatch(/\d+ days away/);
+      expect(msg).not.toContain("OVERDUE");
+    }
+  });
+
   it("UNRESOLVED_CRITICAL_BLOCKERS fires when a high-severity blocker exists", () => {
     const deal = makeDeal();
     const high: RawBlocker[] = [{ severity_name: "High" }];

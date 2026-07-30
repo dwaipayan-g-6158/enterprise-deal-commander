@@ -266,6 +266,16 @@ interface RiskPattern {
 
 const fmt = (n: number) => Math.round(n).toLocaleString("en-US");
 
+/**
+ * Renders a SIGNED `daysToClose` as prose. `daysToClose` is negative for a deal
+ * already past its expected close date (Task 3/M14 stopped clamping it at 0), so
+ * naive interpolation produced nonsense like "close date is -8 days away".
+ */
+const closeHorizonPhrase = (daysToClose: number | null): string => {
+  if (daysToClose == null) return "not set";
+  return daysToClose < 0 ? `${Math.abs(daysToClose)} days OVERDUE` : `${daysToClose} days away`;
+};
+
 // ---------------------------------------------------------------------------
 // IAM/SIEM product intelligence — domain constants (pure, isomorphic).
 // Keyed by stable product `code`, never UUID or display name.
@@ -643,7 +653,7 @@ export const riskPatterns: RiskPattern[] = [
       );
     },
     formatMessage: (deal, thresholds) =>
-      `CLOSE DATE PRESSURE: Expected close date is ${deal.daysToClose} days away ` +
+      `CLOSE DATE PRESSURE: Expected close date is ${closeHorizonPhrase(deal.daysToClose)} ` +
       `but only ${deal.technicalProgressPct}% of technical gates are complete ` +
       `(expected: >=${thresholds.gate_completion_warn_pct}%). High risk of close ` +
       `date slip or premature forced closure.`,
@@ -730,7 +740,7 @@ export const riskPatterns: RiskPattern[] = [
       return (
         `SLOW-MOTION COLLISION: This deal's own gate-completion velocity has ` +
         `dropped ~${Math.round(m?.dropPct ?? 0)}% (recent vs earlier window) while the close ` +
-        `date is ${deal.daysToClose} days away and only ${deal.technicalProgressPct}% of ` +
+        `date is ${closeHorizonPhrase(deal.daysToClose)} and only ${deal.technicalProgressPct}% of ` +
         `gates are complete. On its current self-trajectory it will not finish validation in time.`
       );
     },

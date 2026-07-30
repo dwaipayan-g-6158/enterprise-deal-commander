@@ -239,8 +239,12 @@ describe("scoreTemporalPressure", () => {
       salesStage: "Commercial", daysInStage: 40, daysToClose: -10,
       expectedCloseDate: "2026-07-01", progressPct: 60, benchmarkMedianDays: 30,
     });
-    const closeSignal = overdue.signals.find((s) => s.factor.includes("days to close"))!;
+    // Selected by the "progress remaining" suffix, which signal 4.2 carries for
+    // BOTH signs of daysToClose ("N days to close, .." / "N days overdue, ..");
+    // matching on "days to close" alone would miss the overdue wording.
+    const closeSignal = overdue.signals.find((s) => s.factor.includes("progress remaining"))!;
     expect(closeSignal.rawScore).toBe(100);
+    expect(closeSignal.factor).toBe("10 days overdue, 40% progress remaining");
   });
 
   it("no benchmark falls back to absolute-day thresholds", () => {
@@ -269,7 +273,7 @@ describe("scoreTemporalPressure", () => {
       scoreTemporalPressure({
         salesStage: "Procurement", daysInStage: 5, daysToClose: 60,
         expectedCloseDate: "2026-09-30", progressPct, benchmarkMedianDays: 30,
-      }).signals.find((s) => s.factor.includes("days to close"))!.rawScore;
+      }).signals.find((s) => s.factor.includes("progress remaining"))!.rawScore;
     const scores = [0, 25, 50, 75, 90, 99, 100].map(scoreAt);
     for (let i = 1; i < scores.length; i++) {
       expect(scores[i]).toBeLessThanOrEqual(scores[i - 1]);
@@ -293,7 +297,7 @@ describe("scoreTemporalPressure", () => {
           salesStage: "Commercial", daysInStage: 10, daysToClose,
           expectedCloseDate: "2026-12-31", progressPct, benchmarkMedianDays: 30,
         });
-        scores.push(r.signals.find((s) => s.factor.includes("days to close"))!.rawScore);
+        scores.push(r.signals.find((s) => s.factor.includes("progress remaining"))!.rawScore);
       }
       for (let i = 1; i < scores.length; i++) {
         expect(scores[i]).toBeLessThanOrEqual(scores[i - 1]);
