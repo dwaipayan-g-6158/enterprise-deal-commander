@@ -71,6 +71,36 @@ describe("computeFunnel", () => {
     const sum = rows.reduce((s, r) => s + r.pctOfPipeline, 0);
     expect(sum).toBeCloseTo(100, 1);
   });
+  // Task 13 — sweep version of the invariant above (Task 9b's fix): the single
+  // example only exercised one closed/active mix. Loop over a range of
+  // closed-deal shares (none, minority, half, and mostly-closed) and confirm
+  // pctOfPipeline across the active-stage rows always sums to ~100 as long as
+  // at least one deal remains in an active stage.
+  it("[invariant] pctOfPipeline across active stages always sums to ~100 regardless of closed-deal mix", () => {
+    const stages: StageDef[] = [
+      { id: 1, name: "Discovery", sortOrder: 1 },
+      { id: 2, name: "Validation", sortOrder: 2 },
+      { id: 3, name: "Commercial", sortOrder: 3 },
+      { id: 5, name: "Closed-Won", sortOrder: 5, terminal: "won" },
+      { id: 6, name: "Closed-Lost", sortOrder: 6, terminal: "lost" },
+    ];
+    for (const closedShare of [0, 0.3, 0.5, 0.9]) {
+      const totalDeals = 10;
+      const closedCount = Math.round(totalDeals * closedShare);
+      const deals = Array.from({ length: totalDeals }, (_, i) => ({
+        id: `d${i}`,
+        stageId: i < closedCount ? 5 : (i % 3) + 1,
+        tcv: 100,
+        winProbabilityPct: 50, aiWinProbability: null, createdAt: "2026-01-01",
+      }));
+      const rows = computeFunnel(deals, [], stages);
+      const sum = rows.reduce((s, r) => s + r.pctOfPipeline, 0);
+      if (deals.some((d) => [1, 2, 3].includes(d.stageId))) {
+        expect(sum).toBeCloseTo(100, 0);
+      }
+    }
+  });
+
   it("convToNextPct never exceeds 100% even when a deal is recycled back and re-advances", () => {
     const stages: StageDef[] = [
       { id: 1, name: "Discovery", sortOrder: 1 },
