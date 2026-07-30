@@ -239,6 +239,20 @@ describe("scoreTemporalPressure", () => {
     const fast = scoreTemporalPressure({ ...base, daysInStage: 10 });
     expect(slow.score).toBeGreaterThan(fast.score);
   });
+
+  it("closeDateRisk is monotonically non-increasing as progressPct rises, all else equal", () => {
+    const scoreAt = (progressPct: number) =>
+      scoreTemporalPressure({
+        salesStage: "Procurement", daysInStage: 5, daysToClose: 60,
+        expectedCloseDate: "2026-09-30", progressPct, benchmarkMedianDays: 30,
+      }).signals.find((s) => s.factor.includes("days to close"))!.rawScore;
+    const scores = [0, 25, 50, 75, 90, 99, 100].map(scoreAt);
+    for (let i = 1; i < scores.length; i++) {
+      expect(scores[i]).toBeLessThanOrEqual(scores[i - 1]);
+    }
+    // 100% complete must be in the lowest risk bucket (daysPerPoint effectively infinite).
+    expect(scoreAt(100)).toBe(5);
+  });
 });
 
 describe("scoreFinancialStructure", () => {

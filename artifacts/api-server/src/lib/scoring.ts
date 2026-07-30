@@ -93,8 +93,8 @@ export async function buildScoringInput(dealId: string): Promise<ScoringInput | 
     .where(eq(dealTechnicalGates.dealId, dealId));
   const completed = gates.filter((g) => g.isCompleted);
   const progressPct = gates.length ? Math.round((completed.length / gates.length) * 100) : 0;
-  const ctoSignedOff = completed.some((g) => /CTO|SIGN/i.test(g.gateCode));
-  const executiveAgreed = completed.some((g) => /EXEC|AGREED|G1/i.test(g.gateCode));
+  const ctoSignedOff = completed.some((g) => g.gateCode === "G5_CTO_SIGNED_OFF");
+  const executiveAgreed = completed.some((g) => g.gateCode === "G1_EXECUTIVE_AGREED");
 
   const blockers = await db
     .select({ severity: blockerSeverities.severityName })

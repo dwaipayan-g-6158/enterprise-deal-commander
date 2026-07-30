@@ -374,7 +374,7 @@ export function scoreTemporalPressure(i: {
   if (i.daysToClose !== null && i.daysToClose >= 0) {
     const daysLeft = i.daysToClose;
     const progressRemaining = 100 - i.progressPct;
-    const daysPerPoint = progressRemaining > 0 ? daysLeft / progressRemaining : 0;
+    const daysPerPoint = daysLeft / Math.max(1, progressRemaining);
     if (daysPerPoint >= 3) closeDateRisk = 5;
     else if (daysPerPoint >= 2) closeDateRisk = 20;
     else if (daysPerPoint >= 1) closeDateRisk = 50;

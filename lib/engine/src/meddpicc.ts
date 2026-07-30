@@ -95,7 +95,7 @@ export interface MeddpiccScoreResult {
 
 function ragFor(pct: number, thresholds: MeddpiccThresholds): RagStatus {
   if (pct < thresholds.redMax) return "Red";
-  if (pct > thresholds.greenMin) return "Green";
+  if (pct >= thresholds.greenMin) return "Green";
   return "Amber";
 }
 
@@ -141,7 +141,7 @@ export function computeMeddpiccScore(
     overallScore,
     overallPct,
     stagePct,
-    ragStatus: ragFor(overallPct, thresholds),
+    ragStatus: ragFor(stagePct, thresholds),
     pillarBreakdown,
     strongNoCount,
     unknownCount,

@@ -85,7 +85,7 @@ describe("computeMeddpiccScore", () => {
     expect(r.overallPct).toBeLessThan(100); // P/N questions (2,5,7) still unanswered
   });
 
-  it("RAG boundaries: <40 Red, 40-75 inclusive Amber, >75 Green", () => {
+  it("RAG boundaries: <40 Red, 40-75 inclusive Amber, >=75 Green", () => {
     const at = (pct: number) => {
       const score = Math.round((pct / 100) * 24);
       const answers: Record<number, number> = {};
@@ -99,8 +99,8 @@ describe("computeMeddpiccScore", () => {
     };
     expect(at(39)).toBe("Red");
     expect(at(40)).toBe("Amber");
-    expect(at(75)).toBe("Amber");
-    expect(at(79)).toBe("Green");
+    expect(at(75)).toBe("Green");
+    expect(at(76)).toBe("Green");
   });
 
   it("respects custom thresholds", () => {
@@ -114,5 +114,23 @@ describe("computeMeddpiccScore", () => {
     const r = computeMeddpiccScore({ 1: 1, 2: 0 }, "Negotiation");
     expect(r.strongNoCount).toBe(1);
     expect(r.unknownCount).toBe(7); // 6 unanswered + question 2 explicitly rated 0
+  });
+
+  it("uses stagePct (not overallPct) for RAG status", () => {
+    // Every Qualification-tagged question (stageTag "Q": orders 1,3,4,6,8) perfect;
+    // the rest unanswered.
+    const answers = { 1: 3, 3: 3, 4: 3, 6: 3, 8: 3 };
+    const result = computeMeddpiccScore(answers, "Qualification");
+    expect(result.stagePct).toBe(100);
+    expect(result.ragStatus).toBe("Green");
+  });
+
+  it("greenMin is inclusive: exactly at the boundary is Green", () => {
+    // overallPct computed to land exactly on greenMin (75) using the DEFAULT bucket:
+    // 18 of 24 points = 75%.
+    const answers = { 1: 3, 2: 3, 3: 3, 4: 3, 5: 3, 6: 3 }; // 18 points / 24 = 75%
+    const result = computeMeddpiccScore(answers, "Negotiation"); // full-model bucket, stagePct === overallPct here
+    expect(result.overallPct).toBe(75);
+    expect(result.ragStatus).toBe("Green");
   });
 });

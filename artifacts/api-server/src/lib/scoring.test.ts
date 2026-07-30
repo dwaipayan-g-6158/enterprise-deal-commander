@@ -1,7 +1,7 @@
 import { describe, it, expect, afterAll } from "vitest";
 import { eq } from "drizzle-orm";
-import { db, pool, enterpriseDeals, pricingModels, servicesTiers, pipelineStages, dealScores } from "@workspace/db";
-import { computeDealScore, scoreDeal } from "./scoring";
+import { db, pool, enterpriseDeals, pricingModels, servicesTiers, pipelineStages, dealScores, dealTechnicalGates } from "@workspace/db";
+import { computeDealScore, scoreDeal, buildScoringInput } from "./scoring";
 
 const createdDealIds: string[] = [];
 
@@ -82,5 +82,26 @@ describe("computeDealScore vs scoreDeal", () => {
     const b = await scoreDeal(dealId);
     expect(b?.score).toBe(a?.score);
     expect(b?.confidence).toBe(a?.confidence);
+  });
+});
+
+describe("buildScoringInput — gate code matching", () => {
+  it("G1_CRITERIA_LOCKED alone does not satisfy executiveAgreed", async () => {
+    const dealId = await createDeal();
+    await db.insert(dealTechnicalGates).values({
+      dealId, gateCode: "G1_CRITERIA_LOCKED", isCompleted: true,
+    });
+    const input = await buildScoringInput(dealId);
+    expect(input?.executiveAgreed).toBe(false);
+  });
+
+  it("G1_EXECUTIVE_AGREED satisfies executiveAgreed", async () => {
+    const dealId = await createDeal();
+    await db.insert(dealTechnicalGates).values([
+      { dealId, gateCode: "G1_CRITERIA_LOCKED", isCompleted: true },
+      { dealId, gateCode: "G1_EXECUTIVE_AGREED", isCompleted: true },
+    ]);
+    const input = await buildScoringInput(dealId);
+    expect(input?.executiveAgreed).toBe(true);
   });
 });
