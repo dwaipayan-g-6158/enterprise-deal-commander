@@ -11,6 +11,7 @@ import {
   competitors,
   dealMemory,
 } from "@workspace/db";
+import { calculateFlatTCV } from "@workspace/engine";
 import { dealEvents } from "../events";
 import { logger } from "../logger";
 
@@ -51,6 +52,7 @@ export function registerPostMortem(): () => void {
         dealName: enterpriseDeals.dealName,
         productRevenue: enterpriseDeals.productRevenue,
         servicesRevenue: enterpriseDeals.servicesRevenue,
+        contractTermYears: enterpriseDeals.contractTermYears,
         createdAt: enterpriseDeals.createdAt,
         pricingModel: pricingModels.modelName,
         servicesTier: servicesTiers.tierName,
@@ -77,8 +79,12 @@ export function registerPostMortem(): () => void {
       .leftJoin(competitors, eq(dealCompetitors.competitorId, competitors.id))
       .where(eq(dealCompetitors.dealId, event.dealId));
 
-    const finalTcv =
-      (Number(deal.productRevenue) || 0) + (Number(deal.servicesRevenue) || 0);
+    const finalTcv = calculateFlatTCV({
+      productRevenue: Number(deal.productRevenue) || 0,
+      servicesRevenue: Number(deal.servicesRevenue) || 0,
+      contractTermYears: deal.contractTermYears,
+      pricingModel: deal.pricingModel ?? "",
+    });
     const daysActive = Math.max(
       0,
       Math.round((Date.now() - new Date(deal.createdAt).getTime()) / 86_400_000),

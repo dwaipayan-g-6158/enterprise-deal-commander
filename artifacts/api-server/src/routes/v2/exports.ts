@@ -4,9 +4,10 @@ import {
   db,
   enterpriseDeals,
   pipelineStages,
+  pricingModels,
   dealDecisions,
 } from "@workspace/db";
-import { runPipelineSimulation, type SimDeal } from "@workspace/engine";
+import { runPipelineSimulation, calculateFlatTCV, type SimDeal } from "@workspace/engine";
 
 /**
  * Non-JSON output routes (V2 F14 reports, F15 digest, F17 export). These return
@@ -46,12 +47,15 @@ async function activeDealRows() {
       stageSortOrder: pipelineStages.sortOrder,
       productRevenue: enterpriseDeals.productRevenue,
       servicesRevenue: enterpriseDeals.servicesRevenue,
+      contractTermYears: enterpriseDeals.contractTermYears,
+      pricingModel: pricingModels.modelName,
       currency: enterpriseDeals.dealCurrency,
       expectedCloseDate: enterpriseDeals.expectedCloseDate,
       winProbabilityPct: enterpriseDeals.winProbabilityPct,
     })
     .from(enterpriseDeals)
     .leftJoin(pipelineStages, eq(enterpriseDeals.salesStageId, pipelineStages.id))
+    .leftJoin(pricingModels, eq(enterpriseDeals.pricingModelId, pricingModels.id))
     .where(notDeletedFilter)
     .orderBy(desc(enterpriseDeals.productRevenue));
 }
@@ -154,7 +158,12 @@ async function pipelineFacts() {
   const byStage = new Map<string, { count: number; tcv: number }>();
   const stageOrder = new Map<string, number>();
   for (const r of rows) {
-    const tcv = (Number(r.productRevenue) || 0) + (Number(r.servicesRevenue) || 0);
+    const tcv = calculateFlatTCV({
+      productRevenue: Number(r.productRevenue) || 0,
+      servicesRevenue: Number(r.servicesRevenue) || 0,
+      contractTermYears: r.contractTermYears,
+      pricingModel: r.pricingModel ?? "",
+    });
     totalTcv += tcv;
     if (r.winProbabilityPct != null) weightedTcv += tcv * (Number(r.winProbabilityPct) / 100);
     sim.push({ calculatedTCV: tcv, winProbabilityPct: r.winProbabilityPct ?? null });
@@ -327,7 +336,12 @@ router.get("/reports/pipeline", async (_req: Request, res: Response) => {
       .map(
         (r) =>
           `<tr><td>${esc(r.dealName)}</td><td>${esc(r.accountName)}</td><td>${esc(r.stage ?? "")}</td><td class="num">${fmtMoney(
-            (Number(r.productRevenue) || 0) + (Number(r.servicesRevenue) || 0),
+            calculateFlatTCV({
+              productRevenue: Number(r.productRevenue) || 0,
+              servicesRevenue: Number(r.servicesRevenue) || 0,
+              contractTermYears: r.contractTermYears,
+              pricingModel: r.pricingModel ?? "",
+            }),
           )}</td></tr>`,
       )
       .join("") +
