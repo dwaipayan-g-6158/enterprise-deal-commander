@@ -392,6 +392,157 @@ describe("intelligence engine — 12 risk patterns", () => {
   });
 });
 
+// H6 — these 10 patterns previously had no closed-stage guard, so their
+// day-based (or otherwise time-eroding) conditions kept tripping on
+// Closed-Won/Closed-Lost deals forever: daysInStage/daysSinceLastUpdate/
+// daysToClose are all measured against Date.now(), which keeps advancing long
+// after the deal actually closed. This corrupted `computePatternLethality`'s
+// "which patterns fired on past losses" analysis (loss-risk.ts / analytics.ts
+// `/analytics/loss-risk` and `/analytics/loss-dashboard`), since a sufficiently
+// old closed deal would trip nearly every time-based pattern regardless of
+// what was actually true when it closed. Each fixture below would trip its
+// pattern if the deal were still open (see the equivalent still-open fixture
+// in "intelligence engine — 12 risk patterns" above) — but must not fire once
+// salesStage is Closed-Won/Closed-Lost.
+describe("intelligence engine — closed-stage guard (H6)", () => {
+  it("MISSING_STRUCTURAL_ANCHOR does not fire on a Closed-Lost deal even with no Gate 1 locked", () => {
+    const deal = makeDeal({ sales_stage: "Closed-Lost" });
+    expect(triggeredCodes(deal, [])).not.toContain("MISSING_STRUCTURAL_ANCHOR");
+  });
+
+  it("GHOST_PIPELINE does not fire on a Closed-Lost deal even with stale updated_at", () => {
+    const output = processDealIntelligence(
+      makeDeal({
+        sales_stage: "Closed-Lost",
+        updated_at: "2020-01-01",
+        manager_strategic_blueprint: null,
+      }),
+      [],
+      [],
+      DEFAULTS,
+    );
+    expect(output.governance.alerts.map((a) => a.code)).not.toContain(
+      "GHOST_PIPELINE",
+    );
+  });
+
+  it("CLOSE_DATE_PRESSURE does not fire on a Closed-Lost deal with a past close date and low gate completion", () => {
+    const deal = makeDeal({
+      sales_stage: "Closed-Lost",
+      expected_close_date: daysAgo(5),
+    });
+    expect(
+      triggeredCodes(deal, [
+        makeGate("G1", true),
+        makeGate("G2", false),
+        makeGate("G3", false),
+      ]),
+    ).not.toContain("CLOSE_DATE_PRESSURE");
+  });
+
+  it("PHANTOM_CHAMPION does not fire on a Closed-Lost deal even with an old creation date and no executive agreement", () => {
+    const deal = makeDeal({
+      sales_stage: "Closed-Lost",
+      created_at: daysAgo(40),
+    });
+    expect(triggeredCodes(deal, [])).not.toContain("PHANTOM_CHAMPION");
+  });
+
+  it("STALLED_VALIDATION does not fire on a Closed-Lost deal even with a long stage tenure and incomplete gates", () => {
+    const deal = makeDeal({
+      sales_stage: "Closed-Lost",
+      stage_entered_at: daysAgo(30),
+    });
+    expect(
+      triggeredCodes(deal, [makeGate("G1_CRITERIA_LOCKED", false)]),
+    ).not.toContain("STALLED_VALIDATION");
+  });
+
+  it("SLOW_MOTION_COLLISION does not fire on a Closed-Lost deal even with decelerating momentum near a close date", () => {
+    const deal = makeDeal({
+      sales_stage: "Closed-Lost",
+      expected_close_date: daysFromNow(20),
+    });
+    const gates = [
+      makeGate("G1", true),
+      makeGate("G2", false),
+      makeGate("G3", false),
+    ];
+    const momentum: OwnMomentum = { recentRate: 0, earlierRate: 2, dropPct: 100 };
+    expect(
+      triggeredCodes(deal, gates, [], DEFAULTS, { ownMomentum: momentum }),
+    ).not.toContain("SLOW_MOTION_COLLISION");
+  });
+
+  it("UNPROTECTED_ELEPHANT does not fire on a Closed-Won deal even with a large TCV and no services tier", () => {
+    const deal = makeDeal({
+      sales_stage: "Closed-Won",
+      product_revenue: 600000,
+      services_tier: "None",
+    });
+    expect(triggeredCodes(deal)).not.toContain("UNPROTECTED_ELEPHANT");
+  });
+
+  it("LOW_ATTACH_ELEPHANT does not fire on a Closed-Lost deal even with a large TCV and a low attach rate", () => {
+    const deal = makeDeal({
+      sales_stage: "Closed-Lost",
+      product_revenue: 600000,
+      cross_sells: [
+        {
+          productId: "p1",
+          productName: "Pitched",
+          productCategory: null,
+          isPitched: true,
+        },
+        {
+          productId: "p2",
+          productName: "Pitched 2",
+          productCategory: null,
+          isPitched: true,
+        },
+      ],
+    });
+    expect(
+      triggeredCodes(deal, [], [], DEFAULTS, { catalogCount: 10 }),
+    ).not.toContain("LOW_ATTACH_ELEPHANT");
+  });
+
+  it("SIEM_UNDERSCOPED does not fire on a Closed-Lost deal even against an undersized log estate", () => {
+    const deal = makeDeal({
+      sales_stage: "Closed-Lost",
+      product_revenue: 80000,
+      services_revenue: 0,
+      estimated_log_sources: 1200,
+      anchor_products: [{ code: "EVENTLOG_ANALYZER", suite: "Log360" }],
+    });
+    expect(triggeredCodes(deal)).not.toContain("SIEM_UNDERSCOPED");
+  });
+
+  it("PLAYBOOK_EXECUTION_GAP does not fire on a Closed-Lost deal even with critical playbook gaps", () => {
+    const deal = makeDeal({ sales_stage: "Closed-Lost" });
+    expect(
+      triggeredCodes(deal, [], [], DEFAULTS, { playbookCriticalGaps: 1 }),
+    ).not.toContain("PLAYBOOK_EXECUTION_GAP");
+  });
+
+  // Documents the deliberate exclusion: UNRESOLVED_CRITICAL_BLOCKERS is NOT one
+  // of the 10 guarded patterns, but NOT because it is "stage-scoped by
+  // construction" — reading its evaluate() shows it has no salesStage check at
+  // all (`(_deal, blockers) => blockers.highSeverityCount > 0`). It is excluded
+  // for a different, still-valid reason: it is not time-based (no
+  // daysInStage/daysToClose/daysSinceLastUpdate measured against Date.now() in
+  // its condition) — an active high-severity blocker is a real, current fact
+  // even on a closed deal, not a `Date.now()`-drift artifact. So it legitimately
+  // keeps firing on Closed-Lost deals; this is intentional, not a gap.
+  it("UNRESOLVED_CRITICAL_BLOCKERS still fires on a Closed-Lost deal (not time-based; intentionally unguarded)", () => {
+    const deal = makeDeal({ sales_stage: "Closed-Lost" });
+    const high: RawBlocker[] = [{ severity_name: "High" }];
+    expect(triggeredCodes(deal, [], high)).toContain(
+      "UNRESOLVED_CRITICAL_BLOCKERS",
+    );
+  });
+});
+
 describe("generateRecommendations — product intelligence", () => {
   it("recommends affinity products for an anchor and excludes owned products", () => {
     const recs = generateRecommendations(["ADAUDIT_PLUS"], [], [], DEFAULTS);
