@@ -32,6 +32,7 @@ import { SimulationBand } from "@/components/dashboard/widgets/simulation-band";
 import { MemoryInsights } from "@/components/dashboard/widgets/memory-insights";
 import { PipelineRiskOverview } from "@/components/dashboard/widgets/pipeline-risk-overview";
 import { relativeTime, type Health } from "@/components/dashboard/widgets/_shared";
+import { activityTitle } from "@/lib/activity-title";
 import { DashboardHero } from "@/components/dashboard/dashboard-hero";
 import { CelebrationWatcher } from "@/components/dashboard/celebration-watcher";
 import { DailyBar } from "@/components/dashboard/daily-bar/daily-bar";
@@ -227,7 +228,11 @@ export default function Dashboard() {
                               onClick={() => navigate(`/deals/${e.dealId}`)}
                               className="font-medium text-left hover:underline cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm"
                             >
-                              {e.summary}
+                              {/* Not e.summary: for deal.updated the server
+                                  writes a raw camelCase key dump. Terminal row
+                                  with nothing to expand into, so name up to
+                                  three fields before falling back to a count. */}
+                              {activityTitle(e, { maxNamedFields: 3 })}
                             </button>
                             <span className="text-xs text-muted-foreground whitespace-nowrap">
                               {relativeTime(e.occurredAt)}
