@@ -16,6 +16,7 @@ const LOOKUPS: AuditLookups = {
   ],
   pricingModels: [{ id: 1, modelName: "Multi-Year Committed" }],
   servicesTiers: [{ id: 4, tierName: "Combined SOW Shared" }],
+  lossArchetypes: [{ id: 7, archetypeName: "Premature Commercial Disconnect" }],
   currency: "USD",
   gateLabels: { G1_CRITERIA_LOCKED: "Minimum Viable Requirements Locked" },
 };
@@ -43,6 +44,22 @@ describe("formatAuditValue", () => {
     expect(formatAuditValue("deal", "services_tier_id", "4", LOOKUPS)).toBe(
       "Combined SOW Shared",
     );
+    expect(formatAuditValue("deal", "loss_archetype_id", "7", LOOKUPS)).toBe(
+      "Premature Commercial Disconnect",
+    );
+  });
+
+  it("falls back to a visible id for a loss archetype before the lookup loads", () => {
+    // The archetype list is its own query, so a change-set can render a beat
+    // before it resolves — and closing a deal as Lost writes this row.
+    expect(formatAuditValue("deal", "loss_archetype_id", "7", {})).toBe("#7");
+  });
+
+  it("formats a win probability as a percentage", () => {
+    expect(formatAuditValue("deal", "win_probability_pct", "65")).toBe("65%");
+    expect(formatAuditValue("deal", "win_probability_pct", "0")).toBe("0%");
+    // Null still reads as "not set", not "0%".
+    expect(formatAuditValue("deal", "win_probability_pct", null)).toBe("—");
   });
 
   it("shows an unresolvable foreign key visibly as an id, never blank", () => {
@@ -140,6 +157,31 @@ describe("auditToRows", () => {
       from: "Discovery",
       to: "Validation",
     });
+  });
+
+  it("overrides the labels that humanizeField would mangle", () => {
+    const label = (fieldChanged: string) =>
+      auditToRows([audit({ fieldChanged })], LOOKUPS)[0].details[0].label;
+    expect(label("crm_record_url")).toBe("CRM Record URL");
+    expect(label("ad360_seat_count")).toBe("AD360 Seat Count");
+    expect(label("ad360_feature_notes")).toBe("AD360 Feature Notes");
+    // The unit lives in the formatted value ("65%"), not the label.
+    expect(label("win_probability_pct")).toBe("Win Probability");
+    // Titles use the same vocabulary as the detail labels.
+    expect(auditToRows([audit({ fieldChanged: "crm_record_url" })])[0].title).toBe(
+      "Changed CRM Record URL",
+    );
+  });
+
+  it("leaves fields humanizeField already handles alone", () => {
+    const label = (fieldChanged: string) =>
+      auditToRows([audit({ fieldChanged })], LOOKUPS)[0].details[0].label;
+    expect(label("pricing_model_id")).toBe("Pricing Model");
+    expect(label("contract_term_years")).toBe("Contract Term Years");
+    expect(label("deal_currency")).toBe("Deal Currency");
+    expect(label("loss_archetype_id")).toBe("Loss Archetype");
+    expect(label("manager_strategic_blueprint")).toBe("Manager Strategic Blueprint");
+    expect(label("speaker_notes")).toBe("Speaker Notes");
   });
 
   it("names gate rows by the gate, not the column, using entityId", () => {
@@ -312,6 +354,31 @@ describe("activityToRows", () => {
       activity({ eventType: "deal.updated", metadata: { changedFields: ["salesStageId"] } }),
     ])[0];
     expect(row.title).toBe("Changed Sales Stage");
+  });
+
+  it("labels camelCase fields the same way the audit view labels snake_case ones", () => {
+    // The same edit shows up in both views — Timeline via deal.updated's
+    // changedFields (camelCase) and Field changes via deal_audit_log
+    // (snake_case). They must not disagree on what the field is called.
+    const row = activityToRows([
+      activity({
+        eventType: "deal.updated",
+        metadata: {
+          changedFields: [
+            "crmRecordUrl",
+            "winProbabilityPct",
+            "ad360SeatCount",
+            "pricingModelId",
+          ],
+        },
+      }),
+    ])[0];
+    expect(row.details.map((d) => d.label)).toEqual([
+      "CRM Record URL",
+      "Win Probability",
+      "AD360 Seat Count",
+      "Pricing Model",
+    ]);
   });
 
   it("keeps the server summary when deal.updated has no changedFields", () => {

@@ -371,6 +371,14 @@ const updateDealHandler = async (req: Request, res: Response) => {
   const updates: Partial<typeof enterpriseDeals.$inferInsert> = {};
   const audits: Parameters<typeof writeAudit>[0] = [];
 
+  // Every scalar field of UpdateDealBody must call track() — an assignment into
+  // `updates` without one changes the deal but leaves no row in deal_audit_log,
+  // so Record -> History -> "Field changes" silently omits it. That gap went
+  // unnoticed for eight fields (pricing model, contract term, currency, win
+  // probability, CRM url, blueprint, speaker notes, loss archetype), so it is
+  // now enforced by deals.audit-coverage.test.ts, which walks
+  // UpdateDealBody.shape and requires either a track() or an explicit entry in
+  // that test's NOT_AUDITED allowlist.
   const track = (
     field: string,
     oldValue: unknown,
@@ -397,6 +405,7 @@ const updateDealHandler = async (req: Request, res: Response) => {
     updates.accountName = body.account_name;
   }
   if (body.crm_record_url !== undefined) {
+    track("crm_record_url", existing.crmRecordUrl, body.crm_record_url);
     updates.crmRecordUrl = body.crm_record_url ?? null;
   }
   if (body.account_manager !== undefined) {
@@ -419,12 +428,19 @@ const updateDealHandler = async (req: Request, res: Response) => {
     updates.productRevenue = String(body.product_revenue);
   }
   if (body.pricing_model_id !== undefined) {
+    track("pricing_model_id", existing.pricingModelId, body.pricing_model_id);
     updates.pricingModelId = body.pricing_model_id;
   }
   if (body.contract_term_years !== undefined) {
+    track(
+      "contract_term_years",
+      existing.contractTermYears,
+      body.contract_term_years,
+    );
     updates.contractTermYears = body.contract_term_years;
   }
   if (body.deal_currency !== undefined) {
+    track("deal_currency", existing.dealCurrency, body.deal_currency);
     updates.dealCurrency = body.deal_currency;
   }
   if (body.expected_close_date !== undefined) {
@@ -440,6 +456,11 @@ const updateDealHandler = async (req: Request, res: Response) => {
     updates.landedAt = body.landed_at ?? null;
   }
   if (body.win_probability_pct !== undefined) {
+    track(
+      "win_probability_pct",
+      existing.winProbabilityPct,
+      body.win_probability_pct,
+    );
     updates.winProbabilityPct = body.win_probability_pct ?? null;
   }
   if (body.committed !== undefined) {
@@ -454,13 +475,25 @@ const updateDealHandler = async (req: Request, res: Response) => {
     track("services_tier_id", existing.servicesTierId, body.services_tier_id);
     updates.servicesTierId = body.services_tier_id;
   }
+  // The two long-text fields are audited verbatim, like loss_reason below —
+  // old_value/new_value are unbounded `text`, and the audit endpoint sits behind
+  // the same requireAuth gate as GET /deals/:id, which already returns
+  // speaker_notes. Keeping the full value here means the log stays the record;
+  // the Record tab truncates for display (history/timeline-list.tsx DetailValue).
   if (body.manager_strategic_blueprint !== undefined) {
+    track(
+      "manager_strategic_blueprint",
+      existing.managerStrategicBlueprint,
+      body.manager_strategic_blueprint,
+    );
     updates.managerStrategicBlueprint = body.manager_strategic_blueprint ?? null;
   }
   if (body.speaker_notes !== undefined) {
+    track("speaker_notes", existing.speakerNotes, body.speaker_notes);
     updates.speakerNotes = body.speaker_notes ?? null;
   }
   if (body.loss_archetype_id !== undefined) {
+    track("loss_archetype_id", existing.lossArchetypeId, body.loss_archetype_id);
     updates.lossArchetypeId = body.loss_archetype_id ?? null;
   }
   if (body.loss_reason !== undefined) {

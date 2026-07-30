@@ -77,14 +77,32 @@ export interface TimelineListProps {
   label: string;
 }
 
-function DetailValue({ children }: { children: React.ReactNode }) {
+/**
+ * One before/after value chip. Truncated with CSS rather than by shortening the
+ * string in adapters.ts: the audit log stores long text verbatim (the strategic
+ * blueprint and speaker notes are unbounded, loss_reason and the AD360 notes run
+ * to 2000 chars), so a paragraph would otherwise render as a wall of monospace
+ * inside a chip. Clipping here keeps the value intact — `title` gives the whole
+ * thing back on hover — and needs no list of "long" fields kept in sync.
+ *
+ * `min-w-0` is load-bearing, not defensive: the parent <li> is a flex row and
+ * `truncate` sets white-space:nowrap, which makes a flex item's automatic
+ * min-width equal the full text width. min-width beats max-width, so without it
+ * the chip overflows the row instead of ellipsizing.
+ */
+function DetailValue({ value }: { value: string }) {
   return (
-    <span className="rounded bg-muted px-1.5 py-0.5 font-mono text-[11px]">{children}</span>
+    <span
+      title={value}
+      className="min-w-0 max-w-full truncate rounded bg-muted px-1.5 py-0.5 font-mono text-[11px] sm:max-w-[28rem]"
+    >
+      {value}
+    </span>
   );
 }
 
 function HealthChip({ status }: { status: string | null }) {
-  if (!status) return <DetailValue>—</DetailValue>;
+  if (!status) return <DetailValue value="—" />;
   const cls = HEALTH_CLASS[status as Health];
   return (
     <span
@@ -163,9 +181,9 @@ function Row({ row }: { row: TimelineRow }) {
                 <span className="text-foreground/90">{d.text}</span>
               ) : d.from != null || d.to != null ? (
                 <>
-                  <DetailValue>{d.from ?? "—"}</DetailValue>
+                  <DetailValue value={d.from ?? "—"} />
                   <span className="text-muted-foreground">→</span>
-                  <DetailValue>{d.to ?? "—"}</DetailValue>
+                  <DetailValue value={d.to ?? "—"} />
                 </>
               ) : null}
             </li>
