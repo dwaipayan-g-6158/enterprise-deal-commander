@@ -1,5 +1,5 @@
 import { describe, it, expect, afterAll } from "vitest";
-import { eq, inArray } from "drizzle-orm";
+import { asc, eq, inArray } from "drizzle-orm";
 import {
   db,
   pool,
@@ -12,7 +12,13 @@ import {
   dealPlaybookAssignments,
   playbookStepCompletions,
 } from "@workspace/db";
-import { getPlaybookSignals, getPlaybookJourney, startPlaybookForDeal } from "./playbook-signals";
+import {
+  getPlaybookSignals,
+  getPlaybookJourney,
+  startPlaybookForDeal,
+  recomputeAssignment,
+  supersedeStalePlaybookAssignments,
+} from "./playbook-signals";
 
 // Integration test for the playbook signal derivation that feeds the predictive
 // score, the risk engine, and the trajectory. Exercises the real DB.
@@ -188,6 +194,47 @@ describe("getPlaybookSignals", () => {
     expect(signals.criticalGaps).toBe(1); // P2S1 skipped-critical
     expect(signals.overdueCount).toBe(1); // P2S2 open + overdue
   });
+
+  it("excludes a Superseded assignment from the aggregate", async () => {
+    const dealId = await createDeal();
+
+    const [pb] = await db
+      .insert(playbooks)
+      .values({
+        playbookName: `Superseded Test PB ${Date.now()}`,
+        applicableStage: "Vitest-Superseded-Stage",
+        createdBy: "vitest",
+      })
+      .returning({ id: playbooks.id });
+    createdPlaybookIds.push(pb.id);
+
+    await db.insert(playbookSteps).values([
+      { playbookId: pb.id, stepOrder: 1, stepName: "S1", recommendedAction: "a", isCritical: true },
+      { playbookId: pb.id, stepOrder: 2, stepName: "S2", recommendedAction: "a", isCritical: false },
+    ]);
+
+    // Discovery-stage playbook, started, left with steps incomplete.
+    const [assignment] = await db
+      .insert(dealPlaybookAssignments)
+      .values({ dealId, playbookId: pb.id })
+      .returning({ id: dealPlaybookAssignments.id });
+
+    // Simulate what supersedeStalePlaybookAssignments does once the deal
+    // advances past this playbook's stage.
+    await db
+      .update(dealPlaybookAssignments)
+      .set({ status: "Superseded" })
+      .where(eq(dealPlaybookAssignments.id, assignment.id));
+
+    const signals = await getPlaybookSignals(dealId);
+    // This is the deal's ONLY assignment, and it's Superseded -> the aggregate
+    // must behave exactly as if the deal has no playbook at all.
+    expect(signals.hasPlaybook).toBe(false);
+    expect(signals.totalSteps).toBe(0);
+    expect(signals.adherencePct).toBeNull();
+    expect(signals.criticalGaps).toBe(0);
+    expect(signals.overdueCount).toBe(0);
+  });
 });
 
 describe("getPlaybookJourney + startPlaybookForDeal", () => {
@@ -270,5 +317,70 @@ describe("getPlaybookJourney + startPlaybookForDeal", () => {
     expect(entryB.status).toBe("not_started");
     expect(entryB.totalSteps).toBe(1);
     expect(entryB.assignmentId).toBeNull();
+  });
+});
+
+describe("supersedeStalePlaybookAssignments", () => {
+  it("marks an earlier-stage Active assignment Superseded when the deal advances past it, and leaves a Completed assignment untouched", async () => {
+    const stages = await db.select().from(pipelineStages).orderBy(asc(pipelineStages.sortOrder));
+    const discovery = stages.find((s) => s.stageName === "Discovery")!;
+    const validation = stages.find((s) => s.stageName === "Validation")!;
+    const [discoveryPlaybook] = await db
+      .select()
+      .from(playbooks)
+      .where(eq(playbooks.applicableStage, discovery.stageName))
+      .limit(1);
+
+    // Deal 1: start the Discovery playbook and touch nothing -> stays "Active".
+    const dealId1 = await createDeal();
+    const [assignment1] = await db
+      .insert(dealPlaybookAssignments)
+      .values({ dealId: dealId1, playbookId: discoveryPlaybook.id })
+      .returning({ id: dealPlaybookAssignments.id });
+
+    // Deal advances all the way to Validation (sortOrder > Discovery's).
+    await supersedeStalePlaybookAssignments(dealId1, validation.sortOrder);
+
+    const [after1] = await db
+      .select({ status: dealPlaybookAssignments.status })
+      .from(dealPlaybookAssignments)
+      .where(eq(dealPlaybookAssignments.id, assignment1.id));
+    expect(after1.status).toBe("Superseded");
+
+    // Deal 2: start the Discovery playbook and complete every step, so
+    // recomputeAssignment flips it to "Completed" via the existing path.
+    const dealId2 = await createDeal();
+    const [assignment2] = await db
+      .insert(dealPlaybookAssignments)
+      .values({ dealId: dealId2, playbookId: discoveryPlaybook.id })
+      .returning({ id: dealPlaybookAssignments.id });
+    const discoverySteps = await db
+      .select({ id: playbookSteps.id })
+      .from(playbookSteps)
+      .where(eq(playbookSteps.playbookId, discoveryPlaybook.id));
+    await db.insert(playbookStepCompletions).values(
+      discoverySteps.map((s) => ({
+        assignmentId: assignment2.id,
+        stepId: s.id,
+        status: "completed",
+        skipped: false,
+      })),
+    );
+    await recomputeAssignment(assignment2.id);
+
+    const [beforeSupersede] = await db
+      .select({ status: dealPlaybookAssignments.status })
+      .from(dealPlaybookAssignments)
+      .where(eq(dealPlaybookAssignments.id, assignment2.id));
+    expect(beforeSupersede.status).toBe("Completed");
+
+    await supersedeStalePlaybookAssignments(dealId2, validation.sortOrder);
+
+    const [after2] = await db
+      .select({ status: dealPlaybookAssignments.status })
+      .from(dealPlaybookAssignments)
+      .where(eq(dealPlaybookAssignments.id, assignment2.id));
+    // Completed assignments are a terminal state too -- never downgraded.
+    expect(after2.status).toBe("Completed");
   });
 });
