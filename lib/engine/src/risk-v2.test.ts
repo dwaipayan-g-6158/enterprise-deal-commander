@@ -339,4 +339,32 @@ describe("assessable semantics (C4 regression)", () => {
     );
     expect(result.topDrivers.map((d) => d.dimension)).toEqual(["Technical Readiness"]);
   });
+
+  // Task 13 — sweep version of the invariant above (Task 5's fix): the single
+  // example only exercised one non-assessable score and one pattern-code set.
+  // Loop over a range of non-assessable dimension scores and active-pattern
+  // combinations (including PHANTOM_CHAMPION, which specifically amplifies
+  // Stakeholder Coverage) and confirm the non-assessable dimension never moves
+  // compositeScore and never appears in topDrivers, regardless of how "loud"
+  // its own score or amplification would otherwise be.
+  it("[invariant] a non-assessable dimension never contributes to compositeScore or topDrivers, across a range of scores/amplifications", () => {
+    for (const nonAssessableScore of [0, 30, 60, 90]) {
+      for (const patternCodes of [[], ["PHANTOM_CHAMPION"], ["GHOST_PIPELINE", "PHANTOM_CHAMPION"]]) {
+        const dims = [
+          { name: "Technical Readiness" as const, score: 40, signals: [{ factor: "t", rawScore: 40, weight: 1 }], assessable: true },
+          { name: "Stakeholder Coverage" as const, score: nonAssessableScore, signals: [{ factor: "x", rawScore: nonAssessableScore, weight: 1 }], assessable: false },
+        ];
+        const withoutStakeholder = computeUnifiedRisk({
+          dimensionResults: [dims[0]], activePatternCodes: patternCodes, guardrailCodes: [],
+          dealView: { tcv: 1, daysToClose: 10, progressPct: 40 },
+        });
+        const withStakeholder = computeUnifiedRisk({
+          dimensionResults: dims, activePatternCodes: patternCodes, guardrailCodes: [],
+          dealView: { tcv: 1, daysToClose: 10, progressPct: 40 },
+        });
+        expect(withStakeholder.compositeScore).toBe(withoutStakeholder.compositeScore);
+        expect(withStakeholder.topDrivers.every((d) => d.dimension !== "Stakeholder Coverage")).toBe(true);
+      }
+    }
+  });
 });
