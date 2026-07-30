@@ -55,9 +55,10 @@ that envelope, performance is dominated by database round-trips, not the engine.
 - **No Docker/compose or committed deploy pipeline.** You wire up Postgres and process management
   yourself (historically Replit). The included CI is starter scaffolding.
 - **Platform-specific native binaries.** Only linux-x64 and win32-x64 are enabled out of the box.
-- **Dimensional risk degrades gracefully but partially.** Stakeholder Coverage and Competitive
-  Exposure are `assessable: false` when their inputs are absent; some spec signals (ramp
-  backloading, decision-log activity) are intentionally dropped where the data isn't available.
+- **Dimensional risk degrades gracefully but partially.** Competitive Exposure is `assessable: false`
+  when no competitors are tracked, so it contributes nothing to the composite (Stakeholder Coverage
+  scores an empty roster as a real finding instead); some spec signals (ramp backloading,
+  decision-log activity) are intentionally dropped where the data isn't available.
 - **DB-dependent tests need a database.** The API-server suite expects a reachable `DATABASE_URL`;
   the pure engine suite does not.
 

@@ -559,8 +559,19 @@ describe("intelligence engine — risk v2 integration", () => {
     const competitive = out.risk.dimensions.find(
       (d) => d.name === "Competitive Exposure",
     );
-    expect(stakeholder?.assessable).toBe(false);
+    // Task 5 / C4 — CHANGED EXPECTATION: `stakeholder.assessable` was `false` here.
+    // An empty stakeholder roster past Discovery is a real 60-risk MEASUREMENT, and
+    // `assessable: false` made computeComposite drop it from both the numerator and
+    // the denominator, so that 60 counted for nothing. This fixture's composite
+    // therefore moved 6 → 15 (verified: the only other assessable dims are
+    // Technical/Commercial/Temporal/Financial/Engagement, total weight 0.75, so
+    // 6*0.75 ≈ 4.5 becomes (4.5 + 60*0.15) / 0.90 = 13.5/0.90 = 15). Still LOW.
+    // Competitive Exposure keeps `assessable: false` — an untracked competitor set
+    // genuinely has no signal to measure.
+    expect(stakeholder?.assessable).toBe(true);
+    expect(stakeholder?.score).toBe(60);
     expect(competitive?.assessable).toBe(false);
+    expect(out.risk.riskLevel).toBe("LOW");
   });
 
   it("amplifies Commercial Alignment for an unmanaged PREMATURE_COMMERCIAL deal", () => {

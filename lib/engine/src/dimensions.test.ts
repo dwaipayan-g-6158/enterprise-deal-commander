@@ -150,16 +150,31 @@ describe("scoreCommercialAlignment", () => {
 });
 
 describe("scoreStakeholderCoverage", () => {
-  it("empty stakeholders in Discovery → assessable false, score 10", () => {
+  // Task 5 / C4 — CHANGED EXPECTATION (was `assessable: false` on both empty-roster
+  // branches). An empty stakeholder roster is a real MEASUREMENT of a real gap, not
+  // an absence of data: "no stakeholders is fine in Discovery" (10) and "no
+  // stakeholders past Discovery is a coverage gap" (60) are both judgements the
+  // engine is making. `computeComposite` drops `assessable: false` dimensions from
+  // BOTH the numerator and the denominator, so marking these `false` made the 60
+  // contribute nothing — deleting every stakeholder LOWERED a deal's composite risk.
+  // Only `scoreCompetitiveExposure` legitimately keeps `assessable: false` (no
+  // competitors tracked = genuinely no signal, no implicit default state).
+  it("empty stakeholders in Discovery → assessable TRUE, score 10", () => {
     const r = scoreStakeholderCoverage({ salesStage: "Discovery", stakeholders: [] });
-    expect(r.assessable).toBe(false);
+    expect(r.assessable).toBe(true);
     expect(r.score).toBe(10);
   });
 
-  it("empty stakeholders past Discovery → assessable false, score 60", () => {
+  it("empty stakeholders past Discovery → assessable TRUE, score 60", () => {
     const r = scoreStakeholderCoverage({ salesStage: "Commercial", stakeholders: [] });
-    expect(r.assessable).toBe(false);
+    expect(r.assessable).toBe(true);
     expect(r.score).toBe(60);
+  });
+
+  it("no stakeholders tracked past Discovery is assessable (a real measurement, not an absence of one)", () => {
+    const result = scoreStakeholderCoverage({ salesStage: "Validation", stakeholders: [] });
+    expect(result.assessable).toBe(true);
+    expect(result.score).toBe(60);
   });
 
   it("hostile decision-maker drives the hostile signal to its max", () => {

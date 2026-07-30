@@ -239,7 +239,18 @@ export function scoreStakeholderCoverage(i: {
   salesStage: string;
   stakeholders: StakeholderInput[];
 }): DimensionFnResult {
-  // Graceful degradation: no stakeholders → not assessable.
+  // An EMPTY stakeholder roster is a real measurement, not missing data, so both
+  // branches below are `assessable: true` (see `assessable`'s doc comment in
+  // ./risk-v2-types). "No stakeholders is acceptable in Discovery" (10) and "no
+  // stakeholders past Discovery is a coverage gap" (60) are judgements this engine
+  // is making from data it has — the roster is empty, and that is the finding.
+  //
+  // These were `assessable: false` until Task 5 / C4. Because `computeComposite`
+  // drops non-assessable dimensions from BOTH the numerator and the denominator of
+  // its weighted mean, the 60 contributed nothing: deleting every stakeholder on a
+  // deal LOWERED its composite risk score. Only `scoreCompetitiveExposure` still
+  // returns `assessable: false` — an untracked competitor set is genuinely no
+  // signal, with no implicit default state the way an empty roster has.
   if (!i.stakeholders || i.stakeholders.length === 0) {
     if (i.salesStage === "Discovery") {
       return {
@@ -248,7 +259,7 @@ export function scoreStakeholderCoverage(i: {
         signals: [
           { factor: "No stakeholders tracked (acceptable in Discovery)", rawScore: 10, weight: 1 },
         ],
-        assessable: false,
+        assessable: true,
       };
     }
     return {
@@ -256,12 +267,12 @@ export function scoreStakeholderCoverage(i: {
       score: 60,
       signals: [
         {
-          factor: "No stakeholders tracked past Discovery stage — cannot assess coverage",
+          factor: "No stakeholders tracked past Discovery stage — coverage gap",
           rawScore: 60,
           weight: 1,
         },
       ],
-      assessable: false,
+      assessable: true,
     };
   }
 
