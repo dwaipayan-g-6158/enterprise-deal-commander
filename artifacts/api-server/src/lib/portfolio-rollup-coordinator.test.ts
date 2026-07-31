@@ -4,7 +4,7 @@ import {
   ROLLUP_MAX_AGE_MS,
   ROLLUP_STALE_GRACE_MS,
 } from "./portfolio-rollup-coordinator";
-import { MV_REFRESH_INTERVAL_MS } from "./materialized-views";
+import { MV_REFRESH_INTERVAL_MS } from "./refresh-cadence";
 
 describe("isRollupStale", () => {
   const now = Date.parse("2026-07-31T12:00:00.000Z");

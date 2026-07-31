@@ -1,6 +1,7 @@
 import { db } from "@workspace/db";
 import { sql } from "drizzle-orm";
 import { logger } from "./logger";
+import { MV_REFRESH_INTERVAL_MS } from "./refresh-cadence";
 
 /**
  * Materialized-view refresh registry for Phase 2 analytics.
@@ -12,8 +13,10 @@ import { logger } from "./logger";
  * their values come from the in-process intelligence engine, not SQL.
  */
 
-/** Periodic refresh cadence for every registered view. */
-export const MV_REFRESH_INTERVAL_MS = 15 * 60_000;
+// Re-exported from `./refresh-cadence` (a tiny, DB-free module) so callers
+// that only need the cadence constant — e.g. tests — don't have to import
+// this module and transitively pull in `@workspace/db`.
+export { MV_REFRESH_INTERVAL_MS };
 
 export interface MaterializedView {
   /** Fully-qualified view name, e.g. `edc_v2.portfolio_rollup`. */
