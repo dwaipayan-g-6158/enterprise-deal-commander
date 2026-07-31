@@ -155,7 +155,7 @@ export function PortfolioSummaryCards({
         delayMs={80}
         icon={<DollarSign className="h-3.5 w-3.5" />}
         label="Correlated Exposure"
-        tooltip="Total contract value sitting in deals carrying an alert code that recurs across a significant cluster. Counts only active, undispositioned alerts — so this can read lower than the correlation patterns shown in the tables below, which also include alerts a manager has already acknowledged or accepted."
+        tooltip="Total contract value sitting in deals carrying an alert code that recurs across a significant cluster. Counts only active, undispositioned alerts — so this can read lower than the correlation patterns shown in the tables below, which also include alerts a manager has already acknowledged, snoozed, or accepted."
         value={compactCurrency(summary.correlatedExposureTcv, summary.reportingCurrency)}
         subtitle="TCV in significant risk clusters"
       />

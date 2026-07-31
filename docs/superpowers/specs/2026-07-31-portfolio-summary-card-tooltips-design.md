@@ -44,7 +44,7 @@ baseline."
 **Correlated Exposure** — "Total contract value sitting in deals carrying an alert code that
 recurs across a significant cluster. Counts only active, undispositioned alerts — so this can read
 lower than the correlation patterns shown in the tables below, which also include alerts a manager
-has already acknowledged or accepted."
+has already acknowledged, snoozed, or accepted."
 
 **Critical Deals** — "Deals currently carrying at least one active RED-severity alert that hasn't
 been dispositioned. 'of N monitored' is the total count of active deals in the portfolio right
