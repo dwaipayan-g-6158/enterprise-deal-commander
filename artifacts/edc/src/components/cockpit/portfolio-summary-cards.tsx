@@ -3,14 +3,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { Layers, Link2, DollarSign, AlertOctagon } from "lucide-react";
-import { formatNum } from "@/lib/format";
-
-function compactValue(n: number, currency: string): string {
-  const sym = currency === "USD" ? "$" : `${currency} `;
-  if (n >= 1_000_000) return `${sym}${(n / 1_000_000).toFixed(2)}M`;
-  if (n >= 1_000) return `${sym}${Math.round(n / 1_000)}K`;
-  return `${sym}${Math.round(n)}`;
-}
+import { compactCurrency, formatNum } from "@/lib/format";
 
 // Diversification reads "good when high": green when risk is well spread,
 // rose when it is concentrated in a few cells.
@@ -98,7 +91,7 @@ export function PortfolioSummaryCards({ summary }: { summary: PortfolioSummary }
         delayMs={80}
         icon={<DollarSign className="h-3.5 w-3.5" />}
         label="Correlated Exposure"
-        value={compactValue(summary.correlatedExposureTcv, summary.reportingCurrency)}
+        value={compactCurrency(summary.correlatedExposureTcv, summary.reportingCurrency)}
         subtitle="TCV in significant risk clusters"
       />
 

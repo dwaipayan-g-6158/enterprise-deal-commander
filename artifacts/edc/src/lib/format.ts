@@ -107,22 +107,38 @@ export function money(n: unknown): string {
 }
 
 /**
- * Compact USD for a tile/table figure: "$2.34M", "$450K", "$999" — was
- * copy-pasted verbatim across the Closed-Lost Autopsy tab's panels
- * (archetype-breakdown, competitive-loss-panel, loss-dashboard-panel), each
- * missing the negative case (a negative TCV fell through to an uncompacted
- * "$-5000" instead of "-$5K"). Consolidated here; not for `compactValue` in
- * components/cockpit/* — that one takes a currency code and is a distinct,
- * unrelated helper.
+ * Compact currency for a tile/table figure: "$2.34M", "$450K", "$999",
+ * "-$1.50M", "EUR 2K". Consolidates what used to be FOUR independent
+ * copies — this file's own `compactUSD` plus one apiece in
+ * `components/cockpit/portfolio-summary-cards.tsx`, `portfolio-risk-heatmap.tsx`
+ * (byte-identical to the summary-cards copy), and `product-mix-section.tsx`
+ * (which SHADOWED this very function under the same name) — all of which
+ * fell through to an uncompacted "$-5000" for negative input (`n >=
+ * 1_000_000` is false for negatives) and could round 999,999 up into the
+ * nonsense "$1000K" instead of carrying into "$1.00M". `compactUSD` below is
+ * now a one-line USD-bound alias, kept so its existing importers (four
+ * Closed-Lost Autopsy panels) don't need touching.
  */
-export function compactUSD(n: number): string {
-  const v = Number(n) || 0;
-  const sign = v < 0 ? "-" : "";
-  const abs = Math.abs(v);
-  if (abs >= 1_000_000) return `${sign}$${(abs / 1_000_000).toFixed(2)}M`;
-  if (abs >= 1_000) return `${sign}$${Math.round(abs / 1_000)}K`;
-  return `${sign}$${Math.round(abs)}`;
+export function compactCurrency(n: number, currency = "USD"): string {
+  const v = Number(n);
+  // Number.isFinite, not the old `Number(n) || 0` — that form let Infinity
+  // through and rendered "$InfinityM".
+  const safe = Number.isFinite(v) ? v : 0;
+  const sign = safe < 0 ? "-" : "";
+  const abs = Math.abs(safe);
+  const sym = currency === "USD" ? "$" : `${currency} `;
+  // Branch on the ROUNDED thousands, not on `abs`: rounding first is what
+  // makes 999_999 read "$1.00M" instead of carrying into "$1000K". The K
+  // branch still gates on `abs >= 1_000` so $500 stays "$500" (Math.round(0.5)
+  // is 1, which would otherwise misfire the K branch).
+  const thousands = Math.round(abs / 1_000);
+  if (thousands >= 1_000) return `${sign}${sym}${(abs / 1_000_000).toFixed(2)}M`;
+  if (abs >= 1_000) return `${sign}${sym}${thousands}K`;
+  return `${sign}${sym}${Math.round(abs)}`;
 }
+
+/** USD-bound alias of `compactCurrency` — one implementation, two entry points. */
+export const compactUSD = (n: number): string => compactCurrency(n, "USD");
 
 /** Round to at most 2 decimal places (e.g. 23.6667 -> 23.67). */
 export function round2(n: unknown): number {
@@ -133,7 +149,7 @@ export function round2(n: unknown): number {
  * Format a non-currency metric (cycle time, index, lift multiplier, score,
  * percentage) at at most 2 decimal places, trimming trailing zeros —
  * 23.6667 -> "23.67", 24 -> "24", 0.6 -> "0.6". Not for currency: currency
- * formatting (money, formatCurrency, compactUSD/compactValue) is unaffected.
+ * formatting (money, formatCurrency, compactUSD/compactCurrency) is unaffected.
  */
 export function formatNum(n: unknown): string {
   return round2(n).toLocaleString("en-US", { maximumFractionDigits: 2 });

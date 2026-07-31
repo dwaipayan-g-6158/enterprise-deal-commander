@@ -11,15 +11,9 @@ import {
 import { cn } from "@/lib/utils";
 import { Grid3x3, ArrowUpRight } from "lucide-react";
 import { RISK_LEVEL_CLASS, RISK_LEVEL_SHORT_LABEL, classifyRisk } from "@/lib/semantic-colors";
+import { compactCurrency } from "@/lib/format";
 
 type Axis = "accountManager" | "technicalLead";
-
-function compactValue(n: number, currency: string): string {
-  const sym = currency === "USD" ? "$" : `${currency} `;
-  if (n >= 1_000_000) return `${sym}${(n / 1_000_000).toFixed(2)}M`;
-  if (n >= 1_000) return `${sym}${Math.round(n / 1_000)}K`;
-  return `${sym}${Math.round(n)}`;
-}
 
 // riskScore bands mirror the PRD semantic ramp (and the Whitespace heatmap):
 // sky → amber → orange → red. Tint stays low-opacity so it reads as data.
@@ -53,7 +47,7 @@ function DealList({ deals, currency }: { deals: ProductMixDeal[]; currency: stri
               </p>
             </div>
             <span className="font-mono text-xs tabular-nums text-muted-foreground">
-              {compactValue(d.tcv, currency)}
+              {compactCurrency(d.tcv, currency)}
             </span>
             <ArrowUpRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
           </Link>
@@ -184,7 +178,7 @@ export function PortfolioRiskHeatmap({
                               <TooltipContent className="bg-popover border border-border text-popover-foreground shadow-lg p-3 max-w-xs">
                                 <p className="font-medium">{person} × {product}</p>
                                 <p className="mt-1 text-muted-foreground">
-                                  {band.label} risk · {cell.dealCount} {cell.dealCount === 1 ? "deal" : "deals"} · {compactValue(cell.tcv, currency)}
+                                  {band.label} risk · {cell.dealCount} {cell.dealCount === 1 ? "deal" : "deals"} · {compactCurrency(cell.tcv, currency)}
                                 </p>
                                 {cell.topAlertCodes.length > 0 && (
                                   <p className="mt-1 font-mono text-muted-foreground">
@@ -214,7 +208,7 @@ export function PortfolioRiskHeatmap({
                 {selectedCell.person} × {selectedCell.product}
               </span>
               <span className="text-xs text-muted-foreground">
-                risk {selectedCell.riskScore} · {compactValue(selectedCell.tcv, currency)}
+                risk {selectedCell.riskScore} · {compactCurrency(selectedCell.tcv, currency)}
               </span>
             </div>
             <DealList deals={selectedCell.deals} currency={currency} />

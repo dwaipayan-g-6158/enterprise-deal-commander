@@ -6,6 +6,8 @@ import {
   parseLocalISODate,
   toLocalISODate,
   todayISO,
+  compactCurrency,
+  compactUSD,
 } from "./format";
 
 describe("formatDate — date-only strings (never constructs a Date)", () => {
@@ -130,5 +132,51 @@ describe("humanizeIsoDates", () => {
 
   it("leaves a YYYY-MM-DD-shaped false positive with an invalid month alone", () => {
     expect(humanizeIsoDates("ticket 2026-99-01")).toBe("ticket 2026-99-01");
+  });
+});
+
+describe("compactCurrency — the consolidated compact-money helper", () => {
+  it("compacts millions to 2dp and thousands to a whole number", () => {
+    expect(compactCurrency(2_340_000)).toBe("$2.34M");
+    expect(compactCurrency(450_000)).toBe("$450K");
+    expect(compactCurrency(1_000)).toBe("$1K");
+    expect(compactCurrency(999)).toBe("$999");
+  });
+
+  it("handles negatives — the bug all three cockpit copies shared", () => {
+    expect(compactCurrency(-1_500_000)).toBe("-$1.50M");
+    expect(compactCurrency(-5_000)).toBe("-$5K");
+    expect(compactCurrency(-999)).toBe("-$999");
+    expect(compactCurrency(-0)).toBe("$0");
+  });
+
+  it("carries into M instead of rendering a nonsense $1000K", () => {
+    expect(compactCurrency(999_999)).toBe("$1.00M");
+    expect(compactCurrency(999_500)).toBe("$1.00M");
+    expect(compactCurrency(999_499)).toBe("$999K");
+    expect(compactCurrency(-999_999)).toBe("-$1.00M");
+  });
+
+  it("does not round sub-$1000 values up into K (Math.round(0.5) === 1)", () => {
+    expect(compactCurrency(500)).toBe("$500");
+    expect(compactCurrency(999.4)).toBe("$999");
+  });
+
+  it("prefixes a non-USD code instead of a $ glyph", () => {
+    expect(compactCurrency(1_500_000, "EUR")).toBe("EUR 1.50M");
+    expect(compactCurrency(2_000, "INR")).toBe("INR 2K");
+    expect(compactCurrency(-1_500_000, "EUR")).toBe("-EUR 1.50M");
+  });
+
+  it("collapses non-finite input to zero rather than $InfinityM", () => {
+    expect(compactCurrency(Number.NaN)).toBe("$0");
+    expect(compactCurrency(Number.POSITIVE_INFINITY)).toBe("$0");
+    expect(compactCurrency(undefined as never)).toBe("$0");
+  });
+
+  it("compactUSD is an alias, not a second implementation", () => {
+    for (const n of [0, 999, 1_000, 999_999, 2_340_000, -5_000]) {
+      expect(compactUSD(n)).toBe(compactCurrency(n, "USD"));
+    }
   });
 });

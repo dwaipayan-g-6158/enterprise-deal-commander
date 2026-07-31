@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { ChevronRight, Layers, Grid3x3, ArrowUpRight } from "lucide-react";
 import { groupProductsBySuite } from "./product-picker";
+import { compactCurrency } from "@/lib/format";
 
 // Suite accent — a single hue per suite, used sparingly (dots, bar fills) so it
 // reads as data, not chrome, against the app's neutral palette.
@@ -31,12 +32,6 @@ const fallbackAccent = {
   text: "text-muted-foreground",
 };
 const accentFor = (suite: string) => SUITE_ACCENT[suite] ?? fallbackAccent;
-
-function compactUSD(n: number): string {
-  if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(2)}M`;
-  if (n >= 1_000) return `$${Math.round(n / 1_000)}K`;
-  return `$${Math.round(n)}`;
-}
 
 /** A clickable row of deals that drilled-down panels share. */
 function DealList({ deals }: { deals: ProductMixDeal[] }) {
@@ -62,7 +57,7 @@ function DealList({ deals }: { deals: ProductMixDeal[] }) {
               </p>
             </div>
             <span className="font-mono text-xs tabular-nums text-muted-foreground">
-              {compactUSD(d.tcv)}
+              {compactCurrency(d.tcv)}
             </span>
             <ArrowUpRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
           </Link>
@@ -138,7 +133,7 @@ export function ProductMixSection() {
                     <div className="flex items-baseline justify-between gap-2">
                       <span className="font-semibold">{s.suite}</span>
                       <span className="font-mono text-sm tabular-nums">
-                        {compactUSD(s.totalTCV)}
+                        {compactCurrency(s.totalTCV)}
                       </span>
                     </div>
                     <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-muted">
