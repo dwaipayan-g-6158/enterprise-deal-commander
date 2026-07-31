@@ -21,6 +21,7 @@ import { UsersSettings } from "@/components/settings/users-settings";
 import { AdminOnly, ReadOnlyNotice } from "@/components/auth/write-gate";
 import { useCanWrite } from "@/lib/auth/role-context";
 import { serverMessage } from "@/lib/server-message";
+import { shouldConfirmTabSwitch } from "./settings-model";
 
 export default function Settings() {
   const canWrite = useCanWrite();
@@ -31,6 +32,18 @@ export default function Settings() {
   const updateThresholds = useUpdateEngineThresholds();
   const queryClient = useQueryClient();
   const { toast } = useToast();
+
+  // Radix Tabs unmounts inactive TabsContent, so an unsaved edit on the
+  // Thresholds or Score Weights tab vanishes silently the instant the user
+  // clicks another tab. Making Tabs controlled here lets handleTabChange
+  // intercept the switch and confirm first. Score Weights' own dirty state
+  // lives inside ScoringWeightsSettings (it owns the pct-editing state), so
+  // it's lifted just far enough to reach this guard via onDirtyChange — the
+  // other tabs either auto-save per item (Team, Webhooks, Smart Alerts,
+  // Custom Patterns) or have no unsaved-input concept (Achievements, Users),
+  // so they don't need an entry here.
+  const [activeTab, setActiveTab] = useState("thresholds");
+  const [weightsDirty, setWeightsDirty] = useState(false);
 
   useEffect(() => {
     if (thresholds.length > 0) {
@@ -43,6 +56,17 @@ export default function Settings() {
   }, [thresholds]);
 
   const hasChanges = thresholds.some(t => localValues[t.parameterKey] !== undefined && localValues[t.parameterKey] !== t.parameterValue);
+
+  const handleTabChange = (next: string) => {
+    const dirtyByTab = { thresholds: hasChanges, weights: weightsDirty };
+    if (
+      shouldConfirmTabSwitch(activeTab, next, dirtyByTab) &&
+      !window.confirm("You have unsaved changes on this tab. Switch tabs and discard them?")
+    ) {
+      return;
+    }
+    setActiveTab(next);
+  };
 
   const handleSave = async () => {
     try {
@@ -77,7 +101,7 @@ export default function Settings() {
         automation, or team configuration.
       </ReadOnlyNotice>
 
-      <Tabs defaultValue="thresholds" className="w-full">
+      <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
         <TabsList className="h-auto w-fit flex-wrap justify-start gap-1">
           <TabsTrigger value="thresholds">Thresholds</TabsTrigger>
           <TabsTrigger value="weights">Score Weights</TabsTrigger>
@@ -134,7 +158,7 @@ export default function Settings() {
         </TabsContent>
 
         <TabsContent value="weights" className="pt-4">
-          <ScoringWeightsSettings />
+          <ScoringWeightsSettings onDirtyChange={setWeightsDirty} />
         </TabsContent>
         <TabsContent value="patterns" className="pt-4">
           <CustomPatternsSettings />

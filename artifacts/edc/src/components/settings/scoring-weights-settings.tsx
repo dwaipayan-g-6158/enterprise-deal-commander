@@ -28,7 +28,15 @@ const FACTOR_LABELS: Record<string, string> = {
   playbook_adherence: "Playbook adherence",
 };
 
-export function ScoringWeightsSettings() {
+interface ScoringWeightsSettingsProps {
+  // Lifts this panel's dirty state up to settings.tsx so it can warn before
+  // switching away from this tab and silently discarding an in-progress
+  // edit (Radix Tabs unmounts inactive TabsContent) — see settings.tsx's own
+  // comment on activeTab/weightsDirty for the full reasoning.
+  onDirtyChange?: (dirty: boolean) => void;
+}
+
+export function ScoringWeightsSettings({ onDirtyChange }: ScoringWeightsSettingsProps = {}) {
   const { toast } = useToast();
   const canWrite = useCanWrite();
   const qc = useQueryClient();
@@ -54,6 +62,10 @@ export function ScoringWeightsSettings() {
   // for why sharing one function matters here.
   const changedWeights = selectChangedWeights(rows, pct);
   const dirty = changedWeights.length > 0;
+
+  useEffect(() => {
+    onDirtyChange?.(dirty);
+  }, [dirty, onDirtyChange]);
 
   // Clamp a raw input value into the valid 0-100 percentage range. The Input's
   // min/max HTML attributes never fire here (no <form>, Apply is a click
