@@ -85,4 +85,34 @@ describe("v2/config settings routes reject invalid bodies with 400, not 500", ()
     expect(thrown?.message).toBeTruthy();
     expect(Array.isArray(thrown?.details)).toBe(true);
   });
+
+  // Scoring weights are fractions of 1.0 and feed a permanently-appended,
+  // append-only history table (scoring_model_weights): a bad row here would
+  // corrupt every subsequent deal's predictive score with no easy undo. These
+  // two cases prove the OpenAPI-derived `minimum: 0, maximum: 1` bound (task-2)
+  // rejects out-of-range weights with a clean 400 instead of a 500 (task-1)
+  // or — worse — a silent, corrupting success.
+  it("PUT /config/scoring-weights — negative weight is rejected with 400", async () => {
+    const thrown = await callWithInvalidBody("put", "/config/scoring-weights", {
+      weights: [{ feature_id: "gate_momentum", weight: -0.5 }],
+    });
+    expect(thrown).toBeDefined();
+    expect(thrown?.status).toBe(400);
+    expect(thrown?.code).toBe("BAD_REQUEST");
+    expect(thrown?.message).toBeTruthy();
+    expect(Array.isArray(thrown?.details)).toBe(true);
+    expect((thrown?.details as unknown[]).length).toBeGreaterThan(0);
+  });
+
+  it("PUT /config/scoring-weights — weight above 1 (100%) is rejected with 400", async () => {
+    const thrown = await callWithInvalidBody("put", "/config/scoring-weights", {
+      weights: [{ feature_id: "gate_momentum", weight: 2 }],
+    });
+    expect(thrown).toBeDefined();
+    expect(thrown?.status).toBe(400);
+    expect(thrown?.code).toBe("BAD_REQUEST");
+    expect(thrown?.message).toBeTruthy();
+    expect(Array.isArray(thrown?.details)).toBe(true);
+    expect((thrown?.details as unknown[]).length).toBeGreaterThan(0);
+  });
 });

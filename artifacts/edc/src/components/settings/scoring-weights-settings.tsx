@@ -52,8 +52,18 @@ export function ScoringWeightsSettings() {
   }, [list.data]);
 
   const total = Object.values(pct).reduce((a, b) => a + (Number(b) || 0), 0);
-  const sumOk = Math.round(total) === 100;
   const dirty = rows.some((r) => pct[r.featureId] !== (r.weight * 100).toFixed(0));
+
+  // Clamp a raw input value into the valid 0-100 percentage range. The Input's
+  // min/max HTML attributes never fire here (no <form>, Apply is a click
+  // handler), so out-of-range values must be clamped in JS before they land in
+  // state — otherwise a negative or absurd percentage would be sent to the API.
+  const clampPct = (raw: string): string => {
+    if (raw === "") return raw;
+    const n = Number(raw);
+    if (!Number.isFinite(n)) return raw;
+    return String(Math.max(0, Math.min(100, n)));
+  };
 
   const save = async () => {
     try {
@@ -82,16 +92,17 @@ export function ScoringWeightsSettings() {
           <div>
             <CardTitle>Predictive Score Weights</CardTitle>
             <CardDescription>
-              Tune how much each factor contributes to a deal's predictive score. Weights
-              should total 100%.
+              Tune how much each factor contributes to a deal's predictive score. Weights are
+              relative to each other and are normalized automatically, so the total doesn't
+              need to be exactly 100%.
             </CardDescription>
           </div>
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="flex items-center justify-between">
-          <Badge variant={sumOk ? "secondary" : "destructive"}>
-            Total: {Math.round(total)}%{sumOk ? "" : " (should be 100%)"}
+          <Badge variant="secondary" title="Weights are relative to each other and get normalized automatically — the total doesn't need to be 100%.">
+            Total: {Math.round(total)}% (normalized automatically)
           </Badge>
           <AdminOnly>
             <Button disabled={!dirty || update.isPending} onClick={save} className="gap-2">
@@ -120,7 +131,9 @@ export function ScoringWeightsSettings() {
                 min={0}
                 max={100}
                 value={pct[r.featureId] ?? ""}
-                onChange={(e) => setPct((p) => ({ ...p, [r.featureId]: e.target.value }))}
+                onChange={(e) =>
+                  setPct((p) => ({ ...p, [r.featureId]: clampPct(e.target.value) }))
+                }
                 className="font-mono"
                 disabled={!canWrite}
               />
