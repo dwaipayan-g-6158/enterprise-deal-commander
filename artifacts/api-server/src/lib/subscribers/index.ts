@@ -7,7 +7,7 @@ import {
 } from "../materialized-views";
 import {
   registerPortfolioRollupView,
-  refreshPortfolioRollups,
+  purgeAndWarmPortfolioRollups,
 } from "../portfolio-rollups";
 import { registerActivityLogger } from "./activity-logger";
 import { registerSnapshotService, snapshotAllActiveDeals } from "./snapshot-service";
@@ -60,11 +60,14 @@ export function registerSubscribers(): void {
   disposers.push(registerScoring());
   disposers.push(registerPipelineTransitions());
 
-  // Register portfolio rollups with the MV refresh registry and warm them once
-  // at startup so the first portfolio/summary read is already precomputed.
+  // Register portfolio rollups with the MV refresh registry, then purge+warm
+  // at startup: a rollup row written by a previous (possibly older) binary may
+  // encode stale compute logic, so we never serve one we didn't compute
+  // ourselves this process. Between purge and warm-completion, reads
+  // live-compute — identical to today's cold-start behavior.
   registerPortfolioRollupView();
-  void refreshPortfolioRollups().catch((err) =>
-    logger.error({ err }, "Initial portfolio rollup warm-up failed"),
+  void purgeAndWarmPortfolioRollups().catch((err) =>
+    logger.error({ err }, "Initial portfolio rollup purge+warm failed"),
   );
 
   const snapshotTimer = setInterval(() => {

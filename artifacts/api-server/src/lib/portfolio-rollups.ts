@@ -2,7 +2,13 @@ import { db, portfolioRollups } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { logger } from "./logger";
 import { registerMaterializedView } from "./materialized-views";
-import { isRollupStale, ROLLUP_MAX_AGE_MS } from "./portfolio-rollup-coordinator";
+import {
+  isRollupStale,
+  ROLLUP_MAX_AGE_MS,
+  MAX_REFRESH_ATTEMPTS,
+  RefreshCoordinator,
+  createDebouncer,
+} from "./portfolio-rollup-coordinator";
 import { computeSummary, computePortfolioAnalysis } from "./portfolio";
 
 /**
@@ -84,15 +90,50 @@ export function readPortfolioAnalysisRollup(): Promise<PortfolioAnalysisRollup |
   return readRollup<PortfolioAnalysisRollup>(RollupNames.portfolioAnalysis);
 }
 
-/** Recompute every portfolio rollup and upsert it into the table. */
+const coordinator = new RefreshCoordinator();
+
+/**
+ * Recompute every portfolio rollup and upsert it. Single-flighted: a concurrent
+ * caller (periodic MV job vs. debounced post-mutation refresh) joins the
+ * in-flight run rather than duplicating the compute.
+ */
 export async function refreshPortfolioRollups(): Promise<void> {
-  const [summary, portfolio] = await Promise.all([
-    computeSummary(),
-    computePortfolioAnalysis(),
-  ]);
-  await upsertRollup(RollupNames.summary, summary);
-  await upsertRollup(RollupNames.portfolioAnalysis, portfolio);
+  const ok = await coordinator.run(async (isSuperseded) => {
+    const [summary, portfolio] = await Promise.all([
+      computeSummary(),
+      computePortfolioAnalysis(),
+    ]);
+    if (isSuperseded()) {
+      // A mutation invalidated the rollups while we were computing: this
+      // snapshot predates it, and upserting now would resurrect pre-mutation
+      // numbers AFTER the DELETE. Drop it; the coordinator recomputes.
+      logger.debug("Discarded portfolio rollup snapshot invalidated mid-compute");
+      return;
+    }
+    await upsertRollup(RollupNames.summary, summary);
+    await upsertRollup(RollupNames.portfolioAnalysis, portfolio);
+  });
+  if (!ok) {
+    logger.warn(
+      { attempts: MAX_REFRESH_ATTEMPTS },
+      "Portfolio rollup refresh superseded on every attempt; leaving rollups absent (reads live-compute)",
+    );
+  }
 }
+
+/** Resolves once the most recent invalidation's DELETE has actually landed. */
+let pendingDelete: Promise<void> = Promise.resolve();
+
+const REFRESH_DEBOUNCE_MS = 2_000;
+const refreshDebouncer = createDebouncer(REFRESH_DEBOUNCE_MS, () => {
+  // Sequence after the pending DELETE so the fire-and-forget delete can never
+  // land on top of the fresh rows this refresh is about to write.
+  void pendingDelete
+    .then(() => refreshPortfolioRollups())
+    .catch((err) =>
+      logger.error({ err }, "Debounced portfolio rollup refresh failed"),
+    );
+});
 
 /**
  * Drop all precomputed rollups so the next read falls back to live compute.
@@ -101,28 +142,17 @@ export async function refreshPortfolioRollups(): Promise<void> {
  * after the write burst settles.
  */
 export function invalidatePortfolioRollups(): void {
-  void (async () => {
+  // Bump FIRST and synchronously — before any await — so a refresh already
+  // computing is guaranteed to observe the new epoch and discard its snapshot.
+  coordinator.invalidate();
+  pendingDelete = (async () => {
     try {
       await db.delete(portfolioRollups);
     } catch (err) {
       logger.error({ err }, "Failed to invalidate portfolio rollups");
     }
   })();
-  scheduleRefresh();
-}
-
-const REFRESH_DEBOUNCE_MS = 2_000;
-let refreshTimer: NodeJS.Timeout | null = null;
-
-function scheduleRefresh(): void {
-  if (refreshTimer) return;
-  refreshTimer = setTimeout(() => {
-    refreshTimer = null;
-    void refreshPortfolioRollups().catch((err) =>
-      logger.error({ err }, "Debounced portfolio rollup refresh failed"),
-    );
-  }, REFRESH_DEBOUNCE_MS);
-  refreshTimer.unref();
+  refreshDebouncer.schedule();
 }
 
 let registered = false;
@@ -138,4 +168,21 @@ export function registerPortfolioRollupView(): void {
     name: "edc_v2.portfolio_rollups",
     refresh: refreshPortfolioRollups,
   });
+}
+
+/**
+ * Delete any rollup left by a previous process, then warm. A payload written by
+ * an older binary can encode a different formula (e.g. the pre-normalization
+ * diversification index) or, for a future contract change, a different shape
+ * that would fail the route's Zod parse. Process start is the one moment we
+ * know the compute code may have changed, so we never serve a payload we didn't
+ * compute ourselves.
+ */
+export async function purgeAndWarmPortfolioRollups(): Promise<void> {
+  try {
+    await db.delete(portfolioRollups);
+  } catch (err) {
+    logger.error({ err }, "Failed to purge stale portfolio rollups at startup");
+  }
+  await refreshPortfolioRollups();
 }
