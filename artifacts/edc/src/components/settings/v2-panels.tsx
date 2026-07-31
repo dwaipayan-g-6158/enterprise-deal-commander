@@ -18,6 +18,7 @@ import {
   type NotificationRule,
   type CustomPattern,
 } from "@workspace/api-client-react";
+import { requiresComparisonValue, type CustomOperator } from "@workspace/engine";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -304,6 +305,41 @@ export function CustomPatternsSettings() {
     conditions: conds.map((c, i) => ({ ...c, sort_order: i })),
   });
 
+  // A previously-run "Matches N deal(s)" result is only valid for the exact
+  // form/conditions it was computed against — any further edit invalidates
+  // it, so every setter that mutates `form` or `conds` also clears it.
+  const updateForm = (patch: Partial<typeof form>) => {
+    setForm((f) => ({ ...f, ...patch }));
+    setTestResult("");
+  };
+
+  const setCond = (i: number, patch: Partial<Cond>) => {
+    setConds((cs) => cs.map((c, idx) => (idx === i ? { ...c, ...patch } : c)));
+    setTestResult("");
+  };
+
+  const addCondition = () => {
+    setConds((cs) => [...cs, { field_path: FIELD_PATHS[0], operator: "gt", comparison_value: "" }]);
+    setTestResult("");
+  };
+
+  // Guards against reaching zero conditions even if this were ever called
+  // from somewhere other than the (disabled-at-length-1) row button — the
+  // Zod `minItems: 1` on the API contract is the hard backstop either way.
+  const removeCondition = (i: number) => {
+    setConds((cs) => (cs.length <= 1 ? cs : cs.filter((_, idx) => idx !== i)));
+    setTestResult("");
+  };
+
+  // A blank comparison_value is a dead/no-op condition for every operator
+  // except is_null/is_not_null — see requiresComparisonValue's doc comment
+  // in @workspace/engine for exactly why, operator by operator.
+  const invalidConditions = conds.filter(
+    (c) => requiresComparisonValue(c.operator as CustomOperator) && c.comparison_value.trim() === "",
+  );
+  const canSave =
+    !!form.pattern_name && !!form.alert_message_template && conds.length > 0 && invalidConditions.length === 0;
+
   const runTest = async () => {
     try {
       const res = await test.mutateAsync({ data: body() as never });
@@ -315,7 +351,7 @@ export function CustomPatternsSettings() {
   };
 
   const save = async () => {
-    if (!form.pattern_name || !form.alert_message_template) return;
+    if (!canSave) return;
     try {
       await create.mutateAsync({ data: body() as never });
       await invalidate();
@@ -327,9 +363,6 @@ export function CustomPatternsSettings() {
       toast({ title: "Failed to save pattern", variant: "destructive" });
     }
   };
-
-  const setCond = (i: number, patch: Partial<Cond>) =>
-    setConds((cs) => cs.map((c, idx) => (idx === i ? { ...c, ...patch } : c)));
 
   // PUT /custom-patterns/:id takes the full resource (CustomPatternInput,
   // conditions included, min 1) — send the row's existing fields back with
@@ -393,31 +426,57 @@ export function CustomPatternsSettings() {
 
         <div className="rounded-md border border-dashed p-3 space-y-3">
           <div className="flex gap-2 flex-wrap items-end">
-            <Input className="flex-1 min-w-40" placeholder="Pattern name" value={form.pattern_name} onChange={(e) => setForm({ ...form, pattern_name: e.target.value })} />
-            <Select value={form.severity} onValueChange={(v) => setForm({ ...form, severity: v })}>
+            <Input className="flex-1 min-w-40" placeholder="Pattern name" value={form.pattern_name} onChange={(e) => updateForm({ pattern_name: e.target.value })} />
+            <Select value={form.severity} onValueChange={(v) => updateForm({ severity: v })}>
               <SelectTrigger className="w-28"><SelectValue /></SelectTrigger>
               <SelectContent><SelectItem value="RED">RED</SelectItem><SelectItem value="YELLOW">YELLOW</SelectItem></SelectContent>
             </Select>
-            <Input type="number" className="w-24" value={form.weight} onChange={(e) => setForm({ ...form, weight: Number(e.target.value) })} />
+            <Input type="number" className="w-24" value={form.weight} onChange={(e) => updateForm({ weight: Number(e.target.value) })} />
           </div>
 
-          {conds.map((c, i) => (
-            <div key={i} className="flex gap-2 items-center">
-              <Select value={c.field_path} onValueChange={(v) => setCond(i, { field_path: v })}>
-                <SelectTrigger className="flex-1"><SelectValue /></SelectTrigger>
-                <SelectContent>{FIELD_PATHS.map((f) => <SelectItem key={f} value={f}>{f}</SelectItem>)}</SelectContent>
-              </Select>
-              <Select value={c.operator} onValueChange={(v) => setCond(i, { operator: v })}>
-                <SelectTrigger className="w-32"><SelectValue /></SelectTrigger>
-                <SelectContent>{OPERATORS.map((o) => <SelectItem key={o} value={o}>{o}</SelectItem>)}</SelectContent>
-              </Select>
-              <Input className="w-28" placeholder="value" value={c.comparison_value} onChange={(e) => setCond(i, { comparison_value: e.target.value })} />
-              <Button variant="ghost" size="icon" onClick={() => setConds((cs) => cs.filter((_, idx) => idx !== i))}>
-                <Trash2 className="h-4 w-4" />
-              </Button>
-            </div>
-          ))}
-          <Button variant="outline" size="sm" onClick={() => setConds((cs) => [...cs, { field_path: FIELD_PATHS[0], operator: "gt", comparison_value: "" }])}>
+          {conds.map((c, i) => {
+            const needsValue = requiresComparisonValue(c.operator as CustomOperator);
+            const missingValue = needsValue && c.comparison_value.trim() === "";
+            const isLastCondition = conds.length === 1;
+            return (
+              <div key={i} className="flex gap-2 items-center">
+                <Select value={c.field_path} onValueChange={(v) => setCond(i, { field_path: v })}>
+                  <SelectTrigger className="flex-1"><SelectValue /></SelectTrigger>
+                  <SelectContent>{FIELD_PATHS.map((f) => <SelectItem key={f} value={f}>{f}</SelectItem>)}</SelectContent>
+                </Select>
+                <Select value={c.operator} onValueChange={(v) => setCond(i, { operator: v })}>
+                  <SelectTrigger className="w-32"><SelectValue /></SelectTrigger>
+                  <SelectContent>{OPERATORS.map((o) => <SelectItem key={o} value={o}>{o}</SelectItem>)}</SelectContent>
+                </Select>
+                {needsValue ? (
+                  <Input
+                    className={`w-28 ${missingValue ? "border-destructive focus-visible:ring-destructive" : ""}`}
+                    placeholder="value"
+                    value={c.comparison_value}
+                    onChange={(e) => setCond(i, { comparison_value: e.target.value })}
+                    title={missingValue ? "A value is required for this operator." : undefined}
+                  />
+                ) : (
+                  <span
+                    className="w-28 text-xs text-muted-foreground italic text-center"
+                    title="This operator checks presence only — no comparison value is used."
+                  >
+                    (no value needed)
+                  </span>
+                )}
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => removeCondition(i)}
+                  disabled={isLastCondition}
+                  title={isLastCondition ? "A pattern needs at least one condition." : "Remove condition"}
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </div>
+            );
+          })}
+          <Button variant="outline" size="sm" onClick={addCondition}>
             <Plus className="h-4 w-4 mr-1" /> Add condition
           </Button>
 
@@ -425,7 +484,7 @@ export function CustomPatternsSettings() {
             placeholder="Alert message — supports {{dealName}}, {{financials.calculatedTCV}}"
             rows={2}
             value={form.alert_message_template}
-            onChange={(e) => setForm({ ...form, alert_message_template: e.target.value })}
+            onChange={(e) => updateForm({ alert_message_template: e.target.value })}
           />
 
           <div className="flex items-center gap-2">
@@ -437,7 +496,15 @@ export function CustomPatternsSettings() {
             </Button>
             {testResult && <span className="text-sm text-muted-foreground">{testResult}</span>}
             <AdminOnly>
-              <Button size="sm" className="ml-auto" onClick={save} disabled={create.isPending}>Save pattern</Button>
+              <Button
+                size="sm"
+                className="ml-auto"
+                onClick={save}
+                disabled={create.isPending || !canSave}
+                title={!canSave ? "Give the pattern a name, a message, and fill in every required comparison value." : undefined}
+              >
+                Save pattern
+              </Button>
             </AdminOnly>
           </div>
         </div>

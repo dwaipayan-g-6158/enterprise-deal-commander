@@ -102,6 +102,43 @@ export function evaluateCondition(
   }
 }
 
+/**
+ * Whether a condition needs a non-blank `comparisonValue` to mean anything.
+ * Used by the Settings > Custom Risk Patterns builder to block saving (and
+ * to hide the input entirely for the two operators where it's irrelevant).
+ *
+ * `is_null`/`is_not_null` never read `comparison` at all — `evaluateCondition`
+ * returns before reaching it — so a value there is genuinely irrelevant.
+ *
+ * Every one of the other 8 operators is broken by a blank value, just via
+ * three different mechanisms:
+ *  - `gt`/`lt`/`gte`/`lte`: numeric-only. `asNumber("")` is `null` (fails the
+ *    `v.trim() !== ""` check), so `numeric` is `false` and the switch's
+ *    hard-coded `false` branch fires — the condition can NEVER be true,
+ *    regardless of `fieldValue`.
+ *  - `not_contains`: `comparison.toLowerCase()` is `""`, and every string
+ *    `.includes("")` is `true` in JS, so `!String(fieldValue ?? "")...includes("")`
+ *    is always `false` — deterministically dead for the same reason as the
+ *    numeric four, just reached through the string branch instead.
+ *  - `eq`/`neq`: also fall through to the numeric path first (`asNumber("")`
+ *    is `null`), then to the string-equality fallback
+ *    (`String(fieldValue ?? "") === comparison`, i.e. `=== ""`), which is
+ *    only true when `fieldValue` itself resolves to `null`/`undefined`/`""`.
+ *    None of the builder's FIELD_PATHS (numeric metrics or `salesStage`) ever
+ *    resolve that way on a real deal, so a blank value is dead in practice
+ *    even though it isn't mathematically impossible for arbitrary input.
+ *  - `contains`: the mirror image of `not_contains` — always `true` (every
+ *    string includes the empty string), so the condition ALWAYS matches
+ *    regardless of `fieldValue`. Not "impossible to match" like the others,
+ *    but a silent no-op that contributes nothing to the AND-chain in
+ *    `evaluateCustomPatterns` — equally not what a blank input should mean.
+ *
+ * None of the 8 have a legitimate blank-value use case, so all 8 require one.
+ */
+export function requiresComparisonValue(operator: CustomOperator): boolean {
+  return operator !== "is_null" && operator !== "is_not_null";
+}
+
 /** Replace {{key}} tokens (dotted paths supported) with values from `data`. */
 export function renderTemplate(template: string, data: unknown): string {
   return template.replace(/\{\{\s*([\w.]+)\s*\}\}/g, (_m, key: string) => {
