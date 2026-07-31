@@ -5,6 +5,7 @@ import {
 import { computeTransitionType, type StageDef } from "@workspace/engine";
 import { dealEvents } from "../events";
 import { logger } from "../logger";
+import { flatTcv } from "../deal-filters";
 
 async function loadStages(): Promise<StageDef[]> {
   const rows = await db.select().from(pipelineStages);
@@ -66,7 +67,26 @@ export async function recordTransition(args: {
     .where(and(eq(dealSnapshots.dealId, args.dealId), lte(dealSnapshots.snapshotAt, at)))
     .orderBy(desc(dealSnapshots.snapshotAt))
     .limit(1);
-  const tcvAtTransition = snap?.normalizedTcv ?? null;
+  // A deal can transition (most commonly: its very first "create" transition)
+  // before any snapshot exists for it — snapshots are periodic, not written
+  // synchronously with every deal change. Falling back to `null` there
+  // silently zeroed out the pipeline's "Created" value in the Recycle & Exit
+  // waterfall. The deal's own current revenue fields are always available,
+  // so fall back to those (flatTcv — the same product+services formula every
+  // other analytics route on this branch uses) instead of leaving
+  // tcvAtTransition unset.
+  let tcvAtTransition = snap?.normalizedTcv ?? null;
+  if (tcvAtTransition == null) {
+    const [dealTcvRow] = await db
+      .select({
+        productRevenue: enterpriseDeals.productRevenue,
+        servicesRevenue: enterpriseDeals.servicesRevenue,
+      })
+      .from(enterpriseDeals)
+      .where(eq(enterpriseDeals.id, args.dealId))
+      .limit(1);
+    if (dealTcvRow) tcvAtTransition = String(flatTcv(dealTcvRow));
+  }
 
   await db
     .insert(pipelineTransitions)

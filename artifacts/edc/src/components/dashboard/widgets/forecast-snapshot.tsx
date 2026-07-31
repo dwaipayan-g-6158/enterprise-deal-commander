@@ -7,7 +7,12 @@ import { compactCurrency } from "./_shared";
 
 interface SimData {
   percentiles: { p10: number; p25: number; p50: number; p75: number; p90: number };
+  // weightedPipeline is the simulation's OWN AI-blended mean, not an
+  // independent "traditional" figure — see traditionalWeightedPipeline
+  // below (Σ tcv × manually-set win probability %, the same convention
+  // pages/analytics-overview.tsx and lib/engine's computeCoverage use).
   weightedPipeline: number;
+  traditionalWeightedPipeline: number;
   totalDeals: number;
 }
 
@@ -66,7 +71,8 @@ export function ForecastSnapshot({ reportingCurrency }: { reportingCurrency: str
               />
             </div>
             <p className="text-xs text-muted-foreground">
-              Traditional weighted: <span className="font-mono">{cur(sim.weightedPipeline)}</span> · {sim.totalDeals} active deals
+              Traditional weighted:{" "}
+              <span className="font-mono">{cur(sim.traditionalWeightedPipeline)}</span> · {sim.totalDeals} active deals
             </p>
             <button
               type="button"

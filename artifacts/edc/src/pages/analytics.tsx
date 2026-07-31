@@ -9,7 +9,7 @@ import { money } from "@/lib/format";
 
 export default function Analytics() {
   const pipeline = useGetPipelineAnalytics();
-  const pipe = pipeline.data?.data as { totalTcv: number; activeDeals: number } | undefined;
+  const pipe = pipeline.data?.data as { openTcv: number; openDealCount: number } | undefined;
 
   return (
     <div className="p-8 max-w-[1600px] mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -17,7 +17,11 @@ export default function Analytics() {
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Pipeline Analytics</h1>
           <p className="text-muted-foreground mt-2">
-            {pipe ? `${money(pipe.totalTcv)} across ${pipe.activeDeals} active deals` : "Crunching the pipeline…"}
+            {/* openTcv/openDealCount (not totalTcv/activeDeals) — those two
+                span every stage including Closed-Won/Closed-Lost, which
+                previously made this header's "active deals" claim count
+                deals that had already closed. */}
+            {pipe ? `${money(pipe.openTcv)} across ${pipe.openDealCount} active deals` : "Crunching the pipeline…"}
           </p>
           <PersonalityLine className="text-xs text-muted-foreground italic mt-1" />
         </div>

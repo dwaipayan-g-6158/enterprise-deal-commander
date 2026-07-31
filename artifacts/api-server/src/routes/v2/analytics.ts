@@ -54,19 +54,10 @@ import { computeMemoryHealth } from "../../lib/memory-health";
 import { computeCompetitorIntel, computePlaybookEffectiveness, percentiles } from "../../lib/memory-intel";
 import { pickLatestPerDeal, computeScoreDelta } from "../../lib/roster-enrichment";
 import { clusterProductGaps } from "../../lib/product-gaps";
+import { notDeletedFilter, CLOSED_STAGES } from "../../lib/deal-filters";
+import { computeVelocityRows } from "../../lib/velocity";
 
 const router: IRouter = Router();
-
-// Just "not soft-deleted" — archived deals are real, historical deals that
-// still count in every analytics number below — that's the whole point of
-// archiving vs. deleting. See
-// docs/superpowers/plans/2026-07-27-archive-lifecycle-and-semantics.md.
-// Named notDeletedFilter (not activeFilter) precisely because it does NOT
-// exclude archived deals — contrast with lib/scoring.ts and
-// lib/subscribers/index.ts, which each define their OWN separate
-// activeFilter/activeDealIds that DO exclude archived deals on purpose (a
-// closed deal's score/snapshot is frozen).
-const notDeletedFilter = isNull(enterpriseDeals.deletedAt);
 
 function daysBetween(from: Date | string | null, to = new Date()): number {
   if (!from) return 0;
@@ -103,65 +94,75 @@ router.get("/analytics/velocity", async (_req: Request, res: Response) => {
       stageName: pipelineStages.stageName,
     })
     .from(enterpriseDeals)
-    .leftJoin(pipelineStages, eq(enterpriseDeals.salesStageId, pipelineStages.id))
-    .where(notDeletedFilter);
+    .innerJoin(pipelineStages, eq(enterpriseDeals.salesStageId, pipelineStages.id))
+    // Closed deals never enter this comparison — a Closed-Won/Closed-Lost
+    // deal can't be "overdue," and including it polluted every OPEN deal's
+    // benchmark too (this table used to list Closed-Lost deals as "32 days
+    // overdue").
+    .where(and(notDeletedFilter, notInArray(pipelineStages.stageName, CLOSED_STAGES)));
 
-  // Benchmark = median days-in-stage across active deals in the same stage.
-  const byStage = new Map<string, number[]>();
-  for (const d of deals) {
-    const key = d.stageName ?? "?";
-    const arr = byStage.get(key) ?? [];
-    arr.push(daysBetween(d.stageEnteredAt));
-    byStage.set(key, arr);
-  }
-  const median = (xs: number[]) => {
-    const s = [...xs].sort((a, b) => a - b);
-    return s.length ? s[Math.floor(s.length / 2)] : 0;
-  };
+  // computeVelocityRows (lib/velocity.ts) computes each deal's benchmark as
+  // a leave-one-out median — excluding the deal itself — and returns null
+  // (not a self-fulfilling "exactly at benchmark") when it's the only open
+  // deal in its stage.
+  const rows = computeVelocityRows(
+    deals.map((d) => ({ id: d.id, stageName: d.stageName, daysInStage: daysBetween(d.stageEnteredAt) })),
+  );
+  const byId = new Map(deals.map((d) => [d.id, d]));
 
-  const out = deals.map((d) => {
-    const days = daysBetween(d.stageEnteredAt);
-    const benchmark = median(byStage.get(d.stageName ?? "?") ?? [days]);
+  const out = rows.map((r) => {
+    const d = byId.get(r.id)!;
     return {
-      id: d.id,
+      id: r.id,
       dealName: d.dealName,
       accountName: d.accountName,
-      stage: d.stageName,
-      daysInStage: days,
-      benchmarkDays: benchmark,
-      deltaDays: days - benchmark,
-      velocity: days > benchmark * 1.5 ? "SLOW" : days < benchmark * 0.5 ? "FAST" : "NORMAL",
+      stage: r.stageName,
+      daysInStage: r.daysInStage,
+      benchmarkDays: r.benchmarkDays,
+      deltaDays: r.deltaDays,
+      velocity: r.velocity,
     };
   });
-  out.sort((a, b) => b.deltaDays - a.deltaDays);
+  // Rows with no benchmark (insufficient data) sort to the bottom — they're
+  // neither overdue nor ahead, so they don't belong at either end of a
+  // "most overdue first" list.
+  out.sort((a, b) => (b.deltaDays ?? -Infinity) - (a.deltaDays ?? -Infinity));
   res.json({ data: { deals: out } });
 });
 
 router.get("/analytics/velocity/benchmarks", async (_req: Request, res: Response) => {
   const rows = await db
-    .select({ stageEnteredAt: enterpriseDeals.stageEnteredAt, stageName: pipelineStages.stageName })
+    .select({
+      stageEnteredAt: enterpriseDeals.stageEnteredAt,
+      stageName: pipelineStages.stageName,
+      sortOrder: pipelineStages.sortOrder,
+    })
     .from(enterpriseDeals)
-    .leftJoin(pipelineStages, eq(enterpriseDeals.salesStageId, pipelineStages.id))
-    .where(notDeletedFilter);
-  const byStage = new Map<string, number[]>();
+    .innerJoin(pipelineStages, eq(enterpriseDeals.salesStageId, pipelineStages.id))
+    // Closed stages aren't pipeline benchmarks — a "Closed-Lost median: 67d"
+    // entry read as if it were a stage a deal could still be progressing
+    // through.
+    .where(and(notDeletedFilter, notInArray(pipelineStages.stageName, CLOSED_STAGES)));
+  const byStage = new Map<string, { sortOrder: number; days: number[] }>();
   for (const r of rows) {
-    const key = r.stageName ?? "?";
-    const arr = byStage.get(key) ?? [];
-    arr.push(daysBetween(r.stageEnteredAt));
-    byStage.set(key, arr);
+    const entry = byStage.get(r.stageName) ?? { sortOrder: r.sortOrder, days: [] };
+    entry.days.push(daysBetween(r.stageEnteredAt));
+    byStage.set(r.stageName, entry);
   }
   const pct = (xs: number[], p: number) => {
     const s = [...xs].sort((a, b) => a - b);
     return s.length ? s[Math.min(s.length - 1, Math.floor(s.length * p))] : 0;
   };
-  const benchmarks = [...byStage.entries()].map(([stageName, xs]) => ({
-    stageName,
-    p25: pct(xs, 0.25),
-    median: pct(xs, 0.5),
-    p75: pct(xs, 0.75),
-    p90: pct(xs, 0.9),
-    sampleSize: xs.length,
-  }));
+  const benchmarks = [...byStage.entries()]
+    .sort((a, b) => a[1].sortOrder - b[1].sortOrder)
+    .map(([stageName, { days }]) => ({
+      stageName,
+      p25: pct(days, 0.25),
+      median: pct(days, 0.5),
+      p75: pct(days, 0.75),
+      p90: pct(days, 0.9),
+      sampleSize: days.length,
+    }));
   res.json({ data: { benchmarks } });
 });
 
@@ -176,6 +177,8 @@ router.get("/analytics/pipeline", async (_req: Request, res: Response) => {
     .leftJoin(pipelineStages, eq(enterpriseDeals.salesStageId, pipelineStages.id))
     .where(notDeletedFilter);
   let totalTcv = 0;
+  let openTcv = 0;
+  let openDealCount = 0;
   const byStage = new Map<string, { count: number; tcv: number }>();
   for (const r of rows) {
     const tcv = (Number(r.productRevenue) || 0) + (Number(r.servicesRevenue) || 0);
@@ -185,11 +188,24 @@ router.get("/analytics/pipeline", async (_req: Request, res: Response) => {
     cur.count++;
     cur.tcv += tcv;
     byStage.set(key, cur);
+    // totalTcv/activeDeals below deliberately span EVERY stage (including
+    // Closed-Won/Closed-Lost) — analytics.archive-parity.test.ts depends on
+    // a Closed-Lost deal staying in this same byStage breakdown after
+    // archiving. openTcv/openDealCount are additive fields for callers that
+    // want the header/"active pipeline" read the header text already
+    // implies — pages/analytics.tsx's header used to say "$6.6M across 16
+    // active deals" while summing every closed deal in the book too.
+    if (!CLOSED_STAGES.includes(key)) {
+      openTcv += tcv;
+      openDealCount++;
+    }
   }
   res.json({
     data: {
       totalTcv,
       activeDeals: rows.length,
+      openTcv,
+      openDealCount,
       byStage: [...byStage.entries()].map(([stage, v]) => ({ stage, ...v })),
     },
   });
@@ -223,8 +239,8 @@ router.get("/analytics/simulation", async (req: Request, res: Response) => {
   // Before archiving stopped meaning "excluded from everything," archiving a
   // closed deal was the only way to remove it from this Monte Carlo run;
   // this stage filter is what replaces that escape hatch now that archived
-  // deals still count elsewhere in analytics.
-  const CLOSED_STAGES: string[] = ["Closed-Won", "Closed-Lost"];
+  // deals still count elsewhere in analytics. CLOSED_STAGES imported from
+  // lib/deal-filters (was locally re-declared here and twice more below).
   const deals = await db
     .select({
       id: enterpriseDeals.id,
@@ -241,16 +257,44 @@ router.get("/analytics/simulation", async (req: Request, res: Response) => {
     predictiveScore: scores.get(d.id) ?? null,
     winProbabilityPct: d.winProbabilityPct ?? null,
   }));
-  res.json({ data: runPipelineSimulation(sim, iterations) });
+  // The engine's own `weightedPipeline` (in runPipelineSimulation's result)
+  // is Σ tcv × dealProbability, where dealProbability blends in the AI
+  // predictive score (falling back to winProbabilityPct, then a 30%
+  // default) — it's the simulation's own mean, not an independent
+  // cross-check of it. traditionalWeightedPipeline is the actual
+  // stage-weighted figure ("weighted pipeline" as sales teams usually mean
+  // it): Σ tcv × winProbabilityPct, deals without a manually-set win
+  // probability excluded rather than defaulted — same convention as
+  // computeCoverage's "weighted" ratio (lib/engine/src/flow.ts) and
+  // exports.ts's weightedTcv.
+  const withWinProb = deals.filter((d) => d.winProbabilityPct != null);
+  const traditionalWeightedPipeline = withWinProb.reduce((s, d) => {
+    const tcv = (Number(d.productRevenue) || 0) + (Number(d.servicesRevenue) || 0);
+    return s + tcv * (Number(d.winProbabilityPct) / 100);
+  }, 0);
+  res.json({
+    data: {
+      ...runPipelineSimulation(sim, iterations),
+      traditionalWeightedPipeline: Math.round(traditionalWeightedPipeline),
+      dealsWithoutWinProbability: deals.length - withWinProb.length,
+    },
+  });
 });
 
 /* ----------------------------------------------------------- F2 Competitive analytics */
+
+// A competitor with only 1-2 resolved encounters can't support a definitive
+// win-rate percentage — "1 encounter, 1 loss" reading as a stark "0%" is
+// noise, not signal. Mirrors /analytics/memory-insights's MIN_SAMPLE floor.
+const MIN_COMPETITIVE_SAMPLE = 3;
 
 router.get("/analytics/competitive", async (_req: Request, res: Response) => {
   const rows = await db
     .select({ name: competitors.name, status: dealCompetitors.status })
     .from(dealCompetitors)
-    .leftJoin(competitors, eq(dealCompetitors.competitorId, competitors.id));
+    .innerJoin(enterpriseDeals, eq(dealCompetitors.dealId, enterpriseDeals.id))
+    .leftJoin(competitors, eq(dealCompetitors.competitorId, competitors.id))
+    .where(notDeletedFilter);
   const agg = new Map<string, { encounters: number; wins: number; losses: number }>();
   for (const r of rows) {
     const key = r.name ?? "Unknown";
@@ -264,7 +308,8 @@ router.get("/analytics/competitive", async (_req: Request, res: Response) => {
     .map(([name, v]) => ({
       name,
       ...v,
-      winRatePct: v.wins + v.losses > 0 ? Math.round((v.wins / (v.wins + v.losses)) * 100) : null,
+      winRatePct:
+        v.wins + v.losses >= MIN_COMPETITIVE_SAMPLE ? Math.round((v.wins / (v.wins + v.losses)) * 100) : null,
     }))
     .sort((a, b) => b.encounters - a.encounters);
   res.json({ data: { competitors: competitorsOut } });
@@ -273,7 +318,11 @@ router.get("/analytics/competitive", async (_req: Request, res: Response) => {
 /* ----------------------------------------------------------- F5 Win/Loss analytics */
 
 router.get("/analytics/win-loss", async (_req: Request, res: Response) => {
-  const rows = await db.select().from(dealMemory);
+  const rows = await db
+    .select({ outcome: dealMemory.outcome, finalTcv: dealMemory.finalTcv })
+    .from(dealMemory)
+    .innerJoin(enterpriseDeals, eq(dealMemory.dealId, enterpriseDeals.id))
+    .where(notDeletedFilter);
   const won = rows.filter((r) => r.outcome === "Won").length;
   const lost = rows.filter((r) => r.outcome === "Lost").length;
   const ranges = [
@@ -376,8 +425,8 @@ router.get("/analytics/next-actions", async (_req: Request, res: Response) => {
   // next-actions is a reminder surface, so closed deals (Won or Lost) are
   // excluded — which also excludes archived deals for free, since archiving
   // requires a closed stage (enforced on /deals/:id/archive and on later
-  // stage edits — see routes/deals.ts).
-  const CLOSED_STAGES: string[] = ["Closed-Won", "Closed-Lost"];
+  // stage edits — see routes/deals.ts). CLOSED_STAGES imported from
+  // lib/deal-filters.
 
   const decisions = await db
     .select({
@@ -542,7 +591,7 @@ router.get("/analytics/vital-signs", async (_req: Request, res: Response) => {
     })
     .from(enterpriseDeals)
     .innerJoin(pipelineStages, eq(enterpriseDeals.salesStageId, pipelineStages.id))
-    .where(and(notDeletedFilter, notInArray(pipelineStages.stageName, ["Closed-Won", "Closed-Lost"])));
+    .where(and(notDeletedFilter, notInArray(pipelineStages.stageName, CLOSED_STAGES)));
   const openIds = new Set(deals.map((d) => d.id));
   const scores = await latestScores();
 
@@ -1072,7 +1121,7 @@ router.get("/analytics/loss-risk", async (_req: Request, res: Response) => {
     })
     .from(enterpriseDeals)
     .innerJoin(pipelineStages, eq(enterpriseDeals.salesStageId, pipelineStages.id))
-    .where(and(notDeletedFilter, notInArray(pipelineStages.stageName, ["Closed-Won", "Closed-Lost"])));
+    .where(and(notDeletedFilter, notInArray(pipelineStages.stageName, CLOSED_STAGES)));
 
   const activeIntel = await Promise.all(activeDeals.map((d) => cachedIntel(d.id)));
   const deals = activeDeals
@@ -1404,9 +1453,26 @@ async function loadFlowStages(): Promise<StageDef[]> {
 }
 
 async function loadTransitions(): Promise<TransitionRec[]> {
+  // Joined to enterpriseDeals + notDeletedFilter — pipelineTransitions has
+  // no soft-delete column of its own, so a soft-deleted deal's history was
+  // otherwise still summed into every Flow tab metric (funnel, conversion
+  // matrix, Sankey, recycle/exit rates, the value-bridge waterfall) even
+  // though loadOpenDeals below already excludes that same deal — the two
+  // halves of the Flow tab were drawing from two differently-scoped deal
+  // populations.
   const rows = await db
-    .select()
+    .select({
+      dealId: pipelineTransitions.dealId,
+      fromStageId: pipelineTransitions.fromStageId,
+      toStageId: pipelineTransitions.toStageId,
+      transitionType: pipelineTransitions.transitionType,
+      tcvAtTransition: pipelineTransitions.tcvAtTransition,
+      daysInFromStage: pipelineTransitions.daysInFromStage,
+      transitionedAt: pipelineTransitions.transitionedAt,
+    })
     .from(pipelineTransitions)
+    .innerJoin(enterpriseDeals, eq(pipelineTransitions.dealId, enterpriseDeals.id))
+    .where(notDeletedFilter)
     .orderBy(asc(pipelineTransitions.transitionedAt));
   return rows.map((r) => ({
     dealId: r.dealId,
@@ -1539,32 +1605,32 @@ router.get("/analytics/flow/health-score", async (_req: Request, res: Response) 
     daysWithStage.reduce((s, t) => s + (t.daysInFromStage ?? 0), 0) /
     Math.max(1, daysWithStage.length);
 
-  // Overdue share: fraction of currently-open deals running past 1.5x their
-  // stage's median residence — the same SLOW threshold /analytics/velocity
-  // uses, so "age" here means the same thing a viewer sees on the Velocity
-  // widget. This replaces the previous agingScore, which just re-read
-  // avgResidence under a second label (identical to velocityIndex) and so
-  // contributed no independent signal to the composite.
-  const stageAgeRows = await db
-    .select({ stageEnteredAt: enterpriseDeals.stageEnteredAt, stageName: pipelineStages.stageName })
+  // Overdue share: fraction of currently-open deals classified SLOW by
+  // computeVelocityRows (lib/velocity.ts) — the exact same open-deals-only,
+  // leave-one-out benchmark and >1.5x threshold /analytics/velocity uses, so
+  // "age" here means the same thing a viewer sees on the Velocity widget.
+  // Previously this ran its own inline median-by-stage loop that (a)
+  // included closed deals in both the benchmark and the denominator — a
+  // Closed-Lost deal can't be "overdue," so this contradicted the Velocity
+  // widget's own filtered list — and (b) let a deal's own days-in-stage
+  // count toward its own benchmark, the same self-referential bug fixed in
+  // /analytics/velocity. This also replaces the ORIGINAL agingScore, which
+  // just re-read avgResidence under a second label and so contributed no
+  // independent signal to the composite.
+  const openStageRows = await db
+    .select({
+      id: enterpriseDeals.id,
+      stageEnteredAt: enterpriseDeals.stageEnteredAt,
+      stageName: pipelineStages.stageName,
+    })
     .from(enterpriseDeals)
-    .leftJoin(pipelineStages, eq(enterpriseDeals.salesStageId, pipelineStages.id))
-    .where(notDeletedFilter);
-  const daysByStage = new Map<string, number[]>();
-  const dealAges = stageAgeRows.map((r) => {
-    const key = r.stageName ?? "?";
-    const days = daysBetween(r.stageEnteredAt);
-    daysByStage.set(key, [...(daysByStage.get(key) ?? []), days]);
-    return { key, days };
-  });
-  const median = (xs: number[]) => {
-    const s = [...xs].sort((a, b) => a - b);
-    return s.length ? s[Math.floor(s.length / 2)] : 0;
-  };
-  const overdueCount = dealAges.filter(
-    ({ key, days }) => days > median(daysByStage.get(key) ?? [days]) * 1.5,
-  ).length;
-  const overdueShare = dealAges.length > 0 ? overdueCount / dealAges.length : 0;
+    .innerJoin(pipelineStages, eq(enterpriseDeals.salesStageId, pipelineStages.id))
+    .where(and(notDeletedFilter, notInArray(pipelineStages.stageName, CLOSED_STAGES)));
+  const velocityRows = computeVelocityRows(
+    openStageRows.map((r) => ({ id: r.id, stageName: r.stageName, daysInStage: daysBetween(r.stageEnteredAt) })),
+  );
+  const overdueCount = velocityRows.filter((r) => r.velocity === "SLOW").length;
+  const overdueShare = velocityRows.length > 0 ? overdueCount / velocityRows.length : 0;
 
   // generationRatio: computeCoverage returns netNew===null in two distinct
   // situations that must be scored differently — no quarterly target

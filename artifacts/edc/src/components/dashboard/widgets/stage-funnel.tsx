@@ -4,10 +4,19 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { compactCurrency } from "./_shared";
 
 interface PipelineData {
-  totalTcv: number;
-  activeDeals: number;
+  openTcv: number;
+  openDealCount: number;
   byStage: { stage: string; count: number; tcv: number }[];
 }
+
+// byStage spans every stage including Closed-Won/Closed-Lost by design (the
+// backing /analytics/pipeline endpoint keeps that full census for other
+// consumers — see analytics.archive-parity.test.ts). This "at a glance"
+// dashboard widget is titled "Pipeline by Stage," not "Deal Census," so it
+// only bars the stages a deal can still move through — a closed-stage bar
+// here previously mixed already-decided deals into what reads as the live
+// pipeline shape.
+const isClosedStageName = (name: string) => name === "Closed-Won" || name === "Closed-Lost";
 
 interface Props {
   reportingCurrency: string;
@@ -33,7 +42,7 @@ export function StageFunnel({ reportingCurrency, onSelectStage }: Props) {
     );
   }
 
-  const stages = [...(pipe?.byStage ?? [])].sort((a, b) => b.tcv - a.tcv);
+  const stages = [...(pipe?.byStage ?? [])].filter((s) => !isClosedStageName(s.stage)).sort((a, b) => b.tcv - a.tcv);
   const maxTcv = stages.reduce((m, s) => Math.max(m, s.tcv), 0) || 1;
   const busiest = stages.reduce<{ stage: string; count: number } | null>(
     (top, s) => (!top || s.count > top.count ? { stage: s.stage, count: s.count } : top),
@@ -80,8 +89,8 @@ export function StageFunnel({ reportingCurrency, onSelectStage }: Props) {
             </div>
             <div className="flex items-center justify-between border-t pt-3 text-xs text-muted-foreground">
               <span>
-                Total: <span className="font-mono">{pipe?.activeDeals ?? 0}</span> deals ·{" "}
-                <span className="font-mono">{compactCurrency(pipe?.totalTcv ?? 0, reportingCurrency)}</span>
+                Total: <span className="font-mono">{pipe?.openDealCount ?? 0}</span> deals ·{" "}
+                <span className="font-mono">{compactCurrency(pipe?.openTcv ?? 0, reportingCurrency)}</span>
               </span>
               {busiest && (
                 <span>

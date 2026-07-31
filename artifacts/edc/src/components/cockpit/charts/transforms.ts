@@ -14,19 +14,25 @@ export function toFanSeries(f: Forecast): { k: string; lo: number; mid: number; 
   }));
 }
 
-export function classifyVelocity(deltaDays: number): "ahead" | "on" | "behind" {
+/**
+ * `null` means no leave-one-out benchmark exists yet (the deal is the ONLY
+ * open one in its stage — see computeVelocityRows, lib/velocity.ts on the
+ * server) — "unknown", not a fabricated "exactly on benchmark".
+ */
+export function classifyVelocity(deltaDays: number | null): "ahead" | "on" | "behind" | "unknown" {
+  if (deltaDays == null) return "unknown";
   if (deltaDays > 0) return "behind";
   if (deltaDays < 0) return "ahead";
   return "on";
 }
 
-export type VelocityTone = "ahead" | "on" | "behind";
+export type VelocityTone = "ahead" | "on" | "behind" | "unknown";
 
 export interface MeterGeometry {
   /** Total fill width as a 0–100 percentage of the shared track scale. */
   fillPct: number;
-  /** Benchmark tick position as a 0–100 percentage of the shared track scale. */
-  benchmarkPct: number;
+  /** Benchmark tick position as a 0–100 percentage of the shared track scale; `null` when there's no benchmark to draw. */
+  benchmarkPct: number | null;
   /** Overdue portion (beyond benchmark) as a 0–100 percentage; 0 unless behind. */
   overflowPct: number;
   tone: VelocityTone;
@@ -40,13 +46,17 @@ const clampPct = (n: number): number => Math.max(0, Math.min(100, n));
  * bars are comparable row-to-row. `scaleMax <= 0` is guarded to 1.
  */
 export function meterGeometry(
-  deal: { daysInStage: number; benchmarkDays: number; deltaDays: number },
+  deal: { daysInStage: number; benchmarkDays: number | null; deltaDays: number | null },
   scaleMax: number,
 ): MeterGeometry {
   const max = scaleMax > 0 ? scaleMax : 1;
   const tone = classifyVelocity(deal.deltaDays);
+  const fillPct = clampPct((deal.daysInStage / max) * 100);
+  if (deal.benchmarkDays == null || tone === "unknown") {
+    return { fillPct, benchmarkPct: null, overflowPct: 0, tone: "unknown" };
+  }
   return {
-    fillPct: clampPct((deal.daysInStage / max) * 100),
+    fillPct,
     benchmarkPct: clampPct((deal.benchmarkDays / max) * 100),
     overflowPct: tone === "behind" ? clampPct(((deal.daysInStage - deal.benchmarkDays) / max) * 100) : 0,
     tone,

@@ -57,6 +57,49 @@ describe("computeFunnel", () => {
     const rows = computeFunnel([], [], STAGES);
     expect(rows.every((r) => r.stageId < 5)).toBe(true);
   });
+  it("bounds convToNextPct at 100 even when recycling inflates raw entry counts past the from-stage population — regression guard for a real 1000% seen in production", () => {
+    // Old formula: (times anything ever entered next stage) / (times anything
+    // ever entered this stage). One deal that bounces Discovery -> Validation
+    // -> Discovery -> Validation -> Discovery -> Validation drives "entered
+    // Validation" to 3 while "entered Discovery" stays at 1 (the initial
+    // create), yielding 300%. New formula must stay <= 100 by construction.
+    const transitions: TransitionRec[] = [
+      { dealId: "a", fromStageId: null, toStageId: 1, transitionType: "create", tcv: 0, daysInFromStage: null, transitionedAt: "2026-01-01T00:00:00Z" },
+      { dealId: "a", fromStageId: 1, toStageId: 2, transitionType: "forward", tcv: 0, daysInFromStage: 1, transitionedAt: "2026-01-02T00:00:00Z" },
+      { dealId: "a", fromStageId: 2, toStageId: 1, transitionType: "backward", tcv: 0, daysInFromStage: 1, transitionedAt: "2026-01-03T00:00:00Z" },
+      { dealId: "a", fromStageId: 1, toStageId: 2, transitionType: "forward", tcv: 0, daysInFromStage: 1, transitionedAt: "2026-01-04T00:00:00Z" },
+      { dealId: "a", fromStageId: 2, toStageId: 1, transitionType: "backward", tcv: 0, daysInFromStage: 1, transitionedAt: "2026-01-05T00:00:00Z" },
+      { dealId: "a", fromStageId: 1, toStageId: 2, transitionType: "forward", tcv: 0, daysInFromStage: 1, transitionedAt: "2026-01-06T00:00:00Z" },
+    ];
+    const rows = computeFunnel([{ id: "a", stageId: 2, tcv: 100, winProbabilityPct: null, aiWinProbability: null, createdAt: "2026-01-01" }], transitions, STAGES);
+    const discovery = rows.find((r) => r.stageId === 1)!;
+    // Discovery had 3 outgoing transitions, all 3 to Validation -> 100%, not 300%.
+    expect(discovery.convToNextPct).toBe(100);
+  });
+  it("computes convToNextPct as forward-to-next share of all departures from a stage", () => {
+    const transitions: TransitionRec[] = [
+      { dealId: "a", fromStageId: 1, toStageId: 2, transitionType: "forward", tcv: 0, daysInFromStage: 1, transitionedAt: "2026-01-01T00:00:00Z" },
+      { dealId: "b", fromStageId: 1, toStageId: 2, transitionType: "forward", tcv: 0, daysInFromStage: 1, transitionedAt: "2026-01-02T00:00:00Z" },
+      // A third deal left Discovery but was lost directly from it (not to Validation).
+      { dealId: "c", fromStageId: 1, toStageId: 6, transitionType: "exit_lost", tcv: 0, daysInFromStage: 1, transitionedAt: "2026-01-03T00:00:00Z" },
+    ];
+    const rows = computeFunnel([], transitions, STAGES);
+    const discovery = rows.find((r) => r.stageId === 1)!;
+    // 3 departures from Discovery, 2 went to Validation -> 66.7%.
+    expect(discovery.convToNextPct).toBeCloseTo(66.7, 1);
+  });
+  it("sums pctOfPipeline to 100 across active stages even when closed-stage deals are included in the input", () => {
+    const deals: OpenDeal[] = [
+      { id: "a", stageId: 1, tcv: 100, winProbabilityPct: null, aiWinProbability: null, createdAt: "2026-01-01" },
+      { id: "b", stageId: 2, tcv: 300, winProbabilityPct: null, aiWinProbability: null, createdAt: "2026-01-01" },
+      // Closed deals should not dilute the open-stage percentages.
+      { id: "c", stageId: 5, tcv: 5000, winProbabilityPct: null, aiWinProbability: null, createdAt: "2026-01-01" },
+      { id: "d", stageId: 6, tcv: 5000, winProbabilityPct: null, aiWinProbability: null, createdAt: "2026-01-01" },
+    ];
+    const rows = computeFunnel(deals, [], STAGES);
+    const total = rows.reduce((s, r) => s + r.pctOfPipeline, 0);
+    expect(total).toBeCloseTo(100, 0);
+  });
 });
 
 describe("computeConversionMatrix", () => {
@@ -139,6 +182,20 @@ describe("computeSankeyFlows", () => {
     const { links } = computeSankeyFlows(transitions, STAGES, "value");
     expect(links[0].value).toBe(100);
   });
+  it("orders nodes by stage sortOrder, not raw stage id — regression guard for a caller that treats node index as pipeline order", () => {
+    // Deliberately give the later-pipeline stage the LOWER id, so sorting by
+    // id (the old behavior) would put it first despite sorting after
+    // Discovery in the actual pipeline.
+    const outOfOrderStages: StageDef[] = [
+      { id: 20, name: "Discovery", sortOrder: 1 },
+      { id: 10, name: "Validation", sortOrder: 2 },
+    ];
+    const transitions: TransitionRec[] = [
+      { dealId: "a", fromStageId: 20, toStageId: 10, transitionType: "forward", tcv: 0, daysInFromStage: 1, transitionedAt: "2026-01-01T00:00:00Z" },
+    ];
+    const { nodes } = computeSankeyFlows(transitions, outOfOrderStages, "count");
+    expect(nodes.map((n) => n.label)).toEqual(["Discovery", "Validation"]);
+  });
 });
 
 describe("computeRecycleExit", () => {
@@ -189,6 +246,21 @@ describe("computeRecycleExit", () => {
     expect(r.exitLostRateByStage[4]).toBe(50);
     expect(r.recycledDealCount).toBe(1);
     expect(r.recycledValue).toBe(75);
+  });
+  it("counts a deal recycled more than once toward recycledValue exactly once, at its latest known TCV — regression guard for a real recycled-value exceeding the whole portfolio", () => {
+    const transitions: TransitionRec[] = [
+      { dealId: "a", fromStageId: null, toStageId: 1, transitionType: "create", tcv: 100, daysInFromStage: null, transitionedAt: "2026-01-01T00:00:00Z" },
+      { dealId: "a", fromStageId: 1, toStageId: 2, transitionType: "forward", tcv: 100, daysInFromStage: 1, transitionedAt: "2026-01-02T00:00:00Z" },
+      { dealId: "a", fromStageId: 2, toStageId: 1, transitionType: "backward", tcv: 100, daysInFromStage: 1, transitionedAt: "2026-01-03T00:00:00Z" },
+      { dealId: "a", fromStageId: 1, toStageId: 2, transitionType: "forward", tcv: 150, daysInFromStage: 1, transitionedAt: "2026-01-04T00:00:00Z" },
+      // Recycled a second time — the same deal, not a second deal.
+      { dealId: "a", fromStageId: 2, toStageId: 1, transitionType: "backward", tcv: 150, daysInFromStage: 1, transitionedAt: "2026-01-05T00:00:00Z" },
+    ];
+    const r = computeRecycleExit(transitions, STAGES);
+    expect(r.recycleCountDistribution[2]).toBe(1); // one deal recycled twice
+    // Old formula summed tcv over every backward event: 100 + 150 = 250.
+    // Correct: the deal's own latest TCV (150), counted once.
+    expect(r.recycledValue).toBe(150);
   });
 });
 

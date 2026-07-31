@@ -9,8 +9,9 @@ export interface TriageDeal {
   accountName: string;
   stage: string;
   daysInStage: number;
-  benchmarkDays: number;
-  deltaDays: number;
+  /** `null` when this deal is the only OPEN one in its stage — no other deal to benchmark against yet. */
+  benchmarkDays: number | null;
+  deltaDays: number | null;
   velocity: string;
 }
 
@@ -18,9 +19,12 @@ const VEL: Record<string, { label: string; cls: string; Icon: LucideIcon }> = {
   SLOW: { label: "SLOW", cls: "bg-destructive text-white", Icon: ArrowUp },
   FAST: { label: "FAST", cls: "bg-emerald-500 text-white", Icon: ArrowDown },
   NORMAL: { label: "ON", cls: "bg-muted text-muted-foreground", Icon: Minus },
+  INSUFFICIENT_DATA: { label: "N/A", cls: "bg-muted text-muted-foreground", Icon: Minus },
 };
 
 function meterAria(deal: TriageDeal): string {
+  if (deal.deltaDays == null || deal.benchmarkDays == null)
+    return `${deal.daysInStage} days in stage — no other open deal in ${deal.stage} yet to benchmark against`;
   if (deal.deltaDays > 0)
     return `${deal.daysInStage} days in stage, benchmark ${deal.benchmarkDays}, ${deal.deltaDays} days overdue`;
   if (deal.deltaDays < 0)
@@ -53,11 +57,14 @@ function VarianceMeter({ deal, scaleMax }: { deal: TriageDeal; scaleMax: number 
           style={{ width: `${g.fillPct}%` }}
         />
       )}
-      <div
-        className="absolute inset-y-[-2px] w-0.5 bg-foreground/60"
-        style={{ left: `${g.benchmarkPct}%` }}
-        aria-hidden="true"
-      />
+      {/* No benchmark tick when there's nothing to compare against yet. */}
+      {g.benchmarkPct != null && (
+        <div
+          className="absolute inset-y-[-2px] w-0.5 bg-foreground/60"
+          style={{ left: `${g.benchmarkPct}%` }}
+          aria-hidden="true"
+        />
+      )}
     </div>
   );
 }
@@ -115,10 +122,16 @@ export function VelocityTriageTable({
                   </Tooltip>
                   <td
                     className={`py-2 pl-3 text-right font-mono whitespace-nowrap ${
-                      d.deltaDays > 0 ? "text-destructive" : d.deltaDays < 0 ? "text-emerald-600" : "text-muted-foreground"
+                      d.deltaDays == null
+                        ? "text-muted-foreground"
+                        : d.deltaDays > 0
+                          ? "text-destructive"
+                          : d.deltaDays < 0
+                            ? "text-emerald-600"
+                            : "text-muted-foreground"
                     }`}
                   >
-                    {d.deltaDays > 0 ? `+${d.deltaDays}d` : `${d.deltaDays}d`}
+                    {d.deltaDays == null ? "—" : d.deltaDays > 0 ? `+${d.deltaDays}d` : `${d.deltaDays}d`}
                   </td>
                   <td className="py-2 pl-3 text-right hidden sm:table-cell">
                     <Badge className={v.cls}>

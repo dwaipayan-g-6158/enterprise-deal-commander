@@ -18,6 +18,10 @@ describe("classifyVelocity", () => {
     expect(classifyVelocity(0)).toBe("on");
     expect(classifyVelocity(-3)).toBe("ahead");
   });
+
+  it("classifies a null delta (no benchmark yet) as unknown, not on-time", () => {
+    expect(classifyVelocity(null)).toBe("unknown");
+  });
 });
 
 describe("meterGeometry", () => {
@@ -50,5 +54,13 @@ describe("meterGeometry", () => {
     expect(g.fillPct).toBe(0);
     expect(g.benchmarkPct).toBe(0);
     expect(g.overflowPct).toBe(0);
+  });
+
+  it("renders a null benchmark as unknown tone with no benchmark tick, not a fabricated 0", () => {
+    const g = meterGeometry({ daysInStage: 13, benchmarkDays: null, deltaDays: null }, 20);
+    expect(g.tone).toBe("unknown");
+    expect(g.benchmarkPct).toBeNull();
+    expect(g.overflowPct).toBe(0);
+    expect(g.fillPct).toBeCloseTo(65);
   });
 });

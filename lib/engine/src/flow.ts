@@ -59,12 +59,12 @@ export function computeFunnel(
   stages: StageDef[],
 ): FunnelRow[] {
   const active = [...stages].filter((s) => !s.terminal).sort((a, b) => a.sortOrder - b.sortOrder);
-  const totalValue = deals.reduce((sum, d) => sum + d.tcv, 0) || 1;
 
-  // Count of deals that ever entered each active stage (for conversion).
-  const enteredCount = new Map<number, number>();
+  // Outgoing transitions per stage — every transition that LEFT this stage,
+  // regardless of destination. Denominator for convToNextPct below.
+  const outCount = new Map<number, number>();
   for (const t of transitions) {
-    if (t.toStageId != null) enteredCount.set(t.toStageId, (enteredCount.get(t.toStageId) ?? 0) + 1);
+    if (t.fromStageId != null) outCount.set(t.fromStageId, (outCount.get(t.fromStageId) ?? 0) + 1);
   }
   // Average residence time per stage, from transitions leaving that stage.
   const residSum = new Map<number, number>();
@@ -76,25 +76,38 @@ export function computeFunnel(
     }
   }
 
+  const stageValue = new Map<number, number>(
+    active.map((s) => [s.id, deals.filter((d) => d.stageId === s.id).reduce((sum, d) => sum + d.tcv, 0)]),
+  );
+  // pctOfPipeline's denominator is the active (open) stages actually shown in
+  // this funnel, not every deal passed in — `deals` may also include closed
+  // deals (their stageId falls outside `active`), which previously made the
+  // visible bars sum to well under 100%.
+  const totalActiveValue = [...stageValue.values()].reduce((s, v) => s + v, 0) || 1;
+
   return active.map((stage, i) => {
     const inStage = deals.filter((d) => d.stageId === stage.id);
     const next = active[i + 1];
-    // Use transition-derived entry count only (no inStage.length fallback) so that
-    // convToNextPct is null — not a misleading 0% — when there is no transition history.
-    const enteredThis = enteredCount.get(stage.id);
-    const enteredNext = next ? (enteredCount.get(next.id) ?? 0) : null;
+    // Conversion-to-next: of the transitions that LEFT this stage (any
+    // destination), the share that landed specifically on the next active
+    // stage. Bounded [0,100] by construction — both counts come from the
+    // same from-stage population. Replaces a prior formula that compared two
+    // unrelated global "ever entered stage X" counts, which could exceed
+    // 100% whenever recycling inflated the "next stage" count past the
+    // "this stage" count (e.g. a real "1000%" seen in production).
+    const outFromStage = outCount.get(stage.id) ?? 0;
+    const outToNextStage = next
+      ? transitions.filter((t) => t.fromStageId === stage.id && t.toStageId === next.id).length
+      : 0;
     const n = residN.get(stage.id) ?? 0;
     return {
       stageId: stage.id,
       stageName: stage.name,
       dealCount: inStage.length,
-      totalValue: inStage.reduce((s, d) => s + d.tcv, 0),
-      convToNextPct:
-        enteredThis != null && enteredThis > 0 && enteredNext != null
-          ? round1((enteredNext / enteredThis) * 100)
-          : null,
+      totalValue: stageValue.get(stage.id) ?? 0,
+      convToNextPct: next && outFromStage > 0 ? round1((outToNextStage / outFromStage) * 100) : null,
       avgDaysInStage: n > 0 ? Math.round((residSum.get(stage.id) ?? 0) / n) : null,
-      pctOfPipeline: round1((inStage.reduce((s, d) => s + d.tcv, 0) / totalValue) * 100),
+      pctOfPipeline: round1(((stageValue.get(stage.id) ?? 0) / totalActiveValue) * 100),
     };
   });
 }
@@ -184,6 +197,11 @@ export function computeSankeyFlows(
   mode: "count" | "value",
 ): { nodes: SankeyNode[]; links: SankeyLink[] } {
   const nameById = new Map(stages.map((s) => [s.id, s.name]));
+  // Consumers (transition-sankey.tsx) treat a lower node index as "earlier in
+  // the pipeline" to decide what counts as forward progression, so nodes must
+  // be ordered by the stage's own sortOrder — ordering by raw stage id only
+  // happened to work while seed ids matched sortOrder.
+  const sortOrderById = new Map(stages.map((s) => [s.id, s.sortOrder]));
   const linkMap = new Map<string, number>();
   const usedNodes = new Set<number>();
 
@@ -196,7 +214,7 @@ export function computeSankeyFlows(
   }
 
   const nodes: SankeyNode[] = [...usedNodes]
-    .sort((a, b) => a - b)
+    .sort((a, b) => (sortOrderById.get(a) ?? a) - (sortOrderById.get(b) ?? b))
     .map((id) => ({ id: String(id), label: nameById.get(id) ?? `Stage ${id}` }));
   const links: SankeyLink[] = [...linkMap.entries()].map(([key, value]) => {
     const [source, target] = key.split("→");
@@ -280,9 +298,26 @@ export function computeRecycleExit(transitions: TransitionRec[], stages: StageDe
   const recycledDeals = [...backByDeal.values()].filter((c) => c > 0).length;
   const recycleCountDistribution: Record<number, number> = {};
   for (const c of backByDeal.values()) recycleCountDistribution[c] = (recycleCountDistribution[c] ?? 0) + 1;
-  const recycledValue = transitions
-    .filter((t) => t.transitionType === "backward")
-    .reduce((s, t) => s + t.tcv, 0);
+  // Recycled value = each recycled deal's own (latest known) TCV, summed
+  // ONCE per distinct deal — matching the "N deals" framing above it. Summing
+  // `tcv` over every backward *event* instead double-counts a deal recycled
+  // more than once, which could (and did) inflate this past the entire
+  // portfolio's total value. Latest-by-timestamp rather than latest-in-array
+  // so this doesn't silently depend on callers passing pre-sorted input.
+  const latestTcvByDeal = new Map<string, number>();
+  const latestAtByDeal = new Map<string, number>();
+  for (const t of transitions) {
+    const at = new Date(t.transitionedAt).getTime();
+    const prevAt = latestAtByDeal.get(t.dealId);
+    if (prevAt == null || at >= prevAt) {
+      latestAtByDeal.set(t.dealId, at);
+      latestTcvByDeal.set(t.dealId, t.tcv);
+    }
+  }
+  const recycledValue = [...backByDeal.keys()].reduce(
+    (s, dealId) => s + (latestTcvByDeal.get(dealId) ?? 0),
+    0,
+  );
 
   // Recycle/exit rate by stage = (backward|exit from stage) / (entered stage).
   const enteredByStage = new Map<number, number>();

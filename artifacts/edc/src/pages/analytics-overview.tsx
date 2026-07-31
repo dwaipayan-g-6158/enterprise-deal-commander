@@ -30,8 +30,9 @@ interface VelocityDeal {
   accountName: string;
   stage: string;
   daysInStage: number;
-  benchmarkDays: number;
-  deltaDays: number;
+  /** `null` when this deal is the only OPEN one in its stage — no other deal to benchmark against yet. */
+  benchmarkDays: number | null;
+  deltaDays: number | null;
   velocity: string;
 }
 interface CompetitorRow {
@@ -52,7 +53,13 @@ export function AnalyticsOverview() {
 
   const vDeals = ((velocity.data?.data as { deals?: VelocityDeal[] })?.deals ?? []) as VelocityDeal[];
   const simData = sim.data?.data as
-    | { percentiles: Record<string, number>; weightedPipeline: number; mean: number }
+    | {
+        percentiles: Record<string, number>;
+        weightedPipeline: number;
+        mean: number;
+        traditionalWeightedPipeline: number;
+        dealsWithoutWinProbability: number;
+      }
     | undefined;
   const wl = winLoss.data?.data as
     | { won: number; lost: number; winRatePct: number | null; byTcvRange: { range: string; total: number; wins: number; winRatePct: number | null }[] }
@@ -92,8 +99,17 @@ export function AnalyticsOverview() {
                   ))}
                 </div>
                 <p className="text-sm text-muted-foreground">
-                  Weighted pipeline (traditional): <span className="font-mono">{money(simData.weightedPipeline)}</span>.
-                  Use <b>P50</b> ({money(simData.percentiles.p50)}) for planning, <b>P25</b> for conservative budgeting.
+                  {/* weightedPipeline (the simulation's own AI-blended mean)
+                      used to be shown here mislabeled "(traditional)" — it's
+                      not an independent cross-check of P50, it's the same
+                      Monte Carlo's average. traditionalWeightedPipeline is
+                      the actual manually-set win% figure: Σ tcv × win
+                      probability %, deals without one excluded. */}
+                  Weighted pipeline (traditional, win-probability only):{" "}
+                  <span className="font-mono">{money(simData.traditionalWeightedPipeline)}</span>
+                  {simData.dealsWithoutWinProbability > 0 &&
+                    ` (${simData.dealsWithoutWinProbability} deal${simData.dealsWithoutWinProbability === 1 ? "" : "s"} excluded — no win probability set)`}
+                  . Use <b>P50</b> ({money(simData.percentiles.p50)}) for planning, <b>P25</b> for conservative budgeting.
                 </p>
               </div>
             ) : (
