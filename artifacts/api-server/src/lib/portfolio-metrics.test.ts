@@ -435,6 +435,66 @@ describe("pickHighestCorrelationCluster", () => {
     });
     expect(top).toBeNull();
   });
+
+  it("ignores codes outside eligibleCodes", () => {
+    // Would otherwise be picked: dealCount/share/lift all clear their floors.
+    const byManager: GroupCorrelation[] = [
+      { name: "Alice", dealCount: 4, alertCorrelations: [{ code: "X", share: 0.75, lift: 2.0 }] },
+    ];
+    const top = pickHighestCorrelationCluster(
+      { manager: byManager, lead: [], product: [] },
+      DEFAULT_PORTFOLIO_CONFIG,
+      new Set(["SOME_OTHER_CODE"]),
+    );
+    expect(top).toBeNull();
+  });
+
+  it("is unchanged when eligibleCodes is omitted", () => {
+    // Same input as above, called with only 2 args — proves 2-arg callers
+    // (e.g. any existing/future test) keep working unmodified.
+    const byManager: GroupCorrelation[] = [
+      { name: "Alice", dealCount: 4, alertCorrelations: [{ code: "X", share: 0.75, lift: 2.0 }] },
+    ];
+    const top = pickHighestCorrelationCluster({ manager: byManager, lead: [], product: [] });
+    expect(top).toEqual({ scope: "manager", name: "Alice", code: "X", lift: 2.0, share: 0.75 });
+  });
+
+  it("never names a cluster whose code has no correlated exposure", () => {
+    // Counter-example from the A3 brief: 4 active deals total. 3 of them share
+    // account manager "Alice" (dealCount 3 >= clusterMinDeals), and 2 of those
+    // 3 carry code X as an ACTIVE alert; the 4th deal (a different manager)
+    // carries no active alert at all.
+    //
+    // Group share for X within Alice = 2/3 (~0.667) >= clusterMinShare (0.5).
+    // Portfolio-wide active share for X = 2/4 = 0.5.
+    // lift = 0.667 / 0.5 = 1.333 > 1.
+    // dealCount = 3 >= clusterMinDeals (3).
+    // => without eligibility filtering, pickHighestCorrelationCluster would
+    // report a cluster for X.
+    //
+    // But recurringActiveCodes requires >= clusterMinDeals (3) deals to
+    // actively carry X, and only 2 do — so X is excluded from sigCodes, and
+    // correlatedExposureTcv sums to 0. The cluster card must not name X.
+    const records: MetricsRecord[] = [
+      rec({ dealId: "a", accountManager: "Alice", activeAlertCodes: ["X"] }),
+      rec({ dealId: "b", accountManager: "Alice", activeAlertCodes: ["X"] }),
+      rec({ dealId: "c", accountManager: "Alice", activeAlertCodes: [] }),
+      rec({ dealId: "d", accountManager: "Bob", activeAlertCodes: [] }),
+    ];
+    const config = DEFAULT_PORTFOLIO_CONFIG;
+    const sigCodes = recurringActiveCodes(records, config);
+    expect(correlatedExposureTcv(records, sigCodes)).toBe(0);
+
+    const byManager: GroupCorrelation[] = [
+      { name: "Alice", dealCount: 3, alertCorrelations: [{ code: "X", share: 2 / 3, lift: 4 / 3 }] },
+    ];
+    const top = pickHighestCorrelationCluster(
+      { manager: byManager, lead: [], product: [] },
+      config,
+      sigCodes,
+    );
+    expect(top).toBeNull();
+  });
 });
 
 describe("computeDealRisk with a custom config", () => {

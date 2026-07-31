@@ -310,6 +310,13 @@ export function pickHighestCorrelationCluster(
     product: GroupCorrelation[];
   },
   config: PortfolioMetricsConfig = DEFAULT_PORTFOLIO_CONFIG,
+  /**
+   * When provided, only these codes may be reported. `computePortfolioAnalysis`
+   * passes `recurringActiveCodes(...)` — the exact code set
+   * `correlatedExposureTcv` sums — so a named cluster always has non-zero
+   * Correlated Exposure behind it. Omit for the raw group-concentration signal.
+   */
+  eligibleCodes?: Set<string>,
 ): HighestCorrelationCluster | null {
   const scopes: [HighestCorrelationCluster["scope"], GroupCorrelation[]][] = [
     ["manager", groups.manager],
@@ -321,6 +328,7 @@ export function pickHighestCorrelationCluster(
     for (const g of list) {
       if (g.dealCount < config.clusterMinDeals) continue;
       for (const c of g.alertCorrelations) {
+        if (eligibleCodes && !eligibleCodes.has(c.code)) continue;
         if (c.share < config.clusterMinShare) continue;
         // Only a positively-concentrated pattern (lift > baseline) is a
         // meaningful "correlation cluster"; lift <= 1 is at/below the norm.

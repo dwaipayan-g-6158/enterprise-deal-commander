@@ -156,13 +156,35 @@ export async function computeSummary() {
 
 type PortfolioRecord = MetricsRecord;
 
+/** Which alert set a correlation is computed over. */
+type CodeBasis = "alertCodes" | "activeAlertCodes";
+
+/** Portfolio-wide share of deals carrying each code, on the given basis. */
+function codeShares(
+  records: PortfolioRecord[],
+  basis: CodeBasis,
+): Map<string, number> {
+  const counts = new Map<string, number>();
+  for (const r of records) {
+    for (const code of new Set(r[basis])) {
+      counts.set(code, (counts.get(code) ?? 0) + 1);
+    }
+  }
+  const shares = new Map<string, number>();
+  for (const [code, count] of counts) {
+    shares.set(code, records.length > 0 ? count / records.length : 0);
+  }
+  return shares;
+}
+
 function correlations(
   records: PortfolioRecord[],
   globalShares: Map<string, number>,
-) {
+  basis: CodeBasis = "alertCodes",
+): { code: string; share: number; lift: number }[] {
   const codeCounts = new Map<string, number>();
   for (const r of records) {
-    for (const code of new Set(r.alertCodes)) {
+    for (const code of new Set(r[basis])) {
       codeCounts.set(code, (codeCounts.get(code) ?? 0) + 1);
     }
   }
@@ -205,18 +227,12 @@ export async function computePortfolioAnalysis() {
     stalled: d.governance.alerts.some((a) => a.code === "STALLED_VALIDATION"),
   }));
 
-  const globalShares = new Map<string, number>();
-  {
-    const codeCounts = new Map<string, number>();
-    for (const r of records) {
-      for (const code of new Set(r.alertCodes)) {
-        codeCounts.set(code, (codeCounts.get(code) ?? 0) + 1);
-      }
-    }
-    for (const [code, count] of codeCounts) {
-      globalShares.set(code, records.length > 0 ? count / records.length : 0);
-    }
-  }
+  // Tables keep the active+managed basis (shipped behavior, documented parity).
+  const globalShares = codeShares(records, "alertCodes");
+  // The Top Correlation Cluster card must agree with Correlated Exposure, which
+  // only ever sums ACTIVE (undispositioned) alerts — so the cluster is detected
+  // on an active-only basis. Same groups, different alert set.
+  const activeGlobalShares = codeShares(records, "activeAlertCodes");
 
   const groupBy = (key: "accountManager" | "technicalLead") => {
     const groups = new Map<string, PortfolioRecord[]>();
@@ -290,29 +306,29 @@ export async function computePortfolioAnalysis() {
     technicalLeads: [...new Set(tlCells.map((c) => c.person))].sort(),
   };
 
-  const managerCorr: GroupCorrelation[] = byAccountManager.map((g) => ({
-    name: g.accountManager,
-    dealCount: g.dealCount,
-    alertCorrelations: g.alertCorrelations,
-  }));
-  const leadCorr: GroupCorrelation[] = byTechnicalLead.map((g) => ({
-    name: g.technicalLead,
-    dealCount: g.dealCount,
-    alertCorrelations: g.alertCorrelations,
-  }));
-  const productCorr: GroupCorrelation[] = byProduct.map((g) => ({
-    name: g.productName,
-    dealCount: g.dealCount,
-    alertCorrelations: g.alertCorrelations,
-  }));
+  const activeCorr = (
+    entries: Iterable<[string, PortfolioRecord[]]>,
+  ): GroupCorrelation[] =>
+    [...entries].map(([name, recs]) => ({
+      name,
+      dealCount: recs.length,
+      alertCorrelations: correlations(recs, activeGlobalShares, "activeAlertCodes"),
+    }));
+
+  const activeManagerCorr = activeCorr(amGroups);
+  // Mirror the table's exclusion: an "Unassigned" bucket is not a team member.
+  const activeLeadCorr = activeCorr(
+    [...tlGroups].filter(([tl]) => tl !== UNASSIGNED),
+  );
+  const activeProductCorr = activeCorr(productGroups);
   const sigCodes = recurringActiveCodes(records, portfolioConfig);
   const summary = {
     diversificationIndex: diversificationIndex(amCells),
-    highestCorrelationCluster: pickHighestCorrelationCluster({
-      manager: managerCorr,
-      lead: leadCorr,
-      product: productCorr,
-    }, portfolioConfig),
+    highestCorrelationCluster: pickHighestCorrelationCluster(
+      { manager: activeManagerCorr, lead: activeLeadCorr, product: activeProductCorr },
+      portfolioConfig,
+      sigCodes,
+    ),
     correlatedExposureTcv: correlatedExposureTcv(records, sigCodes),
     redDealCount: records.filter((r) => r.hasActiveRedAlert).length,
     totalDealCount: records.length,
