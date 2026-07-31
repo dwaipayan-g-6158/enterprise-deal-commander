@@ -33,6 +33,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { Trash2, Plus, FlaskConical } from "lucide-react";
 import { AdminOnly, ReadOnlyNotice } from "@/components/auth/write-gate";
@@ -64,12 +74,32 @@ export function WebhooksSettings() {
   const update = useUpdateWebhook();
   const del = useDeleteWebhook();
   const [form, setForm] = useState({ webhook_name: "", target_url: "", events: [] as string[] });
+  const [deleteTarget, setDeleteTarget] = useState<Webhook | null>(null);
 
   const webhooks = list.data?.data ?? [];
   const invalidate = () => qc.invalidateQueries({ queryKey: list.queryKey });
 
+  const confirmDelete = async () => {
+    if (!deleteTarget) return;
+    try {
+      await del.mutateAsync({ id: deleteTarget.id });
+      await invalidate();
+      setDeleteTarget(null);
+      toast({ title: "Webhook deleted" });
+    } catch (err) {
+      toast({ title: "Could not delete webhook", description: serverMessage(err, ""), variant: "destructive" });
+    }
+  };
+
   const add = async () => {
-    if (!form.webhook_name || !form.target_url || form.events.length === 0) return;
+    if (!form.webhook_name.trim() || !form.target_url.trim()) {
+      toast({ title: "Name and target URL are required", variant: "destructive" });
+      return;
+    }
+    if (form.events.length === 0) {
+      toast({ title: "Select at least one event", variant: "destructive" });
+      return;
+    }
     try {
       await create.mutateAsync({ data: form as never });
       await invalidate();
@@ -130,7 +160,7 @@ export function WebhooksSettings() {
               <Switch checked={w.isActive} onCheckedChange={(v) => toggleActive(w, v)} disabled={update.isPending} />
             </AdminOnly>
             <AdminOnly>
-              <Button variant="ghost" size="icon" onClick={async () => { await del.mutateAsync({ id: w.id }); await invalidate(); }}>
+              <Button variant="ghost" size="icon" onClick={() => setDeleteTarget(w)}>
                 <Trash2 className="h-4 w-4" />
               </Button>
             </AdminOnly>
@@ -162,6 +192,27 @@ export function WebhooksSettings() {
           <ReadOnlyNotice>No webhooks are configured.</ReadOnlyNotice>
         )}
       </CardContent>
+
+      <AlertDialog open={deleteTarget !== null} onOpenChange={(v) => !v && setDeleteTarget(null)}>
+        <AlertDialogContent animation="spotlight">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this webhook?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {deleteTarget?.webhookName} will stop receiving event deliveries immediately.
+              This can't be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmDelete}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Card>
   );
 }
@@ -177,12 +228,28 @@ export function NotificationSettings() {
   const update = useUpdateNotificationRule();
   const del = useDeleteNotificationRule();
   const [form, setForm] = useState({ rule_name: "", trigger_event: "health_changed", channel: "in_app" });
+  const [deleteTarget, setDeleteTarget] = useState<NotificationRule | null>(null);
 
   const rules = list.data?.data ?? [];
   const invalidate = () => qc.invalidateQueries({ queryKey: list.queryKey });
 
+  const confirmDelete = async () => {
+    if (!deleteTarget) return;
+    try {
+      await del.mutateAsync({ id: deleteTarget.id });
+      await invalidate();
+      setDeleteTarget(null);
+      toast({ title: "Rule deleted" });
+    } catch (err) {
+      toast({ title: "Could not delete rule", description: serverMessage(err, ""), variant: "destructive" });
+    }
+  };
+
   const add = async () => {
-    if (!form.rule_name) return;
+    if (!form.rule_name.trim()) {
+      toast({ title: "Rule name is required", variant: "destructive" });
+      return;
+    }
     try {
       await create.mutateAsync({ data: form as never });
       await invalidate();
@@ -232,7 +299,7 @@ export function NotificationSettings() {
               <Switch checked={r.isActive} onCheckedChange={(v) => toggleActive(r, v)} disabled={update.isPending} />
             </AdminOnly>
             <AdminOnly>
-              <Button variant="ghost" size="icon" onClick={async () => { await del.mutateAsync({ id: r.id }); await invalidate(); }}>
+              <Button variant="ghost" size="icon" onClick={() => setDeleteTarget(r)}>
                 <Trash2 className="h-4 w-4" />
               </Button>
             </AdminOnly>
@@ -259,6 +326,26 @@ export function NotificationSettings() {
           <ReadOnlyNotice>No smart alert rules are configured.</ReadOnlyNotice>
         )}
       </CardContent>
+
+      <AlertDialog open={deleteTarget !== null} onOpenChange={(v) => !v && setDeleteTarget(null)}>
+        <AlertDialogContent animation="spotlight">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this rule?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {deleteTarget?.ruleName} will stop firing immediately. This can't be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmDelete}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Card>
   );
 }
@@ -297,9 +384,22 @@ export function CustomPatternsSettings() {
   });
   const [conds, setConds] = useState<Cond[]>([{ field_path: FIELD_PATHS[0], operator: "gt", comparison_value: "" }]);
   const [testResult, setTestResult] = useState<string>("");
+  const [deleteTarget, setDeleteTarget] = useState<CustomPattern | null>(null);
 
   const patterns = list.data?.data ?? [];
   const invalidate = () => qc.invalidateQueries({ queryKey: list.queryKey });
+
+  const confirmDelete = async () => {
+    if (!deleteTarget) return;
+    try {
+      await del.mutateAsync({ id: deleteTarget.id });
+      await invalidate();
+      setDeleteTarget(null);
+      toast({ title: "Pattern deleted" });
+    } catch (err) {
+      toast({ title: "Could not delete pattern", description: serverMessage(err, ""), variant: "destructive" });
+    }
+  };
 
   const body = () => ({
     ...form,
@@ -352,7 +452,22 @@ export function CustomPatternsSettings() {
   };
 
   const save = async () => {
-    if (!canSave) return;
+    if (!form.pattern_name.trim()) {
+      toast({ title: "Pattern name is required", variant: "destructive" });
+      return;
+    }
+    if (!form.alert_message_template.trim()) {
+      toast({ title: "Alert message is required", variant: "destructive" });
+      return;
+    }
+    // Per-value feedback already lives inline on each condition row (the red
+    // border + title on the Input) and on the disabled Save button's own
+    // tooltip — this is just the fallback for a caller that reaches here
+    // some other way (e.g. a future keyboard submit).
+    if (invalidConditions.length > 0) {
+      toast({ title: "Fill in every required comparison value", variant: "destructive" });
+      return;
+    }
     try {
       await create.mutateAsync({ data: body() as never });
       await invalidate();
@@ -418,7 +533,7 @@ export function CustomPatternsSettings() {
               <Switch checked={p.isActive} onCheckedChange={(v) => toggleActive(p, v)} disabled={update.isPending} />
             </AdminOnly>
             <AdminOnly>
-              <Button variant="ghost" size="icon" onClick={async () => { await del.mutateAsync({ id: p.id }); await invalidate(); }}>
+              <Button variant="ghost" size="icon" onClick={() => setDeleteTarget(p)}>
                 <Trash2 className="h-4 w-4" />
               </Button>
             </AdminOnly>
@@ -510,6 +625,26 @@ export function CustomPatternsSettings() {
           </div>
         </div>
       </CardContent>
+
+      <AlertDialog open={deleteTarget !== null} onOpenChange={(v) => !v && setDeleteTarget(null)}>
+        <AlertDialogContent animation="spotlight">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this pattern?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {deleteTarget?.patternName} will stop firing immediately. This can't be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmDelete}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Card>
   );
 }
