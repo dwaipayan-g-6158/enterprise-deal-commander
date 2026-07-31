@@ -62,9 +62,46 @@ async function activeDealIds(): Promise<string[]> {
   return rows.map((r) => r.id);
 }
 
+/**
+ * Max concurrent per-deal intelligence assemblies.
+ *
+ * `assembleDealIntelligence` issues ~15 sequential queries per deal against a
+ * pool created as `new Pool({ connectionString })` with no `max`
+ * (lib/db/src/index.ts:13) — i.e. node-postgres' default of 10 connections. An
+ * unbounded `Promise.all` over every active deal therefore doesn't go faster;
+ * it queues on the pool and starves concurrent request handlers of connections
+ * (this path runs on GET /intelligence/summary, GET
+ * /intelligence/portfolio-analysis, GET /api/v2/analytics/engagement AND the
+ * background rollup refresh). 8 saturates the pool while leaving headroom.
+ */
+const INTEL_CONCURRENCY = 8;
+
+/** Order-preserving bounded-concurrency map (no such helper exists in-repo). */
+export async function mapWithConcurrency<T, R>(
+  items: T[],
+  limit: number,
+  fn: (item: T) => Promise<R>,
+): Promise<R[]> {
+  const results = new Array<R>(items.length);
+  let next = 0;
+  const workers = Array.from(
+    { length: Math.min(limit, items.length) },
+    async () => {
+      for (let i = next++; i < items.length; i = next++) {
+        results[i] = await fn(items[i]);
+      }
+    },
+  );
+  await Promise.all(workers);
+  return results;
+}
+
 async function loadActiveIntel(): Promise<Intel[]> {
   const ids = await activeDealIds();
-  const results = await Promise.all(ids.map((id) => cachedIntel(id)));
+  // Index-keyed writes keep input order, which `computeSummary`'s stable
+  // topMovers sort and criticalAlerts/staleDeals slicing rely on for
+  // deterministic tie-breaks.
+  const results = await mapWithConcurrency(ids, INTEL_CONCURRENCY, cachedIntel);
   return results.filter((r): r is Intel => r !== null);
 }
 
