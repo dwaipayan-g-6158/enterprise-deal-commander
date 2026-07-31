@@ -241,32 +241,46 @@ describe("createDebouncer", () => {
     expect(calls).toBe(2);
   });
 
-  it("fires at the FIRST schedule()'s deadline, not extended by a later one (leading, not trailing)", async () => {
-    // Regression guard: if createDebouncer were "fixed" into a trailing
-    // debounce, a second schedule() call inside the window would push the
-    // deadline out and fn() would fire later than the window below allows.
-    const WINDOW_DELAY_MS = 30;
-    let firedAt: number | null = null;
-    const debouncer = createDebouncer(WINDOW_DELAY_MS, () => {
-      firedAt = Date.now();
+  it("keeps firing during a sustained schedule() burst (leading, not trailing debounce)", async () => {
+    // Regression guard for the exact failure mode createDebouncer's own
+    // docblock warns about: "a sustained write burst would then starve the
+    // refresh indefinitely" if this were "fixed" into a trailing debounce
+    // (clearTimeout + re-setTimeout on every schedule() call).
+    //
+    // Deliberately NOT a wall-clock-delta assertion: on this host, Windows'
+    // ~15.6ms system timer granularity is larger than any narrow assertion
+    // margin a short window could give (measured 3/5 pass, 2/5 fail on the
+    // previous version of this test with a 30ms window and a 9ms margin —
+    // i.e. correct code already lands outside that margin ~40% of the time).
+    // Instead we assert the BEHAVIOR that actually matters: does the debounced
+    // fn ever fire while schedule() keeps being called faster than the
+    // window? A leading debounce fires ~delayMs after the first call and
+    // keeps firing periodically no matter how many further calls arrive
+    // inside each window (they're absorbed, not pushed out). A trailing
+    // debounce driven by calls that never stop arriving would never let its
+    // window elapse quietly, so it would still read exactly 0 here — a
+    // difference that doesn't depend on measuring any particular millisecond.
+    const DELAY_MS_WINDOW = 40;
+    let calls = 0;
+    const debouncer = createDebouncer(DELAY_MS_WINDOW, () => {
+      calls++;
     });
 
-    const start = Date.now();
-    debouncer.schedule();
-    // Call again partway through the window — must be absorbed, not push
-    // the deadline out.
-    await sleep(WINDOW_DELAY_MS * 0.5);
-    debouncer.schedule();
+    // Sustained "write burst": call schedule() well inside every window,
+    // for several multiples of the window's length.
+    const burstDurationMs = DELAY_MS_WINDOW * 5;
+    const scheduleIntervalMs = DELAY_MS_WINDOW / 4;
+    const deadline = Date.now() + burstDurationMs;
+    while (Date.now() < deadline) {
+      debouncer.schedule();
+      await sleep(scheduleIntervalMs);
+    }
 
-    await sleep(WINDOW_DELAY_MS * 2);
-
-    expect(firedAt).not.toBeNull();
-    const elapsed = (firedAt as unknown as number) - start;
-    // Leading-window: fires ~WINDOW_DELAY_MS after the FIRST call. A trailing
-    // debounce would instead fire ~1.5x WINDOW_DELAY_MS after start. Allow
-    // generous scheduling slack but stay well under the trailing-debounce
-    // timing to distinguish the two.
-    expect(elapsed).toBeLessThan(WINDOW_DELAY_MS * 1.3);
+    // Leading debounce: fires multiple times over a burst this long. Trailing
+    // debounce: fires zero times for as long as the burst continues. Either
+    // way the assertion below only needs "at least once" to tell them apart —
+    // no timing margin to be flaky about.
+    expect(calls).toBeGreaterThanOrEqual(1);
   });
 
   it("cancel() before the delay elapses prevents fn() from ever firing", async () => {
