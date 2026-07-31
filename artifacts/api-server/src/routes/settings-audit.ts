@@ -12,6 +12,7 @@ import {
 import { getActor } from "../lib/auth";
 import { badRequest, notFound, conflict } from "../lib/http";
 import { computeRollback, logSettingsChange } from "../lib/settings-audit";
+import { validateThresholdUpdate } from "../lib/threshold-validation";
 import { toISO } from "../lib/intelligence";
 
 const router: IRouter = Router();
@@ -112,6 +113,25 @@ router.post("/settings/change-log/:id/rollback", async (req: Request, res: Respo
     throw conflict(`Cannot automatically apply a "${inverse.action}" rollback for module "${row.module}"`);
   }
 
+  // Same bounded validation PUT /lookups/engine-thresholds applies (M4). This
+  // route writes the same engine_thresholds table, so without it a rollback is
+  // an alternate path to the very values that gate blocks — e.g. restoring a
+  // risk_weight_* to 0 (collapsing every deal's risk to LOW/GREEN) or a
+  // non-monotonic risk_level_* boundary. The rollback is a single
+  // parameterKey/parameterValue pair; boundary rules resolve their unspecified
+  // siblings from current DB state.
+  const currentThresholds = await db.select().from(engineThresholds);
+  const currentMap = new Map(
+    currentThresholds.map((t) => [t.parameterKey, { parameterValue: t.parameterValue, dataType: t.dataType }]),
+  );
+  const validation = validateThresholdUpdate(
+    [{ parameter_key: inverse.settingKey, parameter_value: restoreValue }],
+    currentMap,
+  );
+  if (!validation.valid) {
+    throw badRequest(validation.error ?? "Invalid threshold rollback value");
+  }
+
   await db
     .insert(engineThresholds)
     .values({ parameterKey: inverse.settingKey, parameterValue: restoreValue })
@@ -189,6 +209,25 @@ router.post("/settings/config/import", async (req: Request, res: Response) => {
 
   const priorThresholds = await db.select().from(engineThresholds);
   const priorByKey = new Map(priorThresholds.map((t) => [t.parameterKey, t.parameterValue]));
+  // Same bounded validation PUT /lookups/engine-thresholds applies (M4) — an
+  // import is otherwise a way to smuggle in the values that gate rejects.
+  // Validated as ONE batch before any write, so an invalid entry rejects the
+  // whole payload rather than leaving the entries ahead of it already applied.
+  // (Note the field-name casing differs: the import payload is camelCase,
+  // ThresholdUpdateItem is snake_case.)
+  const currentMap = new Map(
+    priorThresholds.map((t) => [t.parameterKey, { parameterValue: t.parameterValue, dataType: t.dataType }]),
+  );
+  const thresholdValidation = validateThresholdUpdate(
+    parsed.data.engineThresholds.map((row) => ({
+      parameter_key: row.parameterKey,
+      parameter_value: row.parameterValue,
+    })),
+    currentMap,
+  );
+  if (!thresholdValidation.valid) {
+    throw badRequest(thresholdValidation.error ?? "Invalid engine thresholds in import payload");
+  }
   for (const row of parsed.data.engineThresholds) {
     await db
       .insert(engineThresholds)

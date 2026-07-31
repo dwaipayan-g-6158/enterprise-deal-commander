@@ -266,6 +266,16 @@ interface RiskPattern {
 
 const fmt = (n: number) => Math.round(n).toLocaleString("en-US");
 
+/**
+ * Renders a SIGNED `daysToClose` as prose. `daysToClose` is negative for a deal
+ * already past its expected close date (Task 3/M14 stopped clamping it at 0), so
+ * naive interpolation produced nonsense like "close date is -8 days away".
+ */
+const closeHorizonPhrase = (daysToClose: number | null): string => {
+  if (daysToClose == null) return "not set";
+  return daysToClose < 0 ? `${Math.abs(daysToClose)} days OVERDUE` : `${daysToClose} days away`;
+};
+
 // ---------------------------------------------------------------------------
 // IAM/SIEM product intelligence — domain constants (pure, isomorphic).
 // Keyed by stable product `code`, never UUID or display name.
@@ -442,6 +452,8 @@ export const riskPatterns: RiskPattern[] = [
     severity: "YELLOW",
     weight: 70,
     evaluate: (deal, _b, thresholds) =>
+      deal.salesStage !== "Closed-Won" &&
+      deal.salesStage !== "Closed-Lost" &&
       deal.normalizedTCV >= thresholds.elephant_tcv_threshold &&
       deal.servicesTier === "None",
     formatMessage: (deal, thresholds) =>
@@ -470,7 +482,10 @@ export const riskPatterns: RiskPattern[] = [
     severity: "RED",
     weight: 90,
     evaluate: (deal) =>
-      deal.salesStage !== "Discovery" && !deal.gateMap["G1_CRITERIA_LOCKED"],
+      deal.salesStage !== "Discovery" &&
+      deal.salesStage !== "Closed-Won" &&
+      deal.salesStage !== "Closed-Lost" &&
+      !deal.gateMap["G1_CRITERIA_LOCKED"],
     formatMessage: () =>
       `MISSING STRUCTURAL ANCHOR: Deal has transitioned past initial Discovery but ` +
       `minimum technical success criteria remain unverified and unlocked. The ` +
@@ -493,6 +508,8 @@ export const riskPatterns: RiskPattern[] = [
     weight: 60,
     evaluate: (deal, _b, thresholds) =>
       deal.salesStage !== "Discovery" &&
+      deal.salesStage !== "Closed-Won" &&
+      deal.salesStage !== "Closed-Lost" &&
       !deal.gateMap["G1_EXECUTIVE_AGREED"] &&
       deal.daysSinceCreation > thresholds.phantom_champion_days,
     formatMessage: (deal) =>
@@ -523,6 +540,8 @@ export const riskPatterns: RiskPattern[] = [
     severity: "YELLOW",
     weight: 50,
     evaluate: (deal, blockers, thresholds) => {
+      if (deal.salesStage === "Closed-Won" || deal.salesStage === "Closed-Lost")
+        return false;
       const hasNotes = !!(
         deal.blueprintNotes && deal.blueprintNotes.trim().length >= 20
       );
@@ -595,6 +614,8 @@ export const riskPatterns: RiskPattern[] = [
     severity: "YELLOW",
     weight: 55,
     evaluate: (deal, _b, thresholds) =>
+      deal.salesStage !== "Closed-Won" &&
+      deal.salesStage !== "Closed-Lost" &&
       deal.daysInStage > thresholds.stale_stage_days &&
       deal.technicalProgressPct < 100,
     formatMessage: (deal) =>
@@ -623,6 +644,8 @@ export const riskPatterns: RiskPattern[] = [
     severity: "YELLOW",
     weight: 65,
     evaluate: (deal, _b, thresholds) => {
+      if (deal.salesStage === "Closed-Won" || deal.salesStage === "Closed-Lost")
+        return false;
       if (deal.daysToClose == null) return false;
       return (
         deal.daysToClose <= thresholds.close_date_warning_days &&
@@ -630,7 +653,7 @@ export const riskPatterns: RiskPattern[] = [
       );
     },
     formatMessage: (deal, thresholds) =>
-      `CLOSE DATE PRESSURE: Expected close date is ${deal.daysToClose} days away ` +
+      `CLOSE DATE PRESSURE: Expected close date is ${closeHorizonPhrase(deal.daysToClose)} ` +
       `but only ${deal.technicalProgressPct}% of technical gates are complete ` +
       `(expected: >=${thresholds.gate_completion_warn_pct}%). High risk of close ` +
       `date slip or premature forced closure.`,
@@ -701,6 +724,8 @@ export const riskPatterns: RiskPattern[] = [
     severity: "YELLOW",
     weight: 75,
     evaluate: (deal, _b, thresholds, context) => {
+      if (deal.salesStage === "Closed-Won" || deal.salesStage === "Closed-Lost")
+        return false;
       const m = context?.ownMomentum || null;
       if (!m) return false;
       if (deal.daysToClose == null) return false;
@@ -715,7 +740,7 @@ export const riskPatterns: RiskPattern[] = [
       return (
         `SLOW-MOTION COLLISION: This deal's own gate-completion velocity has ` +
         `dropped ~${Math.round(m?.dropPct ?? 0)}% (recent vs earlier window) while the close ` +
-        `date is ${deal.daysToClose} days away and only ${deal.technicalProgressPct}% of ` +
+        `date is ${closeHorizonPhrase(deal.daysToClose)} and only ${deal.technicalProgressPct}% of ` +
         `gates are complete. On its current self-trajectory it will not finish validation in time.`
       );
     },
@@ -751,6 +776,8 @@ export const riskPatterns: RiskPattern[] = [
     severity: "YELLOW",
     weight: 45,
     evaluate: (deal, _b, thresholds) => {
+      if (deal.salesStage === "Closed-Won" || deal.salesStage === "Closed-Lost")
+        return false;
       if (deal.normalizedTCV < thresholds.elephant_tcv_threshold) return false;
       if (deal.attachRate == null) return false;
       return deal.attachRate <= thresholds.low_attach_rate_threshold;
@@ -850,6 +877,8 @@ export const riskPatterns: RiskPattern[] = [
     severity: "YELLOW",
     weight: 48,
     evaluate: (deal, _b, thresholds) =>
+      deal.salesStage !== "Closed-Won" &&
+      deal.salesStage !== "Closed-Lost" &&
       deal.hasLog360 &&
       deal.estimatedLogSources != null &&
       deal.estimatedLogSources >= thresholds.siem_high_volume_log_sources &&
@@ -888,7 +917,9 @@ export const riskPatterns: RiskPattern[] = [
     severity: "YELLOW",
     weight: 55,
     evaluate: (deal) =>
-      deal.playbookCriticalGaps > 0 || deal.playbookOverdueCount > 0,
+      deal.salesStage !== "Closed-Won" &&
+      deal.salesStage !== "Closed-Lost" &&
+      (deal.playbookCriticalGaps > 0 || deal.playbookOverdueCount > 0),
     formatMessage: (deal) => {
       const parts: string[] = [];
       if (deal.playbookCriticalGaps > 0)
@@ -1138,7 +1169,6 @@ export function processDealIntelligence(
     daysToClose = Math.floor(
       (new Date(deal.expected_close_date).getTime() - now.getTime()) / DAY,
     );
-    if (daysToClose < 0) daysToClose = 0;
   }
 
   // Whole-days since the most recently completed gate (reuses the same `now`/DAY

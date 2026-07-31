@@ -19,6 +19,7 @@ import {
   GetAutopsyQueryParams,
   GetAutopsyResponse,
 } from "@workspace/api-zod";
+import { calculateFlatTCV } from "@workspace/engine";
 import { notFound } from "../lib/http";
 import { assembleDealIntelligence } from "../lib/intelligence";
 import { contextualAlertsFor } from "../lib/contextual-alerts";
@@ -126,12 +127,12 @@ router.get("/intelligence/product-mix", async (_req: Request, res: Response) => 
   const totalActiveDeals = activeIds.size;
   const tcvById = new Map(
     deals.map((d) => {
-      const p = Number(d.productRevenue);
-      const s = Number(d.servicesRevenue);
-      const tcv =
-        d.pricingModel === "Multi-Year Committed"
-          ? p * d.contractTermYears + s
-          : p + s;
+      const tcv = calculateFlatTCV({
+        productRevenue: Number(d.productRevenue) || 0,
+        servicesRevenue: Number(d.servicesRevenue) || 0,
+        contractTermYears: d.contractTermYears,
+        pricingModel: d.pricingModel,
+      });
       return [d.id, tcv];
     }),
   );

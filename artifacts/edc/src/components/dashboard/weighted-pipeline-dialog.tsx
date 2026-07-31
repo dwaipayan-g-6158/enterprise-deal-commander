@@ -80,13 +80,16 @@ export function WeightedPipelineDialog({
   const compact = (n: number) => compactCurrency(n, reportingCurrency);
   const full = (n: number) => fullCurrency(n, reportingCurrency);
 
-  // Mirror the backend's exact math (raw productRevenue + servicesRevenue,
-  // no FX normalization; score → winProbabilityPct → 30% fallback) so this
-  // breakdown reconciles with the /analytics/vital-signs aggregate shown on
-  // the tile itself, rather than silently disagreeing with it via a
-  // currency-normalized figure the tile doesn't use.
+  // Mirror the backend's exact math (no FX normalization; score →
+  // winProbabilityPct → 30% fallback) so this breakdown reconciles with the
+  // /analytics/vital-signs aggregate shown on the tile itself, rather than
+  // silently disagreeing with it via a currency-normalized figure the tile
+  // doesn't use. Use the deal's server-computed `calculatedTCV` (already
+  // correctly term-multiplied via `calculateFlatTCV`) rather than re-deriving
+  // it, so this breakdown can never drift from the value the backend used to
+  // build that aggregate.
   const rows = deals.map((d) => {
-    const tcv = (Number(d.productRevenue) || 0) + (Number(d.servicesRevenue) || 0);
+    const tcv = Number(d.calculatedTCV) || 0;
     const pct = scoreById.get(d.id) ?? d.winProbabilityPct ?? 30;
     const clampedPct = Math.max(0, Math.min(100, pct));
     return { deal: d, pct: clampedPct, contribution: tcv * (clampedPct / 100) };

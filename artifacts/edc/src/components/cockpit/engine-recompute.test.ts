@@ -597,8 +597,10 @@ describe("Risk Simulator vs server intelligence parity", () => {
  * `processDealIntelligence` as the server. No stakeholders or competitors are
  * passed (they're optional — the engine degrades gracefully), which is exactly
  * the browser simulator's call-site: it omits those optional ProcessContext
- * fields, so Stakeholder Coverage and Competitive Exposure score with
- * assessable:false, but the composite is still a finite numeric.
+ * fields, so Competitive Exposure scores with assessable:false (no competitors =
+ * no signal) while Stakeholder Coverage scores an assessable 60 (an empty roster
+ * past Discovery is a real coverage gap — Task 5 / C4). Either way the composite
+ * is still a finite numeric.
  */
 describe("Risk Simulator — output.risk flows through recomputeIntelligence (B7)", () => {
   it("produces a finite compositeScore (0–100) and a valid riskLevel for a representative deal", () => {
@@ -628,7 +630,7 @@ describe("Risk Simulator — output.risk flows through recomputeIntelligence (B7
     expect(compositeScore).toBeGreaterThan(0);
   });
 
-  it("degraded path: no stakeholders/competitors → Stakeholder Coverage & Competitive Exposure assessable:false, composite still numeric", () => {
+  it("degraded path: no competitors → Competitive Exposure assessable:false; no stakeholders → an assessable 60 coverage gap; composite still numeric", () => {
     // recomputeIntelligence never passes stakeholders or competitors (they live
     // in ProcessContext fields the browser simulator does not supply). This is
     // the real call-site. The engine must handle it without throwing and still
@@ -640,7 +642,7 @@ describe("Risk Simulator — output.risk flows through recomputeIntelligence (B7
 
     const { compositeScore, dimensions } = client.risk;
 
-    // Composite is still a real number despite two dims being non-assessable.
+    // Composite is still a real number despite a non-assessable dimension.
     expect(Number.isFinite(compositeScore)).toBe(true);
 
     const stakeholderDim = dimensions.find((d) => d.name === "Stakeholder Coverage");
@@ -649,8 +651,20 @@ describe("Risk Simulator — output.risk flows through recomputeIntelligence (B7
     expect(stakeholderDim).toBeDefined();
     expect(competitiveDim).toBeDefined();
 
-    // Both degrade gracefully: assessable:false but score is still a number.
-    expect(stakeholderDim!.assessable).toBe(false);
+    // Task 5 / C4 — CHANGED EXPECTATION: `stakeholderDim.assessable` was `false`.
+    // richDeal() is a Commercial-stage deal with no stakeholders, so Stakeholder
+    // Coverage measures a real 60-risk coverage gap and must be counted in the
+    // composite. `assessable: false` meant the 60 was dropped from BOTH the
+    // numerator and the denominator, i.e. the gap was free.
+    // baseScore 60 is the measurement; the +20 is PHANTOM_CHAMPION's amplification
+    // (it fires on this deal), which pre-fix was computed and stamped here too but
+    // then thrown away by the composite — the other half of the C4 bug.
+    expect(stakeholderDim!.assessable).toBe(true);
+    expect(stakeholderDim!.baseScore).toBe(60);
+    expect(stakeholderDim!.score).toBe(80);
+    expect(stakeholderDim!.contributingPatterns).toContain("PHANTOM_CHAMPION");
+    // Competitive Exposure still degrades to `assessable: false` — an untracked
+    // competitor set genuinely has no signal, and its 5 is a display placeholder.
     expect(competitiveDim!.assessable).toBe(false);
     expect(Number.isFinite(stakeholderDim!.score)).toBe(true);
     expect(Number.isFinite(competitiveDim!.score)).toBe(true);

@@ -65,7 +65,7 @@ export async function contextualAlertsFor(dealId: string): Promise<MergeableAler
     competitorProfiles: dealLinks.map((l) => ({
       competitorName: l.name ?? "Unknown",
       status: l.status,
-      historicalWinRate: winRate(l.competitorId),
+      ourWinRate: winRate(l.competitorId),
     })),
   });
 

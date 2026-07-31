@@ -12,6 +12,7 @@ import {
   dealMemory,
   dealProductInterests,
   productCatalog,
+  pricingModels,
   dealBlockers,
   blockerCategories,
   lossArchetypes,
@@ -40,6 +41,7 @@ import {
   computeTransitionBreakdown,
   computePatternLethality,
   scoreLossRisk,
+  calculateFlatTCV,
   type StageDef,
   type TransitionRec,
   type OpenDeal,
@@ -61,7 +63,7 @@ const router: IRouter = Router();
 
 function daysBetween(from: Date | string | null, to = new Date()): number {
   if (!from) return 0;
-  return Math.max(0, Math.round((to.getTime() - new Date(from).getTime()) / 86_400_000));
+  return Math.max(0, Math.floor((to.getTime() - new Date(from).getTime()) / 86_400_000));
 }
 
 /* ----------------------------------------------------------- F3 Scoring */
@@ -171,17 +173,25 @@ router.get("/analytics/pipeline", async (_req: Request, res: Response) => {
     .select({
       productRevenue: enterpriseDeals.productRevenue,
       servicesRevenue: enterpriseDeals.servicesRevenue,
+      contractTermYears: enterpriseDeals.contractTermYears,
+      pricingModel: pricingModels.modelName,
       stageName: pipelineStages.stageName,
     })
     .from(enterpriseDeals)
     .leftJoin(pipelineStages, eq(enterpriseDeals.salesStageId, pipelineStages.id))
+    .leftJoin(pricingModels, eq(enterpriseDeals.pricingModelId, pricingModels.id))
     .where(notDeletedFilter);
   let totalTcv = 0;
   let openTcv = 0;
   let openDealCount = 0;
   const byStage = new Map<string, { count: number; tcv: number }>();
   for (const r of rows) {
-    const tcv = (Number(r.productRevenue) || 0) + (Number(r.servicesRevenue) || 0);
+    const tcv = calculateFlatTCV({
+      productRevenue: Number(r.productRevenue) || 0,
+      servicesRevenue: Number(r.servicesRevenue) || 0,
+      contractTermYears: r.contractTermYears,
+      pricingModel: r.pricingModel ?? "",
+    });
     totalTcv += tcv;
     const key = r.stageName ?? "?";
     const cur = byStage.get(key) ?? { count: 0, tcv: 0 };
@@ -246,14 +256,22 @@ router.get("/analytics/simulation", async (req: Request, res: Response) => {
       id: enterpriseDeals.id,
       productRevenue: enterpriseDeals.productRevenue,
       servicesRevenue: enterpriseDeals.servicesRevenue,
+      contractTermYears: enterpriseDeals.contractTermYears,
+      pricingModel: pricingModels.modelName,
       winProbabilityPct: enterpriseDeals.winProbabilityPct,
     })
     .from(enterpriseDeals)
     .innerJoin(pipelineStages, eq(enterpriseDeals.salesStageId, pipelineStages.id))
+    .leftJoin(pricingModels, eq(enterpriseDeals.pricingModelId, pricingModels.id))
     .where(and(notDeletedFilter, notInArray(pipelineStages.stageName, CLOSED_STAGES)));
   const scores = await latestScores();
   const sim: SimDeal[] = deals.map((d) => ({
-    calculatedTCV: (Number(d.productRevenue) || 0) + (Number(d.servicesRevenue) || 0),
+    calculatedTCV: calculateFlatTCV({
+      productRevenue: Number(d.productRevenue) || 0,
+      servicesRevenue: Number(d.servicesRevenue) || 0,
+      contractTermYears: d.contractTermYears,
+      pricingModel: d.pricingModel ?? "",
+    }),
     predictiveScore: scores.get(d.id) ?? null,
     winProbabilityPct: d.winProbabilityPct ?? null,
   }));
@@ -587,10 +605,13 @@ router.get("/analytics/vital-signs", async (_req: Request, res: Response) => {
       id: enterpriseDeals.id,
       productRevenue: enterpriseDeals.productRevenue,
       servicesRevenue: enterpriseDeals.servicesRevenue,
+      contractTermYears: enterpriseDeals.contractTermYears,
+      pricingModel: pricingModels.modelName,
       winProbabilityPct: enterpriseDeals.winProbabilityPct,
     })
     .from(enterpriseDeals)
     .innerJoin(pipelineStages, eq(enterpriseDeals.salesStageId, pipelineStages.id))
+    .leftJoin(pricingModels, eq(enterpriseDeals.pricingModelId, pricingModels.id))
     .where(and(notDeletedFilter, notInArray(pipelineStages.stageName, CLOSED_STAGES)));
   const openIds = new Set(deals.map((d) => d.id));
   const scores = await latestScores();
@@ -600,7 +621,12 @@ router.get("/analytics/vital-signs", async (_req: Request, res: Response) => {
   let scoreSum = 0;
   let scoreCount = 0;
   for (const d of deals) {
-    const tcv = (Number(d.productRevenue) || 0) + (Number(d.servicesRevenue) || 0);
+    const tcv = calculateFlatTCV({
+      productRevenue: Number(d.productRevenue) || 0,
+      servicesRevenue: Number(d.servicesRevenue) || 0,
+      contractTermYears: d.contractTermYears,
+      pricingModel: d.pricingModel ?? "",
+    });
     totalTCV += tcv;
     const pct = scores.get(d.id) ?? d.winProbabilityPct ?? 30;
     weightedPipeline += tcv * Math.max(0, Math.min(1, pct / 100));
@@ -784,10 +810,13 @@ router.get("/analytics/product-gaps", async (_req: Request, res: Response) => {
       description: dealBlockers.description,
       productRevenue: enterpriseDeals.productRevenue,
       servicesRevenue: enterpriseDeals.servicesRevenue,
+      contractTermYears: enterpriseDeals.contractTermYears,
+      pricingModel: pricingModels.modelName,
     })
     .from(dealBlockers)
     .innerJoin(enterpriseDeals, eq(dealBlockers.dealId, enterpriseDeals.id))
     .innerJoin(blockerCategories, eq(dealBlockers.categoryId, blockerCategories.id))
+    .leftJoin(pricingModels, eq(enterpriseDeals.pricingModelId, pricingModels.id))
     .where(and(eq(dealBlockers.isResolved, false), eq(blockerCategories.categoryName, "Technical")));
 
   const catalog = await db
@@ -805,7 +834,12 @@ router.get("/analytics/product-gaps", async (_req: Request, res: Response) => {
       dealId: b.dealId,
       dealName: b.dealName,
       description: b.description,
-      tcv: (Number(b.productRevenue) || 0) + (Number(b.servicesRevenue) || 0),
+      tcv: calculateFlatTCV({
+        productRevenue: Number(b.productRevenue) || 0,
+        servicesRevenue: Number(b.servicesRevenue) || 0,
+        contractTermYears: b.contractTermYears,
+        pricingModel: b.pricingModel ?? "",
+      }),
     })),
     catalog,
   );
@@ -828,13 +862,26 @@ router.get("/analytics/memory-insights", async (_req: Request, res: Response) =>
       dealName: enterpriseDeals.dealName,
       productRevenue: enterpriseDeals.productRevenue,
       servicesRevenue: enterpriseDeals.servicesRevenue,
+      contractTermYears: enterpriseDeals.contractTermYears,
+      pricingModel: pricingModels.modelName,
       competitorName: competitors.name,
     })
     .from(enterpriseDeals)
     .leftJoin(competitors, eq(enterpriseDeals.competitorId, competitors.id))
+    .leftJoin(pricingModels, eq(enterpriseDeals.pricingModelId, pricingModels.id))
     .where(notDeletedFilter);
-  const tcvOf = (d: { productRevenue: unknown; servicesRevenue: unknown }) =>
-    (Number(d.productRevenue) || 0) + (Number(d.servicesRevenue) || 0);
+  const tcvOf = (d: {
+    productRevenue: unknown;
+    servicesRevenue: unknown;
+    contractTermYears: number;
+    pricingModel: string | null;
+  }) =>
+    calculateFlatTCV({
+      productRevenue: Number(d.productRevenue) || 0,
+      servicesRevenue: Number(d.servicesRevenue) || 0,
+      contractTermYears: d.contractTermYears,
+      pricingModel: d.pricingModel ?? "",
+    });
 
   interface Insight {
     text: string;
@@ -1154,11 +1201,14 @@ router.get("/analytics/competitive-loss", async (_req: Request, res: Response) =
       status: dealCompetitors.status,
       productRevenue: enterpriseDeals.productRevenue,
       servicesRevenue: enterpriseDeals.servicesRevenue,
+      contractTermYears: enterpriseDeals.contractTermYears,
+      pricingModel: pricingModels.modelName,
       lossArchetypeId: enterpriseDeals.lossArchetypeId,
     })
     .from(dealCompetitors)
     .innerJoin(competitors, eq(dealCompetitors.competitorId, competitors.id))
     .innerJoin(enterpriseDeals, eq(dealCompetitors.dealId, enterpriseDeals.id))
+    .leftJoin(pricingModels, eq(enterpriseDeals.pricingModelId, pricingModels.id))
     .where(inArray(dealCompetitors.status, ["Lost To", "Won Against"]));
 
   const archetypeRows = await db.select().from(lossArchetypes);
@@ -1184,7 +1234,12 @@ router.get("/analytics/competitive-loss", async (_req: Request, res: Response) =
   const matrix = new Map<string, { suite: string; competitorName: string; losses: number; wins: number }>();
 
   for (const r of rows) {
-    const tcv = (Number(r.productRevenue) || 0) + (Number(r.servicesRevenue) || 0);
+    const tcv = calculateFlatTCV({
+      productRevenue: Number(r.productRevenue) || 0,
+      servicesRevenue: Number(r.servicesRevenue) || 0,
+      contractTermYears: r.contractTermYears,
+      pricingModel: r.pricingModel ?? "",
+    });
     const isLoss = r.status === "Lost To";
     if (isLoss) {
       const c = byCompetitor.get(r.competitorId) ?? {
@@ -1492,11 +1547,14 @@ async function loadOpenDeals(): Promise<OpenDeal[]> {
       stageId: enterpriseDeals.salesStageId,
       productRevenue: enterpriseDeals.productRevenue,
       servicesRevenue: enterpriseDeals.servicesRevenue,
+      contractTermYears: enterpriseDeals.contractTermYears,
+      pricingModel: pricingModels.modelName,
       wp: enterpriseDeals.winProbabilityPct,
       createdAt: enterpriseDeals.createdAt,
       landedAt: enterpriseDeals.landedAt,
     })
     .from(enterpriseDeals)
+    .leftJoin(pricingModels, eq(enterpriseDeals.pricingModelId, pricingModels.id))
     .where(notDeletedFilter);
 
   // AI win-probability from latest deal_scores per deal.
@@ -1513,7 +1571,12 @@ async function loadOpenDeals(): Promise<OpenDeal[]> {
   }
 
   return rows.map((r) => {
-    const tcv = (Number(r.productRevenue) || 0) + (Number(r.servicesRevenue) || 0);
+    const tcv = calculateFlatTCV({
+      productRevenue: Number(r.productRevenue) || 0,
+      servicesRevenue: Number(r.servicesRevenue) || 0,
+      contractTermYears: r.contractTermYears,
+      pricingModel: r.pricingModel ?? "",
+    });
     const rawScore = aiByDeal.get(r.id);
     return {
       id: r.id,

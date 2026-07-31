@@ -14,7 +14,7 @@ export interface ContextualAlert {
 export interface CompetitorProfile {
   competitorName: string;
   status: string; // 'Active' | 'Displaced' | 'Lost To' | 'Won Against'
-  historicalWinRate: number; // 0–1, our win rate against them
+  ourWinRate: number; // 0–1, our win rate against them
 }
 
 export interface CompetitiveContext {
@@ -39,16 +39,17 @@ export function evaluateCompetitivePatterns(ctx: CompetitiveContext): Contextual
   }
 
   const threat = ctx.competitorProfiles.find(
-    (cp) => cp.status === "Active" && cp.historicalWinRate > 0.6,
+    (cp) => cp.status === "Active" && cp.ourWinRate <= 0.4,
   );
   if (threat) {
+    const theirRate = Math.round((1 - threat.ourWinRate) * 100);
     alerts.push({
       code: "LOST_TO_PATTERN",
       severity: "YELLOW",
       weight: 50,
       message:
         `COMPETITIVE DISADVANTAGE: ${threat.competitorName} has won ` +
-        `${Math.round(threat.historicalWinRate * 100)}% of head-to-head encounters. Review competitive ` +
+        `${theirRate}% of head-to-head encounters. Review competitive ` +
         `playbook and escalate differentiation strategy.`,
     });
   }

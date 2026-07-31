@@ -1,4 +1,4 @@
-import { and, eq, isNull, desc } from "drizzle-orm";
+import { and, eq, isNull, desc, inArray } from "drizzle-orm";
 import {
   db,
   enterpriseDeals,
@@ -10,9 +10,11 @@ import {
   dealScores,
   dealMemory,
   scoringModelWeights,
+  velocityBenchmarks,
 } from "@workspace/db";
 import {
   computePredictiveScore,
+  calculateFlatTCV,
   type ScoringInput,
   type ScoringContext,
 } from "@workspace/engine";
@@ -29,7 +31,7 @@ const activeFilter = and(isNull(enterpriseDeals.deletedAt), isNull(enterpriseDea
 
 function daysBetween(from: Date | string | null, to = new Date()): number {
   if (!from) return 0;
-  return Math.max(0, Math.round((to.getTime() - new Date(from).getTime()) / 86_400_000));
+  return Math.max(0, Math.floor((to.getTime() - new Date(from).getTime()) / 86_400_000));
 }
 
 export async function historicalContext(): Promise<ScoringContext> {
@@ -39,7 +41,43 @@ export async function historicalContext(): Promise<ScoringContext> {
     .where(eq(dealMemory.outcome, "Won"));
   const tcvs = won.map((w) => Number(w.tcv) || 0).filter((n) => n > 0);
   const avgWonTCV = tcvs.length ? tcvs.reduce((a, b) => a + b, 0) / tcvs.length : null;
-  return { avgWonTCV };
+
+  // Win rate keyed by pricing model alone (NOT stage+pricingModel): a closed
+  // deal in dealMemory has no "current stage" concept to key against, and
+  // deriving one from pipelineTransitions is a separate, bigger task. This
+  // matches profileKey below and /analytics/pricing-benchmarks, which also
+  // groups dealMemory by pricingModel without a stage dimension.
+  const decided = await db
+    .select({ pricingModel: dealMemory.pricingModel, outcome: dealMemory.outcome })
+    .from(dealMemory)
+    .where(inArray(dealMemory.outcome, ["Won", "Lost"]));
+  const tally = new Map<string, { won: number; total: number }>();
+  for (const row of decided) {
+    if (!row.pricingModel) continue;
+    const t = tally.get(row.pricingModel) ?? { won: 0, total: 0 };
+    t.total++;
+    if (row.outcome === "Won") t.won++;
+    tally.set(row.pricingModel, t);
+  }
+  const winRateByProfile: Record<string, number> = {};
+  for (const [model, t] of tally) winRateByProfile[model] = t.won / t.total;
+
+  return { avgWonTCV, winRateByProfile };
+}
+
+/**
+ * Median days historically spent in `stageName`, from the velocity benchmark
+ * rollup (same lookup `intelligence.ts` uses for the risk engine's stage-pace
+ * signal). Null when the stage has no benchmark row yet.
+ */
+async function stageBenchmarkDaysFor(stageName: string | null): Promise<number | null> {
+  if (!stageName) return null;
+  const rows = await db
+    .select({ medianDays: velocityBenchmarks.medianDays })
+    .from(velocityBenchmarks)
+    .where(eq(velocityBenchmarks.stageName, stageName))
+    .limit(1);
+  return rows[0]?.medianDays != null ? Number(rows[0].medianDays) : null;
 }
 
 /**
@@ -72,6 +110,7 @@ export async function buildScoringInput(dealId: string): Promise<ScoringInput | 
     .select({
       productRevenue: enterpriseDeals.productRevenue,
       servicesRevenue: enterpriseDeals.servicesRevenue,
+      contractTermYears: enterpriseDeals.contractTermYears,
       stageEnteredAt: enterpriseDeals.stageEnteredAt,
       expectedCloseDate: enterpriseDeals.expectedCloseDate,
       salesStageId: enterpriseDeals.salesStageId,
@@ -93,8 +132,8 @@ export async function buildScoringInput(dealId: string): Promise<ScoringInput | 
     .where(eq(dealTechnicalGates.dealId, dealId));
   const completed = gates.filter((g) => g.isCompleted);
   const progressPct = gates.length ? Math.round((completed.length / gates.length) * 100) : 0;
-  const ctoSignedOff = completed.some((g) => /CTO|SIGN/i.test(g.gateCode));
-  const executiveAgreed = completed.some((g) => /EXEC|AGREED|G1/i.test(g.gateCode));
+  const ctoSignedOff = completed.some((g) => g.gateCode === "G5_CTO_SIGNED_OFF");
+  const executiveAgreed = completed.some((g) => g.gateCode === "G1_EXECUTIVE_AGREED");
 
   const blockers = await db
     .select({ severity: blockerSeverities.severityName })
@@ -118,11 +157,16 @@ export async function buildScoringInput(dealId: string): Promise<ScoringInput | 
     executiveAgreed,
     totalBlockerCount,
     highBlockerCount,
-    calculatedTCV: productRevenue + servicesRevenue,
+    calculatedTCV: calculateFlatTCV({
+      productRevenue,
+      servicesRevenue,
+      contractTermYears: deal.contractTermYears,
+      pricingModel: deal.pricingModel ?? "",
+    }),
     daysToClose: deal.expectedCloseDate
       ? daysBetween(new Date(), new Date(deal.expectedCloseDate))
       : null,
-    profileKey: `${deal.stageName ?? deal.salesStageId}|${deal.pricingModel ?? deal.pricingModelId}`,
+    profileKey: deal.pricingModel ?? String(deal.pricingModelId),
     // Playbook execution — undefined adherence (no active playbook) leaves the
     // playbook_adherence factor at a neutral 0.5.
     playbookAdherencePct: playbook.adherencePct ?? undefined,
@@ -158,7 +202,21 @@ export async function computeDealScore(
 ): Promise<PersistedScore | null> {
   const input = await buildScoringInput(dealId);
   if (!input) return null;
-  const context = ctx ?? (await historicalContext());
+  const baseCtx = ctx ?? (await historicalContext());
+  // stageBenchmarkDays is inherently per-deal (this deal's CURRENT stage), so
+  // it's always resolved fresh here — never taken from a shared/cached `ctx`.
+  // rescoreActiveDeals passes one historicalContext() across many deals (to
+  // avoid re-querying avgWonTCV/winRateByProfile per deal), but each deal can
+  // be in a different stage, so this lookup must run every call regardless of
+  // whether `ctx` was supplied.
+  const [stageRow] = await db
+    .select({ stageName: pipelineStages.stageName })
+    .from(enterpriseDeals)
+    .leftJoin(pipelineStages, eq(enterpriseDeals.salesStageId, pipelineStages.id))
+    .where(eq(enterpriseDeals.id, dealId))
+    .limit(1);
+  const stageBenchmarkDays = await stageBenchmarkDaysFor(stageRow?.stageName ?? null);
+  const context: ScoringContext = { ...baseCtx, stageBenchmarkDays };
   const w = weights ?? (await getScoringWeights());
   const score = computePredictiveScore(input, context, w);
   return { score: score.score, confidence: score.confidence, breakdown: score.breakdown };

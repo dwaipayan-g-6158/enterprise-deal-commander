@@ -100,6 +100,67 @@ describe("computeFunnel", () => {
     const total = rows.reduce((s, r) => s + r.pctOfPipeline, 0);
     expect(total).toBeCloseTo(100, 0);
   });
+  it("pctOfPipeline across active stages sums to ~100 even when closed deals exist", () => {
+    const stages: StageDef[] = [
+      { id: 1, name: "Discovery", sortOrder: 1 },
+      { id: 2, name: "Validation", sortOrder: 2 },
+      { id: 5, name: "Closed-Won", sortOrder: 5, terminal: "won" },
+    ];
+    const deals = [
+      { id: "a", stageId: 1, tcv: 100, winProbabilityPct: 50, aiWinProbability: null, createdAt: "2026-01-01" },
+      { id: "b", stageId: 5, tcv: 900, winProbabilityPct: 100, aiWinProbability: null, createdAt: "2026-01-01" },
+    ];
+    const rows = computeFunnel(deals, [], stages);
+    const sum = rows.reduce((s, r) => s + r.pctOfPipeline, 0);
+    expect(sum).toBeCloseTo(100, 1);
+  });
+  // Task 13 — sweep version of the invariant above (Task 9b's fix): the single
+  // example only exercised one closed/active mix. Loop over a range of
+  // closed-deal shares (none, minority, half, and mostly-closed) and confirm
+  // pctOfPipeline across the active-stage rows always sums to ~100 as long as
+  // at least one deal remains in an active stage.
+  it("[invariant] pctOfPipeline across active stages always sums to ~100 regardless of closed-deal mix", () => {
+    const stages: StageDef[] = [
+      { id: 1, name: "Discovery", sortOrder: 1 },
+      { id: 2, name: "Validation", sortOrder: 2 },
+      { id: 3, name: "Commercial", sortOrder: 3 },
+      { id: 5, name: "Closed-Won", sortOrder: 5, terminal: "won" },
+      { id: 6, name: "Closed-Lost", sortOrder: 6, terminal: "lost" },
+    ];
+    for (const closedShare of [0, 0.3, 0.5, 0.9]) {
+      const totalDeals = 10;
+      const closedCount = Math.round(totalDeals * closedShare);
+      const deals = Array.from({ length: totalDeals }, (_, i) => ({
+        id: `d${i}`,
+        stageId: i < closedCount ? 5 : (i % 3) + 1,
+        tcv: 100,
+        winProbabilityPct: 50, aiWinProbability: null, createdAt: "2026-01-01",
+      }));
+      const rows = computeFunnel(deals, [], stages);
+      const sum = rows.reduce((s, r) => s + r.pctOfPipeline, 0);
+      if (deals.some((d) => [1, 2, 3].includes(d.stageId))) {
+        expect(sum).toBeCloseTo(100, 0);
+      }
+    }
+  });
+
+  it("convToNextPct never exceeds 100% even when a deal is recycled back and re-advances", () => {
+    const stages: StageDef[] = [
+      { id: 1, name: "Discovery", sortOrder: 1 },
+      { id: 2, name: "Validation", sortOrder: 2 },
+    ];
+    const t = [
+      { dealId: "a", fromStageId: 1, toStageId: 2, transitionType: "forward" as const, tcv: 0, daysInFromStage: 1, transitionedAt: "2026-06-01T00:00:00Z" },
+      { dealId: "b", fromStageId: 1, toStageId: 2, transitionType: "forward" as const, tcv: 0, daysInFromStage: 1, transitionedAt: "2026-06-02T00:00:00Z" },
+      { dealId: "c", fromStageId: 1, toStageId: 2, transitionType: "forward" as const, tcv: 0, daysInFromStage: 1, transitionedAt: "2026-06-03T00:00:00Z" },
+      { dealId: "c", fromStageId: 2, toStageId: 1, transitionType: "backward" as const, tcv: 0, daysInFromStage: 1, transitionedAt: "2026-06-04T00:00:00Z" },
+      { dealId: "c", fromStageId: 1, toStageId: 2, transitionType: "forward" as const, tcv: 0, daysInFromStage: 1, transitionedAt: "2026-06-05T00:00:00Z" },
+    ];
+    const rows = computeFunnel([], t, stages);
+    const discovery = rows.find((r) => r.stageName === "Discovery")!;
+    expect(discovery.convToNextPct).toBeLessThanOrEqual(100);
+    expect(discovery.convToNextPct).toBe(100); // 3 distinct deals entered Discovery, all 3 reached Validation
+  });
 });
 
 describe("computeConversionMatrix", () => {

@@ -18,7 +18,9 @@ import {
   tagDefinitions,
   dealTags,
   dealMemory,
+  pricingModels,
 } from "@workspace/db";
+import { calculateFlatTCV } from "@workspace/engine";
 import {
   ListDealCompetitorsParams,
   AddDealCompetitorParams,
@@ -945,14 +947,30 @@ router.get("/memory/ask", async (req: Request, res: Response) => {
 router.get("/memory/similar/:dealId", async (req: Request, res: Response) => {
   const { dealId } = GetSimilarDealsParams.parse(req.params);
   const dealRows = await db
-    .select({ accountName: enterpriseDeals.accountName, productRevenue: enterpriseDeals.productRevenue })
+    .select({
+      accountName: enterpriseDeals.accountName,
+      productRevenue: enterpriseDeals.productRevenue,
+      servicesRevenue: enterpriseDeals.servicesRevenue,
+      contractTermYears: enterpriseDeals.contractTermYears,
+      pricingModel: pricingModels.modelName,
+    })
     .from(enterpriseDeals)
+    .leftJoin(pricingModels, eq(enterpriseDeals.pricingModelId, pricingModels.id))
     .where(eq(enterpriseDeals.id, dealId))
     .limit(1);
   const deal = dealRows[0];
   if (!deal) throw notFound("Deal not found");
   const all = await db.select().from(dealMemory).limit(200);
-  const tcv = Number(deal.productRevenue) || 0;
+  // Compare like with like: `dealMemory.finalTcv` is written via calculateFlatTCV
+  // (term-multiplied for Multi-Year Committed deals), so deriving this deal's
+  // side from raw productRevenue alone would mis-scale a multi-year deal by its
+  // term and stop it from matching correctly-sized archived deals.
+  const tcv = calculateFlatTCV({
+    productRevenue: Number(deal.productRevenue) || 0,
+    servicesRevenue: Number(deal.servicesRevenue) || 0,
+    contractTermYears: deal.contractTermYears,
+    pricingModel: deal.pricingModel ?? "",
+  });
   const similar = all.filter((m) => {
     if (m.accountName === deal.accountName) return true;
     const mt = Number(m.finalTcv) || 0;

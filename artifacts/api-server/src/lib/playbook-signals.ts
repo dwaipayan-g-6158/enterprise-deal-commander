@@ -226,12 +226,20 @@ async function stepsAndCompletionsFor(assignmentId: string, playbookId: string) 
   return { steps, completions };
 }
 
-/** Deal-wide aggregate across every assignment the deal has ever picked up. */
+/**
+ * Deal-wide aggregate across every assignment the deal has ever picked up —
+ * excluding any "Superseded" ones. An assignment is superseded once the deal
+ * advances past its playbook's stage (see `supersedeStalePlaybookAssignments`),
+ * so it stops weighing in here even though the row itself is retained for
+ * history/audit. A deal whose only assignment(s) are all superseded is
+ * reported exactly like a deal with no playbook at all.
+ */
 export async function getPlaybookSignals(dealId: string): Promise<PlaybookSignals> {
-  const assignments = await db
+  const allAssignments = await db
     .select()
     .from(dealPlaybookAssignments)
     .where(eq(dealPlaybookAssignments.dealId, dealId));
+  const assignments = allAssignments.filter((a) => a.status !== "Superseded");
   if (assignments.length === 0) return EMPTY_AGGREGATE;
 
   const graceDays = await overdueGraceDays();
@@ -260,6 +268,36 @@ export async function getPlaybookSignals(dealId: string): Promise<PlaybookSignal
     criticalGaps,
     overdueCount,
   };
+}
+
+/**
+ * Marks every "Active" assignment on this deal whose playbook targets a
+ * stage strictly earlier (by sortOrder) than the deal's new stage as
+ * "Superseded" — a terminal state distinct from "Completed", excluded from
+ * getPlaybookSignals' aggregate. "Completed" assignments are never touched.
+ */
+export async function supersedeStalePlaybookAssignments(
+  dealId: string,
+  newStageSortOrder: number,
+): Promise<void> {
+  const rows = await db
+    .select({
+      id: dealPlaybookAssignments.id,
+      status: dealPlaybookAssignments.status,
+      sortOrder: pipelineStages.sortOrder,
+    })
+    .from(dealPlaybookAssignments)
+    .innerJoin(playbooks, eq(dealPlaybookAssignments.playbookId, playbooks.id))
+    .innerJoin(pipelineStages, eq(playbooks.applicableStage, pipelineStages.stageName))
+    .where(eq(dealPlaybookAssignments.dealId, dealId));
+  for (const row of rows) {
+    if (row.status === "Active" && row.sortOrder < newStageSortOrder) {
+      await db
+        .update(dealPlaybookAssignments)
+        .set({ status: "Superseded" })
+        .where(eq(dealPlaybookAssignments.id, row.id));
+    }
+  }
 }
 
 /**
@@ -419,6 +457,12 @@ export async function recomputeAssignment(assignmentId: string): Promise<void> {
     .where(eq(dealPlaybookAssignments.id, assignmentId))
     .limit(1);
   if (!assignment) return;
+  // "Superseded" is terminal: the deal has advanced past this playbook's stage
+  // and `getPlaybookSignals` deliberately stops counting it. Actioning one of
+  // its leftover steps (directly, or via the MEDDPICC gate sync) must NOT
+  // resurrect it to "Active" -- that would silently re-arm the H9 bug where a
+  // stale playbook keeps dragging the deal's score down with no way to clear it.
+  if (assignment.status === "Superseded") return;
   const steps = await db
     .select({ id: playbookSteps.id })
     .from(playbookSteps)

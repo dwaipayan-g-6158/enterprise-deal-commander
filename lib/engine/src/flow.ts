@@ -94,7 +94,11 @@ export function computeFunnel(
     // same from-stage population. Replaces a prior formula that compared two
     // unrelated global "ever entered stage X" counts, which could exceed
     // 100% whenever recycling inflated the "next stage" count past the
-    // "this stage" count (e.g. a real "1000%" seen in production).
+    // "this stage" count (e.g. a real "1000%" seen in production) — a
+    // distinct-deals-based alternative was tried and still needed a
+    // Math.min(100, …) defensive cap (see flow.test.ts's regression cases
+    // below); this formula never needs one, since numerator and denominator
+    // are drawn from the exact same from-stage population.
     const outFromStage = outCount.get(stage.id) ?? 0;
     const outToNextStage = next
       ? transitions.filter((t) => t.fromStageId === stage.id && t.toStageId === next.id).length
@@ -355,7 +359,7 @@ export function computeRecycleExit(transitions: TransitionRec[], stages: StageDe
   const created = transitions.filter((t) => t.transitionType === "create").reduce((s, t) => s + t.tcv, 0);
   const won = transitions.filter((t) => t.transitionType === "exit_won").reduce((s, t) => s + t.tcv, 0);
   const lost = transitions.filter((t) => t.transitionType === "exit_lost").reduce((s, t) => s + t.tcv, 0);
-  const stillOpen = Math.max(0, created - won - lost);
+  const stillOpen = created - won - lost;
   const waterfall: WaterfallStep[] = [
     { label: "Created", delta: Math.round(created), kind: "created" },
     { label: "Won", delta: -Math.round(won), kind: "won" },

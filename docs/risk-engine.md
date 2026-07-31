@@ -102,14 +102,18 @@ removes its amplification, too.
 
 Seven independent dimensional scorers (`lib/engine/src/dimensions.ts`) each return a 0–100 risk
 score (0 = no risk, 100 = maximum) as a weighted mean of internal **signals**. Dimensions degrade
-gracefully — when their inputs are absent they return a low default and mark themselves
-`assessable: false`.
+gracefully when their inputs are absent. A dimension marks itself `assessable: false` **only when
+there is genuinely no signal to measure** — such a dimension is dropped from both the numerator and
+the denominator of the composite weighted mean, has its pattern amplification zeroed, and is
+filtered out of `topDrivers`; its `score` is a display-only placeholder. An empty record set that is
+itself a finding (no stakeholders tracked past Discovery) stays `assessable: true`, otherwise
+deleting risk-relevant data would lower a deal's composite risk score.
 
 | Dimension | Signals (weight) |
 |---|---|
 | **Technical Readiness** | Gate completion % (0.30), time since last gate (0.30), gate-sequence integrity (0.15), critical-gate status — G3/G5 (0.25). |
 | **Commercial Alignment** | Stage-vs-gates gap (0.45), services attachment on large deals (0.30), probability-vs-reality gap (0.25). |
-| **Stakeholder Coverage** | Champion ratio (0.30), hostile decision-makers (0.35), decision-maker coverage (0.35). *Not assessable without stakeholders.* |
+| **Stakeholder Coverage** | Champion ratio (0.30), hostile decision-makers (0.35), decision-maker coverage (0.35). *An empty roster is still assessed: 10 in Discovery, 60 past it.* |
 | **Temporal Pressure** | Stage duration vs benchmark (0.35), close-date proximity vs remaining progress (0.45), close-date existence (0.20). |
 | **Financial Structure** | Services protection (0.35), cross-sell overextension (0.30), contract-term appropriateness (0.35). |
 | **Competitive Exposure** | Active-competitor count (0.35), historical win-rate vs active competitors (0.45), competition late in cycle (0.20). *Not assessable without competitors.* |

@@ -22,6 +22,7 @@ import {
 import {
   computeRampTCV,
   evaluateCustomPatterns,
+  calculateFlatTCV,
   type CustomPattern,
   type PricingYear,
 } from "@workspace/engine";
@@ -593,11 +594,14 @@ async function normalizedDeals() {
       accountName: enterpriseDeals.accountName,
       productRevenue: enterpriseDeals.productRevenue,
       servicesRevenue: enterpriseDeals.servicesRevenue,
+      contractTermYears: enterpriseDeals.contractTermYears,
+      pricingModel: pricingModels.modelName,
       stageEnteredAt: enterpriseDeals.stageEnteredAt,
       stageName: pipelineStages.stageName,
     })
     .from(enterpriseDeals)
     .leftJoin(pipelineStages, eq(enterpriseDeals.salesStageId, pipelineStages.id))
+    .leftJoin(pricingModels, eq(enterpriseDeals.pricingModelId, pricingModels.id))
     .where(and(isNull(enterpriseDeals.deletedAt), isNull(enterpriseDeals.archivedAt)));
   const out = [];
   for (const d of deals) {
@@ -620,7 +624,12 @@ async function normalizedDeals() {
       salesStage: d.stageName,
       daysInStage: Math.max(0, Math.round((Date.now() - new Date(d.stageEnteredAt).getTime()) / 86_400_000)),
       financials: {
-        calculatedTCV: (Number(d.productRevenue) || 0) + (Number(d.servicesRevenue) || 0),
+        calculatedTCV: calculateFlatTCV({
+          productRevenue: Number(d.productRevenue) || 0,
+          servicesRevenue: Number(d.servicesRevenue) || 0,
+          contractTermYears: d.contractTermYears,
+          pricingModel: d.pricingModel ?? "",
+        }),
         productRevenue: Number(d.productRevenue) || 0,
         servicesRevenue: Number(d.servicesRevenue) || 0,
       },

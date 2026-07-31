@@ -239,7 +239,18 @@ export function scoreStakeholderCoverage(i: {
   salesStage: string;
   stakeholders: StakeholderInput[];
 }): DimensionFnResult {
-  // Graceful degradation: no stakeholders → not assessable.
+  // An EMPTY stakeholder roster is a real measurement, not missing data, so both
+  // branches below are `assessable: true` (see `assessable`'s doc comment in
+  // ./risk-v2-types). "No stakeholders is acceptable in Discovery" (10) and "no
+  // stakeholders past Discovery is a coverage gap" (60) are judgements this engine
+  // is making from data it has — the roster is empty, and that is the finding.
+  //
+  // These were `assessable: false` until Task 5 / C4. Because `computeComposite`
+  // drops non-assessable dimensions from BOTH the numerator and the denominator of
+  // its weighted mean, the 60 contributed nothing: deleting every stakeholder on a
+  // deal LOWERED its composite risk score. Only `scoreCompetitiveExposure` still
+  // returns `assessable: false` — an untracked competitor set is genuinely no
+  // signal, with no implicit default state the way an empty roster has.
   if (!i.stakeholders || i.stakeholders.length === 0) {
     if (i.salesStage === "Discovery") {
       return {
@@ -248,7 +259,7 @@ export function scoreStakeholderCoverage(i: {
         signals: [
           { factor: "No stakeholders tracked (acceptable in Discovery)", rawScore: 10, weight: 1 },
         ],
-        assessable: false,
+        assessable: true,
       };
     }
     return {
@@ -256,12 +267,12 @@ export function scoreStakeholderCoverage(i: {
       score: 60,
       signals: [
         {
-          factor: "No stakeholders tracked past Discovery stage — cannot assess coverage",
+          factor: "No stakeholders tracked past Discovery stage — coverage gap",
           rawScore: 60,
           weight: 1,
         },
       ],
-      assessable: false,
+      assessable: true,
     };
   }
 
@@ -371,23 +382,36 @@ export function scoreTemporalPressure(i: {
 
   // Signal 4.2: Close Date Proximity vs. Progress (weight 0.45)
   let closeDateRisk = 0;
-  if (i.daysToClose !== null && i.daysToClose >= 0) {
+  if (i.daysToClose !== null) {
     const daysLeft = i.daysToClose;
-    const progressRemaining = 100 - i.progressPct;
-    const daysPerPoint = progressRemaining > 0 ? daysLeft / progressRemaining : 0;
-    if (daysPerPoint >= 3) closeDateRisk = 5;
-    else if (daysPerPoint >= 2) closeDateRisk = 20;
-    else if (daysPerPoint >= 1) closeDateRisk = 50;
-    else if (daysPerPoint >= 0.5) closeDateRisk = 75;
-    else closeDateRisk = 95;
-    if (daysLeft <= 0 && i.progressPct < 100) closeDateRisk = 100;
+    if (daysLeft <= 0 && i.progressPct < 100) {
+      // Overdue (negative) or exactly due today, and not yet complete: maximal
+      // risk. Handled before the daysPerPoint ladder so a negative daysLeft
+      // (an overdue deal — Task 3/M14) can't fall through to a lower bucket.
+      closeDateRisk = 100;
+    } else {
+      const progressRemaining = 100 - i.progressPct;
+      const daysPerPoint = daysLeft / Math.max(1, progressRemaining); // Task 1b's fix
+      if (daysPerPoint >= 3) closeDateRisk = 5;
+      else if (daysPerPoint >= 2) closeDateRisk = 20;
+      else if (daysPerPoint >= 1) closeDateRisk = 50;
+      else if (daysPerPoint >= 0.5) closeDateRisk = 75;
+      else closeDateRisk = 95;
+    }
   } else if (ACTIVE_STAGES_FOR_DATE(i.salesStage)) {
     closeDateRisk = 35;
   }
   signals.push({
+    // `daysToClose` is signed (negative = already past the expected close date,
+    // Task 3/M14), so the label has to read naturally for both signs rather than
+    // rendering the nonsensical "-8 days to close". Both branches keep the
+    // distinctive "progress remaining" suffix, which is how tests locate this
+    // signal (the array is re-sorted by weighted score, so position isn't stable).
     factor:
       i.daysToClose !== null
-        ? `${i.daysToClose} days to close, ${100 - i.progressPct}% progress remaining`
+        ? i.daysToClose < 0
+          ? `${Math.abs(i.daysToClose)} days overdue, ${100 - i.progressPct}% progress remaining`
+          : `${i.daysToClose} days to close, ${100 - i.progressPct}% progress remaining`
         : "No close date set",
     rawScore: closeDateRisk,
     weight: 0.45,

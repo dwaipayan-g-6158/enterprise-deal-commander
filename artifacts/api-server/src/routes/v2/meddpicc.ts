@@ -7,7 +7,7 @@ import {
 import { getActor } from "../../lib/auth";
 import { notFound } from "../../lib/http";
 import { emitDealEvent } from "../../lib/events";
-import { getMeddpiccAssessment, upsertMeddpiccAnswer } from "../../lib/meddpicc";
+import { getMeddpiccAssessment, recalculateMeddpiccAssessment, upsertMeddpiccAnswer } from "../../lib/meddpicc";
 
 const router: IRouter = Router();
 
@@ -31,7 +31,7 @@ router.patch("/deals/:dealId/meddpicc", async (req: Request, res: Response) => {
     score: body.score,
   });
 
-  const assessment = await getMeddpiccAssessment(dealId);
+  const assessment = await recalculateMeddpiccAssessment(dealId);
   if (!assessment) throw notFound("Deal not found");
   res.json({ data: assessment });
 });

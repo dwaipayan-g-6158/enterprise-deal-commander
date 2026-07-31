@@ -48,6 +48,7 @@ import {
 import { logSettingsChange } from "../lib/settings-audit";
 import { getActor } from "../lib/auth";
 import { badRequest, conflict, notFound } from "../lib/http";
+import { validateThresholdUpdate } from "../lib/threshold-validation";
 
 // Auth + write-role enforcement is applied centrally in routes/index.ts.
 const router: IRouter = Router();
@@ -428,6 +429,11 @@ router.put(
     const actor = getActor(req);
     const before = await db.select().from(engineThresholds);
     const beforeByKey = new Map(before.map((r) => [r.parameterKey, r]));
+    const currentMap = new Map(before.map((r) => [r.parameterKey, { parameterValue: r.parameterValue, dataType: r.dataType }]));
+    const validation = validateThresholdUpdate(parsed.data.updates, currentMap);
+    if (!validation.valid) {
+      throw badRequest(validation.error ?? "Invalid threshold update");
+    }
     for (const update of parsed.data.updates) {
       const prior = beforeByKey.get(update.parameter_key);
       await db

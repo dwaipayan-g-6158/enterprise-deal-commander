@@ -34,7 +34,8 @@ import {
 } from "@workspace/api-zod";
 import { getActor } from "../lib/auth";
 import { badRequest, notFound, conflict, stageGuardrail, archiveGuardrail } from "../lib/http";
-import { serializeDeal, assembleDealIntelligence } from "../lib/intelligence";
+import { serializeDeal, assembleDealIntelligence, isBlockingRedAlert } from "../lib/intelligence";
+import { contextualAlertsFor } from "../lib/contextual-alerts";
 import { writeAudit } from "../lib/audit";
 import { emitDealEvent } from "../lib/events";
 
@@ -580,10 +581,28 @@ const updateDealHandler = async (req: Request, res: Response) => {
       !!fromStage && !!toStage && toStage.sortOrder > fromStage.sortOrder;
     if (isAdvancing) {
       const intel = await assembleDealIntelligence(id);
-      const blockingCodes =
-        intel?.governance.alerts
-          .filter((a) => a.severity === "RED")
-          .map((a) => a.code) ?? [];
+      // Blocking RED alerts come from three sources, all funneled through the
+      // shared isBlockingRedAlert predicate (lib/intelligence.ts) so this
+      // can't silently diverge from the read-path intelligence route again:
+      //   - intel.governance.alerts: unmanaged (no disposition at all).
+      //   - intel.governance.managedAlerts: has a disposition, but only
+      //     `accept` (its own mandatory rationale) legitimately clears a RED
+      //     alert — `acknowledge`/`snooze` do not.
+      //   - contextualAlertsFor: V2 competitive/stakeholder patterns (e.g.
+      //     HOSTILE_STAKEHOLDER) that never flow through
+      //     assembleDealIntelligence — previously only ever surfaced on the
+      //     GET .../intelligence read route, never enforced here.
+      const contextual = await contextualAlertsFor(id);
+      const candidateAlerts = [
+        ...(intel?.governance.alerts ?? []),
+        ...(intel?.governance.managedAlerts ?? []),
+        ...contextual,
+      ];
+      const blockingCodes = [
+        ...new Set(
+          candidateAlerts.filter(isBlockingRedAlert).map((a) => a.code),
+        ),
+      ];
       if (blockingCodes.length > 0) {
         const reason = body.override_reason?.trim();
         if (!reason || reason.length < 10) {

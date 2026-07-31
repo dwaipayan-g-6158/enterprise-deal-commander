@@ -45,16 +45,22 @@ export interface LossRiskMatch {
 }
 
 export interface LossRiskResult {
-  /** 0-100, normalized sum of matched historical lethalities. */
+  /** 0-100: the lethality of the single most dangerous matched pattern. */
   score: number;
   matchedPatterns: LossRiskMatch[];
 }
 
 /**
  * Scores one active deal's currently-firing pattern codes against the
- * historical lethality map. Score is the sum of matched lethalities,
- * normalized against the theoretical max (every known pattern matching at
- * full lethality) and clamped to [0, 100].
+ * historical lethality map. Score is the lethality of the single most
+ * dangerous pattern this deal shares with the lost cohort, scaled to
+ * [0, 100] — i.e. "this deal carries the pattern that killed X% of past
+ * losses." This is intentionally NOT a sum across matched patterns: summing
+ * (even normalized) makes every deal's score shrink as the historical
+ * cohort accumulates more distinct patterns, regardless of whether those
+ * new patterns relate to the deal being scored. A max-of-matched score is
+ * stable under cohort growth: adding an unrelated lost deal's new pattern
+ * never changes an existing deal's score.
  */
 export function scoreLossRisk(
   activeAlertCodes: string[],
@@ -74,13 +80,9 @@ export function scoreLossRisk(
     return { score: 0, matchedPatterns: [] };
   }
 
-  const matchedSum = matchedPatterns.reduce((s, m) => s + m.lethality, 0);
-  const maxPossibleSum = lethality.reduce((s, l) => s + l.lethality, 0);
-  const score = maxPossibleSum > 0
-    ? Math.min(100, Math.round((matchedSum / maxPossibleSum) * 100))
-    : 0;
-
   matchedPatterns.sort((a, b) => b.lethality - a.lethality);
+  const maxMatchedLethality = matchedPatterns[0].lethality;
+  const score = Math.min(100, Math.round(maxMatchedLethality * 100));
 
   return { score, matchedPatterns };
 }

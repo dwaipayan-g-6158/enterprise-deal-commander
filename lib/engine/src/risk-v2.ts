@@ -241,7 +241,12 @@ export function applyAmplification(
   }
 
   return baseDims.map((dim) => {
-    const amplification = accumulator[dim.name] || 0;
+    // A non-assessable dimension is excluded from the composite entirely (see
+    // computeComposite), so amplifying it would compute a boost that influences
+    // nothing while still being *displayed* — and `topDrivers` used to rank it as
+    // a driver of a score it never touched. Zero it explicitly instead of
+    // computing-and-discarding it silently.
+    const amplification = dim.assessable ? accumulator[dim.name] || 0 : 0;
     const score = Math.min(dim.score + amplification, DIMENSION_SCORE_CAP);
     return {
       ...dim,
@@ -249,7 +254,8 @@ export function applyAmplification(
       amplification,
       score,
       weight: 0, // populated by computeUnifiedRisk against the active weights
-      contributingPatterns: contributors[dim.name] ? [...contributors[dim.name]!] : [],
+      contributingPatterns:
+        dim.assessable && contributors[dim.name] ? [...contributors[dim.name]!] : [],
     };
   });
 }
@@ -258,12 +264,16 @@ export function applyAmplification(
 // adjustedImpact per Risk Engine2.md: a signal's raw score is nudged by the
 // dimension's amplification (scaled by the signal weight), then weighted by the
 // signal weight and the dimension's global weight.
+//
+// Non-assessable dimensions are filtered out: `computeComposite` excludes them
+// from the weighted mean, so they contributed nothing to the composite and must
+// not be presented as "top drivers" of it.
 
 export function topDrivers(
   adjustedDims: DimensionScore[],
   weights: RiskV2Weights = HARDCODED_WEIGHTS,
 ): RiskDriver[] {
-  const drivers: RiskDriver[] = adjustedDims.flatMap((dim) => {
+  const drivers: RiskDriver[] = adjustedDims.filter((dim) => dim.assessable).flatMap((dim) => {
     const dimWeight = weightFor(dim.name, weights);
     return dim.signals.map((s) => ({
       dimension: dim.name,

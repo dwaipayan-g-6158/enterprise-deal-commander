@@ -1,8 +1,8 @@
 import { and, desc, eq, lte } from "drizzle-orm";
 import {
-  db, pipelineTransitions, pipelineStages, enterpriseDeals, dealSnapshots,
+  db, pipelineTransitions, pipelineStages, enterpriseDeals, dealSnapshots, pricingModels,
 } from "@workspace/db";
-import { computeTransitionType, type StageDef } from "@workspace/engine";
+import { computeTransitionType, calculateFlatTCV, type StageDef } from "@workspace/engine";
 import { dealEvents } from "../events";
 import { logger } from "../logger";
 import { flatTcv } from "../deal-filters";
@@ -104,9 +104,68 @@ export async function recordTransition(args: {
     .onConflictDoNothing({ target: [pipelineTransitions.dealId, pipelineTransitions.transitionedAt] });
 }
 
+/**
+ * Records the initial "create" transition for a brand-new deal (fromStageId
+ * null -> its starting stage). Without this, `pipeline_transitions` only ever
+ * gains a "create" row via the one-shot backfill script — every deal created
+ * since then has no create row, understating value-bridge (waterfall) totals.
+ *
+ * TCV is computed live from the deal's current economics (rather than looked
+ * up from `deal_snapshots`, which may not exist yet for a brand-new deal).
+ */
+export async function recordCreateTransition(args: {
+  dealId: string;
+  actor: string;
+  at?: Date;
+}): Promise<void> {
+  const [deal] = await db
+    .select({
+      salesStageId: enterpriseDeals.salesStageId,
+      productRevenue: enterpriseDeals.productRevenue,
+      servicesRevenue: enterpriseDeals.servicesRevenue,
+      contractTermYears: enterpriseDeals.contractTermYears,
+      pricingModel: pricingModels.modelName,
+    })
+    .from(enterpriseDeals)
+    .leftJoin(pricingModels, eq(enterpriseDeals.pricingModelId, pricingModels.id))
+    .where(eq(enterpriseDeals.id, args.dealId))
+    .limit(1);
+  if (!deal) return;
+
+  const tcv = calculateFlatTCV({
+    productRevenue: Number(deal.productRevenue) || 0,
+    servicesRevenue: Number(deal.servicesRevenue) || 0,
+    contractTermYears: deal.contractTermYears,
+    pricingModel: deal.pricingModel ?? "",
+  });
+
+  await db
+    .insert(pipelineTransitions)
+    .values({
+      dealId: args.dealId,
+      fromStageId: null,
+      toStageId: deal.salesStageId,
+      transitionType: "create",
+      tcvAtTransition: String(Math.round(tcv)),
+      daysInFromStage: null,
+      overridden: false,
+      transitionedAt: args.at ?? new Date(),
+      createdBy: args.actor,
+    })
+    .onConflictDoNothing({ target: [pipelineTransitions.dealId, pipelineTransitions.transitionedAt] });
+}
+
 export function registerPipelineTransitions(): () => void {
   return dealEvents.on(async (event) => {
     try {
+      if (event.type === "deal.created") {
+        await recordCreateTransition({
+          dealId: event.dealId,
+          actor: event.actor,
+          at: event.occurredAt,
+        });
+        return;
+      }
       if (event.type === "deal.stage_changed") {
         await recordTransition({
           dealId: event.dealId,

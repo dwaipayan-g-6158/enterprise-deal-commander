@@ -12,6 +12,7 @@ import {
   MAX_AMPLIFICATION_PER_DIMENSION,
   DIMENSION_SCORE_CAP,
 } from "./risk-v2";
+import { scoreStakeholderCoverage } from "./dimensions";
 import type { DimensionFnResult, DimensionScore } from "./risk-v2-types";
 
 function dim(
@@ -217,5 +218,153 @@ describe("computeUnifiedRisk", () => {
   it("uses hardcoded defaults for weights and boundaries", () => {
     expect(HARDCODED_WEIGHTS.technical).toBe(0.2);
     expect(HARDCODED_BOUNDARIES.lowMax).toBe(25);
+  });
+});
+
+// ── Task 5 / C4: `assessable` means "we have no signal", never "a low signal" ──
+describe("assessable semantics (C4 regression)", () => {
+  const tech: DimensionFnResult = dim("Technical Readiness", 20, true, [
+    { factor: "t", rawScore: 20, weight: 1 },
+  ]);
+  const dealView = { tcv: 1, daysToClose: null, progressPct: 20 };
+
+  it("a measured stakeholder GAP raises the composite above the same deal with no stakeholder dimension at all", () => {
+    // The proven C4 bug: `scoreStakeholderCoverage` returned `assessable: false`
+    // for "no stakeholders tracked past Discovery" while scoring it 60 — a real
+    // measurement of a real gap. `computeComposite` excludes non-assessable
+    // dimensions from BOTH the numerator and the denominator, so that 60
+    // contributed NOTHING: a deal with every stakeholder deleted scored exactly
+    // the same composite as a deal whose stakeholder dimension was never scored.
+    // Deleting risk-relevant data was free (and could even lower the score).
+    const withoutStakeholderDim = computeUnifiedRisk({
+      dimensionResults: [tech],
+      activePatternCodes: [],
+      guardrailCodes: [],
+      dealView,
+    });
+    const withUntrackedStakeholders = computeUnifiedRisk({
+      dimensionResults: [
+        tech,
+        scoreStakeholderCoverage({ salesStage: "Validation", stakeholders: [] }),
+      ],
+      activePatternCodes: [],
+      guardrailCodes: [],
+      dealView,
+    });
+    // Hand math (technical weight 0.20, stakeholder weight 0.15):
+    //   no stakeholder dimension → (20*0.20) / 0.20            = 20
+    //   untracked (score 60)     → (20*0.20 + 60*0.15) / 0.35
+    //                            = (4 + 9) / 0.35 = 37.142…    → 37
+    expect(withoutStakeholderDim.compositeScore).toBe(20);
+    expect(withUntrackedStakeholders.compositeScore).toBe(37);
+    expect(withUntrackedStakeholders.compositeScore).toBeGreaterThan(
+      withoutStakeholderDim.compositeScore,
+    );
+  });
+
+  it("deleting all stakeholders does not LOWER the composite relative to a tracked hostile decision-maker", () => {
+    const baseDims = [tech];
+    const tracked = computeUnifiedRisk({
+      dimensionResults: [
+        ...baseDims,
+        {
+          name: "Stakeholder Coverage" as const,
+          score: 90,
+          signals: [{ factor: "hostile DM", rawScore: 90, weight: 1 }],
+          assessable: true,
+        },
+      ],
+      activePatternCodes: [],
+      guardrailCodes: [],
+      dealView,
+    });
+    const deleted = computeUnifiedRisk({
+      // After the fix, scoreStakeholderCoverage never returns assessable:false for
+      // this branch — this fixture simulates the OLD shape to pin down what
+      // `assessable: false` must mean at the synthesis layer: contributes nothing.
+      dimensionResults: [
+        ...baseDims,
+        {
+          name: "Stakeholder Coverage" as const,
+          score: 60,
+          signals: [{ factor: "none tracked", rawScore: 60, weight: 1 }],
+          assessable: false,
+        },
+      ],
+      activePatternCodes: [],
+      guardrailCodes: [],
+      dealView,
+    });
+    // tracked  → (20*0.20 + 90*0.15) / 0.35 = (4 + 13.5) / 0.35 = 50
+    // deleted  → the non-assessable dim is excluded entirely → 20*0.20/0.20 = 20
+    expect(tracked.compositeScore).toBe(50);
+    expect(deleted.compositeScore).toBeLessThanOrEqual(tracked.compositeScore);
+    // The core invariant: an assessable:false dimension must contribute its score
+    // to nothing — composite is driven ONLY by Technical Readiness (20) here.
+    expect(deleted.compositeScore).toBe(20);
+  });
+
+  it("amplification on a non-assessable dimension is zeroed, and it never appears in topDrivers", () => {
+    const dims: DimensionFnResult[] = [
+      {
+        name: "Technical Readiness" as const,
+        score: 40,
+        signals: [{ factor: "t", rawScore: 40, weight: 1 }],
+        assessable: true,
+      },
+      {
+        name: "Competitive Exposure" as const,
+        score: 5,
+        signals: [{ factor: "none tracked", rawScore: 5, weight: 1 }],
+        assessable: false,
+      },
+    ];
+    const result = computeUnifiedRisk({
+      dimensionResults: dims,
+      // COMPETITIVE_DISPLACEMENT_STALL amplifies Competitive Exposure +25 and
+      // Temporal Pressure +15; only Competitive Exposure is present here.
+      activePatternCodes: ["COMPETITIVE_DISPLACEMENT_STALL"],
+      guardrailCodes: [],
+      dealView: { tcv: 1, daysToClose: 10, progressPct: 40 },
+    });
+    const competitive = result.dimensions.find((d) => d.name === "Competitive Exposure")!;
+    expect(competitive.amplification).toBe(0);
+    // ...and the amplification is not silently baked into the displayed score.
+    expect(competitive.score).toBe(5);
+    expect(competitive.contributingPatterns).toEqual([]);
+    // A dimension that contributed nothing to the composite cannot be a "top
+    // driver" of it (pre-fix it ranked with impact (5 + 25) * 1 * 0.10 = 3).
+    expect(result.topDrivers.some((d) => d.dimension === "Competitive Exposure")).toBe(
+      false,
+    );
+    expect(result.topDrivers.map((d) => d.dimension)).toEqual(["Technical Readiness"]);
+  });
+
+  // Task 13 — sweep version of the invariant above (Task 5's fix): the single
+  // example only exercised one non-assessable score and one pattern-code set.
+  // Loop over a range of non-assessable dimension scores and active-pattern
+  // combinations (including PHANTOM_CHAMPION, which specifically amplifies
+  // Stakeholder Coverage) and confirm the non-assessable dimension never moves
+  // compositeScore and never appears in topDrivers, regardless of how "loud"
+  // its own score or amplification would otherwise be.
+  it("[invariant] a non-assessable dimension never contributes to compositeScore or topDrivers, across a range of scores/amplifications", () => {
+    for (const nonAssessableScore of [0, 30, 60, 90]) {
+      for (const patternCodes of [[], ["PHANTOM_CHAMPION"], ["GHOST_PIPELINE", "PHANTOM_CHAMPION"]]) {
+        const dims = [
+          { name: "Technical Readiness" as const, score: 40, signals: [{ factor: "t", rawScore: 40, weight: 1 }], assessable: true },
+          { name: "Stakeholder Coverage" as const, score: nonAssessableScore, signals: [{ factor: "x", rawScore: nonAssessableScore, weight: 1 }], assessable: false },
+        ];
+        const withoutStakeholder = computeUnifiedRisk({
+          dimensionResults: [dims[0]], activePatternCodes: patternCodes, guardrailCodes: [],
+          dealView: { tcv: 1, daysToClose: 10, progressPct: 40 },
+        });
+        const withStakeholder = computeUnifiedRisk({
+          dimensionResults: dims, activePatternCodes: patternCodes, guardrailCodes: [],
+          dealView: { tcv: 1, daysToClose: 10, progressPct: 40 },
+        });
+        expect(withStakeholder.compositeScore).toBe(withoutStakeholder.compositeScore);
+        expect(withStakeholder.topDrivers.every((d) => d.dimension !== "Stakeholder Coverage")).toBe(true);
+      }
+    }
   });
 });

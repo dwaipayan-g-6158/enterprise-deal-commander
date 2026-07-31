@@ -39,6 +39,7 @@ import {
   type IntelligenceOutput,
   type StakeholderInput,
   type CompetitorInput,
+  type Alert,
 } from "@workspace/engine";
 import { cache, CacheKeys, CacheTtl } from "./cache";
 import { competitorWinRates } from "./competitive";
@@ -294,6 +295,25 @@ export async function getExtraComplianceDrivers(dealId: string) {
     )
     .where(eq(dealComplianceDrivers.dealId, dealId));
   return rows;
+}
+
+/**
+ * Whether a RED alert should still block stage advancement (the PATCH/PUT
+ * /deals/:id guardrail — see CLAUDE.md: "advancing past an active RED risk
+ * pattern returns 409 STAGE_GUARDRAIL unless an override_reason is
+ * supplied"). Only the `accept` disposition legitimately clears a RED alert:
+ * it carries its own mandatory rationale (enforced by
+ * routes/dispositions.ts), an independent audit trail equivalent to the
+ * override_reason itself. `acknowledge` (no rationale required) and
+ * `snooze` (only a duration) carry no equivalent accountability, so a RED
+ * alert bearing either of those — or no disposition at all (unmanaged) —
+ * must still block. Shared by the write-path guardrail in routes/deals.ts so
+ * the predicate can't drift between call sites again.
+ */
+export function isBlockingRedAlert(
+  alert: Pick<Alert, "severity" | "disposition">,
+): boolean {
+  return alert.severity === "RED" && alert.disposition?.state !== "accept";
 }
 
 function enrichAlert(alert: IntelligenceOutput["governance"]["alerts"][number], interventionMap: Map<string, { checklistId: number; name: string }>) {

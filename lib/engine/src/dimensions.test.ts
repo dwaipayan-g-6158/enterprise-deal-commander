@@ -150,16 +150,31 @@ describe("scoreCommercialAlignment", () => {
 });
 
 describe("scoreStakeholderCoverage", () => {
-  it("empty stakeholders in Discovery → assessable false, score 10", () => {
+  // Task 5 / C4 — CHANGED EXPECTATION (was `assessable: false` on both empty-roster
+  // branches). An empty stakeholder roster is a real MEASUREMENT of a real gap, not
+  // an absence of data: "no stakeholders is fine in Discovery" (10) and "no
+  // stakeholders past Discovery is a coverage gap" (60) are both judgements the
+  // engine is making. `computeComposite` drops `assessable: false` dimensions from
+  // BOTH the numerator and the denominator, so marking these `false` made the 60
+  // contribute nothing — deleting every stakeholder LOWERED a deal's composite risk.
+  // Only `scoreCompetitiveExposure` legitimately keeps `assessable: false` (no
+  // competitors tracked = genuinely no signal, no implicit default state).
+  it("empty stakeholders in Discovery → assessable TRUE, score 10", () => {
     const r = scoreStakeholderCoverage({ salesStage: "Discovery", stakeholders: [] });
-    expect(r.assessable).toBe(false);
+    expect(r.assessable).toBe(true);
     expect(r.score).toBe(10);
   });
 
-  it("empty stakeholders past Discovery → assessable false, score 60", () => {
+  it("empty stakeholders past Discovery → assessable TRUE, score 60", () => {
     const r = scoreStakeholderCoverage({ salesStage: "Commercial", stakeholders: [] });
-    expect(r.assessable).toBe(false);
+    expect(r.assessable).toBe(true);
     expect(r.score).toBe(60);
+  });
+
+  it("no stakeholders tracked past Discovery is assessable (a real measurement, not an absence of one)", () => {
+    const result = scoreStakeholderCoverage({ salesStage: "Validation", stakeholders: [] });
+    expect(result.assessable).toBe(true);
+    expect(result.score).toBe(60);
   });
 
   it("hostile decision-maker drives the hostile signal to its max", () => {
@@ -219,6 +234,19 @@ describe("scoreTemporalPressure", () => {
     expect(closeSignal?.rawScore).toBe(100);
   });
 
+  it("an overdue deal (negative daysToClose) scores maximal close-date risk, not the flat no-date bucket", () => {
+    const overdue = scoreTemporalPressure({
+      salesStage: "Commercial", daysInStage: 40, daysToClose: -10,
+      expectedCloseDate: "2026-07-01", progressPct: 60, benchmarkMedianDays: 30,
+    });
+    // Selected by the "progress remaining" suffix, which signal 4.2 carries for
+    // BOTH signs of daysToClose ("N days to close, .." / "N days overdue, ..");
+    // matching on "days to close" alone would miss the overdue wording.
+    const closeSignal = overdue.signals.find((s) => s.factor.includes("progress remaining"))!;
+    expect(closeSignal.rawScore).toBe(100);
+    expect(closeSignal.factor).toBe("10 days overdue, 40% progress remaining");
+  });
+
   it("no benchmark falls back to absolute-day thresholds", () => {
     const r = scoreTemporalPressure({ ...base, benchmarkMedianDays: null, daysInStage: 90 });
     expect(r.score).toBeGreaterThan(0);
@@ -238,6 +266,43 @@ describe("scoreTemporalPressure", () => {
     const slow = scoreTemporalPressure({ ...base, daysInStage: 90 });
     const fast = scoreTemporalPressure({ ...base, daysInStage: 10 });
     expect(slow.score).toBeGreaterThan(fast.score);
+  });
+
+  it("closeDateRisk is monotonically non-increasing as progressPct rises, all else equal", () => {
+    const scoreAt = (progressPct: number) =>
+      scoreTemporalPressure({
+        salesStage: "Procurement", daysInStage: 5, daysToClose: 60,
+        expectedCloseDate: "2026-09-30", progressPct, benchmarkMedianDays: 30,
+      }).signals.find((s) => s.factor.includes("progress remaining"))!.rawScore;
+    const scores = [0, 25, 50, 75, 90, 99, 100].map(scoreAt);
+    for (let i = 1; i < scores.length; i++) {
+      expect(scores[i]).toBeLessThanOrEqual(scores[i - 1]);
+    }
+    // 100% complete must be in the lowest risk bucket (daysPerPoint effectively infinite).
+    expect(scoreAt(100)).toBe(5);
+  });
+
+  // Task 13 — sweep version of the invariant above (Task 1b/3's fix): a single
+  // (daysToClose, progressPct) example isn't enough to rule out a regression at
+  // a DIFFERENT point on the curve, e.g. a different daysPerPoint bucket
+  // boundary or the daysToClose<=0 special case. Loop over a representative
+  // range of daysToClose (negative/overdue, zero, and several positive
+  // horizons) and confirm non-increasing risk holds across the whole
+  // progressPct range for every one of them.
+  it("[invariant] closeDateRisk is non-increasing in progressPct, for every daysToClose in a representative range", () => {
+    for (const daysToClose of [-10, 0, 5, 15, 30, 60, 90]) {
+      const scores = [];
+      for (let progressPct = 0; progressPct <= 100; progressPct += 10) {
+        const r = scoreTemporalPressure({
+          salesStage: "Commercial", daysInStage: 10, daysToClose,
+          expectedCloseDate: "2026-12-31", progressPct, benchmarkMedianDays: 30,
+        });
+        scores.push(r.signals.find((s) => s.factor.includes("progress remaining"))!.rawScore);
+      }
+      for (let i = 1; i < scores.length; i++) {
+        expect(scores[i]).toBeLessThanOrEqual(scores[i - 1]);
+      }
+    }
   });
 });
 
