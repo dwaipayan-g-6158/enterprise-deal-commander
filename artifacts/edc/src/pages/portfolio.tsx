@@ -3,11 +3,12 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { AlertTriangle } from "lucide-react";
+import { AlertCircle, AlertTriangle } from "lucide-react";
 import { PersonalityLine } from "@/components/personality-line";
 import { ProductMixSection } from "@/components/cockpit/product-mix-section";
 import { PortfolioSummaryCards } from "@/components/cockpit/portfolio-summary-cards";
 import { PortfolioRiskHeatmap } from "@/components/cockpit/portfolio-risk-heatmap";
+import { Button } from "@/components/ui/button";
 import { formatNum } from "@/lib/format";
 
 // Geometry-matched loading state. Every height below is derived from the real
@@ -73,15 +74,44 @@ function PortfolioSkeleton() {
 }
 
 export default function Portfolio() {
-  const { data: response, isLoading } = useGetPortfolioAnalysis();
+  const { data: response, isLoading, isError, refetch } = useGetPortfolioAnalysis();
   // ProductMixSection (rendered below) fires this same query on mount, which
   // serialises it behind portfolio-analysis and gives the loaded page a second
   // "Loading product mix…" flash plus a large reflow. Subscribing here starts
   // it in parallel from first paint; React Query dedupes by key, so the child
   // gets the settled entry for free.
+  // Only isLoading is taken from the mix query — its own isError is
+  // deliberately NOT checked here. portfolioAnalysis is this page's spine
+  // (summary cards, heatmap, all three correlation tables); productMix is a
+  // DIFFERENT endpoint feeding only 2 of 7 cards, and ProductMixSection owns
+  // its own error/retry state (see Part 2) so a mix failure degrades just
+  // that section instead of blanking a page whose other 5 cards loaded fine.
+  // If a future edit adds an `isErrorMix` check here, it re-introduces this
+  // exact bug — don't.
   const { isLoading: isLoadingMix } = useGetProductMix();
   const data = response?.data;
 
+  // Checked BEFORE the loading gate — deliberately the opposite order from
+  // deals.tsx's isLoading-then-isError chain, because isLoadingMix belongs to
+  // the OTHER query here: loading-first would hold the skeleton hostage on a
+  // definitively failed portfolio-analysis fetch until the mix query happened
+  // to also settle, instead of surfacing the error immediately.
+  if (isError)
+    return (
+      <div className="p-8 max-w-[1600px] mx-auto animate-in fade-in duration-300">
+        <Card className="py-12">
+          <div className="flex flex-col items-center gap-3 text-center">
+            <AlertCircle className="h-8 w-8 text-destructive" />
+            <p className="text-sm text-muted-foreground">
+              Couldn't load the portfolio analysis. Give it another try.
+            </p>
+            <Button size="sm" variant="outline" onClick={() => refetch()}>
+              Retry
+            </Button>
+          </div>
+        </Card>
+      </div>
+    );
   if (isLoading || isLoadingMix) return <PortfolioSkeleton />;
   if (!data)
     return (

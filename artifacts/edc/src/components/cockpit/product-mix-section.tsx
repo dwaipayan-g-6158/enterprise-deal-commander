@@ -7,8 +7,9 @@ import {
 } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { ChevronRight, Layers, Grid3x3, ArrowUpRight } from "lucide-react";
+import { AlertCircle, ChevronRight, Layers, Grid3x3, ArrowUpRight } from "lucide-react";
 import { groupProductsBySuite } from "./product-picker";
 import { compactCurrency } from "@/lib/format";
 import { attachBand } from "@/components/cockpit/portfolio-presentation";
@@ -69,17 +70,35 @@ function DealList({ deals }: { deals: ProductMixDeal[] }) {
 }
 
 export function ProductMixSection() {
-  const { data, isLoading } = useGetProductMix();
+  const { data, isLoading, isError, refetch } = useGetProductMix();
   const mix = data?.data;
 
   const [openSuite, setOpenSuite] = useState<string | null>(null);
   const [openProduct, setOpenProduct] = useState<string | null>(null);
 
-  if (isLoading || !mix) {
+  // Three distinct states, deliberately NOT collapsed: `!mix` alone made a 500
+  // indistinguishable from an empty portfolio (the same bug portfolio.tsx's own
+  // page-level error state fixes one level up). An error here degrades only
+  // this section — productMix is a different endpoint than portfolioAnalysis,
+  // and blanking the whole page would hide the summary cards, heatmap, and all
+  // three correlation tables that DID load successfully.
+  if (isLoading || isError || !mix) {
     return (
       <Card className="xl:col-span-2">
         <CardContent className="p-6 text-sm text-muted-foreground">
-          {isLoading ? "Loading product mix…" : "Product mix will appear here once deals are active."}
+          {isLoading ? (
+            "Loading product mix…"
+          ) : isError ? (
+            <span className="flex flex-wrap items-center gap-3">
+              <AlertCircle className="h-4 w-4 shrink-0 text-destructive" />
+              Product mix didn't load.
+              <Button size="sm" variant="outline" onClick={() => refetch()}>
+                Retry
+              </Button>
+            </span>
+          ) : (
+            "Product mix will appear here once deals are active."
+          )}
         </CardContent>
       </Card>
     );
