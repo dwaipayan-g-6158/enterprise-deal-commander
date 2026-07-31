@@ -193,19 +193,40 @@ export function buildRiskCells(
 }
 
 /**
- * Modified Herfindahl-Hirschman diversification index (PRD 10.4):
- * D = 1 - sum(w_i^2), where w_i is a cell's share of total correlated risk
- * (riskScore * dealCount). 1 = evenly spread, 0 = fully concentrated.
+ * Gini-Simpson / effective-N normalized Herfindahl-Hirschman diversification
+ * index. Cell weight w_i = riskScore * dealCount; shares are of total
+ * correlated risk.
+ *
+ *   D_raw = 1 - Σ(w_i²)            // PRD §10.4
+ *   D     = D_raw * n / (n - 1)    // n = number of cells
+ *
+ * DEVIATION FROM PRD §10.4, deliberate: the raw index is bounded above by
+ * 1 - 1/n, so it is not comparable across portfolios with different cell
+ * counts — a perfectly even 2-cell portfolio maxes out at 0.50 and a 3-cell one
+ * at 0.67, both of which read as "concentrated" against the UI's green
+ * threshold even though nothing is concentrated at all. Dividing by the
+ * theoretical maximum for n rescales "as evenly spread as n cells can be" to
+ * exactly 1.0, which is what the card's "0 = concentrated / 1 = diversified"
+ * legend claims.
+ *
+ * n <= 1 returns 1: a lone cell has no sibling to be concentrated *against*,
+ * and 1 - 1/1 = 0 means the raw formula's answer (0) is not a measurement,
+ * it's a degenerate artifact of the denominator. Returning 0 there would flag
+ * every single-manager/single-product portfolio permanently red. (An
+ * all-zero-weight portfolio also returns 1 via the `total <= 0` guard — no
+ * risk exists, so there is nothing to concentrate.)
  */
 export function diversificationIndex(cells: RiskCell[]): number {
   const weights = cells.map((c) => c.riskScore * c.dealCount);
   const total = weights.reduce((s, w) => s + w, 0);
   if (total <= 0) return 1;
+  const n = weights.length;
+  if (n <= 1) return 1;
   const hhi = weights.reduce((s, w) => {
     const share = w / total;
     return s + share * share;
   }, 0);
-  return clamp(1 - hhi, 0, 1);
+  return clamp((1 - hhi) * (n / (n - 1)), 0, 1);
 }
 
 /**

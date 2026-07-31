@@ -178,18 +178,20 @@ describe("buildRiskCells", () => {
 
 describe("diversificationIndex", () => {
   it("returns 1 for an empty portfolio", () => {
+    // hits the `total <= 0` early return (n <= 1 would also return 1 here,
+    // but there are zero cells so n === 0 never reaches that branch).
     expect(diversificationIndex([])).toBe(1);
   });
 
-  it("approaches 0 when all risk sits in one cell", () => {
+  it("returns 1 for a single cell — nothing to be concentrated against", () => {
     const cells = buildRiskCells(
       [rec({ healthStatus: "RED", maxActiveAlertWeight: 80 })],
       "accountManager",
     );
-    expect(diversificationIndex(cells)).toBeCloseTo(0, 5);
+    expect(diversificationIndex(cells)).toBe(1);
   });
 
-  it("is higher when risk is spread evenly across cells", () => {
+  it("scores a perfectly even 2-cell portfolio 1.0 (raw HHI capped it at 0.5)", () => {
     const even = buildRiskCells(
       [
         rec({ dealId: "a", accountManager: "Alice", products: ["AD360"], healthStatus: "RED", maxActiveAlertWeight: 80 }),
@@ -197,8 +199,127 @@ describe("diversificationIndex", () => {
       ],
       "accountManager",
     );
-    // two equal-weight clusters => D = 1 - (0.5^2 + 0.5^2) = 0.5
-    expect(diversificationIndex(even)).toBeCloseTo(0.5, 5);
+    // D_raw = 1 - (0.5^2 + 0.5^2) = 0.5, normalized: 0.5 * 2/(2-1) = 1.0.
+    // This is the exact regression the normalization fixes: the un-normalized
+    // formula capped an evenly-spread 2-cell portfolio at 0.5, which read as
+    // "concentrated" under the frontend's threshold even though nothing was.
+    expect(diversificationIndex(even)).toBeCloseTo(1, 5);
+  });
+
+  it("drops toward 0 when one of several cells holds nearly all risk", () => {
+    const cells = buildRiskCells(
+      [
+        ...Array.from({ length: 6 }, (_, i) =>
+          rec({
+            dealId: `a${i}`,
+            accountManager: "Alice",
+            products: ["AD360"],
+            healthStatus: "RED",
+            maxActiveAlertWeight: 80,
+          }),
+        ),
+        rec({ dealId: "b", accountManager: "Bob", products: ["AD360"], healthStatus: "GREEN", maxActiveAlertWeight: 0 }),
+        rec({ dealId: "c", accountManager: "Carol", products: ["AD360"], healthStatus: "GREEN", maxActiveAlertWeight: 0 }),
+        rec({ dealId: "d", accountManager: "Dave", products: ["AD360"], healthStatus: "GREEN", maxActiveAlertWeight: 0 }),
+      ],
+      "accountManager",
+    );
+    // Alice: riskScore 95 (RED base 75 + min(25, 80*0.25=20)), dealCount 6 => weight 570
+    // Bob/Carol/Dave: riskScore 10 (GREEN base, no alert), dealCount 1 each => weight 10 each
+    // total = 570 + 10 + 10 + 10 = 600
+    // shares: Alice 570/600 = 0.95, others 10/600 = 1/60 each
+    // hhi = 0.95^2 + 3*(1/60)^2 = 0.9025 + 0.000833... = 0.903333...
+    // D_raw = 1 - 0.903333... = 0.096667...
+    // n=4 => normalize by 4/(4-1) = 4/3: D = 0.096667 * 4/3 = 0.128889 (29/225)
+    expect(diversificationIndex(cells)).toBeCloseTo(0.128889, 5);
+  });
+
+  it("reaches 1.0 for a perfectly even 3-cell portfolio", () => {
+    const even3 = buildRiskCells(
+      [
+        rec({ dealId: "a", accountManager: "Alice", products: ["AD360"], healthStatus: "RED", maxActiveAlertWeight: 80 }),
+        rec({ dealId: "b", accountManager: "Bob", products: ["AD360"], healthStatus: "RED", maxActiveAlertWeight: 80 }),
+        rec({ dealId: "c", accountManager: "Carol", products: ["AD360"], healthStatus: "RED", maxActiveAlertWeight: 80 }),
+      ],
+      "accountManager",
+    );
+    // three equal-weight cells => shares 1/3 each
+    // hhi = 3*(1/3)^2 = 1/3, D_raw = 1 - 1/3 = 2/3
+    // n=3 => normalize by 3/(3-1) = 3/2: D = 2/3 * 3/2 = 1
+    // Guards the specific 0.667-vs-0.66-adjacent false-red the raw formula produced.
+    expect(diversificationIndex(even3)).toBeCloseTo(1, 5);
+  });
+
+  it("is monotonically decreasing in concentration at a fixed cell count", () => {
+    // At n=2, with both cells sharing the same per-deal riskScore, weight
+    // ratio == dealCount ratio, so D reduces to 4*p*(1-p) for share p.
+    function splitCells(countA: number, countB: number) {
+      const records = [
+        ...Array.from({ length: countA }, (_, i) =>
+          rec({ dealId: `a${i}`, accountManager: "Alice", products: ["AD360"], healthStatus: "RED", maxActiveAlertWeight: 80 }),
+        ),
+        ...Array.from({ length: countB }, (_, i) =>
+          rec({ dealId: `b${i}`, accountManager: "Bob", products: ["AD360"], healthStatus: "RED", maxActiveAlertWeight: 80 }),
+        ),
+      ];
+      return buildRiskCells(records, "accountManager");
+    }
+
+    const fiftyFifty = splitCells(1, 1); // p=0.5 => D = 4*0.5*0.5 = 1.0
+    const ninetyTen = splitCells(9, 1); // p=0.9 => D = 4*0.9*0.1 = 0.36
+    const ninetyNineOne = splitCells(99, 1); // p=0.99 => D = 4*0.99*0.01 = 0.0396
+
+    expect(diversificationIndex(fiftyFifty)).toBeCloseTo(1, 5);
+    expect(diversificationIndex(ninetyTen)).toBeCloseTo(0.36, 5);
+    expect(diversificationIndex(ninetyNineOne)).toBeCloseTo(0.0396, 5);
+
+    expect(diversificationIndex(fiftyFifty)).toBeGreaterThan(diversificationIndex(ninetyTen));
+    expect(diversificationIndex(ninetyTen)).toBeGreaterThan(diversificationIndex(ninetyNineOne));
+  });
+
+  it("stays within [0, 1]", () => {
+    // Extreme 999:1 dealCount split with equal per-deal riskScore => p=0.999
+    const records = [
+      ...Array.from({ length: 999 }, (_, i) =>
+        rec({ dealId: `a${i}`, accountManager: "Alice", products: ["AD360"], healthStatus: "RED", maxActiveAlertWeight: 80 }),
+      ),
+      rec({ dealId: "b", accountManager: "Bob", products: ["AD360"], healthStatus: "RED", maxActiveAlertWeight: 80 }),
+    ];
+    const cells = buildRiskCells(records, "accountManager");
+    // D = 4*p*(1-p) = 4*0.999*0.001 = 0.003996
+    const d = diversificationIndex(cells);
+    expect(d).toBeCloseTo(0.003996, 5);
+    expect(d).toBeGreaterThanOrEqual(0);
+    expect(d).toBeLessThanOrEqual(1);
+  });
+
+  it("treats a zero-weight sibling cell as a real bucket, not noise", () => {
+    // Custom config so a GREEN deal has a genuine riskScore (and thus weight) of 0,
+    // rather than the DEFAULT_PORTFOLIO_CONFIG healthBase.GREEN = 10.
+    const zeroGreenConfig: PortfolioMetricsConfig = {
+      ...DEFAULT_PORTFOLIO_CONFIG,
+      healthBase: { ...DEFAULT_PORTFOLIO_CONFIG.healthBase, GREEN: 0 },
+    };
+    const cells = buildRiskCells(
+      [
+        rec({ dealId: "a", accountManager: "Alice", products: ["AD360"], healthStatus: "RED", maxActiveAlertWeight: 80 }),
+        rec({ dealId: "b", accountManager: "Bob", products: ["AD360"], healthStatus: "GREEN", maxActiveAlertWeight: 0 }),
+      ],
+      "accountManager",
+      zeroGreenConfig,
+    );
+    // Alice: riskScore 95 (RED base 75 + min(25, 80*0.25=20)), dealCount 1 => weight 95
+    // Bob: riskScore 0 (GREEN base overridden to 0, no alert bump), dealCount 1 => weight 0
+    // total = 95, shares: Alice 95/95 = 1, Bob 0/95 = 0
+    // hhi = 1^2 + 0^2 = 1, D_raw = 1 - 1 = 0
+    // n=2 (Bob's zero-weight cell still counts!) => normalize by 2/(2-1) = 2: D = 0 * 2 = 0
+    //
+    // If zero-weight cells were filtered out of n before this computation, n
+    // would collapse to 1 (just Alice) and hit the n<=1 branch, reporting 1.0
+    // ("perfectly diversified") for a portfolio where one cell holds 100% of
+    // the risk — exactly wrong. Using cells.length keeps Bob's empty bucket
+    // in the denominator, so the result correctly reads as concentrated (0).
+    expect(diversificationIndex(cells)).toBeCloseTo(0, 5);
   });
 });
 
