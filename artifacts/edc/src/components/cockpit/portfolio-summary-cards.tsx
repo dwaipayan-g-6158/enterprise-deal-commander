@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils";
 import { Layers, Link2, DollarSign, AlertOctagon } from "lucide-react";
 import { compactCurrency, formatNum } from "@/lib/format";
 import { diversificationBand, liftPresentation } from "@/components/cockpit/portfolio-presentation";
+import { InfoTooltip } from "@/components/ui/info-tooltip";
 
 interface MetricCardProps {
   icon: React.ReactNode;
@@ -13,6 +14,7 @@ interface MetricCardProps {
   subtitle: React.ReactNode;
   valueClassName?: string;
   delayMs: number;
+  tooltip?: React.ReactNode;
 }
 
 /**
@@ -41,7 +43,7 @@ function diversificationCaveat(
   return null;
 }
 
-function MetricCard({ icon, label, value, subtitle, valueClassName, delayMs }: MetricCardProps) {
+function MetricCard({ icon, label, value, subtitle, valueClassName, delayMs, tooltip }: MetricCardProps) {
   return (
     <Card
       className="animate-in fade-in fill-mode-both duration-300 transition-shadow hover:shadow-md"
@@ -51,6 +53,7 @@ function MetricCard({ icon, label, value, subtitle, valueClassName, delayMs }: M
         <div className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">
           {icon}
           {label}
+          {tooltip && <InfoTooltip>{tooltip}</InfoTooltip>}
         </div>
         <div className={cn("text-2xl font-bold tabular-nums leading-tight", valueClassName)}>
           {value}
@@ -99,6 +102,7 @@ export function PortfolioSummaryCards({
         delayMs={0}
         icon={<Layers className="h-3.5 w-3.5" />}
         label="Diversification Index"
+        tooltip="How evenly risk is spread across manager × product combinations. 0 means concentrated in a few pairings, 1 means evenly spread. Normalized so the score is comparable across portfolios of any size — a small portfolio with well-spread risk scores just as high as a large one."
         value={
           diversificationCaveatInfo ? (
             <span title={diversificationCaveatInfo.tooltip}>—</span>
@@ -125,6 +129,7 @@ export function PortfolioSummaryCards({
         delayMs={40}
         icon={<Link2 className="h-3.5 w-3.5" />}
         label="Top Correlation Cluster"
+        tooltip="The manager, technical lead, or product group where one risk-alert code shows up disproportionately more than its portfolio-wide baseline rate (the 'lift'). 'None significant' means no group clears the bar for group size, share of deals affected, and lift above baseline."
         value={
           cluster ? (
             <span className="flex items-center gap-2">
@@ -150,6 +155,7 @@ export function PortfolioSummaryCards({
         delayMs={80}
         icon={<DollarSign className="h-3.5 w-3.5" />}
         label="Correlated Exposure"
+        tooltip="Total contract value sitting in deals carrying an alert code that recurs across a significant cluster. Counts only active, undispositioned alerts — so this can read lower than the correlation patterns shown in the tables below, which also include alerts a manager has already acknowledged or accepted."
         value={compactCurrency(summary.correlatedExposureTcv, summary.reportingCurrency)}
         subtitle="TCV in significant risk clusters"
       />
@@ -158,6 +164,7 @@ export function PortfolioSummaryCards({
         delayMs={120}
         icon={<AlertOctagon className="h-3.5 w-3.5" />}
         label="Critical Deals"
+        tooltip="Deals currently carrying at least one active RED-severity alert that hasn't been dispositioned. 'of N monitored' is the total count of active deals in the portfolio right now."
         value={summary.redDealCount}
         valueClassName={summary.redDealCount > 0 ? "text-red-600 dark:text-red-400" : undefined}
         subtitle={`of ${summary.totalDealCount} monitored with a critical (RED) alert`}
