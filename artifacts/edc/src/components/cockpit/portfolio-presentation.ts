@@ -66,13 +66,18 @@ export function riskBand(score: number): { cell: string; label: string } {
  * time — but the whole scale also shifted up (×2.0 at n=2, ×1.33 at n=4), so
  * the numbers must move up with it, not just become "valid".
  *
- * 0.85/0.6 map to a statement that stays stable across cell counts: >=0.85
- * means no single cell holds much more than ~40% of correlated risk (genuinely
- * spread); 0.60-0.85 means one cell holds roughly half to two-thirds (a real
- * hotspot); <0.60 means one cell holds two-thirds or more (concentrated). At
- * the OLD 0.66/0.4 thresholds, a single cell holding 50% of all risk would
- * have read GREEN (D ≈ 0.78-0.89 under the new formula) — backwards for a
- * metric whose entire job is flagging concentration.
+ * 0.85/0.6 map to a statement that is most precise at LARGER n and only
+ * asymptotically approaches "no single cell holds much more than ~40% of
+ * correlated risk" as n grows — the exact top-cell percentage a given D
+ * implies shifts with cell count n (e.g. D >= 0.85 corresponds to a top cell
+ * of <=69% at n=2, <=59% at n=3, tightening toward ~40% only for larger n), so
+ * read "~40%" as the asymptotic story, not an exact claim at every n. The
+ * ORDERING and the concentrated-vs-spread verdict still hold at every n:
+ * >=0.85 (genuinely spread) > 0.60-0.85 (a real hotspot, roughly half to
+ * two-thirds concentrated in one cell) > <0.60 (concentrated, two-thirds or
+ * more in one cell). At the OLD 0.66/0.4 thresholds, a single cell holding
+ * 50% of all risk would have read GREEN (D ≈ 0.78-0.89 under the new formula)
+ * — backwards for a metric whose entire job is flagging concentration.
  *
  * Non-finite (NaN/Infinity) coerces to the ROSE branch, not a thrown error or
  * a default green: the normalized formula divides by (n-1) and is

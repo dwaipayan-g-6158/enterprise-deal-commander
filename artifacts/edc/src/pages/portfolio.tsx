@@ -37,7 +37,14 @@ function PortfolioSkeleton() {
 
       {/* Grid classes copied verbatim from portfolio-summary-cards.tsx — the
           sm:/@4xl: mix is intentional there; don't "fix" it here or the
-          skeleton and real grid disagree in the 640-950px band. */}
+          skeleton and real grid disagree in the 640-950px band. Why the mix
+          is safe: sm: (640px) is a VIEWPORT breakpoint, but it only ever
+          fires below this app's MOBILE_BREAKPOINT (768px, use-mobile.tsx) —
+          exactly the band where the sidebar doesn't exist, so viewport
+          width ≈ container width there. A viewport breakpoint is therefore
+          behaviorally equivalent to a container one in that band; only above
+          768px (sidebar present, viewport != container) does it matter that
+          @4xl: tracks the container instead. */}
       <div className="grid grid-cols-1 sm:grid-cols-2 @4xl:grid-cols-4 gap-4">
         {Array.from({ length: 4 }).map((_, i) => (
           <Card key={i}>
@@ -149,6 +156,13 @@ export default function Portfolio() {
   // 1, not 0: an under-represented 0.5x lift still got a misleading "+". Both
   // are fixed by delegating to the shared portfolio-presentation helpers so
   // this table and the summary cards' cluster subtitle never disagree again.
+  // NOTE on basis: these `alertCorrelations` are server-computed on the
+  // active+managed basis (portfolio.ts's globalShares), while
+  // PortfolioSummaryCards' "Top Correlation Cluster" card is deliberately
+  // computed on an active-only basis (portfolio.ts's activeGlobalShares) — see
+  // that card's own comment and .agents/memory/edc-phase2-backbone.md. The
+  // same manager/lead/product can legitimately show a different dominant code
+  // here vs. there; that's by design, not a bug.
   const renderCorrelations = (correlations: AlertCorrelation[]) => {
     if (!correlations || correlations.length === 0) return <span className="text-muted-foreground text-xs">Nothing stands out</span>;
     const { shown, hiddenCount, hiddenCodes } = splitCorrelations(correlations);

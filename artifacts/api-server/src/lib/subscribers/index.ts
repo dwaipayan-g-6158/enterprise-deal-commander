@@ -65,6 +65,11 @@ export function registerSubscribers(): void {
   // encode stale compute logic, so we never serve one we didn't compute
   // ourselves this process. Between purge and warm-completion, reads
   // live-compute — identical to today's cold-start behavior.
+  // NOTE this call happens HERE, inside app.listen's callback — i.e. AFTER the
+  // server is already accepting connections — and is fire-and-forget (void
+  // ...catch below), so the purge's DELETE has not necessarily landed yet when
+  // the first post-restart request arrives. See purgeAndWarmPortfolioRollups's
+  // docstring (portfolio-rollups.ts) for why that narrow window self-heals.
   registerPortfolioRollupView();
   void purgeAndWarmPortfolioRollups().catch((err) =>
     logger.error({ err }, "Initial portfolio rollup purge+warm failed"),

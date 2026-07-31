@@ -15,6 +15,32 @@ interface MetricCardProps {
   delayMs: number;
 }
 
+/**
+ * Distinguishes the two "nothing to measure" cases the diversification card
+ * has to special-case, which are NOT the same thing: a genuinely EMPTY
+ * portfolio (zero manager x product cells — no active deals at all) vs. the
+ * mathematically-degenerate single-cell case Decision 3 (plan) was built for
+ * (exactly one cell — nothing to be concentrated AGAINST). Returns null when
+ * neither applies, so the caller renders the real number.
+ */
+function diversificationCaveat(
+  cellCount: number,
+): { tooltip: string; subtitle: string } | null {
+  if (cellCount === 0) {
+    return {
+      tooltip: "No manager × product pairs to diversify across.",
+      subtitle: "Nothing to measure yet",
+    };
+  }
+  if (cellCount === 1) {
+    return {
+      tooltip: "Only one manager × product cell — nothing to measure",
+      subtitle: "Only one manager × product cell — nothing to measure",
+    };
+  }
+  return null;
+}
+
 function MetricCard({ icon, label, value, subtitle, valueClassName, delayMs }: MetricCardProps) {
   return (
     <Card
@@ -55,6 +81,7 @@ export function PortfolioSummaryCards({
         ? "Technical Lead"
         : "Product";
   const lift = cluster ? liftPresentation(cluster.lift) : null;
+  const diversificationCaveatInfo = diversificationCaveat(diversificationCellCount);
 
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 @4xl:grid-cols-4 gap-4">
@@ -64,26 +91,36 @@ export function PortfolioSummaryCards({
           rather than 0, but a bare "1.00" would misleadingly read as
           "perfectly diversified". Dash + caveat instead of the raw number;
           no colour accent (valueClassName undefined) since nothing is really
-          being measured — a green OR rose tint would both be a false signal. */}
+          being measured — a green OR rose tint would both be a false signal.
+          Zero cells (a genuinely empty portfolio) hits the same dash-render
+          path via diversificationCaveat() but gets its own copy — see that
+          helper — so an empty portfolio is never described as "one cell". */}
       <MetricCard
         delayMs={0}
         icon={<Layers className="h-3.5 w-3.5" />}
         label="Diversification Index"
         value={
-          diversificationCellCount <= 1 ? (
-            <span title="Only one manager × product cell — nothing to measure">—</span>
+          diversificationCaveatInfo ? (
+            <span title={diversificationCaveatInfo.tooltip}>—</span>
           ) : (
             formatNum(summary.diversificationIndex)
           )
         }
-        valueClassName={diversificationCellCount <= 1 ? undefined : diversificationBand(summary.diversificationIndex)}
+        valueClassName={diversificationCaveatInfo ? undefined : diversificationBand(summary.diversificationIndex)}
         subtitle={
-          diversificationCellCount <= 1
-            ? "Only one manager × product cell — nothing to measure"
+          diversificationCaveatInfo
+            ? diversificationCaveatInfo.subtitle
             : "0 = concentrated · 1 = diversified"
         }
       />
 
+      {/* This card's cluster is computed server-side on an ACTIVE-ONLY alert
+          basis (portfolio.ts's activeGlobalShares), deliberately different from
+          the active+managed basis behind the By-Account-Manager/By-Technical-
+          Lead/By-Product correlation TABLES rendered in portfolio.tsx's
+          renderCorrelations. The two surfaces can legitimately name a
+          different dominant code for the same group — that's intentional, see
+          .agents/memory/edc-phase2-backbone.md, not a bug to reconcile. */}
       <MetricCard
         delayMs={40}
         icon={<Link2 className="h-3.5 w-3.5" />}

@@ -177,6 +177,18 @@ export function registerPortfolioRollupView(): void {
  * that would fail the route's Zod parse. Process start is the one moment we
  * know the compute code may have changed, so we never serve a payload we didn't
  * compute ourselves.
+ *
+ * Timing caveat: the caller (`registerSubscribers()`) invokes this
+ * fire-and-forget (`void purgeAndWarmPortfolioRollups().catch(...)`) from
+ * inside the `app.listen` callback in `index.ts` — i.e. AFTER the server has
+ * already begun accepting HTTP connections, not before. So there is a brief
+ * (typically sub-second) window where a request can still read a rollup row
+ * written by the PREVIOUS process. This self-heals on the very next request
+ * once the purge lands, because a rollup HIT bypasses the 15s `cache.wrap`
+ * `summary:` tier entirely — a stale read in that window is never cached
+ * forward. It is NOT a guarantee against a second instance of this process
+ * still running (and re-upserting) concurrently in a multi-instance
+ * deployment — see .agents/memory/edc-phase2-backbone.md.
  */
 export async function purgeAndWarmPortfolioRollups(): Promise<void> {
   try {
