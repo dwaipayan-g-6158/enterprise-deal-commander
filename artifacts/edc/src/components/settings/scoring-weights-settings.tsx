@@ -13,11 +13,7 @@ import { SlidersHorizontal, Save } from "lucide-react";
 import { AdminOnly } from "@/components/auth/write-gate";
 import { useCanWrite } from "@/lib/auth/role-context";
 import { serverMessage } from "@/lib/server-message";
-
-interface WeightRow {
-  featureId: string;
-  weight: number; // fraction of 1.0
-}
+import { weightToPctString, selectChangedWeights, type WeightRow } from "./scoring-weights-model";
 
 // Friendly labels for the predictive-score factors.
 const FACTOR_LABELS: Record<string, string> = {
@@ -46,14 +42,18 @@ export function ScoringWeightsSettings() {
   useEffect(() => {
     if (rows.length > 0) {
       const init: Record<string, string> = {};
-      for (const r of rows) init[r.featureId] = (r.weight * 100).toFixed(0);
+      for (const r of rows) init[r.featureId] = weightToPctString(r.weight);
       setPct(init);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [list.data]);
 
   const total = Object.values(pct).reduce((a, b) => a + (Number(b) || 0), 0);
-  const dirty = rows.some((r) => pct[r.featureId] !== (r.weight * 100).toFixed(0));
+  // Same per-factor comparison drives both "is there anything to save" and
+  // the actual PUT payload below — see selectChangedWeights's doc comment
+  // for why sharing one function matters here.
+  const changedWeights = selectChangedWeights(rows, pct);
+  const dirty = changedWeights.length > 0;
 
   // Clamp a raw input value into the valid 0-100 percentage range. The Input's
   // min/max HTML attributes never fire here (no <form>, Apply is a click
@@ -67,12 +67,9 @@ export function ScoringWeightsSettings() {
   };
 
   const save = async () => {
+    if (changedWeights.length === 0) return;
     try {
-      const weights = Object.entries(pct).map(([feature_id, v]) => ({
-        feature_id,
-        weight: (Number(v) || 0) / 100,
-      }));
-      const result = await update.mutateAsync({ data: { weights } });
+      const result = await update.mutateAsync({ data: { weights: changedWeights } });
       await qc.invalidateQueries({ queryKey: list.queryKey });
       const rescored = Number(result.data.rescored);
       const count = Number.isFinite(rescored) ? rescored : 0;
