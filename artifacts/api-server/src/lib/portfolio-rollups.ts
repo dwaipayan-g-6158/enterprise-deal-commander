@@ -2,6 +2,7 @@ import { db, portfolioRollups } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { logger } from "./logger";
 import { registerMaterializedView } from "./materialized-views";
+import { isRollupStale, ROLLUP_MAX_AGE_MS } from "./portfolio-rollup-coordinator";
 import { computeSummary, computePortfolioAnalysis } from "./portfolio";
 
 /**
@@ -42,13 +43,35 @@ async function upsertRollup(
     });
 }
 
+let lastStaleWarnAt = 0;
+const STALE_WARN_THROTTLE_MS = 60_000;
+
 async function readRollup<T>(name: string): Promise<T | null> {
   const rows = await db
-    .select({ payload: portfolioRollups.payload })
+    .select({
+      payload: portfolioRollups.payload,
+      computedAt: portfolioRollups.computedAt,
+    })
     .from(portfolioRollups)
     .where(eq(portfolioRollups.name, name))
     .limit(1);
-  return rows.length > 0 ? (rows[0].payload as T) : null;
+  if (rows.length === 0) return null;
+  const { payload, computedAt } = rows[0];
+  if (isRollupStale(computedAt)) {
+    // Throttled: this runs on every /intelligence/summary and
+    // /intelligence/portfolio-analysis request, so an unthrottled warn would
+    // flood the log for exactly as long as the problem lasts.
+    const now = Date.now();
+    if (now - lastStaleWarnAt > STALE_WARN_THROTTLE_MS) {
+      lastStaleWarnAt = now;
+      logger.warn(
+        { rollup: name, computedAt, maxAgeMs: ROLLUP_MAX_AGE_MS },
+        "Portfolio rollup exceeded max age — refresh job may be dead; serving live compute",
+      );
+    }
+    return null;
+  }
+  return payload as T;
 }
 
 /** Read the precomputed summary rollup, or null when not yet computed. */

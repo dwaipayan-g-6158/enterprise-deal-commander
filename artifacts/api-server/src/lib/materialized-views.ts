@@ -12,6 +12,9 @@ import { logger } from "./logger";
  * their values come from the in-process intelligence engine, not SQL.
  */
 
+/** Periodic refresh cadence for every registered view. */
+export const MV_REFRESH_INTERVAL_MS = 15 * 60_000;
+
 export interface MaterializedView {
   /** Fully-qualified view name, e.g. `edc_v2.portfolio_rollup`. */
   name: string;

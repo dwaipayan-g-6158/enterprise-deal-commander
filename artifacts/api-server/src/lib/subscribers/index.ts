@@ -1,7 +1,10 @@
 import { db, enterpriseDeals } from "@workspace/db";
 import { and, isNull } from "drizzle-orm";
 import { logger } from "../logger";
-import { refreshMaterializedViews } from "../materialized-views";
+import {
+  refreshMaterializedViews,
+  MV_REFRESH_INTERVAL_MS,
+} from "../materialized-views";
 import {
   registerPortfolioRollupView,
   refreshPortfolioRollups,
@@ -21,7 +24,6 @@ export { captureSnapshot } from "./snapshot-service";
 export { reconcileHealth } from "./health-tracker";
 
 const SNAPSHOT_INTERVAL_MS = 60 * 60_000; // hourly
-const MV_REFRESH_INTERVAL_MS = 15 * 60_000; // every 15 minutes
 
 async function activeDealIds(): Promise<string[]> {
   const rows = await db
