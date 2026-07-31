@@ -5,6 +5,25 @@ import { Link } from "wouter";
 import { money } from "@/lib/format";
 import { OUTCOME_CLASS } from "@/lib/semantic-colors";
 
+// The server (`ts_headline`) wraps matched search terms in literal
+// <mark>...</mark> around otherwise-unescaped, user-entered narrative text.
+// Never hand that string to dangerouslySetInnerHTML — split on the marker
+// tags and render each half as plain React text (auto-escaped); only the
+// marked segments become real <mark> elements. This is safe even if a
+// narrative happens to contain literal "<mark>" text, because everything
+// still passes through React as a text child, never as raw HTML.
+function renderHighlightedSnippet(snippet: string) {
+  return snippet.split(/(<mark>.*?<\/mark>)/g).map((part, i) => {
+    const match = /^<mark>([\s\S]*)<\/mark>$/.exec(part);
+    if (!match) return part;
+    return (
+      <mark key={i} className="bg-amber-500/20 text-amber-600 rounded-sm px-0.5">
+        {match[1]}
+      </mark>
+    );
+  });
+}
+
 type MemoryResult = {
   id: string;
   dealId: string;
@@ -52,10 +71,7 @@ export function MemoryResultCard({
           {m.competitorsFaced?.length ? ` · vs ${m.competitorsFaced.join(", ")}` : ""}
         </p>
         {m.snippet ? (
-          <p
-            className="text-muted-foreground [&_mark]:bg-amber-500/20 [&_mark]:text-amber-600 [&_mark]:rounded-sm [&_mark]:px-0.5"
-            dangerouslySetInnerHTML={{ __html: m.snippet }}
-          />
+          <p className="text-muted-foreground">{renderHighlightedSnippet(m.snippet)}</p>
         ) : (
           m.winLossNarrative && <p>{m.winLossNarrative}</p>
         )}

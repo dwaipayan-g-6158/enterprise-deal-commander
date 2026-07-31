@@ -5,19 +5,6 @@ import { Badge } from "@/components/ui/badge";
 import { Empty, EmptyHeader, EmptyMedia, EmptyTitle, EmptyDescription } from "@/components/ui/empty";
 import { ShieldAlert, ArrowUpRight } from "lucide-react";
 
-interface MatchedPattern {
-  code: string;
-  lethality: number;
-}
-
-interface LossRiskDeal {
-  dealId: string;
-  dealName: string;
-  accountName: string;
-  score: number;
-  matchedPatterns: MatchedPattern[];
-}
-
 function scoreColor(score: number): string {
   if (score >= 70) return "text-destructive";
   if (score >= 40) return "text-amber-500";
@@ -25,8 +12,11 @@ function scoreColor(score: number): string {
 }
 
 export function LossRiskPanel() {
-  const { data: response, isLoading } = useGetLossRisk();
-  const data = response?.data as { deals?: LossRiskDeal[]; lostDealCount?: number } | undefined;
+  // Typed response (GetLossRiskResponse, generated from the LossRisk schema)
+  // — was GenericDataResponse, cast with `as` to a local interface that could
+  // silently drift from what the server actually returns.
+  const { data: response, isLoading, isError } = useGetLossRisk();
+  const data = response?.data;
   const deals = data?.deals ?? [];
   const lostDealCount = data?.lostDealCount ?? 0;
 
@@ -47,6 +37,8 @@ export function LossRiskPanel() {
       <CardContent>
         {isLoading ? (
           <div className="p-8 text-center text-muted-foreground">Scanning active pipeline...</div>
+        ) : isError ? (
+          <p className="text-sm text-muted-foreground">Early Warning data didn't load. Try refreshing the page.</p>
         ) : deals.length === 0 ? (
           <Empty>
             <EmptyHeader>
@@ -72,6 +64,11 @@ export function LossRiskPanel() {
                         {p.code}
                       </Badge>
                     ))}
+                    {d.matchedPatterns.length > 3 && (
+                      <Badge variant="outline" className="text-xs font-mono text-muted-foreground">
+                        +{d.matchedPatterns.length - 3}
+                      </Badge>
+                    )}
                   </div>
                 </div>
                 <span className={`font-mono text-lg font-bold tabular-nums ${scoreColor(d.score)}`}>

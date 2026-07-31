@@ -1,5 +1,6 @@
 import { isNull } from "drizzle-orm";
 import { enterpriseDeals } from "@workspace/db";
+import { calculateFlatTCV } from "@workspace/engine";
 
 // Just "not soft-deleted" — archived deals are real, historical deals that
 // still count in every analytics number below — that's the whole point of
@@ -12,9 +13,10 @@ import { enterpriseDeals } from "@workspace/db";
 // closed deal's score/snapshot is frozen).
 //
 // Previously duplicated as a local const in routes/v2/analytics.ts (which
-// also independently re-declared CLOSED_STAGES three times below it).
-// Consolidated here so every route that counts/aggregates deals excludes
-// soft-deleted rows and defines "closed" the same way.
+// also independently re-declared CLOSED_STAGES three times below it) and in
+// routes/v2/exports.ts, and absent entirely from routes/intelligence.ts —
+// consolidated here so every route that counts/aggregates deals (including
+// the Closed-Lost Autopsy tabs) excludes soft-deleted rows the same way.
 export const notDeletedFilter = isNull(enterpriseDeals.deletedAt);
 
 // The two terminal pipeline stages. A deal in either of these has no further
@@ -28,23 +30,28 @@ export const CLOSED_STAGES: string[] = ["Closed-Won", "Closed-Lost"];
 export interface TcvInput {
   productRevenue: unknown;
   servicesRevenue: unknown;
+  contractTermYears: unknown;
+  pricingModel: string | null | undefined;
 }
 
 /**
- * Flat TCV — productRevenue + servicesRevenue. This is the formula every
- * OTHER analytics route on this branch already uses (/analytics/pipeline,
- * /analytics/simulation, /analytics/vital-signs, ...), so it's what
- * synthetic pipeline_transitions rows use too — a deal's own current
- * revenue fields, always available, rather than a snapshot lookup that may
- * not exist yet for a just-created or seed-inserted deal.
- *
- * NOT term-aware (doesn't multiply by contractTermYears for Multi-Year
- * Committed deals) — that richer formula exists as `calculateFlatTCV` in
- * @workspace/engine and is used by `processDealIntelligence`'s own
- * `calculatedTCV`, but adopting it HERE, selectively, would make
- * pipeline_transitions disagree with every other analytics figure on a
- * multi-year deal instead of agreeing with all of them.
+ * Term-aware TCV — the SAME formula `processDealIntelligence` uses for a
+ * deal's `calculatedTCV` (lib/engine/src/index.ts, via calculateFlatTCV):
+ * `productRevenue * contractTermYears + servicesRevenue` under the
+ * Multi-Year Committed pricing model, `productRevenue + servicesRevenue`
+ * otherwise. Several Closed-Lost Autopsy routes used to compute their own
+ * flat `product + services` sum instead, so the same lost deal's value
+ * disagreed across tabs whenever it was a multi-year deal. This is now the
+ * one TCV formula used everywhere on this codebase (routes/v2/analytics.ts,
+ * lib/scoring.ts, routes/intelligence.ts, and the synthetic
+ * pipeline_transitions rows below) — see the 2026-07-30 core-logic
+ * remediation plan (H1) for the consolidation.
  */
-export function flatTcv(row: TcvInput): number {
-  return (Number(row.productRevenue) || 0) + (Number(row.servicesRevenue) || 0);
+export function termAwareTcv(row: TcvInput): number {
+  return calculateFlatTCV({
+    productRevenue: Number(row.productRevenue) || 0,
+    servicesRevenue: Number(row.servicesRevenue) || 0,
+    contractTermYears: Number(row.contractTermYears) || 1,
+    pricingModel: row.pricingModel ?? "",
+  });
 }

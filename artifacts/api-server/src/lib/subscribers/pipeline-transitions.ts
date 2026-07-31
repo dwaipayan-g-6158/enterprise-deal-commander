@@ -2,10 +2,10 @@ import { and, desc, eq, lte } from "drizzle-orm";
 import {
   db, pipelineTransitions, pipelineStages, enterpriseDeals, dealSnapshots, pricingModels,
 } from "@workspace/db";
-import { computeTransitionType, calculateFlatTCV, type StageDef } from "@workspace/engine";
+import { computeTransitionType, type StageDef } from "@workspace/engine";
 import { dealEvents } from "../events";
 import { logger } from "../logger";
-import { flatTcv } from "../deal-filters";
+import { termAwareTcv } from "../deal-filters";
 
 async function loadStages(): Promise<StageDef[]> {
   const rows = await db.select().from(pipelineStages);
@@ -67,25 +67,29 @@ export async function recordTransition(args: {
     .where(and(eq(dealSnapshots.dealId, args.dealId), lte(dealSnapshots.snapshotAt, at)))
     .orderBy(desc(dealSnapshots.snapshotAt))
     .limit(1);
-  // A deal can transition (most commonly: its very first "create" transition)
-  // before any snapshot exists for it — snapshots are periodic, not written
-  // synchronously with every deal change. Falling back to `null` there
-  // silently zeroed out the pipeline's "Created" value in the Recycle & Exit
-  // waterfall. The deal's own current revenue fields are always available,
-  // so fall back to those (flatTcv — the same product+services formula every
-  // other analytics route on this branch uses) instead of leaving
-  // tcvAtTransition unset.
+  // A deal can transition before any snapshot exists for it — snapshots are
+  // periodic, not written synchronously with every deal change. Falling back
+  // to `null` there silently zeroed out the pipeline's "Created" value in the
+  // Recycle & Exit waterfall. The deal's own current revenue fields are
+  // always available, so fall back to those via termAwareTcv (the same
+  // formula every other analytics route on this branch uses, post-H1
+  // consolidation) instead of leaving tcvAtTransition unset. In practice this
+  // path is now mostly a safety net — the deal's actual "create" transition
+  // is recorded separately by recordCreateTransition below, on deal.created.
   let tcvAtTransition = snap?.normalizedTcv ?? null;
   if (tcvAtTransition == null) {
     const [dealTcvRow] = await db
       .select({
         productRevenue: enterpriseDeals.productRevenue,
         servicesRevenue: enterpriseDeals.servicesRevenue,
+        contractTermYears: enterpriseDeals.contractTermYears,
+        pricingModel: pricingModels.modelName,
       })
       .from(enterpriseDeals)
+      .leftJoin(pricingModels, eq(enterpriseDeals.pricingModelId, pricingModels.id))
       .where(eq(enterpriseDeals.id, args.dealId))
       .limit(1);
-    if (dealTcvRow) tcvAtTransition = String(flatTcv(dealTcvRow));
+    if (dealTcvRow) tcvAtTransition = String(termAwareTcv(dealTcvRow));
   }
 
   await db
@@ -132,12 +136,7 @@ export async function recordCreateTransition(args: {
     .limit(1);
   if (!deal) return;
 
-  const tcv = calculateFlatTCV({
-    productRevenue: Number(deal.productRevenue) || 0,
-    servicesRevenue: Number(deal.servicesRevenue) || 0,
-    contractTermYears: deal.contractTermYears,
-    pricingModel: deal.pricingModel ?? "",
-  });
+  const tcv = termAwareTcv(deal);
 
   await db
     .insert(pipelineTransitions)

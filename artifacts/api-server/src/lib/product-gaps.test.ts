@@ -55,4 +55,28 @@ describe("clusterProductGaps", () => {
     const blockers: GapBlocker[] = [{ dealId: "d1", dealName: "D1", description: "some blocker", tcv: 100 }];
     expect(clusterProductGaps([], blockers, CATALOG)).toEqual([]);
   });
+
+  it("does not let a short (<4 char) gap label absorb unrelated blockers via raw substring match", () => {
+    const mems: GapMemory[] = [{ dealId: "d1", dealName: "Deal 1", finalTcv: 100, productGaps: ["sso"] }];
+    const blockers: GapBlocker[] = [
+      // Contains "sso" as a raw substring (glo-SSO-lalia) but not as a whole
+      // word — must NOT fold in under the old naive .includes() matching.
+      { dealId: "d2", dealName: "Deal 2", description: "glossolalia parsing error in the report engine", tcv: 999 },
+    ];
+    const clusters = clusterProductGaps(mems, blockers, CATALOG);
+    expect(clusters).toHaveLength(1);
+    expect(clusters[0].openBlockerCount).toBe(0);
+    expect(clusters[0].openTcv).toBe(0);
+    expect(clusters[0].dealCount).toBe(1); // d1 only, d2 correctly excluded
+  });
+
+  it("sums openTcv from blocker deals separately from lostTcv", () => {
+    const mems: GapMemory[] = [{ dealId: "d1", dealName: "Deal 1", finalTcv: 100, productGaps: ["Log360 scale"] }];
+    const blockers: GapBlocker[] = [
+      { dealId: "d2", dealName: "Deal 2", description: "Log360 scale ceiling at 5k EPS", tcv: 400 },
+    ];
+    const clusters = clusterProductGaps(mems, blockers, CATALOG);
+    expect(clusters[0].lostTcv).toBe(100); // autopsy-only
+    expect(clusters[0].openTcv).toBe(400); // blocker-only, no longer missing from the total
+  });
 });

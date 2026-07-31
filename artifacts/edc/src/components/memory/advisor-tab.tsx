@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type Dispatch, type SetStateAction } from "react";
 import { useAskDealMemory } from "@workspace/api-client-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -9,7 +9,7 @@ import { Send } from "lucide-react";
 interface Citation { id: string; dealName: string; accountName: string }
 interface AdvisorAnswer { answer: string; confidence: "high" | "medium" | "low" | "none"; citations: Citation[] }
 
-interface Message {
+export interface Message {
   role: "user" | "advisor";
   text: string;
   confidence?: AdvisorAnswer["confidence"];
@@ -30,41 +30,60 @@ const CONFIDENCE_CLASS: Record<AdvisorAnswer["confidence"], string> = {
   none: "text-destructive",
 };
 
-export function AdvisorTab() {
+interface PendingAsk { id: number; q: string }
+
+export function AdvisorTab({
+  messages,
+  onMessagesChange,
+}: {
+  messages: Message[];
+  onMessagesChange: Dispatch<SetStateAction<Message[]>>;
+}) {
   const [input, setInput] = useState("");
-  const [submittedQuery, setSubmittedQuery] = useState("");
-  const [messages, setMessages] = useState<Message[]>([]);
-  const { data, isFetching } = useAskDealMemory(
-    { q: submittedQuery } as never,
-    { query: { enabled: submittedQuery.length > 0 } } as never,
+  const [pending, setPending] = useState<PendingAsk | null>(null);
+  const { data, isFetching, isError } = useAskDealMemory(
+    { q: pending?.q ?? "" } as never,
+    { query: { enabled: pending != null } } as never,
   );
 
-  // Fires once per distinct submitted query: `data` only gets a new object
-  // reference when the query key changes and actually refetches, so asking the
-  // exact same question twice in a row intentionally does not append a second
-  // (identical, cached) answer bubble.
+  // Keyed to `pending`, not to `data`'s object identity — this is what makes
+  // re-asking the same question work (a new `pending.id` always re-enables the
+  // query) and stops the double-append bug (once `pending` is cleared, further
+  // background settlement of the same query is ignored).
   useEffect(() => {
-    if (!data) return;
-    const payload = data.data as unknown as AdvisorAnswer;
-    setMessages((prev) => [
-      ...prev,
-      { role: "advisor", text: payload.answer, confidence: payload.confidence, citations: payload.citations },
-    ]);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data]);
+    if (!pending || isFetching) return;
+    if (isError) {
+      onMessagesChange((prev) => [...prev, { role: "advisor", text: "Couldn't reach Deal Memory — try again." }]);
+      setPending(null);
+      return;
+    }
+    if (data) {
+      const payload = data.data as unknown as Partial<AdvisorAnswer> | undefined;
+      onMessagesChange((prev) => [
+        ...prev,
+        {
+          role: "advisor",
+          text: payload?.answer ?? "No answer text was returned.",
+          confidence: payload?.confidence,
+          citations: payload?.citations,
+        },
+      ]);
+      setPending(null);
+    }
+  }, [pending, isFetching, isError, data, onMessagesChange]);
 
   const ask = () => {
     const question = input.trim();
-    if (!question) return;
-    setMessages((prev) => [...prev, { role: "user", text: question }]);
+    if (!question || pending) return;
+    onMessagesChange((prev) => [...prev, { role: "user", text: question }]);
     setInput("");
-    setSubmittedQuery(question);
+    setPending({ id: Date.now(), q: question });
   };
 
   return (
     <div className="flex flex-col h-[600px] rounded-lg border bg-card">
       <div className="flex-1 overflow-y-auto p-4 space-y-3">
-        {messages.length === 0 && (
+        {messages.length === 0 && !pending && (
           <p className="text-sm text-muted-foreground">
             Ask about competitors ("How have we done against CloudBridge?"), pricing ("What's typical pricing for enterprise deals?"),
             or precedents ("What's the biggest deal we've closed?"). Answers are computed deterministically from your archived deals — no AI model is used, so answers are only as good as your archive's coverage.
@@ -95,15 +114,22 @@ export function AdvisorTab() {
             </div>
           </div>
         ))}
+        {pending && (
+          <div className="flex justify-start">
+            <div className="bg-card border border-border rounded-lg px-4 py-3 text-sm italic text-muted-foreground">
+              Thinking…
+            </div>
+          </div>
+        )}
       </div>
       <div className="border-t p-3 flex gap-2">
         <Input
           placeholder="Ask Deal Memory a question…"
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          onKeyDown={(e) => { if (e.key === "Enter" && !isFetching) ask(); }}
+          onKeyDown={(e) => { if (e.key === "Enter" && !pending) ask(); }}
         />
-        <Button onClick={ask} disabled={isFetching || !input.trim()}>
+        <Button onClick={ask} disabled={pending != null || !input.trim()}>
           <Send className="h-4 w-4" />
         </Button>
       </div>

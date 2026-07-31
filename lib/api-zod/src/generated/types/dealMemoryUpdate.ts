@@ -13,16 +13,23 @@ export interface DealMemoryUpdate {
   win_loss_narrative?: string | null;
   key_lessons?: string[];
   tags?: string[];
+  /** @nullable */
   primary_loss_category?: DealMemoryUpdatePrimaryLossCategory;
-  /** @maxLength 80 */
-  loss_subcategory?: string;
-  loss_narrative?: string;
-  winning_competitor_id?: number;
+  /**
+     * @maxLength 80
+     * @nullable
+     */
+  loss_subcategory?: string | null;
+  /** @nullable */
+  loss_narrative?: string | null;
+  /** @nullable */
+  winning_competitor_id?: number | null;
   /**
      * @minimum 0
      * @maximum 100
      */
   win_back_potential?: number;
+  /** @nullable */
   win_back_timeline?: DealMemoryUpdateWinBackTimeline;
   /** @maxItems 5 */
   causal_chain?: string[];

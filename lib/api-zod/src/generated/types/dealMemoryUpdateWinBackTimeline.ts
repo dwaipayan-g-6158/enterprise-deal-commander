@@ -6,7 +6,10 @@
  * OpenAPI spec version: 1.0.0
  */
 
-export type DealMemoryUpdateWinBackTimeline = typeof DealMemoryUpdateWinBackTimeline[keyof typeof DealMemoryUpdateWinBackTimeline];
+/**
+ * @nullable
+ */
+export type DealMemoryUpdateWinBackTimeline = typeof DealMemoryUpdateWinBackTimeline[keyof typeof DealMemoryUpdateWinBackTimeline] | null;
 
 
 export const DealMemoryUpdateWinBackTimeline = {

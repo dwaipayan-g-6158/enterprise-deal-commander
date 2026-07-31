@@ -12,7 +12,7 @@
  *     denser and more complete than periodic snapshots. Only deals with at
  *     least one such audit row are covered by this pass. deal_audit_log
  *     carries no TCV of its own, so every row this pass inserts uses the
- *     deal's own CURRENT flat TCV (not historically precise if revenue
+ *     deal's own CURRENT term-aware TCV (not historically precise if revenue
  *     changed since, but far better than a silent null/zero).
  *
  *   Pass B (fallback source): the original deal_snapshots-based
@@ -36,9 +36,9 @@
  *     insert one: fromStageId null (the true prior stage is unrecoverable),
  *     toStageId = current stage, transitionedAt = stageEnteredAt.
  *
- *   Both C and D use the deal's own current flatTcv (not a snapshot lookup,
- *   which would find nothing for a deal with no history) and are tagged
- *   createdBy = "backfill-synthetic-create" / "backfill-synthetic-exit".
+ *   Both C and D use the deal's own current termAwareTcv (not a snapshot
+ *   lookup, which would find nothing for a deal with no history) and are
+ *   tagged createdBy = "backfill-synthetic-create" / "backfill-synthetic-exit".
  *
  * Run:
  *   $env:DATABASE_URL = "postgresql://..."
@@ -53,18 +53,28 @@ import {
   pipelineStages,
   enterpriseDeals,
   dealAuditLog,
+  pricingModels,
 } from "@workspace/db";
-import { computeTransitionType, type StageDef } from "@workspace/engine";
+import { computeTransitionType, calculateFlatTCV, type StageDef } from "@workspace/engine";
 
-// Flat TCV — productRevenue + servicesRevenue. Same formula as
-// deal-filters.ts's flatTcv (kept local for the same package-boundary
-// reason above) — matches every OTHER analytics route on this branch
-// (/analytics/pipeline, /analytics/simulation, ...), so a synthetic
-// transition's TCV agrees with the rest of the app rather than
-// disagreeing on multi-year deals via a term-aware formula used nowhere
-// else here.
-function flatTcv(row: { productRevenue: unknown; servicesRevenue: unknown }): number {
-  return (Number(row.productRevenue) || 0) + (Number(row.servicesRevenue) || 0);
+// Term-aware TCV — same formula as deal-filters.ts's termAwareTcv (kept
+// local for the package-boundary reason above: scripts only depends on
+// @workspace/db and @workspace/engine, not on artifacts/api-server's src).
+// Matches every other analytics route on this branch post the 2026-07-30
+// core-logic remediation's TCV consolidation (H1), so a synthetic
+// transition's TCV agrees with the rest of the app on multi-year deals too.
+function termAwareTcv(row: {
+  productRevenue: unknown;
+  servicesRevenue: unknown;
+  contractTermYears: unknown;
+  pricingModel: string | null | undefined;
+}): number {
+  return calculateFlatTCV({
+    productRevenue: Number(row.productRevenue) || 0,
+    servicesRevenue: Number(row.servicesRevenue) || 0,
+    contractTermYears: Number(row.contractTermYears) || 1,
+    pricingModel: row.pricingModel ?? "",
+  });
 }
 
 interface InsertArgs {
@@ -111,15 +121,18 @@ async function main(): Promise<void> {
       stageEnteredAt: enterpriseDeals.stageEnteredAt,
       productRevenue: enterpriseDeals.productRevenue,
       servicesRevenue: enterpriseDeals.servicesRevenue,
+      contractTermYears: enterpriseDeals.contractTermYears,
+      pricingModel: pricingModels.modelName,
     })
-    .from(enterpriseDeals);
-  // Each deal's current flat TCV — the best available approximation for a
-  // reconstructed transition's tcvAtTransition. deal_audit_log carries no
-  // TCV of its own, so without this every Pass A row would insert `null`,
+    .from(enterpriseDeals)
+    .leftJoin(pricingModels, eq(enterpriseDeals.pricingModelId, pricingModels.id));
+  // Each deal's current term-aware TCV — the best available approximation
+  // for a reconstructed transition's tcvAtTransition. deal_audit_log carries
+  // no TCV of its own, so without this every Pass A row would insert `null`,
   // making it contribute exactly 0 to the value bridge, Sankey value mode,
   // and recycled-value — not historically precise (revenue may have
   // changed since), but far better than a silent zero for a real deal.
-  const flatTcvByDeal = new Map(deals.map((d) => [d.id, flatTcv(d)]));
+  const termAwareTcvByDeal = new Map(deals.map((d) => [d.id, termAwareTcv(d)]));
 
   // Transitions that already exist BEFORE this run — a deal updated through
   // the live update path writes an audit_log row AND fires the
@@ -211,7 +224,7 @@ async function main(): Promise<void> {
               fromStageId: null,
               toStageId: createdStageId,
               transitionType: "create",
-              tcvAtTransition: String(flatTcvByDeal.get(dealId) ?? 0),
+              tcvAtTransition: String(termAwareTcvByDeal.get(dealId) ?? 0),
               daysInFromStage: null,
               transitionedAt: prevAt,
               createdBy: "backfill-audit-log",
@@ -251,7 +264,7 @@ async function main(): Promise<void> {
         fromStageId: prevStageId,
         toStageId,
         transitionType,
-        tcvAtTransition: String(flatTcvByDeal.get(dealId) ?? 0), // audit log carries no TCV; use the deal's current flat TCV as the best available approximation
+        tcvAtTransition: String(termAwareTcvByDeal.get(dealId) ?? 0), // audit log carries no TCV; use the deal's current term-aware TCV as the best available approximation
         daysInFromStage,
         transitionedAt,
         createdBy: "backfill-audit-log",
@@ -355,7 +368,7 @@ async function main(): Promise<void> {
       fromStageId: null,
       toStageId: deal.salesStageId,
       transitionType: "create",
-      tcvAtTransition: String(flatTcv(deal)),
+      tcvAtTransition: String(termAwareTcv(deal)),
       daysInFromStage: null,
       transitionedAt: createAt,
       createdBy: "backfill-synthetic-create",
@@ -376,7 +389,7 @@ async function main(): Promise<void> {
       fromStageId: null,
       toStageId: deal.salesStageId,
       transitionType: toStage.terminal === "won" ? "exit_won" : "exit_lost",
-      tcvAtTransition: String(flatTcv(deal)),
+      tcvAtTransition: String(termAwareTcv(deal)),
       daysInFromStage: null,
       transitionedAt: new Date(deal.stageEnteredAt),
       createdBy: "backfill-synthetic-exit",

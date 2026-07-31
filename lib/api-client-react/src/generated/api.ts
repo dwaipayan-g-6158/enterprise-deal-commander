@@ -35,6 +35,7 @@ import type {
   BlockerUpdate,
   ChangesResponse,
   CompareDealMemoryParams,
+  CompetitiveLossResponse,
   CompetitorBattlecardListResponse,
   CompetitorListResponse,
   CompetitorResponse,
@@ -111,6 +112,8 @@ import type {
   ListSettingsChangeLogParams,
   LoginInput,
   LossArchetypeListResponse,
+  LossDashboardResponse,
+  LossRiskResponse,
   MeddpiccAssessmentResponse,
   MeetingSessionInput,
   MeetingSessionListResponse,
@@ -7063,9 +7066,9 @@ export const getGetLossRiskUrl = () => {
   return `/api/v2/analytics/loss-risk`
 }
 
-export const getLossRisk = async ( options?: RequestInit): Promise<GenericDataResponse> => {
+export const getLossRisk = async ( options?: RequestInit): Promise<LossRiskResponse> => {
 
-  return customFetch<GenericDataResponse>(getGetLossRiskUrl(),
+  return customFetch<LossRiskResponse>(getGetLossRiskUrl(),
   {
     ...options,
     method: 'GET'
@@ -7134,9 +7137,9 @@ export const getGetCompetitiveLossUrl = () => {
   return `/api/v2/analytics/competitive-loss`
 }
 
-export const getCompetitiveLoss = async ( options?: RequestInit): Promise<GenericDataResponse> => {
+export const getCompetitiveLoss = async ( options?: RequestInit): Promise<CompetitiveLossResponse> => {
 
-  return customFetch<GenericDataResponse>(getGetCompetitiveLossUrl(),
+  return customFetch<CompetitiveLossResponse>(getGetCompetitiveLossUrl(),
   {
     ...options,
     method: 'GET'
@@ -7205,9 +7208,9 @@ export const getGetLossDashboardUrl = () => {
   return `/api/v2/analytics/loss-dashboard`
 }
 
-export const getLossDashboard = async ( options?: RequestInit): Promise<GenericDataResponse> => {
+export const getLossDashboard = async ( options?: RequestInit): Promise<LossDashboardResponse> => {
 
-  return customFetch<GenericDataResponse>(getGetLossDashboardUrl(),
+  return customFetch<LossDashboardResponse>(getGetLossDashboardUrl(),
   {
     ...options,
     method: 'GET'

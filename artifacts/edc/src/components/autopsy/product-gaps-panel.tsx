@@ -5,7 +5,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
-import { fullCurrency } from "@/components/dashboard/widgets/_shared";
+import { compactUSD } from "@/lib/format";
 
 // "What to build/fix" register: product gaps clustered from loss autopsies +
 // unresolved technical blockers, ranked by TCV-at-risk. Computed on read.
@@ -61,9 +61,16 @@ export function ProductGapsPanel() {
                   {c.openBlockerCount > 0 && ` · ${c.openBlockerCount} open blocker${c.openBlockerCount === 1 ? "" : "s"}`}
                 </p>
               </div>
-              <span className="shrink-0 font-mono text-sm font-semibold tabular-nums text-red-600 dark:text-red-400">
-                {fullCurrency(c.lostTcv)}
-              </span>
+              <div className="shrink-0 text-right">
+                <span className="block font-mono text-sm font-semibold tabular-nums text-red-600 dark:text-red-400">
+                  {compactUSD(c.lostTcv)} lost
+                </span>
+                {c.openTcv > 0 && (
+                  <span className="block font-mono text-xs tabular-nums text-amber-600 dark:text-amber-400">
+                    {compactUSD(c.openTcv)} open
+                  </span>
+                )}
+              </div>
             </button>
             {expanded && (
               <ul className="border-t bg-muted/20 px-4 py-2">
@@ -82,7 +89,7 @@ export function ProductGapsPanel() {
                       </span>
                       {d.dealName}
                     </span>
-                    {d.tcv != null && <span className="font-mono text-xs tabular-nums text-muted-foreground">{fullCurrency(d.tcv)}</span>}
+                    {d.tcv != null && <span className="font-mono text-xs tabular-nums text-muted-foreground">{compactUSD(d.tcv)}</span>}
                   </li>
                 ))}
               </ul>

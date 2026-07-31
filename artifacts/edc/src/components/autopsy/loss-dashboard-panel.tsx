@@ -3,36 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Activity } from "lucide-react";
-import { formatNum } from "@/lib/format";
-
-interface TopPattern {
-  code: string;
-  share: number;
-}
-
-interface CategoryComposition {
-  category: string;
-  count: number;
-  value: number;
-}
-
-interface LossDashboardData {
-  lossPulse: number | null;
-  lossPulseComponents: {
-    autopsyCompletenessPct: number;
-    avgQualityScore: number | null;
-    lossRatePct: number | null;
-  };
-  volume: { lossCount: number; lossValue: number };
-  compositionByCategory: CategoryComposition[];
-  topPatterns: TopPattern[];
-}
-
-function compactUSD(n: number): string {
-  if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(2)}M`;
-  if (n >= 1_000) return `$${Math.round(n / 1_000)}K`;
-  return `$${Math.round(n)}`;
-}
+import { formatNum, compactUSD } from "@/lib/format";
 
 function pulseColor(score: number | null): string {
   if (score == null) return "text-muted-foreground";
@@ -53,9 +24,15 @@ const CATEGORY_LABELS: Record<string, string> = {
 };
 
 export function LossDashboardPanel() {
-  const { data: response, isLoading } = useGetLossDashboard();
-  const data = response?.data as LossDashboardData | undefined;
+  // Typed response (GetLossDashboardResponse, generated from the
+  // LossDashboard schema) — was GenericDataResponse, cast with `as` to a
+  // local interface that could silently drift from the server shape.
+  const { data: response, isLoading, isError } = useGetLossDashboard();
+  const data = response?.data;
 
+  if (isError) {
+    return <p className="p-8 text-center text-sm text-muted-foreground">Loss Intelligence didn't load. Try refreshing the page.</p>;
+  }
   if (isLoading || !data) {
     return <div className="p-8 text-center text-muted-foreground">Computing loss intelligence...</div>;
   }
@@ -76,9 +53,15 @@ export function LossDashboardPanel() {
               {data.lossPulse != null ? formatNum(data.lossPulse) : "—"}
             </p>
             <p className="text-xs text-muted-foreground mt-2">
-              Autopsy completeness {formatNum(data.lossPulseComponents.autopsyCompletenessPct)}%
-              {data.lossPulseComponents.avgQualityScore != null && ` · Avg quality ${formatNum(data.lossPulseComponents.avgQualityScore)}`}
-              {data.lossPulseComponents.lossRatePct != null && ` · Loss rate ${formatNum(data.lossPulseComponents.lossRatePct)}%`}
+              {data.volume.lossCount === 0 ? (
+                "No losses recorded yet — nothing to measure."
+              ) : (
+                <>
+                  Autopsy completeness {formatNum(data.lossPulseComponents.autopsyCompletenessPct)}%
+                  {data.lossPulseComponents.avgQualityScore != null && ` · Avg quality ${formatNum(data.lossPulseComponents.avgQualityScore)}`}
+                  {data.lossPulseComponents.lossRatePct != null && ` · Loss rate ${formatNum(data.lossPulseComponents.lossRatePct)}%`}
+                </>
+              )}
             </p>
           </CardContent>
         </Card>

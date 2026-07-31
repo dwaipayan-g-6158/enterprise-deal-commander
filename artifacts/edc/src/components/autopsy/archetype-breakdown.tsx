@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "wouter";
 import { useGetAutopsy, useListLossArchetypes } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -8,22 +8,25 @@ import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
 import { ArrowUpRight, Stethoscope } from "lucide-react";
 import { LossAutopsySheet } from "./loss-autopsy-sheet";
-import { formatNum } from "@/lib/format";
-
-function compactUSD(n: number): string {
-  if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(2)}M`;
-  if (n >= 1_000) return `$${Math.round(n / 1_000)}K`;
-  return `$${Math.round(n)}`;
-}
+import { formatNum, compactUSD } from "@/lib/format";
 
 export function ArchetypeBreakdown() {
   const [archetypeId, setArchetypeId] = useState<string>("all");
   const [autopsyDeal, setAutopsyDeal] = useState<{ id: string; name: string } | null>(null);
+  // Last non-null target, kept around after autopsyDeal clears so the Sheet
+  // stays mounted through its own close transition instead of being torn out
+  // of the tree mid-animation (the `{autopsyDeal && <Sheet .../>}` pattern
+  // this replaces unmounted synchronously with the click, cutting the
+  // animation off).
+  const [lastAutopsyDeal, setLastAutopsyDeal] = useState<{ id: string; name: string } | null>(null);
+  useEffect(() => {
+    if (autopsyDeal) setLastAutopsyDeal(autopsyDeal);
+  }, [autopsyDeal]);
 
   const { data: archetypesData } = useListLossArchetypes();
   const archetypes = archetypesData?.data || [];
 
-  const { data: response, isLoading } = useGetAutopsy(archetypeId !== "all" ? { archetypeId: Number(archetypeId) } : undefined);
+  const { data: response, isLoading, isError } = useGetAutopsy(archetypeId !== "all" ? { archetypeId: Number(archetypeId) } : undefined);
   const data = response?.data;
 
   return (
@@ -44,6 +47,10 @@ export function ArchetypeBreakdown() {
 
       {isLoading ? (
         <div className="p-8 text-center text-muted-foreground">Analyzing losses...</div>
+      ) : isError ? (
+        <Card>
+          <CardContent className="p-8 text-center text-muted-foreground">Archetype data didn't load. Try refreshing the page.</CardContent>
+        </Card>
       ) : !data || data.byArchetype.length === 0 ? (
         <Card>
           <CardContent className="p-8 text-center text-muted-foreground">No autopsy data yet. Nothing lost to learn from — that's a good sign.</CardContent>
@@ -51,7 +58,7 @@ export function ArchetypeBreakdown() {
       ) : (
         <div className="grid gap-6">
           {data.byArchetype.map((arch) => (
-            <Card key={arch.archetypeId}>
+            <Card key={arch.archetypeId ?? "unclassified"}>
               <CardHeader className="bg-muted/30 border-b">
                 <CardTitle className="text-xl flex justify-between items-center">
                   <span>{arch.archetypeName}</span>
@@ -152,14 +159,12 @@ export function ArchetypeBreakdown() {
         </div>
       )}
 
-      {autopsyDeal && (
-        <LossAutopsySheet
-          dealId={autopsyDeal.id}
-          dealName={autopsyDeal.name}
-          open={!!autopsyDeal}
-          onOpenChange={(v) => !v && setAutopsyDeal(null)}
-        />
-      )}
+      <LossAutopsySheet
+        dealId={lastAutopsyDeal?.id ?? ""}
+        dealName={lastAutopsyDeal?.name ?? ""}
+        open={!!autopsyDeal}
+        onOpenChange={(v) => !v && setAutopsyDeal(null)}
+      />
     </div>
   );
 }

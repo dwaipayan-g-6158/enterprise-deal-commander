@@ -1,4 +1,6 @@
-const MIN_ENCOUNTERS = 3;
+// Below this many archived encounters, a competitor's stats are still shown
+// but labelled lowConfidence — small samples are informative, not hidden.
+const LOW_CONFIDENCE_BELOW = 3;
 
 export interface MemoryRow {
   id: string;
@@ -17,12 +19,22 @@ export interface CompetitorIntel {
   winRatePct: number;
   topLossCategory: string | null;
   avgTcv: number;
+  lowConfidence: boolean;
 }
 
+// Linear-interpolation percentile (R-7, the numpy/Excel default) over a
+// 0-indexed sorted sample. Nearest-rank (floor(n*p)) collapses p90 to the max
+// for any n <= 10, which is the only regime this app's archive runs in.
 export function percentiles(xs: number[]): { p25: number; median: number; p75: number; p90: number } {
   if (xs.length === 0) return { p25: 0, median: 0, p75: 0, p90: 0 };
   const s = [...xs].sort((a, b) => a - b);
-  const at = (p: number) => s[Math.min(s.length - 1, Math.floor(s.length * p))];
+  const at = (p: number) => {
+    const rank = (s.length - 1) * p;
+    const lo = Math.floor(rank);
+    const hi = Math.ceil(rank);
+    if (lo === hi) return s[lo];
+    return s[lo] + (s[hi] - s[lo]) * (rank - lo);
+  };
   return { p25: at(0.25), median: at(0.5), p75: at(0.75), p90: at(0.9) };
 }
 
@@ -38,7 +50,6 @@ export function computeCompetitorIntel(rows: MemoryRow[]): CompetitorIntel[] {
 
   const result: CompetitorIntel[] = [];
   for (const [name, encounters] of byCompetitor.entries()) {
-    if (encounters.length < MIN_ENCOUNTERS) continue;
     const decided = encounters.filter((r) => r.outcome === "Won" || r.outcome === "Lost");
     const wins = decided.filter((r) => r.outcome === "Won").length;
     const winRatePct = decided.length ? Math.round((wins / decided.length) * 100) : 0;
@@ -58,13 +69,22 @@ export function computeCompetitorIntel(rows: MemoryRow[]): CompetitorIntel[] {
       }
     }
 
-    const tcvs = encounters.map((r) => Number(r.finalTcv) || 0);
+    // Only average over deals with a real TCV — a null/zero TCV isn't "$0",
+    // it's missing data, and including it as zero deflates the average.
+    const tcvs = encounters.map((r) => Number(r.finalTcv) || 0).filter((n) => n > 0);
     const avgTcv = tcvs.length ? Math.round(tcvs.reduce((a, b) => a + b, 0) / tcvs.length) : 0;
 
-    result.push({ name, encounterCount: encounters.length, winRatePct, topLossCategory, avgTcv });
+    result.push({
+      name,
+      encounterCount: encounters.length,
+      winRatePct,
+      topLossCategory,
+      avgTcv,
+      lowConfidence: encounters.length < LOW_CONFIDENCE_BELOW,
+    });
   }
 
-  return result.sort((a, b) => b.encounterCount - a.encounterCount);
+  return result.sort((a, b) => b.encounterCount - a.encounterCount || a.name.localeCompare(b.name));
 }
 
 export interface PlaybookEffectiveness {

@@ -20,19 +20,37 @@ describe("percentiles", () => {
     expect(percentiles([])).toEqual({ p25: 0, median: 0, p75: 0, p90: 0 });
   });
 
-  it("computes percentiles over a sorted sample", () => {
+  it("computes percentiles over a sorted sample via linear interpolation", () => {
     const xs = [10, 20, 30, 40, 50, 60, 70, 80, 90, 100];
     const p = percentiles(xs);
-    expect(p.median).toBe(60);
-    expect(p.p25).toBeLessThan(p.median);
-    expect(p.p90).toBeGreaterThan(p.median);
+    expect(p.p25).toBe(32.5);
+    expect(p.median).toBe(55);
+    expect(p.p75).toBe(77.5);
+    expect(p.p90).toBe(91);
+  });
+
+  it("does not collapse p90 to the max for small samples", () => {
+    // Nearest-rank (floor(n*p)) degenerates to the max for any n <= 10 — the
+    // only regime this app's archive runs in. Interpolation must not do that.
+    const xs = [10, 20, 30];
+    const p = percentiles(xs);
+    expect(p.p90).toBeLessThan(30);
+    expect(p.p90).toBeGreaterThan(20);
+  });
+
+  it("interpolates the median for an even-length sample instead of picking the upper middle", () => {
+    const p = percentiles([10, 20]);
+    expect(p.median).toBe(15);
   });
 });
 
 describe("computeCompetitorIntel", () => {
-  it("returns no entries below the minimum encounter threshold", () => {
+  it("returns a competitor below the low-confidence floor, flagged rather than hidden", () => {
     const rows = [row({ competitorsFaced: ["CloudBridge"] }), row({ competitorsFaced: ["CloudBridge"] })];
-    expect(computeCompetitorIntel(rows)).toEqual([]);
+    const intel = computeCompetitorIntel(rows);
+    expect(intel).toHaveLength(1);
+    expect(intel[0].encounterCount).toBe(2);
+    expect(intel[0].lowConfidence).toBe(true);
   });
 
   it("aggregates win rate and top loss category once the threshold is met", () => {
@@ -47,6 +65,16 @@ describe("computeCompetitorIntel", () => {
     expect(intel[0].encounterCount).toBe(3);
     expect(intel[0].winRatePct).toBe(33);
     expect(intel[0].topLossCategory).toBe("price");
+    expect(intel[0].lowConfidence).toBe(false);
+  });
+
+  it("ignores null/zero TCV rows when averaging deal size", () => {
+    const rows = [
+      row({ competitorsFaced: ["CloudBridge"], finalTcv: null }),
+      row({ competitorsFaced: ["CloudBridge"], finalTcv: "0" }),
+      row({ competitorsFaced: ["CloudBridge"], finalTcv: "200000" }),
+    ];
+    expect(computeCompetitorIntel(rows)[0].avgTcv).toBe(200000);
   });
 
   it("sorts competitors by encounter count descending", () => {

@@ -3,31 +3,14 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Empty, EmptyHeader, EmptyMedia, EmptyTitle, EmptyDescription } from "@/components/ui/empty";
 import { Swords } from "lucide-react";
-
-interface CompetitorLoss {
-  competitorId: number;
-  name: string;
-  lossCount: number;
-  lossTcv: number;
-  topArchetype: string | null;
-}
-
-interface MatrixCell {
-  suite: string;
-  competitorName: string;
-  losses: number;
-  wins: number;
-}
-
-function compactUSD(n: number): string {
-  if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(2)}M`;
-  if (n >= 1_000) return `$${Math.round(n / 1_000)}K`;
-  return `$${Math.round(n)}`;
-}
+import { compactUSD } from "@/lib/format";
 
 export function CompetitiveLossPanel() {
-  const { data: response, isLoading } = useGetCompetitiveLoss();
-  const data = response?.data as { byCompetitor?: CompetitorLoss[]; matrix?: MatrixCell[] } | undefined;
+  // Typed response (GetCompetitiveLossResponse, generated from the
+  // CompetitiveLoss schema) — was GenericDataResponse, cast with `as` to
+  // local interfaces that could silently drift from the server shape.
+  const { data: response, isLoading, isError } = useGetCompetitiveLoss();
+  const data = response?.data;
   const byCompetitor = data?.byCompetitor ?? [];
   const matrix = data?.matrix ?? [];
   const suites = [...new Set(matrix.map((m) => m.suite))].sort();
@@ -42,11 +25,16 @@ export function CompetitiveLossPanel() {
             <Swords className="h-5 w-5" />
             Competitive Loss Intelligence
           </CardTitle>
-          <p className="text-sm text-muted-foreground">Aggregated from the Competitive tab tracked on each deal.</p>
+          <p className="text-sm text-muted-foreground">
+            Aggregated from the Competitive tab tracked on each deal. Only deals that have actually closed
+            Closed-Won/Closed-Lost count — a competitor tagged on a still-open deal isn't booked as a win or loss yet.
+          </p>
         </CardHeader>
         <CardContent>
           {isLoading ? (
             <div className="p-8 text-center text-muted-foreground">Aggregating competitive data...</div>
+          ) : isError ? (
+            <p className="text-sm text-muted-foreground">Competitive data didn't load. Try refreshing the page.</p>
           ) : byCompetitor.length === 0 ? (
             <Empty>
               <EmptyHeader>

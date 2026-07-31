@@ -1421,19 +1421,19 @@ paths:
       operationId: getLossRisk
       tags: [v2intel]
       responses:
-        "200": { description: "Active deals ranked by historical loss-pattern match (\"Early Warning\")", content: { application/json: { schema: { $ref: "#/components/schemas/GenericDataResponse" } } } }
+        "200": { description: "Active deals ranked by historical loss-pattern match (\"Early Warning\")", content: { application/json: { schema: { $ref: "#/components/schemas/LossRiskResponse" } } } }
   /v2/analytics/competitive-loss:
     get:
       operationId: getCompetitiveLoss
       tags: [v2intel]
       responses:
-        "200": { description: Per-competitor loss aggregation and product-suite win/loss matrix, content: { application/json: { schema: { $ref: "#/components/schemas/GenericDataResponse" } } } }
+        "200": { description: Per-competitor loss aggregation and product-suite win/loss matrix, content: { application/json: { schema: { $ref: "#/components/schemas/CompetitiveLossResponse" } } } }
   /v2/analytics/loss-dashboard:
     get:
       operationId: getLossDashboard
       tags: [v2intel]
       responses:
-        "200": { description: "Loss Pulse composite, volume/value tracker, category composition, and top loss patterns", content: { application/json: { schema: { $ref: "#/components/schemas/GenericDataResponse" } } } }
+        "200": { description: "Loss Pulse composite, volume/value tracker, category composition, and top loss patterns", content: { application/json: { schema: { $ref: "#/components/schemas/LossDashboardResponse" } } } }
 
   # --- Pipeline Flow analytics ---
   /v2/analytics/flow/funnel:
@@ -1525,6 +1525,12 @@ paths:
       operationId: searchDealMemory
       tags: [v2intel]
       parameters:
+        # Exact match on deal_memory.deal_id (unique — see post-mortem.ts's
+        # onConflictDoUpdate target) — lets a caller reliably fetch THE
+        # record for a specific deal instead of relying on the outcome-scoped
+        # list + LIMIT 50, which silently missed deals past the 50th most
+        # recently archived.
+        - { name: dealId, in: query, required: false, schema: { type: string } }
         - { name: q, in: query, required: false, schema: { type: string } }
         - { name: outcome, in: query, required: false, schema: { type: string } }
         - { name: competitor, in: query, required: false, schema: { type: string } }
@@ -2949,7 +2955,9 @@ components:
     ArchetypeAutopsy:
       type: object
       properties:
-        archetypeId: { type: integer }
+        # null represents the synthetic "Unclassified" bucket: a Closed-Lost
+        # deal with no loss archetype set (never server-enforced on close).
+        archetypeId: { type: ["integer", "null"] }
         archetypeName: { type: string }
         lossCount: { type: integer }
         avgGateCompletionPct: { type: number }
@@ -2973,6 +2981,100 @@ components:
       type: object
       properties:
         data: { $ref: "#/components/schemas/Autopsy" }
+      required: [data]
+
+    # --- Closed-Lost Autopsy: Early Warning / Competitive / Loss Dashboard ---
+    # Previously all three returned GenericDataResponse, so the frontend
+    # panels hand-wrote local interfaces and cast the response with `as` —
+    # a server-side shape drift would not fail typecheck. Typed + parsed here
+    # like every other Autopsy tab endpoint.
+    LossRiskMatchedPattern:
+      type: object
+      properties:
+        code: { type: string }
+        lethality: { type: number }
+      required: [code, lethality]
+    LossRiskDeal:
+      type: object
+      properties:
+        dealId: { type: string }
+        dealName: { type: string }
+        accountName: { type: string }
+        score: { type: number }
+        matchedPatterns: { type: array, items: { $ref: "#/components/schemas/LossRiskMatchedPattern" } }
+      required: [dealId, dealName, accountName, score, matchedPatterns]
+    LossRisk:
+      type: object
+      properties:
+        deals: { type: array, items: { $ref: "#/components/schemas/LossRiskDeal" } }
+        lostDealCount: { type: integer }
+      required: [deals, lostDealCount]
+    LossRiskResponse:
+      type: object
+      properties:
+        data: { $ref: "#/components/schemas/LossRisk" }
+      required: [data]
+
+    CompetitorLoss:
+      type: object
+      properties:
+        competitorId: { type: integer }
+        name: { type: string }
+        lossCount: { type: integer }
+        lossTcv: { type: number }
+        topArchetype: { type: ["string", "null"] }
+      required: [competitorId, name, lossCount, lossTcv, topArchetype]
+    CompetitiveLossMatrixCell:
+      type: object
+      properties:
+        suite: { type: string }
+        competitorName: { type: string }
+        losses: { type: integer }
+        wins: { type: integer }
+      required: [suite, competitorName, losses, wins]
+    CompetitiveLoss:
+      type: object
+      properties:
+        byCompetitor: { type: array, items: { $ref: "#/components/schemas/CompetitorLoss" } }
+        matrix: { type: array, items: { $ref: "#/components/schemas/CompetitiveLossMatrixCell" } }
+      required: [byCompetitor, matrix]
+    CompetitiveLossResponse:
+      type: object
+      properties:
+        data: { $ref: "#/components/schemas/CompetitiveLoss" }
+      required: [data]
+
+    LossDashboardCategoryComposition:
+      type: object
+      properties:
+        category: { type: string }
+        count: { type: integer }
+        value: { type: number }
+      required: [category, count, value]
+    LossDashboard:
+      type: object
+      properties:
+        lossPulse: { type: ["number", "null"] }
+        lossPulseComponents:
+          type: object
+          properties:
+            autopsyCompletenessPct: { type: number }
+            avgQualityScore: { type: ["number", "null"] }
+            lossRatePct: { type: ["number", "null"] }
+          required: [autopsyCompletenessPct, avgQualityScore, lossRatePct]
+        volume:
+          type: object
+          properties:
+            lossCount: { type: integer }
+            lossValue: { type: number }
+          required: [lossCount, lossValue]
+        compositionByCategory: { type: array, items: { $ref: "#/components/schemas/LossDashboardCategoryComposition" } }
+        topPatterns: { type: array, items: { $ref: "#/components/schemas/PatternShare" } }
+      required: [lossPulse, lossPulseComponents, volume, compositionByCategory, topPatterns]
+    LossDashboardResponse:
+      type: object
+      properties:
+        data: { $ref: "#/components/schemas/LossDashboard" }
       required: [data]
 
     AuditLog:
@@ -3701,12 +3803,15 @@ components:
         win_loss_narrative: { type: ["string", "null"] }
         key_lessons: { type: array, items: { type: string } }
         tags: { type: array, items: { type: string } }
-        primary_loss_category: { type: string, enum: [price, product, competitive, timing, relationship, process] }
-        loss_subcategory: { type: string, maxLength: 80 }
-        loss_narrative: { type: string }
-        winning_competitor_id: { type: integer }
+        # Nullable (not just optional): a client sends null EXPLICITLY to
+        # clear a previously-set value, vs. omitting the key to leave it
+        # untouched — routes/v2/crud.ts distinguishes the two with `"x" in b`.
+        primary_loss_category: { type: ["string", "null"], enum: [price, product, competitive, timing, relationship, process, null] }
+        loss_subcategory: { type: ["string", "null"], maxLength: 80 }
+        loss_narrative: { type: ["string", "null"] }
+        winning_competitor_id: { type: ["integer", "null"] }
         win_back_potential: { type: integer, minimum: 0, maximum: 100 }
-        win_back_timeline: { type: string, enum: [immediate, short_term, long_term, none] }
+        win_back_timeline: { type: ["string", "null"], enum: [immediate, short_term, long_term, none, null] }
         causal_chain: { type: array, items: { type: string }, maxItems: 5 }
         decision_maker_engaged: { type: boolean }
         champion_identified: { type: boolean }
@@ -3758,10 +3863,15 @@ components:
         productId: { type: ["string", "null"] }
         productName: { type: ["string", "null"] }
         dealCount: { type: integer }
+        # TCV at risk from Closed-Lost autopsy deals citing this gap.
         lostTcv: { type: number }
+        # TCV on still-OPEN deals blocked by this gap — distinct from lostTcv
+        # (a blocker deal hasn't been lost, so its TCV isn't "at risk" the
+        # same way; it used to be silently absent from every cluster total).
+        openTcv: { type: number }
         openBlockerCount: { type: integer }
         deals: { type: array, items: { $ref: "#/components/schemas/ProductGapDeal" } }
-      required: [label, dealCount, lostTcv, openBlockerCount, deals]
+      required: [label, dealCount, lostTcv, openTcv, openBlockerCount, deals]
     ProductGapsResponse:
       type: object
       properties:

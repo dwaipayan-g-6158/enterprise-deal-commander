@@ -120,6 +120,14 @@ export default function Deals() {
   // close the success toast offers to complete the autopsy.
   const [pendingClose, setPendingClose] = useState<PendingClose | null>(null);
   const [autopsyTarget, setAutopsyTarget] = useState<{ dealId: string; dealName: string } | null>(null);
+  // Last non-null target, kept around after autopsyTarget clears so the
+  // Sheet stays mounted through its own close transition instead of
+  // unmounting synchronously with the click (see the identical pattern in
+  // components/autopsy/archetype-breakdown.tsx).
+  const [lastAutopsyTarget, setLastAutopsyTarget] = useState<{ dealId: string; dealName: string } | null>(null);
+  useEffect(() => {
+    if (autopsyTarget) setLastAutopsyTarget(autopsyTarget);
+  }, [autopsyTarget]);
 
   // Board-only stage-move API (drag-drop + context menu + 409 override). Harmless
   // in table mode — it holds no subscriptions until a move is triggered.
@@ -481,14 +489,12 @@ export default function Deals() {
         }}
       />
 
-      {autopsyTarget && (
-        <LossAutopsySheet
-          dealId={autopsyTarget.dealId}
-          dealName={autopsyTarget.dealName}
-          open={autopsyTarget !== null}
-          onOpenChange={(v) => !v && setAutopsyTarget(null)}
-        />
-      )}
+      <LossAutopsySheet
+        dealId={lastAutopsyTarget?.dealId ?? ""}
+        dealName={lastAutopsyTarget?.dealName ?? ""}
+        open={autopsyTarget !== null}
+        onOpenChange={(v) => !v && setAutopsyTarget(null)}
+      />
 
       {!isLoading && !isError && derived.flat.length > 0 && (
         <p className="text-xs text-muted-foreground flex flex-wrap items-center gap-1">

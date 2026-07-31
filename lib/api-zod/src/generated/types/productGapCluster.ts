@@ -15,6 +15,7 @@ export interface ProductGapCluster {
   productName?: string | null;
   dealCount: number;
   lostTcv: number;
+  openTcv: number;
   openBlockerCount: number;
   deals: ProductGapDeal[];
 }

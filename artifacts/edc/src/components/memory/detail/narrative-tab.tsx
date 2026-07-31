@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useUpdateDealMemory } from "@workspace/api-client-react";
+import { useUpdateDealMemory, useGetDeal, getGetDealQueryKey } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
@@ -34,6 +34,13 @@ export function NarrativeTab({ memory: m }: { memory: MemoryDetail }) {
   const { toast } = useToast();
   const canWrite = useCanWrite();
   const updateMemory = useUpdateDealMemory();
+  // Loss archetype lives on enterprise_deals, not deal_memory — fetched
+  // separately so the embedded AutopsyForm can show its current value
+  // instead of always rendering the select as unset.
+  const { data: dealRes } = useGetDeal(m.dealId, {
+    query: { enabled: m.outcome === "Lost", queryKey: getGetDealQueryKey(m.dealId) },
+  });
+  const lossArchetypeId = dealRes?.data?.lossArchetypeId ?? null;
   const [narrative, setNarrative] = useState(m.winLossNarrative ?? "");
   const [lessons, setLessons] = useState((m.keyLessons ?? []).join("\n"));
   const [tags, setTags] = useState((m.tags ?? []).join(", "));
@@ -90,7 +97,7 @@ export function NarrativeTab({ memory: m }: { memory: MemoryDetail }) {
         <Card>
           <CardHeader><CardTitle className="text-lg">Closed-Lost Autopsy</CardTitle></CardHeader>
           <CardContent>
-            <AutopsyForm dealId={m.dealId} dealName={m.dealName} memoryRow={m} />
+            <AutopsyForm dealId={m.dealId} dealName={m.dealName} memoryRow={m} lossArchetypeId={lossArchetypeId} />
           </CardContent>
         </Card>
       )}
