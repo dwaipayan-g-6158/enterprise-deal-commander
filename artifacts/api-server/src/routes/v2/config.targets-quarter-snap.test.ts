@@ -2,6 +2,7 @@ import { describe, it, expect, afterAll } from "vitest";
 import type { Request, Response } from "express";
 import { and, eq } from "drizzle-orm";
 import { db, pool, pipelineTargets, settingsChangeLog } from "@workspace/db";
+import { quarterStartUTC } from "@workspace/engine";
 import configRouter from "./config";
 import analyticsRouter from "./analytics";
 
@@ -66,74 +67,127 @@ async function getCoverage(): Promise<CoverageResponse["data"]> {
   return captured.data;
 }
 
-// Pure UTC quarter-flooring — the exact convention both routes/v2/analytics.ts
-// (activeQuarterStart) and artifacts/edc's targets-settings.tsx
-// (quarterStartISO) now share (duplicated, not imported, per task-4-report.md
-// — a literal shared module isn't possible across the browser/Node
-// boundary). Reproduced here (rather than importing a private route-file
-// function) purely to build this test's fixture data.
-function utcQuarterStart(d: Date): string {
-  const q = Math.floor(d.getUTCMonth() / 3);
-  return new Date(Date.UTC(d.getUTCFullYear(), q * 3, 1)).toISOString().slice(0, 10);
-}
-
+const NO_TARGET_CAVEAT = "No target set for the active period.";
 const TEST_TARGET_VALUE = 4_242_424.24;
+const DECOY_TARGET_VALUE = 1_111_111.11;
 
 describe("PUT /config/targets -> GET /analytics/flow/coverage — quarter-snap round trip (F4)", () => {
   let quarterStart = "";
-  let priorRow: (typeof pipelineTargets.$inferSelect) | undefined;
+  // Rows THIS test creates, captured by id so cleanup deletes exactly them —
+  // never a pattern match that could sweep up unrelated rows (see below).
+  let createdQuarterRowId: string | undefined;
+  let createdMonthRowId: string | undefined;
+  let createdChangeLogId: string | undefined;
+  // Whatever (if anything) already occupied these exact (periodType, periodStart)
+  // slots before this test ran, so it can be put back afterward — the upsert's
+  // conflict key means this test's writes would otherwise clobber a real row.
+  let priorQuarterRow: (typeof pipelineTargets.$inferSelect) | undefined;
+  let priorMonthRow: (typeof pipelineTargets.$inferSelect) | undefined;
 
   afterAll(async () => {
-    if (quarterStart) {
-      await db
-        .delete(pipelineTargets)
-        .where(and(eq(pipelineTargets.periodType, "quarter"), eq(pipelineTargets.periodStart, quarterStart)));
-      if (priorRow) {
-        // Restore whatever real target (if any) existed for the active
-        // quarter before this test overwrote it via the upsert conflict key.
-        await db.insert(pipelineTargets).values(priorRow);
-      }
-      await db.delete(settingsChangeLog).where(eq(settingsChangeLog.settingKey, `quarter:${quarterStart}`));
+    // Delete ONLY the exact rows this test created, by primary key — never by
+    // a settingKey/periodStart pattern match, which could destroy unrelated
+    // history in whatever DB this suite runs against (a genuine data-loss bug
+    // in an earlier version of this test — settings_change_log is an audit
+    // trail, not scratch data, and nothing here restores it once deleted).
+    if (createdQuarterRowId) {
+      await db.delete(pipelineTargets).where(eq(pipelineTargets.id, createdQuarterRowId));
     }
+    if (createdMonthRowId) {
+      await db.delete(pipelineTargets).where(eq(pipelineTargets.id, createdMonthRowId));
+    }
+    if (createdChangeLogId) {
+      await db.delete(settingsChangeLog).where(eq(settingsChangeLog.id, createdChangeLogId));
+    }
+    // Restore whatever real rows previously occupied these slots.
+    if (priorQuarterRow) await db.insert(pipelineTargets).values(priorQuarterRow);
+    if (priorMonthRow) await db.insert(pipelineTargets).values(priorMonthRow);
     await pool.end();
   });
 
-  it("a target saved for an off-quarter (snapped) date is found by coverage's periodType-filtered read", async () => {
-    // Simulate an admin picking an arbitrary mid-quarter day — the 11th of
-    // the quarter's first month, deliberately not the 1st — which is exactly
-    // the scenario that used to save a row /analytics/flow/coverage and
-    // /analytics/flow/health-score could never read back (wrong day, and
-    // previously no periodType filter at all).
-    const now = new Date();
-    quarterStart = utcQuarterStart(now);
-    const [qYear, qMonth] = quarterStart.split("-").map(Number);
-    const midQuarterPick = new Date(Date.UTC(qYear, qMonth - 1, 11));
-    const snappedPeriodStart = utcQuarterStart(midQuarterPick); // what the fixed frontend now sends
+  it("a same-dated 'month' row is NOT read by coverage — only the periodType-filtered 'quarter' row satisfies it", async () => {
+    // quarterStartUTC is the exact shared formula both the server's
+    // activeQuarterStart() and the browser's quarterStartISO() call (see
+    // lib/engine/src/flow.ts) — used here only to build fixture data, not to
+    // assert anything about itself (a self-referential assertion would prove
+    // nothing about production behavior).
+    quarterStart = quarterStartUTC(new Date());
 
-    // Sanity: the 11th of the quarter's first month is always still inside
-    // that same quarter, so this should equal the real active quarter.
-    expect(snappedPeriodStart).toBe(quarterStart);
-
-    const [existing] = await db
+    // Capture + clear any pre-existing row at this exact (periodType,
+    // periodStart) slot so the "before" baseline below starts from a known,
+    // clean absence rather than a leftover from a previous test run or real
+    // admin data.
+    const [existingQuarter] = await db
       .select()
       .from(pipelineTargets)
       .where(and(eq(pipelineTargets.periodType, "quarter"), eq(pipelineTargets.periodStart, quarterStart)));
-    priorRow = existing;
+    priorQuarterRow = existingQuarter;
+    if (existingQuarter) {
+      await db.delete(pipelineTargets).where(eq(pipelineTargets.id, existingQuarter.id));
+    }
+    const [existingMonth] = await db
+      .select()
+      .from(pipelineTargets)
+      .where(and(eq(pipelineTargets.periodType, "month"), eq(pipelineTargets.periodStart, quarterStart)));
+    priorMonthRow = existingMonth;
+    if (existingMonth) {
+      await db.delete(pipelineTargets).where(eq(pipelineTargets.id, existingMonth.id));
+    }
 
+    // Step 1: insert ONLY a decoy row sharing the exact same periodStart but
+    // a DIFFERENT periodType ("month"). Inserted directly (bypassing the PUT
+    // route, which defaults periodType to "quarter") so this proves the read
+    // side's discrimination independent of how the row got written.
+    const [monthRow] = await db
+      .insert(pipelineTargets)
+      .values({ periodType: "month", periodStart: quarterStart, targetValue: String(DECOY_TARGET_VALUE) })
+      .returning();
+    createdMonthRowId = monthRow.id;
+
+    // Baseline: with only the same-dated "month" row present, the
+    // "quarter"-scoped coverage read must find no target at all. Before the
+    // periodType filter existed, an unfiltered `eq(periodStart, ...)` read
+    // WOULD have matched this month row (same date) and returned a non-null
+    // total here — this assertion is exactly what falls over on that
+    // pre-fix code, proving the filter actually discriminates rather than
+    // merely being present but never exercised.
+    const beforeQuarterRow = await getCoverage();
+    expect(beforeQuarterRow.caveats).toContain(NO_TARGET_CAVEAT);
+    expect(beforeQuarterRow.total).toBeNull();
+
+    // Step 2: now PUT a real "quarter" row at the IDENTICAL periodStart
+    // through the real production route.
     const saved = await putTarget({
       periodType: "quarter",
-      periodStart: snappedPeriodStart,
+      periodStart: quarterStart,
       targetValue: TEST_TARGET_VALUE,
     });
+    createdQuarterRowId = saved.id;
     expect(saved.periodType).toBe("quarter");
     expect(saved.periodStart).toBe(quarterStart);
 
-    const coverage = await getCoverage();
-    // Before the fix this would come back null with "No target set for the
-    // active period." — either because the row was saved under the raw
-    // picked date instead of the quarter start, or because the read had no
-    // periodType filter to reliably match against.
-    expect(coverage.caveats).not.toContain("No target set for the active period.");
-    expect(coverage.total).not.toBeNull();
+    // The change-log row this PUT wrote — captured by its own id (not a
+    // settingKey pattern) so cleanup can delete exactly this row and nothing
+    // else that might share the same "quarter:<periodStart>" key.
+    const [changeLogRow] = await db
+      .select()
+      .from(settingsChangeLog)
+      .where(
+        and(
+          eq(settingsChangeLog.module, "pipeline_targets"),
+          eq(settingsChangeLog.entityId, String(saved.id)),
+        ),
+      )
+      .orderBy(settingsChangeLog.changedAt)
+      .limit(1);
+    createdChangeLogId = changeLogRow?.id;
+
+    // With the "quarter" row now present alongside the still-present "month"
+    // decoy at the same date, coverage must find the "quarter" row — proving
+    // the periodType filter picks the right row rather than just any row at
+    // that periodStart.
+    const afterQuarterRow = await getCoverage();
+    expect(afterQuarterRow.caveats).not.toContain(NO_TARGET_CAVEAT);
+    expect(afterQuarterRow.total).not.toBeNull();
   });
 });

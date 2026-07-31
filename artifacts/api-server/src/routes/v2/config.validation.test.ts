@@ -133,5 +133,9 @@ describe("v2/config settings routes reject invalid bodies with 400, not 500", ()
     expect(thrown?.message).toBeTruthy();
     expect(Array.isArray(thrown?.details)).toBe(true);
     expect((thrown?.details as unknown[]).length).toBeGreaterThan(0);
+    // Pin down WHICH field failed — without this, the test would pass just as
+    // happily if some unrelated Zod issue (e.g. a bad periodStart) were the
+    // one caught, silently losing coverage of the `targetValue` minimum bound.
+    expect(JSON.stringify(thrown?.details)).toContain("targetValue");
   });
 });

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   formatDate,
   formatDateTime,
@@ -8,6 +8,8 @@ import {
   todayISO,
   compactCurrency,
   compactUSD,
+  quarterStartISO,
+  todayUTCISO,
 } from "./format";
 
 describe("formatDate — date-only strings (never constructs a Date)", () => {
@@ -117,6 +119,65 @@ describe("todayISO", () => {
 
   it("is a YYYY-MM-DD string", () => {
     expect(todayISO()).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+  });
+});
+
+describe("quarterStartISO — UTC quarter-flooring for pipeline_targets.period_start", () => {
+  it("snaps a mid-quarter date to that quarter's first day", () => {
+    expect(quarterStartISO("2026-08-17")).toBe("2026-07-01");
+  });
+
+  it("floors the boundary month of each quarter to itself", () => {
+    expect(quarterStartISO("2026-01-01")).toBe("2026-01-01");
+    expect(quarterStartISO("2026-04-01")).toBe("2026-04-01");
+    expect(quarterStartISO("2026-07-01")).toBe("2026-07-01");
+    expect(quarterStartISO("2026-10-01")).toBe("2026-10-01");
+  });
+
+  it("snaps the last day of a quarter to that same quarter's start, not the next one", () => {
+    expect(quarterStartISO("2026-03-31")).toBe("2026-01-01");
+    expect(quarterStartISO("2026-12-31")).toBe("2026-10-01");
+  });
+
+  it("tolerates a full timestamp by using only its date portion", () => {
+    expect(quarterStartISO("2026-08-17T23:59:59.000Z")).toBe("2026-07-01");
+  });
+
+  it("falls back to the current UTC quarter for malformed/empty input instead of emitting NaN", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-08-17T00:00:00.000Z"));
+    try {
+      expect(quarterStartISO("")).toBe("2026-07-01");
+      expect(quarterStartISO("not-a-date")).toBe("2026-07-01");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
+describe("todayUTCISO", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("returns the UTC calendar date, not the local one, near a UTC midnight boundary", () => {
+    // 2026-08-17T23:30:00Z is still 2026-08-18 local in any timezone ahead of
+    // UTC by 30+ minutes — todayUTCISO must report the UTC day regardless.
+    vi.setSystemTime(new Date("2026-08-17T23:30:00.000Z"));
+    expect(todayUTCISO()).toBe("2026-08-17");
+  });
+
+  it("is a YYYY-MM-DD string", () => {
+    vi.setSystemTime(new Date("2026-01-05T00:00:00.000Z"));
+    expect(todayUTCISO()).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+  });
+
+  it("feeding todayUTCISO into quarterStartISO gives the active UTC quarter", () => {
+    vi.setSystemTime(new Date("2026-11-20T00:00:00.000Z"));
+    expect(quarterStartISO(todayUTCISO())).toBe("2026-10-01");
   });
 });
 

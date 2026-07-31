@@ -381,6 +381,36 @@ export function computeRecycleExit(transitions: TransitionRec[], stages: StageDe
 }
 
 // ---------------------------------------------------------------------------
+// Quarter-start convention — the ONE shared implementation for "what quarter
+// is a given instant in", in UTC.
+// ---------------------------------------------------------------------------
+//
+// pipeline_targets.period_start is stored as a bare, timezone-less date-only
+// string, so there is no "local time" attached to a row on disk — UTC is the
+// one frame both the server (Node, server clock) and the browser (local wall
+// clock) can agree on without a "whose local time?" ambiguity. This used to
+// be two textually-identical but separately-maintained copies of the same
+// floor-to-3-months formula — routes/v2/analytics.ts's `activeQuarterStart`
+// (server reads) and artifacts/edc's targets-settings.tsx (client writes) —
+// held in sync only by "keep these in sync" comments. Since `lib/engine` is
+// already pure/isomorphic with zero DB/network deps and runs identically on
+// both sides (that's its whole purpose — see this package's header comment),
+// the formula now lives here ONCE and both sides call it.
+//
+// `date` must be a real instant (e.g. `new Date()`, or a Date parsed from a
+// full timestamp). To snap a "YYYY-MM-DD" date-only string to its quarter
+// start, construct the Date via `new Date(dateOnlyISO)` first — per the
+// ISO-8601/JS spec a bare date-only string parses as UTC midnight, which is
+// the CORRECT interpretation for this specific feature (unlike most
+// date-only handling in this codebase, this convention is UTC end-to-end,
+// not local-calendar — see artifacts/edc/src/lib/format.ts's header comment
+// and its "Local-calendar round-trip" section for the contrast).
+export function quarterStartUTC(date: Date): string {
+  const q = Math.floor(date.getUTCMonth() / 3);
+  return new Date(Date.UTC(date.getUTCFullYear(), q * 3, 1)).toISOString().slice(0, 10);
+}
+
+// ---------------------------------------------------------------------------
 // Task 6: computeCoverage
 // ---------------------------------------------------------------------------
 

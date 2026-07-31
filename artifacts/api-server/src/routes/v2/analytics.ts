@@ -42,6 +42,7 @@ import {
   computePatternLethality,
   scoreLossRisk,
   calculateFlatTCV,
+  quarterStartUTC,
   type StageDef,
   type TransitionRec,
   type OpenDeal,
@@ -1616,15 +1617,15 @@ async function loadOpenDeals(): Promise<OpenDeal[]> {
  * pipeline target row in" across the whole feature — pipeline_targets.
  * period_start is stored as a bare date-only string with no timezone
  * attached, so there is no "local time" to consult on the read side anyway.
- * The frontend's targets-settings.tsx duplicates this exact floor-to-3-months
- * formula (as quarterStartISO/todayUTCISO) rather than importing it, since a
- * literal shared module can't run identically in a browser (local wall
- * clock) and Node (server clock) — see that file's comment for the full
- * reasoning. Keep the two in sync if this formula ever changes.
+ * The actual flooring math is `quarterStartUTC` (`@workspace/engine`, a pure
+ * isomorphic module with zero DB/network deps) — the frontend's
+ * targets-settings.tsx (via artifacts/edc/src/lib/format.ts's
+ * quarterStartISO) calls the SAME function rather than duplicating the
+ * formula, so a server-clock instant and a browser-clock instant can never
+ * disagree about which quarter they land in.
  */
 function activeQuarterStart(now = new Date()): string {
-  const q = Math.floor(now.getUTCMonth() / 3);
-  return new Date(Date.UTC(now.getUTCFullYear(), q * 3, 1)).toISOString().slice(0, 10);
+  return quarterStartUTC(now);
 }
 
 // NOTE: literal paths registered before any param-based routes per repo convention.

@@ -1,3 +1,5 @@
+import { quarterStartUTC } from "@workspace/engine";
+
 // ---- Dates ------------------------------------------------------------
 //
 // Renders every absolute date as DD/MM/YYYY (DD/MM/YYYY, HH:MM for
@@ -238,6 +240,12 @@ export function dayKey(value: DateInput): string {
 // For callers that need "today" (or a picked date) as a LOCAL calendar day,
 // not a UTC instant — `new Date().toISOString().slice(0, 10)` is UTC and
 // drifts a day from the local date near midnight in any non-UTC timezone.
+//
+// quarterStartISO/todayUTCISO below (in the Quarter-start section further
+// down) are the deliberate EXCEPTION to this: pipeline_targets.period_start
+// has no local time attached to it at all (bare date-only string on disk),
+// so UTC is the one frame the server and every browser can agree on — see
+// that section's own comment for the full reasoning.
 
 /** Parse a "YYYY-MM-DD" string into a local Date (no timezone shift), or
  *  `undefined` for a missing/malformed string. */
@@ -263,4 +271,42 @@ export function toLocalISODate(date: Date): string {
 /** Today's local calendar date as "YYYY-MM-DD". */
 export function todayISO(): string {
   return toLocalISODate(new Date());
+}
+
+// ---- Quarter-start (UTC) -----------------------------------------------
+//
+// Used solely by the Quarterly Pipeline Targets settings panel
+// (components/settings/targets-settings.tsx). Deliberately UTC, not local
+// calendar — the opposite convention from every other date helper in this
+// file. pipeline_targets.period_start is stored as a bare, timezone-less
+// date-only string, so there's no "local time" attached to a row at all;
+// UTC is the one frame this browser and the Node server can agree on
+// without a "whose local time?" ambiguity (a positive-offset timezone like
+// IST disagreeing with the server about which quarter "right now" falls in
+// was the actual bug this fixed — see git history / task-4-report.md).
+//
+// The flooring math itself is `quarterStartUTC` from `@workspace/engine` — a
+// pure, isomorphic function with zero DB/network deps that runs identically
+// here and in routes/v2/analytics.ts's `activeQuarterStart` on the server.
+// There is now exactly ONE copy of this formula, not two kept in sync by
+// comment.
+
+/**
+ * Snaps a "YYYY-MM-DD" date-only string to the start of its UTC calendar
+ * quarter ("2026-08-17" -> "2026-07-01"). Constructing a `Date` from a
+ * date-only string normally parses it as UTC midnight and is exactly the
+ * footgun this file's header warns about for LOCAL-calendar callers — here
+ * that UTC interpretation is intentional and correct (see the section
+ * comment above). Malformed/empty input (e.g. `""`) falls back to the
+ * current UTC quarter rather than propagating a "NaN-01" string.
+ */
+export function quarterStartISO(dateOnlyISO: string): string {
+  const d = dateOnlyISO ? new Date(dateOnlyISO.slice(0, 10)) : new Date(NaN);
+  return quarterStartUTC(Number.isFinite(d.getTime()) ? d : new Date());
+}
+
+/** "Today" as the UTC calendar date — see the section comment above for why
+ *  this deliberately does NOT use the local-calendar `todayISO()`. */
+export function todayUTCISO(): string {
+  return new Date().toISOString().slice(0, 10);
 }

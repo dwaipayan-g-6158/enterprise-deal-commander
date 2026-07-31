@@ -9,6 +9,7 @@ import {
   computeCoverage,
   computeHealthScore,
   scoreHealthAbsolute,
+  quarterStartUTC,
   DEFAULT_HEALTH_WEIGHTS,
   DEFAULT_HEALTH_BENCHMARKS,
   type StageDef,
@@ -322,6 +323,34 @@ describe("computeRecycleExit", () => {
     // Old formula summed tcv over every backward event: 100 + 150 = 250.
     // Correct: the deal's own latest TCV (150), counted once.
     expect(r.recycledValue).toBe(150);
+  });
+});
+
+describe("quarterStartUTC — the single shared server+browser quarter-flooring formula", () => {
+  it("floors a mid-quarter instant to that quarter's first day", () => {
+    expect(quarterStartUTC(new Date("2026-08-17T00:00:00.000Z"))).toBe("2026-07-01");
+  });
+
+  it("floors the boundary month of each quarter to itself", () => {
+    expect(quarterStartUTC(new Date("2026-01-01T00:00:00.000Z"))).toBe("2026-01-01");
+    expect(quarterStartUTC(new Date("2026-04-01T00:00:00.000Z"))).toBe("2026-04-01");
+    expect(quarterStartUTC(new Date("2026-07-01T00:00:00.000Z"))).toBe("2026-07-01");
+    expect(quarterStartUTC(new Date("2026-10-01T00:00:00.000Z"))).toBe("2026-10-01");
+  });
+
+  it("floors the last day of a quarter to that same quarter's start (not the next one)", () => {
+    expect(quarterStartUTC(new Date("2026-03-31T23:59:59.000Z"))).toBe("2026-01-01");
+    expect(quarterStartUTC(new Date("2026-12-31T23:59:59.000Z"))).toBe("2026-10-01");
+  });
+
+  it("reads UTC getters, not local ones — a late-evening instant in a positive-offset zone doesn't roll to the next quarter", () => {
+    // 2026-09-30T23:00:00+05:30 is still 2026-09-30T17:30:00Z (Q3), not Q4 —
+    // this is exactly the disagreement class this shared helper eliminates.
+    expect(quarterStartUTC(new Date("2026-09-30T23:00:00+05:30"))).toBe("2026-07-01");
+  });
+
+  it("is a pure function of the instant, ignoring which Date-string form produced it", () => {
+    expect(quarterStartUTC(new Date("2026-10-05"))).toBe(quarterStartUTC(new Date(Date.UTC(2026, 9, 5))));
   });
 });
 
