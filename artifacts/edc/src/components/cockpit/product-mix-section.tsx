@@ -84,7 +84,7 @@ export function ProductMixSection() {
   // three correlation tables that DID load successfully.
   if (isLoading || isError || !mix) {
     return (
-      <Card className="xl:col-span-2">
+      <Card className="@4xl:col-span-2">
         <CardContent className="p-6 text-sm text-muted-foreground">
           {isLoading ? (
             "Loading product mix…"
@@ -110,7 +110,7 @@ export function ProductMixSection() {
   return (
     <>
       {/* ---- Pipeline by Suite ---------------------------------------- */}
-      <Card className="xl:col-span-2">
+      <Card className="@4xl:col-span-2">
         <CardHeader className="flex flex-row items-center justify-between space-y-0">
           <div>
             <CardTitle className="flex items-center gap-2">
@@ -179,7 +179,7 @@ export function ProductMixSection() {
       </Card>
 
       {/* ---- Product Whitespace Heatmap ------------------------------- */}
-      <Card className="xl:col-span-2">
+      <Card className="@4xl:col-span-2">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Grid3x3 className="h-4 w-4 text-muted-foreground" />

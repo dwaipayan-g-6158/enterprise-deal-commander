@@ -259,7 +259,7 @@ export default function Portfolio() {
           </CardContent>
         </Card>
 
-        <Card className="xl:col-span-2">
+        <Card className="@4xl:col-span-2">
           <CardHeader>
             <CardTitle>By Product</CardTitle>
           </CardHeader>
