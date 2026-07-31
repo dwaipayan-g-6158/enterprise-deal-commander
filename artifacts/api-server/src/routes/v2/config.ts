@@ -57,6 +57,7 @@ import { logSettingsChange } from "../../lib/settings-audit";
 import { emitDealEvent } from "../../lib/events";
 import { getPlaybookJourney, startPlaybookForDeal, recomputeAssignment, dealIdForAssignment } from "../../lib/playbook-signals";
 import { cache, CacheKeys } from "../../lib/cache";
+import { rescoreActiveDeals } from "../../lib/scoring";
 
 const router: IRouter = Router();
 
@@ -797,7 +798,10 @@ router.put("/config/scoring-weights", async (req: Request, res: Response) => {
   }
   // Drop the cached merged weights so the next score picks up the new values.
   cache.invalidatePrefix(CacheKeys.lookupPrefix);
-  res.json({ data: { updated: body.weights.length } });
+  // Re-score every active deal now, inline, so the new weights take effect
+  // immediately instead of waiting for each deal's next natural score event.
+  const rescored = await rescoreActiveDeals();
+  res.json({ data: { updated: body.weights.length, rescored } });
 });
 
 export default router;

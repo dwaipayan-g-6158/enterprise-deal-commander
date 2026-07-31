@@ -71,11 +71,13 @@ export function ScoringWeightsSettings() {
         feature_id,
         weight: (Number(v) || 0) / 100,
       }));
-      await update.mutateAsync({ data: { weights } });
+      const result = await update.mutateAsync({ data: { weights } });
       await qc.invalidateQueries({ queryKey: list.queryKey });
+      const rescored = Number(result.data.rescored);
+      const count = Number.isFinite(rescored) ? rescored : 0;
       toast({
         title: "Scoring weights updated",
-        description: "Deals will re-score with the new factor weights.",
+        description: `${count} deal${count === 1 ? "" : "s"} re-scored with the new factor weights.`,
       });
     } catch {
       toast({ title: "Failed to update weights", variant: "destructive" });

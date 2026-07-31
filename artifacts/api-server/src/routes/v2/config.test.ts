@@ -1,13 +1,22 @@
 import { describe, it, expect, afterAll } from "vitest";
 import type { Request, Response } from "express";
-import { inArray } from "drizzle-orm";
-import { db, pool, enterpriseDeals, pricingModels, servicesTiers, pipelineStages } from "@workspace/db";
+import { eq, inArray } from "drizzle-orm";
+import {
+  db,
+  pool,
+  enterpriseDeals,
+  pricingModels,
+  servicesTiers,
+  pipelineStages,
+  scoringModelWeights,
+  settingsChangeLog,
+} from "@workspace/db";
 import router from "./config";
 
 // Mirrors routes/v2/analytics.vital-signs.test.ts: no supertest harness exists
 // in this repo, so pull the real handler off the router's stack and call it
 // directly — this exercises production code, not a reimplementation of it.
-function getHandler(method: "get" | "post", path: string) {
+function getHandler(method: "get" | "post" | "put", path: string) {
   const stack = (router as unknown as {
     stack: Array<{
       route?: {
@@ -77,11 +86,45 @@ async function createDeal(tag: string, overrides: { archivedAt?: Date; deletedAt
   return deal.id;
 }
 
+// Feature id used only by the PUT /config/scoring-weights test below. It is
+// deliberately not one of the real predictive-score factors: mergeScoringWeights
+// (lib/engine-config.ts) only merges rows whose featureId is already a known
+// key, so writing a calibration row under this made-up id can never perturb
+// any other test's or the live app's actual scoring weights.
+const TEST_FEATURE_ID = "test_probe_scoring_weight";
+
 afterAll(async () => {
   if (createdDealIds.length > 0) {
     await db.delete(enterpriseDeals).where(inArray(enterpriseDeals.id, createdDealIds));
   }
+  await db.delete(scoringModelWeights).where(eq(scoringModelWeights.featureId, TEST_FEATURE_ID));
+  await db.delete(settingsChangeLog).where(eq(settingsChangeLog.settingKey, TEST_FEATURE_ID));
   await pool.end();
+});
+
+interface UpdateWeightsResponse { data: { updated: number; rescored: number } }
+
+async function callUpdateScoringWeights(): Promise<UpdateWeightsResponse["data"]> {
+  const handler = getHandler("put", "/config/scoring-weights");
+  let captured: UpdateWeightsResponse | undefined;
+  const fakeReq = {
+    body: { weights: [{ feature_id: TEST_FEATURE_ID, weight: 0.5 }] },
+    actor: { id: "test-actor", username: "test-actor", displayName: "Test Actor", role: "admin" },
+  } as unknown as Request;
+  const fakeRes = { json: (body: UpdateWeightsResponse) => { captured = body; } } as unknown as Response;
+  await handler(fakeReq, fakeRes);
+  if (!captured) throw new Error("Handler did not call res.json");
+  return captured.data;
+}
+
+describe("PUT /config/scoring-weights — inline re-score (F2)", () => {
+  it("returns a rescored count alongside the updated count", async () => {
+    const { updated, rescored } = await callUpdateScoringWeights();
+
+    expect(updated).toBe(1);
+    expect(Number.isInteger(rescored)).toBe(true);
+    expect(rescored).toBeGreaterThanOrEqual(0);
+  });
 });
 
 describe("POST /custom-patterns/test — excludes non-live deals", () => {
