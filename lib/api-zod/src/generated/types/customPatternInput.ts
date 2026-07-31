@@ -6,14 +6,20 @@
  * OpenAPI spec version: 1.0.0
  */
 import type { CustomPatternConditionInput } from './customPatternConditionInput';
+import type { CustomPatternInputSeverity } from './customPatternInputSeverity';
 
 export interface CustomPatternInput {
   pattern_name: string;
   /** @nullable */
   description?: string | null;
-  severity: string;
+  severity: CustomPatternInputSeverity;
+  /**
+     * @minimum 0
+     * @maximum 100
+     */
   weight: number;
   alert_message_template: string;
   is_active?: boolean;
+  /** @minItems 1 */
   conditions: CustomPatternConditionInput[];
 }

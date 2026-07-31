@@ -9,5 +9,6 @@
 export interface PipelineTargetInput {
   periodType?: string;
   periodStart: Date;
+  /** @minimum 0 */
   targetValue: number;
 }

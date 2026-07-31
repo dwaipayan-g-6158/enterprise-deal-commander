@@ -3132,19 +3132,25 @@ export const ListCustomPatternsResponse = zod.object({
 })
 
 
+export const createCustomPatternBodyWeightMin = 0;
+export const createCustomPatternBodyWeightMax = 100;
+
+
+
+
 export const CreateCustomPatternBody = zod.object({
   "pattern_name": zod.string(),
   "description": zod.string().nullish(),
-  "severity": zod.string(),
-  "weight": zod.number(),
+  "severity": zod.enum(['RED', 'YELLOW']),
+  "weight": zod.number().min(createCustomPatternBodyWeightMin).max(createCustomPatternBodyWeightMax),
   "alert_message_template": zod.string(),
   "is_active": zod.boolean().optional(),
   "conditions": zod.array(zod.object({
   "field_path": zod.string(),
-  "operator": zod.string(),
+  "operator": zod.enum(['gt', 'lt', 'gte', 'lte', 'eq', 'neq', 'contains', 'not_contains', 'is_null', 'is_not_null']),
   "comparison_value": zod.string(),
   "sort_order": zod.number()
-}))
+})).min(1)
 })
 
 
@@ -3152,19 +3158,25 @@ export const UpdateCustomPatternParams = zod.object({
   "id": zod.coerce.string()
 })
 
+export const updateCustomPatternBodyWeightMin = 0;
+export const updateCustomPatternBodyWeightMax = 100;
+
+
+
+
 export const UpdateCustomPatternBody = zod.object({
   "pattern_name": zod.string(),
   "description": zod.string().nullish(),
-  "severity": zod.string(),
-  "weight": zod.number(),
+  "severity": zod.enum(['RED', 'YELLOW']),
+  "weight": zod.number().min(updateCustomPatternBodyWeightMin).max(updateCustomPatternBodyWeightMax),
   "alert_message_template": zod.string(),
   "is_active": zod.boolean().optional(),
   "conditions": zod.array(zod.object({
   "field_path": zod.string(),
-  "operator": zod.string(),
+  "operator": zod.enum(['gt', 'lt', 'gte', 'lte', 'eq', 'neq', 'contains', 'not_contains', 'is_null', 'is_not_null']),
   "comparison_value": zod.string(),
   "sort_order": zod.number()
-}))
+})).min(1)
 })
 
 export const UpdateCustomPatternResponse = zod.object({
@@ -3191,19 +3203,25 @@ export const DeleteCustomPatternResponse = zod.object({
 })
 
 
+export const testCustomPatternBodyWeightMin = 0;
+export const testCustomPatternBodyWeightMax = 100;
+
+
+
+
 export const TestCustomPatternBody = zod.object({
   "pattern_name": zod.string(),
   "description": zod.string().nullish(),
-  "severity": zod.string(),
-  "weight": zod.number(),
+  "severity": zod.enum(['RED', 'YELLOW']),
+  "weight": zod.number().min(testCustomPatternBodyWeightMin).max(testCustomPatternBodyWeightMax),
   "alert_message_template": zod.string(),
   "is_active": zod.boolean().optional(),
   "conditions": zod.array(zod.object({
   "field_path": zod.string(),
-  "operator": zod.string(),
+  "operator": zod.enum(['gt', 'lt', 'gte', 'lte', 'eq', 'neq', 'contains', 'not_contains', 'is_null', 'is_not_null']),
   "comparison_value": zod.string(),
   "sort_order": zod.number()
-}))
+})).min(1)
 })
 
 export const TestCustomPatternResponse = zod.object({
@@ -3418,11 +3436,14 @@ export const ListPipelineTargetsResponse = zod.object({
 
 
 export const upsertPipelineTargetBodyPeriodTypeDefault = `quarter`;
+export const upsertPipelineTargetBodyTargetValueMin = 0;
+
+
 
 export const UpsertPipelineTargetBody = zod.object({
   "periodType": zod.string().default(upsertPipelineTargetBodyPeriodTypeDefault),
   "periodStart": zod.coerce.date(),
-  "targetValue": zod.number()
+  "targetValue": zod.number().min(upsertPipelineTargetBodyTargetValueMin)
 })
 
 export const UpsertPipelineTargetResponse = zod.object({
@@ -3443,10 +3464,15 @@ export const ListScoringWeightsResponse = zod.object({
 })
 
 
+export const updateScoringWeightsBodyWeightsItemWeightMin = 0;
+export const updateScoringWeightsBodyWeightsItemWeightMax = 1;
+
+
+
 export const UpdateScoringWeightsBody = zod.object({
   "weights": zod.array(zod.object({
   "feature_id": zod.string(),
-  "weight": zod.number()
+  "weight": zod.number().min(updateScoringWeightsBodyWeightsItemWeightMin).max(updateScoringWeightsBodyWeightsItemWeightMax)
 }))
 })
 

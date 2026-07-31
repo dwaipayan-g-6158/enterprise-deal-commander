@@ -4063,7 +4063,7 @@ components:
             type: object
             properties:
               feature_id: { type: string }
-              weight: { type: number }
+              weight: { type: number, minimum: 0, maximum: 1 }
             required: [feature_id, weight]
       required: [weights]
     PlaybookListResponse:
@@ -4196,7 +4196,9 @@ components:
       type: object
       properties:
         field_path: { type: string }
-        operator: { type: string }
+        operator:
+          type: string
+          enum: [gt, lt, gte, lte, eq, neq, contains, not_contains, is_null, is_not_null]
         comparison_value: { type: string }
         sort_order: { type: integer }
       required: [field_path, operator, comparison_value, sort_order]
@@ -4218,11 +4220,14 @@ components:
       properties:
         pattern_name: { type: string }
         description: { type: ["string", "null"] }
-        severity: { type: string }
-        weight: { type: integer }
+        severity: { type: string, enum: [RED, YELLOW] }
+        weight: { type: integer, minimum: 0, maximum: 100 }
         alert_message_template: { type: string }
         is_active: { type: boolean }
-        conditions: { type: array, items: { $ref: "#/components/schemas/CustomPatternConditionInput" } }
+        conditions:
+          type: array
+          items: { $ref: "#/components/schemas/CustomPatternConditionInput" }
+          minItems: 1
       required: [pattern_name, severity, weight, alert_message_template, conditions]
     CustomPatternListResponse:
       type: object
@@ -4368,4 +4373,4 @@ components:
       properties:
         periodType: { type: string, default: quarter }
         periodStart: { type: string, format: date }
-        targetValue: { type: number }
+        targetValue: { type: number, minimum: 0 }

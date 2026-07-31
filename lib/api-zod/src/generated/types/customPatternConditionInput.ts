@@ -5,10 +5,11 @@
  * Enterprise Deal Commander (EDC) Phase 1 API
  * OpenAPI spec version: 1.0.0
  */
+import type { CustomPatternConditionInputOperator } from './customPatternConditionInputOperator';
 
 export interface CustomPatternConditionInput {
   field_path: string;
-  operator: string;
+  operator: CustomPatternConditionInputOperator;
   comparison_value: string;
   sort_order: number;
 }

@@ -8,5 +8,9 @@
 
 export type ScoringWeightsUpdateWeightsItem = {
   feature_id: string;
+  /**
+     * @minimum 0
+     * @maximum 1
+     */
   weight: number;
 };

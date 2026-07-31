@@ -2077,6 +2077,10 @@ export interface ScoringWeight {
 
 export type ScoringWeightsUpdateWeightsItem = {
   feature_id: string;
+  /**
+     * @minimum 0
+     * @maximum 1
+     */
   weight: number;
 };
 
@@ -2208,9 +2212,25 @@ export interface WebhookDeliveryListResponse {
   data: WebhookDelivery[];
 }
 
+export type CustomPatternConditionInputOperator = typeof CustomPatternConditionInputOperator[keyof typeof CustomPatternConditionInputOperator];
+
+
+export const CustomPatternConditionInputOperator = {
+  gt: 'gt',
+  lt: 'lt',
+  gte: 'gte',
+  lte: 'lte',
+  eq: 'eq',
+  neq: 'neq',
+  contains: 'contains',
+  not_contains: 'not_contains',
+  is_null: 'is_null',
+  is_not_null: 'is_not_null',
+} as const;
+
 export interface CustomPatternConditionInput {
   field_path: string;
-  operator: string;
+  operator: CustomPatternConditionInputOperator;
   comparison_value: string;
   sort_order: number;
 }
@@ -2230,14 +2250,27 @@ export interface CustomPattern {
   conditions?: CustomPatternConditionsItem[];
 }
 
+export type CustomPatternInputSeverity = typeof CustomPatternInputSeverity[keyof typeof CustomPatternInputSeverity];
+
+
+export const CustomPatternInputSeverity = {
+  RED: 'RED',
+  YELLOW: 'YELLOW',
+} as const;
+
 export interface CustomPatternInput {
   pattern_name: string;
   /** @nullable */
   description?: string | null;
-  severity: string;
+  severity: CustomPatternInputSeverity;
+  /**
+     * @minimum 0
+     * @maximum 100
+     */
   weight: number;
   alert_message_template: string;
   is_active?: boolean;
+  /** @minItems 1 */
   conditions: CustomPatternConditionInput[];
 }
 
@@ -2370,6 +2403,7 @@ export interface PipelineTarget {
 export interface PipelineTargetInput {
   periodType?: string;
   periodStart: string;
+  /** @minimum 0 */
   targetValue: number;
 }
 
