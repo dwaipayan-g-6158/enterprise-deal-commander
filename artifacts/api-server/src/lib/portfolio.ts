@@ -1,4 +1,4 @@
-import { and, eq, isNull, gt, notInArray } from "drizzle-orm";
+import { and, eq, isNull, gt, notInArray, inArray, sql } from "drizzle-orm";
 import {
   db,
   enterpriseDeals,
@@ -68,6 +68,40 @@ async function loadActiveIntel(): Promise<Intel[]> {
   return results.filter((r): r is Intel => r !== null);
 }
 
+/**
+ * Audit-log change counts per deal since that deal's review marker, in ONE
+ * query instead of one SELECT per deal.
+ *
+ * Semantics preserved exactly: the INNER JOIN on deal_review_markers drops
+ * deals with no marker, so they are absent from the map and skipped by the
+ * caller — NOT reported with changeCount 0. Deals that have a marker but no
+ * newer audit rows are likewise absent (count 0), matching the old
+ * `if (changes.length > 0)` gate.
+ */
+async function changeCountsSinceReview(
+  dealIds: string[],
+): Promise<Map<string, number>> {
+  if (dealIds.length === 0) return new Map();
+  const rows = await db
+    .select({
+      dealId: dealAuditLog.dealId,
+      changeCount: sql<number>`count(*)::int`,
+    })
+    .from(dealAuditLog)
+    .innerJoin(
+      dealReviewMarkers,
+      eq(dealReviewMarkers.dealId, dealAuditLog.dealId),
+    )
+    .where(
+      and(
+        inArray(dealAuditLog.dealId, dealIds),
+        gt(dealAuditLog.changedAt, dealReviewMarkers.lastReviewedAt),
+      ),
+    )
+    .groupBy(dealAuditLog.dealId);
+  return new Map(rows.map((r) => [r.dealId, Number(r.changeCount)]));
+}
+
 export async function computeSummary() {
   const { thresholds } = await getThresholds();
   const reportingCurrency = String(thresholds.reporting_currency || "USD");
@@ -115,27 +149,14 @@ export async function computeSummary() {
   criticalAlerts.sort((a, b) => (b.alert.weight ?? 0) - (a.alert.weight ?? 0));
   staleDeals.sort((a, b) => b.daysInStage - a.daysInStage);
 
-  const markers = await db.select().from(dealReviewMarkers);
-  const markerMap = new Map(markers.map((m) => [m.dealId, m.lastReviewedAt]));
+  const changeCounts = await changeCountsSinceReview(deals.map((d) => d.id));
   let dealsWithChanges = 0;
   const movers: { dealId: string; dealName: string; changeCount: number }[] = [];
   for (const d of deals) {
-    const since = markerMap.get(d.id);
-    if (!since) continue;
-    const changes = await db
-      .select({ id: dealAuditLog.id })
-      .from(dealAuditLog)
-      .where(
-        and(eq(dealAuditLog.dealId, d.id), gt(dealAuditLog.changedAt, since)),
-      );
-    if (changes.length > 0) {
-      dealsWithChanges += 1;
-      movers.push({
-        dealId: d.id,
-        dealName: d.dealName,
-        changeCount: changes.length,
-      });
-    }
+    const changeCount = changeCounts.get(d.id) ?? 0;
+    if (changeCount === 0) continue;
+    dealsWithChanges += 1;
+    movers.push({ dealId: d.id, dealName: d.dealName, changeCount });
   }
   movers.sort((a, b) => b.changeCount - a.changeCount);
 
