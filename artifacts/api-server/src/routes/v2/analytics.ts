@@ -1608,7 +1608,20 @@ async function loadOpenDeals(): Promise<OpenDeal[]> {
   });
 }
 
-/** Returns the ISO date string (YYYY-MM-DD) for the first day of the active calendar quarter. */
+/**
+ * Returns the ISO date string (YYYY-MM-DD) for the first day of the active
+ * calendar quarter, computed in UTC.
+ *
+ * UTC is the deliberate, canonical convention for "which quarter is this
+ * pipeline target row in" across the whole feature — pipeline_targets.
+ * period_start is stored as a bare date-only string with no timezone
+ * attached, so there is no "local time" to consult on the read side anyway.
+ * The frontend's targets-settings.tsx duplicates this exact floor-to-3-months
+ * formula (as quarterStartISO/todayUTCISO) rather than importing it, since a
+ * literal shared module can't run identically in a browser (local wall
+ * clock) and Node (server clock) — see that file's comment for the full
+ * reasoning. Keep the two in sync if this formula ever changes.
+ */
 function activeQuarterStart(now = new Date()): string {
   const q = Math.floor(now.getUTCMonth() / 3);
   return new Date(Date.UTC(now.getUTCFullYear(), q * 3, 1)).toISOString().slice(0, 10);
@@ -1656,10 +1669,13 @@ router.get("/analytics/flow/recycle", async (_req: Request, res: Response) => {
 router.get("/analytics/flow/coverage", async (_req: Request, res: Response) => {
   const [stages, deals] = await Promise.all([loadFlowStages(), loadOpenDeals()]);
   const periodStart = activeQuarterStart();
+  // periodType is part of the upsert's conflict key ([periodType, periodStart]
+  // in config.ts) — filtering on periodStart alone could match a differently-
+  // typed row that happens to share the same date.
   const [tgt] = await db
     .select()
     .from(pipelineTargets)
-    .where(eq(pipelineTargets.periodStart, periodStart));
+    .where(and(eq(pipelineTargets.periodType, "quarter"), eq(pipelineTargets.periodStart, periodStart)));
   const target = tgt ? Number(tgt.targetValue) : null;
   res.json({ data: computeCoverage(deals, stages, target, periodStart) });
 });
@@ -1671,10 +1687,12 @@ router.get("/analytics/flow/health-score", async (_req: Request, res: Response) 
     loadTransitions(),
   ]);
   const periodStart = activeQuarterStart();
+  // See the matching comment in /analytics/flow/coverage above: periodType is
+  // part of the upsert's conflict key, so it must be filtered on here too.
   const [tgt] = await db
     .select()
     .from(pipelineTargets)
-    .where(eq(pipelineTargets.periodStart, periodStart));
+    .where(and(eq(pipelineTargets.periodType, "quarter"), eq(pipelineTargets.periodStart, periodStart)));
   const target = tgt ? Number(tgt.targetValue) : null;
   const coverage = computeCoverage(deals, stages, target, periodStart);
   const recycle = computeRecycleExit(transitions, stages);

@@ -115,4 +115,23 @@ describe("v2/config settings routes reject invalid bodies with 400, not 500", ()
     expect(Array.isArray(thrown?.details)).toBe(true);
     expect((thrown?.details as unknown[]).length).toBeGreaterThan(0);
   });
+
+  // pipeline_targets.target_value feeds computeCoverage/health-score ratios
+  // directly as a divisor (lib/engine/src/flow.ts): a negative target would
+  // flip every coverage ratio's sign instead of being rejected outright.
+  // Proves the OpenAPI-derived `minimum: 0` bound (task-2) rejects it with a
+  // clean 400 instead of a silently-corrupting 200 — see task-4-brief.md.
+  it("PUT /config/targets — negative targetValue is rejected with 400", async () => {
+    const thrown = await callWithInvalidBody("put", "/config/targets", {
+      periodType: "quarter",
+      periodStart: "2026-07-01",
+      targetValue: -1,
+    });
+    expect(thrown).toBeDefined();
+    expect(thrown?.status).toBe(400);
+    expect(thrown?.code).toBe("BAD_REQUEST");
+    expect(thrown?.message).toBeTruthy();
+    expect(Array.isArray(thrown?.details)).toBe(true);
+    expect((thrown?.details as unknown[]).length).toBeGreaterThan(0);
+  });
 });

@@ -5,7 +5,6 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { DatePicker } from "@/components/ui/date-picker";
-import { toLocalISODate } from "@/lib/format";
 import { useToast } from "@/hooks/use-toast";
 import { Target } from "lucide-react";
 import { AdminOnly } from "@/components/auth/write-gate";
@@ -17,12 +16,39 @@ interface PipelineTargetRow {
   targetValue: number;
 }
 
-function quarterStart(d = new Date()): string {
-  const q = Math.floor(d.getMonth() / 3);
-  // Local parts in, local parts out — toISOString() here would shift to the
-  // previous UTC day in any positive-offset timezone (e.g. IST), posting the
-  // previous quarter's last day as the default periodStart.
-  return toLocalISODate(new Date(d.getFullYear(), q * 3, 1));
+// Snaps a "YYYY-MM-DD" date-only string to the start of its calendar quarter
+// ("2026-08-17" -> "2026-07-01"). Pure string/number surgery on the parsed
+// year/month — never routes through `Date`, so there's no local-vs-UTC
+// timezone step to get wrong (see lib/format.ts's header comment on why a
+// date-only string is never handed to the `Date` constructor).
+//
+// This must land on the exact same quarter boundary as the server's
+// activeQuarterStart() (routes/v2/analytics.ts), which floors
+// `Math.floor(utcMonth / 3) * 3` against the UTC calendar date. The two used
+// to disagree: this file previously built a `Date` from LOCAL parts and read
+// it back with local getters, which names a different calendar day than the
+// UTC one near a quarter boundary in any positive-offset timezone (e.g.
+// IST — local midnight on the 1st of a quarter is still the last UTC day of
+// the prior quarter). Since pipeline_targets.period_start is stored as a
+// bare, timezone-less date-only string, UTC is the one frame both sides can
+// agree on without a "whose local time?" ambiguity — a literal shared helper
+// isn't possible across the browser/Node boundary, so this formula is
+// intentionally duplicated (not imported) on both sides; keep them in sync
+// if it ever changes.
+function quarterStartISO(dateOnlyISO: string): string {
+  const [yStr, moStr] = dateOnlyISO.slice(0, 10).split("-");
+  const month0 = Number(moStr) - 1; // 0-indexed, matches Math.floor(.../3) below
+  const qMonth0 = Math.floor(month0 / 3) * 3;
+  return `${yStr}-${String(qMonth0 + 1).padStart(2, "0")}-01`;
+}
+
+// "Today" as the UTC calendar date, matching the server's activeQuarterStart()
+// (which derives the active quarter from the UTC calendar date too). Using
+// the browser's LOCAL calendar date here would reintroduce the disagreement
+// quarterStartISO's comment describes, so this deliberately does not use a
+// local-calendar helper like toLocalISODate(new Date()).
+function todayUTCISO(): string {
+  return new Date().toISOString().slice(0, 10);
 }
 
 export function TargetsSettings() {
@@ -32,7 +58,7 @@ export function TargetsSettings() {
   const list = useListPipelineTargets();
   const upsert = useUpsertPipelineTarget();
 
-  const [period, setPeriod] = useState(quarterStart());
+  const [period, setPeriod] = useState(quarterStartISO(todayUTCISO()));
   const [value, setValue] = useState("");
 
   const targets = (list.data?.data ?? []) as PipelineTargetRow[];
@@ -41,7 +67,18 @@ export function TargetsSettings() {
   const save = async () => {
     if (!value) return;
     try {
-      await upsert.mutateAsync({ data: { periodStart: period, targetValue: Number(value) } });
+      await upsert.mutateAsync({
+        data: {
+          // Sent explicitly rather than relying on the PUT route's default —
+          // see task-4-brief.md — and re-snapped defensively even though
+          // `period` is already quarter-granular via the DatePicker's
+          // onChange below, so a future caller of setPeriod() can't sneak an
+          // off-quarter date past this save.
+          periodType: "quarter",
+          periodStart: quarterStartISO(period),
+          targetValue: Number(value),
+        },
+      });
       await invalidate();
       setValue("");
       toast({ title: "Target saved", description: "Pipeline target updated." });
@@ -69,8 +106,16 @@ export function TargetsSettings() {
         <AdminOnly>
           <div className="flex flex-wrap items-end gap-3 rounded-md border border-dashed p-3">
             <div>
-              <label className="text-xs text-muted-foreground uppercase tracking-wider">Quarter start</label>
-              <DatePicker value={period} onChange={setPeriod} placeholder="Quarter start" />
+              <label className="text-xs text-muted-foreground uppercase tracking-wider">Quarter</label>
+              <DatePicker
+                value={period}
+                onChange={(v) => setPeriod(quarterStartISO(v))}
+                placeholder="Pick any date in the quarter"
+              />
+              <p className="text-[11px] text-muted-foreground mt-1 max-w-[16rem]">
+                Any date you pick snaps to that quarter's start — targets are
+                per-quarter, not per-day.
+              </p>
             </div>
             <div>
               <label className="text-xs text-muted-foreground uppercase tracking-wider">Target (USD)</label>
