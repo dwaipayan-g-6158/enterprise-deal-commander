@@ -3,14 +3,20 @@ import { useQueryClient } from "@tanstack/react-query";
 import {
   useListWebhooks,
   useCreateWebhook,
+  useUpdateWebhook,
   useDeleteWebhook,
   useListNotificationRules,
   useCreateNotificationRule,
+  useUpdateNotificationRule,
   useDeleteNotificationRule,
   useListCustomPatterns,
   useCreateCustomPattern,
+  useUpdateCustomPattern,
   useDeleteCustomPattern,
   useTestCustomPattern,
+  type Webhook,
+  type NotificationRule,
+  type CustomPattern,
 } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -18,6 +24,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Switch } from "@/components/ui/switch";
 import {
   Select,
   SelectContent,
@@ -41,12 +48,18 @@ const WEBHOOK_EVENTS = [
   "blocker.resolved",
 ];
 
+// Must match the auto-disable threshold in
+// artifacts/api-server/src/lib/subscribers/webhook-dispatcher.ts (bumps
+// failureCount on exhausted retries, disables at 10 consecutive failures).
+const WEBHOOK_AUTO_DISABLE_THRESHOLD = 10;
+
 export function WebhooksSettings() {
   const { toast } = useToast();
   const canWrite = useCanWrite();
   const qc = useQueryClient();
   const list = useListWebhooks();
   const create = useCreateWebhook();
+  const update = useUpdateWebhook();
   const del = useDeleteWebhook();
   const [form, setForm] = useState({ webhook_name: "", target_url: "", events: [] as string[] });
 
@@ -62,6 +75,26 @@ export function WebhooksSettings() {
       toast({ title: "Webhook created" });
     } catch {
       toast({ title: "Failed to create webhook", variant: "destructive" });
+    }
+  };
+
+  // PUT /webhooks/:id takes the full resource (WebhookInput), not a partial
+  // patch — send the row's existing fields back alongside the toggled flag.
+  const toggleActive = async (w: Webhook, isActive: boolean) => {
+    try {
+      await update.mutateAsync({
+        id: w.id,
+        data: {
+          webhook_name: w.webhookName,
+          target_url: w.targetUrl,
+          events: w.events,
+          is_active: isActive,
+        },
+      });
+      await invalidate();
+      toast({ title: isActive ? "Webhook re-enabled" : "Webhook disabled" });
+    } catch {
+      toast({ title: "Could not update webhook", variant: "destructive" });
     }
   };
 
@@ -81,7 +114,19 @@ export function WebhooksSettings() {
                 {w.events.map((e) => <Badge key={e} variant="outline" className="text-[10px]">{e}</Badge>)}
               </div>
             </div>
-            {!w.isActive && <Badge variant="destructive">disabled</Badge>}
+            {!w.isActive && (
+              <div className="flex flex-col items-end gap-0.5">
+                <Badge variant="destructive">disabled</Badge>
+                {w.failureCount >= WEBHOOK_AUTO_DISABLE_THRESHOLD && (
+                  <span className="text-[10px] text-muted-foreground">
+                    Auto-disabled after {w.failureCount} failed deliveries
+                  </span>
+                )}
+              </div>
+            )}
+            <AdminOnly>
+              <Switch checked={w.isActive} onCheckedChange={(v) => toggleActive(w, v)} disabled={update.isPending} />
+            </AdminOnly>
             <AdminOnly>
               <Button variant="ghost" size="icon" onClick={async () => { await del.mutateAsync({ id: w.id }); await invalidate(); }}>
                 <Trash2 className="h-4 w-4" />
@@ -127,6 +172,7 @@ export function NotificationSettings() {
   const qc = useQueryClient();
   const list = useListNotificationRules();
   const create = useCreateNotificationRule();
+  const update = useUpdateNotificationRule();
   const del = useDeleteNotificationRule();
   const [form, setForm] = useState({ rule_name: "", trigger_event: "health_changed", channel: "in_app" });
 
@@ -145,6 +191,27 @@ export function NotificationSettings() {
     }
   };
 
+  // PUT /notification-rules/:id takes the full resource (NotificationRuleInput),
+  // not a partial patch — send the row's existing fields back with the toggle.
+  const toggleActive = async (r: NotificationRule, isActive: boolean) => {
+    try {
+      await update.mutateAsync({
+        id: r.id,
+        data: {
+          rule_name: r.ruleName,
+          trigger_event: r.triggerEvent,
+          trigger_conditions: r.triggerConditions ?? null,
+          channel: r.channel,
+          is_active: isActive,
+        },
+      });
+      await invalidate();
+      toast({ title: isActive ? "Rule enabled" : "Rule disabled" });
+    } catch {
+      toast({ title: "Could not update rule", variant: "destructive" });
+    }
+  };
+
   return (
     <Card>
       <CardHeader>
@@ -159,6 +226,9 @@ export function NotificationSettings() {
               <p className="text-xs text-muted-foreground">on {r.triggerEvent} → {r.channel}</p>
             </div>
             {!r.isActive && <Badge variant="outline">off</Badge>}
+            <AdminOnly>
+              <Switch checked={r.isActive} onCheckedChange={(v) => toggleActive(r, v)} disabled={update.isPending} />
+            </AdminOnly>
             <AdminOnly>
               <Button variant="ghost" size="icon" onClick={async () => { await del.mutateAsync({ id: r.id }); await invalidate(); }}>
                 <Trash2 className="h-4 w-4" />
@@ -214,6 +284,7 @@ export function CustomPatternsSettings() {
   const qc = useQueryClient();
   const list = useListCustomPatterns();
   const create = useCreateCustomPattern();
+  const update = useUpdateCustomPattern();
   const del = useDeleteCustomPattern();
   const test = useTestCustomPattern();
   const [form, setForm] = useState({
@@ -260,6 +331,40 @@ export function CustomPatternsSettings() {
   const setCond = (i: number, patch: Partial<Cond>) =>
     setConds((cs) => cs.map((c, idx) => (idx === i ? { ...c, ...patch } : c)));
 
+  // PUT /custom-patterns/:id takes the full resource (CustomPatternInput,
+  // conditions included, min 1) — send the row's existing fields back with
+  // the toggle. The list response's `conditions` are camelCase
+  // (fieldPath/comparisonValue/sortOrder); the input body needs snake_case.
+  const toggleActive = async (p: CustomPattern, isActive: boolean) => {
+    try {
+      const conditions = (p.conditions ?? []).map((c) => {
+        const cond = c as { fieldPath: string; operator: string; comparisonValue: string; sortOrder: number };
+        return {
+          field_path: cond.fieldPath,
+          operator: cond.operator,
+          comparison_value: cond.comparisonValue,
+          sort_order: cond.sortOrder,
+        };
+      });
+      await update.mutateAsync({
+        id: p.id,
+        data: {
+          pattern_name: p.patternName,
+          description: p.description ?? null,
+          severity: p.severity,
+          weight: p.weight,
+          alert_message_template: p.alertMessageTemplate,
+          is_active: isActive,
+          conditions,
+        } as never,
+      });
+      await invalidate();
+      toast({ title: isActive ? "Pattern enabled" : "Pattern disabled" });
+    } catch {
+      toast({ title: "Could not update pattern", variant: "destructive" });
+    }
+  };
+
   return (
     <Card>
       <CardHeader>
@@ -274,6 +379,10 @@ export function CustomPatternsSettings() {
               <p className="font-medium">{p.patternName}</p>
               <p className="text-xs text-muted-foreground">weight {p.weight} · fired {p.triggerCount}×</p>
             </div>
+            {!p.isActive && <Badge variant="outline">off</Badge>}
+            <AdminOnly>
+              <Switch checked={p.isActive} onCheckedChange={(v) => toggleActive(p, v)} disabled={update.isPending} />
+            </AdminOnly>
             <AdminOnly>
               <Button variant="ghost" size="icon" onClick={async () => { await del.mutateAsync({ id: p.id }); await invalidate(); }}>
                 <Trash2 className="h-4 w-4" />

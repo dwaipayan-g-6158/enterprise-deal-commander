@@ -362,6 +362,11 @@ router.put("/webhooks/:id", async (req: Request, res: Response) => {
   const b = UpdateWebhookBody.parse(req.body);
   const actor = getActor(req);
   const [prior] = await db.select().from(webhooks).where(eq(webhooks.id, id));
+  // Re-enabling a webhook (false -> true) clears the failure count it was
+  // auto-disabled with — otherwise the only recourse for a user is delete +
+  // recreate, which discards delivery history. Any other update (including
+  // leaving an active webhook active) must NOT touch failureCount.
+  const reactivating = !!prior && prior.isActive === false && b.is_active === true;
   const [row] = await db
     .update(webhooks)
     .set({
@@ -369,6 +374,7 @@ router.put("/webhooks/:id", async (req: Request, res: Response) => {
       targetUrl: b.target_url,
       events: b.events,
       isActive: b.is_active ?? undefined,
+      ...(reactivating ? { failureCount: 0 } : {}),
       ...(b.secret_key ? { secretKey: b.secret_key } : {}),
     })
     .where(eq(webhooks.id, id))
