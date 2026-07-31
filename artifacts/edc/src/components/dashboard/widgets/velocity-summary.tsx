@@ -11,8 +11,9 @@ interface VelocityDeal {
   accountName: string;
   stage: string;
   daysInStage: number;
-  benchmarkDays: number;
-  deltaDays: number;
+  /** `null` when this deal is the only OPEN one in its stage — no benchmark yet. */
+  benchmarkDays: number | null;
+  deltaDays: number | null;
   velocity: string;
 }
 
@@ -20,6 +21,7 @@ const STATUS: Record<string, { label: string; cls: string }> = {
   SLOW: { label: "Stalled", cls: "bg-destructive text-white" },
   FAST: { label: "Fast", cls: "bg-emerald-500 text-white" },
   NORMAL: { label: "On Pace", cls: "bg-muted text-muted-foreground" },
+  INSUFFICIENT_DATA: { label: "New", cls: "bg-muted text-muted-foreground" },
 };
 
 // Widget 8 — Velocity Map (compact). The most-overdue deals relative to their
@@ -29,7 +31,9 @@ export function VelocitySummary() {
   const [, navigate] = useLocation();
   const deals = ((data?.data as { deals?: VelocityDeal[] })?.deals ?? [])
     .slice()
-    .sort((a, b) => b.deltaDays - a.deltaDays)
+    // Deals with no benchmark yet (null) sort to the bottom — they're
+    // neither overdue nor ahead, so they don't belong at either end.
+    .sort((a, b) => (b.deltaDays ?? -Infinity) - (a.deltaDays ?? -Infinity))
     .slice(0, 6);
 
   return (
@@ -71,9 +75,13 @@ export function VelocitySummary() {
                       <span className="text-muted-foreground"> · {d.stage}</span>
                     </td>
                     <td className="py-1.5 px-2 text-right font-mono text-xs">
-                      <span className={d.deltaDays > 0 ? "text-red-500" : "text-emerald-500"}>
-                        {d.deltaDays > 0 ? `+${d.deltaDays}d` : `${d.deltaDays}d`}
-                      </span>
+                      {d.deltaDays == null ? (
+                        <span className="text-muted-foreground">—</span>
+                      ) : (
+                        <span className={d.deltaDays > 0 ? "text-red-500" : "text-emerald-500"}>
+                          {d.deltaDays > 0 ? `+${d.deltaDays}d` : `${d.deltaDays}d`}
+                        </span>
+                      )}
                     </td>
                     <td className="py-1.5 pl-2 text-right">
                       <Badge className={s.cls}>{s.label}</Badge>
