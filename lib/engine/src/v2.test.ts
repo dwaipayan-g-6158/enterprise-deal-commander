@@ -115,6 +115,40 @@ describe("predictive scoring", () => {
     expect(defaultWeighted.breakdown.find((b) => b.featureId === "gate_momentum")?.weight).toBe(22);
   });
 
+  it("a negative weight override is ignored (falls back to the factor default) instead of inverting its contribution", () => {
+    const negativeOverride = { ...DEFAULT_SCORING_WEIGHTS, gate_momentum: -50 };
+    const r = computePredictiveScore(baseScoringInput, {}, negativeOverride);
+    expect(r.score).toBeGreaterThanOrEqual(0);
+    expect(r.score).toBeLessThanOrEqual(100);
+    // Negative override discarded — the factor keeps its own default weight (22).
+    expect(r.breakdown.find((b) => b.featureId === "gate_momentum")?.weight).toBe(22);
+  });
+
+  it("a total weight of zero (every factor overridden to 0) still yields a score within 0-100", () => {
+    const zeroed = { ...DEFAULT_SCORING_WEIGHTS };
+    for (const k of Object.keys(zeroed)) zeroed[k] = 0;
+    const r = computePredictiveScore(baseScoringInput, {}, zeroed);
+    expect(r.score).toBeGreaterThanOrEqual(0);
+    expect(r.score).toBeLessThanOrEqual(100);
+    expect(r.score).toBe(0);
+  });
+
+  it("a wildly over-100 weight override still yields a score within 0-100", () => {
+    const blownOut = { ...DEFAULT_SCORING_WEIGHTS, gate_momentum: 300 };
+    const r = computePredictiveScore(baseScoringInput, {}, blownOut);
+    expect(r.score).toBeGreaterThanOrEqual(0);
+    expect(r.score).toBeLessThanOrEqual(100);
+  });
+
+  it("non-finite weight overrides (NaN/Infinity) are ignored, falling back to the factor default", () => {
+    const broken = { ...DEFAULT_SCORING_WEIGHTS, gate_momentum: NaN, stage_velocity: Infinity };
+    const r = computePredictiveScore(baseScoringInput, {}, broken);
+    expect(r.score).toBeGreaterThanOrEqual(0);
+    expect(r.score).toBeLessThanOrEqual(100);
+    expect(r.breakdown.find((b) => b.featureId === "gate_momentum")?.weight).toBe(22);
+    expect(r.breakdown.find((b) => b.featureId === "stage_velocity")?.weight).toBe(13);
+  });
+
   it("playbook_adherence is neutral without a playbook, rewards adherence, and penalises gaps", () => {
     const neutral = computePredictiveScore(baseScoringInput); // no playbook fields
     const adhering = computePredictiveScore({

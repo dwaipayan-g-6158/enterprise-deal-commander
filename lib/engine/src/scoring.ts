@@ -191,7 +191,12 @@ export function computePredictiveScore(
   const breakdown: ScoreFactorResult[] = [];
 
   for (const f of FACTORS) {
-    const w = weights?.[f.id] ?? f.weight;
+    const override = weights?.[f.id];
+    // A non-finite or negative override (e.g. a corrupt calibrated weight) can't be
+    // trusted: it would invert the factor's contribution or drag totalWeight toward
+    // zero/negative. Fall back to the factor's own default in that case. A zero
+    // override is legitimate (deliberately excludes the factor) and is kept as-is.
+    const w = override == null || !Number.isFinite(override) || override < 0 ? f.weight : override;
     const raw = clamp01(f.extract(input, context));
     const contribution = raw * w;
     weightedSum += contribution;
@@ -205,7 +210,8 @@ export function computePredictiveScore(
     });
   }
 
-  const score = totalWeight > 0 ? Math.round((weightedSum / totalWeight) * 100) : 0;
+  const rawScoreTotal = totalWeight > 0 ? Math.round((weightedSum / totalWeight) * 100) : 0;
+  const score = Math.max(0, Math.min(100, rawScoreTotal));
 
   const dataPoints = [
     input.daysToClose != null,
