@@ -52,7 +52,7 @@ import {
   UpdateScoringWeightsBody,
 } from "@workspace/api-zod";
 import { getActor } from "../../lib/auth";
-import { notFound } from "../../lib/http";
+import { badRequest, notFound } from "../../lib/http";
 import { logSettingsChange } from "../../lib/settings-audit";
 import { emitDealEvent } from "../../lib/events";
 import { getPlaybookJourney, startPlaybookForDeal, recomputeAssignment, dealIdForAssignment } from "../../lib/playbook-signals";
@@ -482,7 +482,11 @@ router.get("/custom-patterns", async (_req: Request, res: Response) => {
 });
 
 router.post("/custom-patterns", async (req: Request, res: Response) => {
-  const b = CreateCustomPatternBody.parse(req.body);
+  const parsed = CreateCustomPatternBody.safeParse(req.body);
+  if (!parsed.success) {
+    throw badRequest("Invalid custom pattern payload", parsed.error.issues);
+  }
+  const b = parsed.data;
   const actor = getActor(req);
   const [p] = await db
     .insert(customRiskPatterns)
@@ -521,7 +525,11 @@ router.post("/custom-patterns", async (req: Request, res: Response) => {
 
 router.put("/custom-patterns/:id", async (req: Request, res: Response) => {
   const { id } = UpdateCustomPatternParams.parse(req.params);
-  const b = UpdateCustomPatternBody.parse(req.body);
+  const parsed = UpdateCustomPatternBody.safeParse(req.body);
+  if (!parsed.success) {
+    throw badRequest("Invalid custom pattern payload", parsed.error.issues);
+  }
+  const b = parsed.data;
   const actor = getActor(req);
   const [prior] = await db.select().from(customRiskPatterns).where(eq(customRiskPatterns.id, id));
   const [p] = await db
@@ -685,7 +693,11 @@ router.get("/config/targets", async (_req: Request, res: Response) => {
 
 // PUT /v2/config/targets — upsert a period target (conflict on periodType + periodStart).
 router.put("/config/targets", async (req: Request, res: Response) => {
-  const body = UpsertPipelineTargetBody.parse(req.body);
+  const parsed = UpsertPipelineTargetBody.safeParse(req.body);
+  if (!parsed.success) {
+    throw badRequest("Invalid pipeline target payload", parsed.error.issues);
+  }
+  const body = parsed.data;
   const actor = getActor(req);
   // body.periodStart is a Date (coerced by Zod's coerce.date() + useDates:true).
   // pipelineTargets.periodStart is a date column with mode:"string" → needs YYYY-MM-DD.
@@ -758,7 +770,11 @@ router.get("/config/scoring-weights", async (_req: Request, res: Response) => {
 // PUT /v2/config/scoring-weights — append a new calibration row per supplied
 // factor (append-only history; latest wins). Weights are fractions of 1.0.
 router.put("/config/scoring-weights", async (req: Request, res: Response) => {
-  const body = UpdateScoringWeightsBody.parse(req.body);
+  const parsed = UpdateScoringWeightsBody.safeParse(req.body);
+  if (!parsed.success) {
+    throw badRequest("Invalid scoring weights payload", parsed.error.issues);
+  }
+  const body = parsed.data;
   const actor = getActor(req);
   const today = new Date().toISOString().slice(0, 10);
   for (const w of body.weights) {

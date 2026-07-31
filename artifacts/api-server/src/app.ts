@@ -9,9 +9,10 @@ import express, {
 import cors from "cors";
 import cookieParser from "cookie-parser";
 import pinoHttp from "pino-http";
+import { ZodError } from "zod";
 import router from "./routes";
 import { logger } from "./lib/logger";
-import { HttpError, sendError } from "./lib/http";
+import { HttpError, badRequest, sendError } from "./lib/http";
 
 const app: Express = express();
 
@@ -85,6 +86,10 @@ app.use(
   (err: unknown, req: Request, res: Response, _next: NextFunction): void => {
     if (err instanceof HttpError) {
       sendError(res, err);
+      return;
+    }
+    if (err instanceof ZodError) {
+      sendError(res, badRequest("Invalid request", err.issues));
       return;
     }
     req.log?.error({ err }, "Unhandled error");
