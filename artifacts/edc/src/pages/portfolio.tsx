@@ -16,8 +16,10 @@ import { liftPresentation, splitCorrelations } from "@/components/cockpit/portfo
 
 // Geometry-matched loading state. Every height below is derived from the real
 // page's own primitives (Card + CardContent p-4 space-y-1, text-3xl, etc.) so
-// the swap to real content causes no reflow. The heatmap card's real height is
-// data-dependent (187 + 44 * rows); this is tuned for the common 4-row case.
+// the card COUNT and column SPANS match the real grid exactly, and individual
+// heights are tuned close enough that the swap causes at most a small reflow,
+// not a layout jump. The heatmap card's real height is data-dependent
+// (187 + 44 * rows); this is tuned for the common 4-row case.
 function PortfolioSkeleton() {
   return (
     <div className="p-8 max-w-[1600px] mx-auto space-y-8" aria-busy="true">
@@ -67,10 +69,27 @@ function PortfolioSkeleton() {
         </CardContent>
       </Card>
 
+      {/* FIVE boxes with the real spans, not four equal ones: ProductMixSection
+          returns a FRAGMENT of two full-width Cards (Pipeline by Suite, Product
+          Whitespace), then By Account Manager and By Technical Lead share a row,
+          then By Product spans again. At @4xl that is 4 grid rows, not 2 — the
+          previous four-equal-box version disagreed with the real grid on both
+          count and column tracks. Spans use @4xl: to match the real cards (see
+          the prior container-query span fix in this same file/product-mix-
+          section.tsx) — a viewport xl: here would leave the same ~1168-1279px
+          dead band that fix eliminated from the real cards. Heights were
+          MEASURED LIVE (not estimated) against the seeded dev dataset at a
+          1440px viewport — 2 suites/product groups, 5 deals split across
+          managers/leads/products — then rounded to the nearest 10px. A
+          materially different dataset will make these a little off, but the
+          count/spans (the load-bearing part of this task) hold regardless of
+          data shape. */}
       <div className="grid grid-cols-1 @4xl:grid-cols-2 gap-8">
-        {Array.from({ length: 4 }).map((_, i) => (
-          <Skeleton key={i} className="h-[320px] rounded-xl" />
-        ))}
+        <Skeleton className="h-[180px] rounded-xl @4xl:col-span-2" /> {/* Pipeline by Suite */}
+        <Skeleton className="h-[590px] rounded-xl @4xl:col-span-2" /> {/* Product Whitespace */}
+        <Skeleton className="h-[480px] rounded-xl" /> {/* By Account Manager */}
+        <Skeleton className="h-[480px] rounded-xl" /> {/* By Technical Lead */}
+        <Skeleton className="h-[340px] rounded-xl @4xl:col-span-2" /> {/* By Product */}
       </div>
     </div>
   );
