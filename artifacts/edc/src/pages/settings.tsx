@@ -20,6 +20,7 @@ import { AchievementsSettings } from "@/components/settings/achievements-setting
 import { UsersSettings } from "@/components/settings/users-settings";
 import { AdminOnly, ReadOnlyNotice } from "@/components/auth/write-gate";
 import { useCanWrite } from "@/lib/auth/role-context";
+import { serverMessage } from "@/lib/server-message";
 
 export default function Settings() {
   const canWrite = useCanWrite();
@@ -58,7 +59,7 @@ export default function Settings() {
       queryClient.invalidateQueries({ queryKey: getListEngineThresholdsQueryKey() });
       toast({ title: "Thresholds Updated", description: "Engine parameters successfully tuned." });
     } catch (err) {
-      toast({ title: "Update Failed", description: "Could not apply engine changes.", variant: "destructive" });
+      toast({ title: "Update Failed", description: serverMessage(err, "Could not apply engine changes."), variant: "destructive" });
     }
   };
 

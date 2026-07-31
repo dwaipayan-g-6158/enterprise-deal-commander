@@ -63,19 +63,10 @@ import { useToast } from "@/hooks/use-toast";
 import { useSession, useCanWrite } from "@/lib/auth/role-context";
 import { AdminOnly, ReadOnlyNotice } from "@/components/auth/write-gate";
 import { relativeTime } from "@/components/dashboard/widgets/_shared";
+import { serverMessage } from "@/lib/server-message";
 import { Plus, MoreHorizontal, KeyRound, Trash2, Users as UsersIcon } from "lucide-react";
 
 const EMPTY_FORM = { email: "", display_name: "", password: "", role: "reader" as "admin" | "reader" };
-
-// House style for surfacing the server's real message (see pages/deals.tsx,
-// technical-gates.tsx, blockers-panel.tsx, risk-governance.tsx).
-function serverMessage(err: unknown, fallback: string): string {
-  return (
-    (err as { data?: { error?: { message?: string } } })?.data?.error?.message ??
-    (err instanceof Error ? err.message : undefined) ??
-    fallback
-  );
-}
 
 export function UsersSettings() {
   const { toast } = useToast();

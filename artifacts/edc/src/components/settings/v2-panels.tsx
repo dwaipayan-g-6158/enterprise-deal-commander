@@ -37,6 +37,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Trash2, Plus, FlaskConical } from "lucide-react";
 import { AdminOnly, ReadOnlyNotice } from "@/components/auth/write-gate";
 import { useCanWrite } from "@/lib/auth/role-context";
+import { serverMessage } from "@/lib/server-message";
 
 const WEBHOOK_EVENTS = [
   "deal.created",
@@ -74,8 +75,8 @@ export function WebhooksSettings() {
       await invalidate();
       setForm({ webhook_name: "", target_url: "", events: [] });
       toast({ title: "Webhook created" });
-    } catch {
-      toast({ title: "Failed to create webhook", variant: "destructive" });
+    } catch (err) {
+      toast({ title: "Failed to create webhook", description: serverMessage(err, ""), variant: "destructive" });
     }
   };
 
@@ -94,8 +95,8 @@ export function WebhooksSettings() {
       });
       await invalidate();
       toast({ title: isActive ? "Webhook re-enabled" : "Webhook disabled" });
-    } catch {
-      toast({ title: "Could not update webhook", variant: "destructive" });
+    } catch (err) {
+      toast({ title: "Could not update webhook", description: serverMessage(err, ""), variant: "destructive" });
     }
   };
 
@@ -187,8 +188,8 @@ export function NotificationSettings() {
       await invalidate();
       setForm({ rule_name: "", trigger_event: "health_changed", channel: "in_app" });
       toast({ title: "Rule created" });
-    } catch {
-      toast({ title: "Failed to create rule", variant: "destructive" });
+    } catch (err) {
+      toast({ title: "Failed to create rule", description: serverMessage(err, ""), variant: "destructive" });
     }
   };
 
@@ -208,8 +209,8 @@ export function NotificationSettings() {
       });
       await invalidate();
       toast({ title: isActive ? "Rule enabled" : "Rule disabled" });
-    } catch {
-      toast({ title: "Could not update rule", variant: "destructive" });
+    } catch (err) {
+      toast({ title: "Could not update rule", description: serverMessage(err, ""), variant: "destructive" });
     }
   };
 
@@ -345,8 +346,8 @@ export function CustomPatternsSettings() {
       const res = await test.mutateAsync({ data: body() as never });
       const d = (res?.data ?? {}) as { matchCount?: number };
       setTestResult(`Matches ${d.matchCount ?? 0} active deal(s)`);
-    } catch {
-      setTestResult("Test failed");
+    } catch (err) {
+      setTestResult(serverMessage(err, "Test failed"));
     }
   };
 
@@ -359,8 +360,8 @@ export function CustomPatternsSettings() {
       setConds([{ field_path: FIELD_PATHS[0], operator: "gt", comparison_value: "" }]);
       setTestResult("");
       toast({ title: "Custom pattern saved" });
-    } catch {
-      toast({ title: "Failed to save pattern", variant: "destructive" });
+    } catch (err) {
+      toast({ title: "Failed to save pattern", description: serverMessage(err, ""), variant: "destructive" });
     }
   };
 
@@ -393,8 +394,8 @@ export function CustomPatternsSettings() {
       });
       await invalidate();
       toast({ title: isActive ? "Pattern enabled" : "Pattern disabled" });
-    } catch {
-      toast({ title: "Could not update pattern", variant: "destructive" });
+    } catch (err) {
+      toast({ title: "Could not update pattern", description: serverMessage(err, ""), variant: "destructive" });
     }
   };
 

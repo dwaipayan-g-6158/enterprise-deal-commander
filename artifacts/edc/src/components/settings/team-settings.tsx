@@ -14,6 +14,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Trash2, Plus, Users } from "lucide-react";
 import { AdminOnly } from "@/components/auth/write-gate";
 import { useCanWrite } from "@/lib/auth/role-context";
+import { serverMessage } from "@/lib/server-message";
 
 export function TeamSettings() {
   const { toast } = useToast();
@@ -43,8 +44,8 @@ export function TeamSettings() {
       await invalidate();
       setForm({ name: "", can_be_am: true, can_be_tl: false });
       toast({ title: "Team member added" });
-    } catch {
-      toast({ title: "Failed to add team member", variant: "destructive" });
+    } catch (err) {
+      toast({ title: "Failed to add team member", description: serverMessage(err, ""), variant: "destructive" });
     }
   };
 
@@ -53,8 +54,8 @@ export function TeamSettings() {
       await del.mutateAsync({ id });
       await invalidate();
       toast({ title: "Team member removed" });
-    } catch {
-      toast({ title: "Failed to remove team member", variant: "destructive" });
+    } catch (err) {
+      toast({ title: "Failed to remove team member", description: serverMessage(err, ""), variant: "destructive" });
     }
   };
 

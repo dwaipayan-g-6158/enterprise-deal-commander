@@ -12,6 +12,7 @@ import { useToast } from "@/hooks/use-toast";
 import { SlidersHorizontal, Save } from "lucide-react";
 import { AdminOnly } from "@/components/auth/write-gate";
 import { useCanWrite } from "@/lib/auth/role-context";
+import { serverMessage } from "@/lib/server-message";
 
 interface WeightRow {
   featureId: string;
@@ -79,8 +80,8 @@ export function ScoringWeightsSettings() {
         title: "Scoring weights updated",
         description: `${count} deal${count === 1 ? "" : "s"} re-scored with the new factor weights.`,
       });
-    } catch {
-      toast({ title: "Failed to update weights", variant: "destructive" });
+    } catch (err) {
+      toast({ title: "Failed to update weights", description: serverMessage(err, ""), variant: "destructive" });
     }
   };
 

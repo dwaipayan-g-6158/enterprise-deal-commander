@@ -10,6 +10,7 @@ import { Target } from "lucide-react";
 import { AdminOnly } from "@/components/auth/write-gate";
 import { useCanWrite } from "@/lib/auth/role-context";
 import { quarterStartISO, todayUTCISO } from "@/lib/format";
+import { serverMessage } from "@/lib/server-message";
 
 interface PipelineTargetRow {
   id: string;
@@ -55,8 +56,8 @@ export function TargetsSettings() {
       await invalidate();
       setValue("");
       toast({ title: "Target saved", description: "Pipeline target updated." });
-    } catch {
-      toast({ title: "Failed to save target", variant: "destructive" });
+    } catch (err) {
+      toast({ title: "Failed to save target", description: serverMessage(err, ""), variant: "destructive" });
     }
   };
 
