@@ -10,19 +10,10 @@ import {
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { Grid3x3, ArrowUpRight } from "lucide-react";
-import { RISK_LEVEL_CLASS, RISK_LEVEL_SHORT_LABEL, classifyRisk } from "@/lib/semantic-colors";
 import { compactCurrency } from "@/lib/format";
+import { riskBand } from "@/components/cockpit/portfolio-presentation";
 
 type Axis = "accountManager" | "technicalLead";
-
-// riskScore bands mirror the PRD semantic ramp (and the Whitespace heatmap):
-// sky → amber → orange → red. Tint stays low-opacity so it reads as data.
-// Thresholds/labels come from the shared classifyRisk (0-25/26-50/51-75/76-100)
-// so the heatmap can never drift from every other risk-level surface again.
-function riskBand(score: number): { cell: string; label: string } {
-  const level = classifyRisk(score);
-  return { cell: RISK_LEVEL_CLASS[level].cell, label: RISK_LEVEL_SHORT_LABEL[level] };
-}
 
 const SEP = "␟";
 const cellKey = (person: string, product: string) => `${person}${SEP}${product}`;
@@ -227,8 +218,10 @@ function HeatLegend() {
   // token to appear literally in source to generate it; a runtime-concatenated
   // string is invisible to it (same reason healthTone in briefing-report.tsx
   // hardcodes its hex classes instead of interpolating BRIEFING_HEALTH_HEX).
-  // Kept in sync by hand with RISK_LEVEL_CLASS's colors (sky/amber/orange/red)
-  // and with classifyRisk's boundaries (25/50/75).
+  // Kept in sync by hand with portfolio-presentation.ts's `riskBand` colors
+  // (sky/amber/orange/red) and its underlying classifyRisk boundaries
+  // (25/50/75) — portfolio-presentation.test.ts's "legend-sync guard" asserts
+  // riskBand's cell classes still match these literals at each boundary.
   const items = [
     { label: "Low (0–25)", cls: "bg-sky-500/40" },
     { label: "Moderate (26–50)", cls: "bg-amber-500/40" },

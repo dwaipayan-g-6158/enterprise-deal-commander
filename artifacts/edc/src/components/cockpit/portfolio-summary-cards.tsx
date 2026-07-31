@@ -4,14 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { Layers, Link2, DollarSign, AlertOctagon } from "lucide-react";
 import { compactCurrency, formatNum } from "@/lib/format";
-
-// Diversification reads "good when high": green when risk is well spread,
-// rose when it is concentrated in a few cells.
-function diversificationAccent(d: number): string {
-  if (d >= 0.66) return "text-emerald-600 dark:text-emerald-400";
-  if (d >= 0.4) return "text-amber-600 dark:text-amber-400";
-  return "text-rose-600 dark:text-rose-400";
-}
+import { diversificationBand } from "@/components/cockpit/portfolio-presentation";
 
 interface MetricCardProps {
   icon: React.ReactNode;
@@ -58,7 +51,7 @@ export function PortfolioSummaryCards({ summary }: { summary: PortfolioSummary }
         icon={<Layers className="h-3.5 w-3.5" />}
         label="Diversification Index"
         value={formatNum(summary.diversificationIndex)}
-        valueClassName={diversificationAccent(summary.diversificationIndex)}
+        valueClassName={diversificationBand(summary.diversificationIndex)}
         subtitle="0 = concentrated · 1 = diversified"
       />
 

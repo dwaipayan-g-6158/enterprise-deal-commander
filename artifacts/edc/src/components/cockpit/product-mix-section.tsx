@@ -11,6 +11,7 @@ import { cn } from "@/lib/utils";
 import { ChevronRight, Layers, Grid3x3, ArrowUpRight } from "lucide-react";
 import { groupProductsBySuite } from "./product-picker";
 import { compactCurrency } from "@/lib/format";
+import { attachBand } from "@/components/cockpit/portfolio-presentation";
 
 // Suite accent — a single hue per suite, used sparingly (dots, bar fills) so it
 // reads as data, not chrome, against the app's neutral palette.
@@ -236,17 +237,6 @@ export function ProductMixSection() {
   );
 }
 
-// Attach % → border + tint. Low attach = whitespace opportunity (warm), high = cool/calm.
-function heatClasses(attachPct: number): string {
-  if (attachPct >= 0.6)
-    return "border-emerald-500/30 bg-emerald-500/10 hover:bg-emerald-500/15";
-  if (attachPct >= 0.3)
-    return "border-amber-500/30 bg-amber-500/10 hover:bg-amber-500/15";
-  if (attachPct > 0)
-    return "border-orange-500/30 bg-orange-500/10 hover:bg-orange-500/15";
-  return "border-rose-500/30 bg-rose-500/10 hover:bg-rose-500/15";
-}
-
 function WhitespaceCell({
   product,
   open,
@@ -264,7 +254,7 @@ function WhitespaceCell({
       aria-expanded={open}
       className={cn(
         "flex flex-col gap-1.5 rounded-md border p-3 text-left transition-colors",
-        heatClasses(product.attachPct),
+        attachBand(product.attachPct),
         open && "ring-2 ring-ring ring-offset-1 ring-offset-background",
       )}
     >
