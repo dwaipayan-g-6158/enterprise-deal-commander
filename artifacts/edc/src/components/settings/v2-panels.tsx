@@ -17,6 +17,7 @@ import {
   type Webhook,
   type NotificationRule,
   type CustomPattern,
+  type CustomPatternInputSeverity,
 } from "@workspace/api-client-react";
 import { requiresComparisonValue, type CustomOperator } from "@workspace/engine";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -101,7 +102,7 @@ export function WebhooksSettings() {
       return;
     }
     try {
-      await create.mutateAsync({ data: form as never });
+      await create.mutateAsync({ data: form });
       await invalidate();
       setForm({ webhook_name: "", target_url: "", events: [] });
       toast({ title: "Webhook created" });
@@ -251,7 +252,7 @@ export function NotificationSettings() {
       return;
     }
     try {
-      await create.mutateAsync({ data: form as never });
+      await create.mutateAsync({ data: form });
       await invalidate();
       setForm({ rule_name: "", trigger_event: "health_changed", channel: "in_app" });
       toast({ title: "Rule created" });
@@ -360,11 +361,11 @@ const FIELD_PATHS = [
   "salesStage",
   "daysInStage",
 ];
-const OPERATORS = ["gt", "lt", "gte", "lte", "eq", "neq", "contains", "not_contains", "is_null", "is_not_null"];
+const OPERATORS: CustomOperator[] = ["gt", "lt", "gte", "lte", "eq", "neq", "contains", "not_contains", "is_null", "is_not_null"];
 
 interface Cond {
   field_path: string;
-  operator: string;
+  operator: CustomOperator;
   comparison_value: string;
 }
 
@@ -378,7 +379,7 @@ export function CustomPatternsSettings() {
   const test = useTestCustomPattern();
   const [form, setForm] = useState({
     pattern_name: "",
-    severity: "YELLOW",
+    severity: "YELLOW" as CustomPatternInputSeverity,
     weight: 50,
     alert_message_template: "",
   });
@@ -436,14 +437,14 @@ export function CustomPatternsSettings() {
   // except is_null/is_not_null — see requiresComparisonValue's doc comment
   // in @workspace/engine for exactly why, operator by operator.
   const invalidConditions = conds.filter(
-    (c) => requiresComparisonValue(c.operator as CustomOperator) && c.comparison_value.trim() === "",
+    (c) => requiresComparisonValue(c.operator) && c.comparison_value.trim() === "",
   );
   const canSave =
     !!form.pattern_name && !!form.alert_message_template && conds.length > 0 && invalidConditions.length === 0;
 
   const runTest = async () => {
     try {
-      const res = await test.mutateAsync({ data: body() as never });
+      const res = await test.mutateAsync({ data: body() });
       const d = (res?.data ?? {}) as { matchCount?: number };
       setTestResult(`Matches ${d.matchCount ?? 0} active deal(s)`);
     } catch (err) {
@@ -469,7 +470,7 @@ export function CustomPatternsSettings() {
       return;
     }
     try {
-      await create.mutateAsync({ data: body() as never });
+      await create.mutateAsync({ data: body() });
       await invalidate();
       setForm({ pattern_name: "", severity: "YELLOW", weight: 50, alert_message_template: "" });
       setConds([{ field_path: FIELD_PATHS[0], operator: "gt", comparison_value: "" }]);
@@ -487,7 +488,7 @@ export function CustomPatternsSettings() {
   const toggleActive = async (p: CustomPattern, isActive: boolean) => {
     try {
       const conditions = (p.conditions ?? []).map((c) => {
-        const cond = c as { fieldPath: string; operator: string; comparisonValue: string; sortOrder: number };
+        const cond = c as { fieldPath: string; operator: CustomOperator; comparisonValue: string; sortOrder: number };
         return {
           field_path: cond.fieldPath,
           operator: cond.operator,
@@ -500,12 +501,17 @@ export function CustomPatternsSettings() {
         data: {
           pattern_name: p.patternName,
           description: p.description ?? null,
-          severity: p.severity,
+          // CustomPattern.severity comes back from the generated response
+          // type as a plain `string` (the response schema doesn't carry the
+          // RED/YELLOW literal union the way CustomPatternInput does), so
+          // this one cast is a genuine, permanent gap between the two
+          // generated types rather than something local typing could avoid.
+          severity: p.severity as CustomPatternInputSeverity,
           weight: p.weight,
           alert_message_template: p.alertMessageTemplate,
           is_active: isActive,
           conditions,
-        } as never,
+        },
       });
       await invalidate();
       toast({ title: isActive ? "Pattern enabled" : "Pattern disabled" });
@@ -543,7 +549,13 @@ export function CustomPatternsSettings() {
         <div className="rounded-md border border-dashed p-3 space-y-3">
           <div className="flex gap-2 flex-wrap items-end">
             <Input className="flex-1 min-w-40" placeholder="Pattern name" value={form.pattern_name} onChange={(e) => updateForm({ pattern_name: e.target.value })} />
-            <Select value={form.severity} onValueChange={(v) => updateForm({ severity: v })}>
+            <Select
+              value={form.severity}
+              // Radix Select always hands back a plain string; narrowed here
+              // rather than widening Cond/form's own field, since the two
+              // SelectItems below are the only values that can ever arrive.
+              onValueChange={(v) => updateForm({ severity: v as CustomPatternInputSeverity })}
+            >
               <SelectTrigger className="w-28"><SelectValue /></SelectTrigger>
               <SelectContent><SelectItem value="RED">RED</SelectItem><SelectItem value="YELLOW">YELLOW</SelectItem></SelectContent>
             </Select>
@@ -551,7 +563,7 @@ export function CustomPatternsSettings() {
           </div>
 
           {conds.map((c, i) => {
-            const needsValue = requiresComparisonValue(c.operator as CustomOperator);
+            const needsValue = requiresComparisonValue(c.operator);
             const missingValue = needsValue && c.comparison_value.trim() === "";
             const isLastCondition = conds.length === 1;
             return (
@@ -560,7 +572,12 @@ export function CustomPatternsSettings() {
                   <SelectTrigger className="flex-1"><SelectValue /></SelectTrigger>
                   <SelectContent>{FIELD_PATHS.map((f) => <SelectItem key={f} value={f}>{f}</SelectItem>)}</SelectContent>
                 </Select>
-                <Select value={c.operator} onValueChange={(v) => setCond(i, { operator: v })}>
+                <Select
+                  value={c.operator}
+                  // Same narrowing as the severity Select above — the
+                  // SelectItems are populated straight from OPERATORS.
+                  onValueChange={(v) => setCond(i, { operator: v as CustomOperator })}
+                >
                   <SelectTrigger className="w-32"><SelectValue /></SelectTrigger>
                   <SelectContent>{OPERATORS.map((o) => <SelectItem key={o} value={o}>{o}</SelectItem>)}</SelectContent>
                 </Select>
