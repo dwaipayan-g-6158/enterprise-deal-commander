@@ -1,4 +1,5 @@
 import { useGetPortfolioAnalysis, useGetProductMix } from "@workspace/api-client-react";
+import type { AlertCorrelation } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
@@ -9,7 +10,9 @@ import { ProductMixSection } from "@/components/cockpit/product-mix-section";
 import { PortfolioSummaryCards } from "@/components/cockpit/portfolio-summary-cards";
 import { PortfolioRiskHeatmap } from "@/components/cockpit/portfolio-risk-heatmap";
 import { Button } from "@/components/ui/button";
+import { InfoTooltip } from "@/components/ui/info-tooltip";
 import { formatNum } from "@/lib/format";
+import { liftPresentation, splitCorrelations } from "@/components/cockpit/portfolio-presentation";
 
 // Geometry-matched loading state. Every height below is derived from the real
 // page's own primitives (Card + CardContent p-4 space-y-1, text-3xl, etc.) so
@@ -120,17 +123,39 @@ export default function Portfolio() {
       </div>
     );
 
-  const renderCorrelations = (correlations: any[]) => {
+  // Two historical bugs here: `any[]` typing (no compile-time safety against
+  // drift from the generated AlertCorrelation shape), and unbounded badge
+  // rendering (a group carrying many alert codes blows out the table cell) —
+  // plus `corr.lift > 0 ? '+' : ''`, which is wrong because lift's baseline is
+  // 1, not 0: an under-represented 0.5x lift still got a misleading "+". Both
+  // are fixed by delegating to the shared portfolio-presentation helpers so
+  // this table and the summary cards' cluster subtitle never disagree again.
+  const renderCorrelations = (correlations: AlertCorrelation[]) => {
     if (!correlations || correlations.length === 0) return <span className="text-muted-foreground text-xs">Nothing stands out</span>;
+    const { shown, hiddenCount, hiddenCodes } = splitCorrelations(correlations);
     return (
       <div className="flex flex-wrap gap-2">
-        {correlations.map(corr => (
-          <Badge key={corr.code} variant="outline" className="text-xs bg-muted/50 flex gap-1">
-            <AlertTriangle className="w-3 h-3 text-amber-500" />
-            <span className="font-mono">{corr.code}</span>
-            <span className="text-muted-foreground">({formatNum(corr.share * 100)}%, {corr.lift > 0 ? '+' : ''}{formatNum(corr.lift)}x)</span>
+        {shown.map((corr) => {
+          const lift = liftPresentation(corr.lift);
+          return (
+            <Badge key={corr.code} variant="outline" className="text-xs bg-muted/50 flex gap-1">
+              <AlertTriangle className="w-3 h-3 text-amber-500" />
+              <span className="font-mono">{corr.code}</span>
+              <span className="text-muted-foreground" title={lift.label}>
+                ({formatNum(corr.share * 100)}%, {lift.text})
+              </span>
+            </Badge>
+          );
+        })}
+        {hiddenCount > 0 && (
+          <Badge
+            variant="outline"
+            className="text-xs font-mono text-muted-foreground"
+            title={hiddenCodes.join(", ")}
+          >
+            +{hiddenCount}
           </Badge>
-        ))}
+        )}
       </div>
     );
   };
@@ -142,7 +167,12 @@ export default function Portfolio() {
         <p className="text-muted-foreground mt-2">Correlation of risk patterns across team members and products</p>
       </div>
 
-      {data.summary && <PortfolioSummaryCards summary={data.summary} />}
+      {data.summary && (
+        <PortfolioSummaryCards
+          summary={data.summary}
+          diversificationCellCount={data.riskMatrix?.byAccountManager.length ?? 0}
+        />
+      )}
 
       {data.riskMatrix && (
         <PortfolioRiskHeatmap
@@ -164,7 +194,11 @@ export default function Portfolio() {
                 <TableRow>
                   <TableHead>Manager</TableHead>
                   <TableHead>Deals</TableHead>
-                  <TableHead>Avg Cycle</TableHead>
+                  {/* "Avg Cycle" was misleading: avgCycleTimeDays sums daysInStage
+                      (time in the CURRENT pipeline stage), not end-to-end deal
+                      cycle time. Relabelled to match what the field actually
+                      measures — the cell rendering below is unchanged. */}
+                  <TableHead>Avg Days in Stage</TableHead>
                   <TableHead>Risk Correlations</TableHead>
                 </TableRow>
               </TableHeader>
@@ -192,7 +226,7 @@ export default function Portfolio() {
                 <TableRow>
                   <TableHead>Lead</TableHead>
                   <TableHead>Deals</TableHead>
-                  <TableHead>Avg Cycle</TableHead>
+                  <TableHead>Avg Days in Stage</TableHead>
                   <TableHead>Risk Correlations</TableHead>
                 </TableRow>
               </TableHeader>
@@ -207,6 +241,21 @@ export default function Portfolio() {
                 ))}
               </TableBody>
             </Table>
+            {/* The server filters "Unassigned" out of byTechnicalLead and computes
+                noTechnicalLeadCycleTimeDays precisely so this footnote can exist — without
+                it those deals vanish from this table with no trace, while the Risk
+                Heatmap's Tech Lead axis still lists them under "Unassigned", so the two
+                surfaces would otherwise contradict each other. null (not 0) means there
+                are no unassigned deals → render nothing. Says "days in stage", not "cycle
+                time", for the same reason the column header above was relabelled — same
+                underlying field, same misnomer. */}
+            {data.noTechnicalLeadCycleTimeDays != null && (
+              <p className="mt-4 border-t pt-3 text-xs text-muted-foreground">
+                Deals with no technical lead assigned are excluded from this table. They
+                average {formatNum(data.noTechnicalLeadCycleTimeDays)} days in stage, and
+                do appear on the Risk Heatmap's Tech Lead axis under "Unassigned".
+              </p>
+            )}
           </CardContent>
         </Card>
 
@@ -220,7 +269,17 @@ export default function Portfolio() {
                 <TableRow>
                   <TableHead>Product</TableHead>
                   <TableHead>Deals</TableHead>
-                  <TableHead>Stalled Share</TableHead>
+                  <TableHead>
+                    <span className="inline-flex items-center gap-1.5">
+                      Share of Stalled Deals
+                      <InfoTooltip>
+                        The share of <em>all</em> stalled deals portfolio-wide that this product appears in — not
+                        the share of this product's own deals that are stalled. A deal counts toward every
+                        product it involves, so one stalled three-product deal makes all three products read 100%,
+                        and the column can total well over 100%.
+                      </InfoTooltip>
+                    </span>
+                  </TableHead>
                   <TableHead>Risk Correlations</TableHead>
                 </TableRow>
               </TableHeader>

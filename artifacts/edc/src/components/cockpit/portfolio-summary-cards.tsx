@@ -4,7 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { Layers, Link2, DollarSign, AlertOctagon } from "lucide-react";
 import { compactCurrency, formatNum } from "@/lib/format";
-import { diversificationBand } from "@/components/cockpit/portfolio-presentation";
+import { diversificationBand, liftPresentation } from "@/components/cockpit/portfolio-presentation";
 
 interface MetricCardProps {
   icon: React.ReactNode;
@@ -35,7 +35,18 @@ function MetricCard({ icon, label, value, subtitle, valueClassName, delayMs }: M
   );
 }
 
-export function PortfolioSummaryCards({ summary }: { summary: PortfolioSummary }) {
+export function PortfolioSummaryCards({
+  summary,
+  diversificationCellCount,
+}: {
+  summary: PortfolioSummary;
+  // Heatmap cell count (riskMatrix.byAccountManager.length) — lives outside
+  // `summary` but is needed here to detect the single-cell degenerate case
+  // below. A plain number (not the whole RiskMatrix) because this component
+  // only ever needs the count, not any other matrix-derived value; passing
+  // the count keeps this component decoupled from RiskMatrix's shape.
+  diversificationCellCount: number;
+}) {
   const cluster = summary.highestCorrelationCluster;
   const scopeLabel =
     cluster?.scope === "manager"
@@ -43,16 +54,34 @@ export function PortfolioSummaryCards({ summary }: { summary: PortfolioSummary }
       : cluster?.scope === "lead"
         ? "Technical Lead"
         : "Product";
+  const lift = cluster ? liftPresentation(cluster.lift) : null;
 
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 @4xl:grid-cols-4 gap-4">
+      {/* Per Decision 3 (plan): a single manager x product heatmap cell makes
+          diversificationIndex mathematically degenerate — there's nothing to
+          be concentrated AGAINST. The server (Task 2) returns 1 for this case
+          rather than 0, but a bare "1.00" would misleadingly read as
+          "perfectly diversified". Dash + caveat instead of the raw number;
+          no colour accent (valueClassName undefined) since nothing is really
+          being measured — a green OR rose tint would both be a false signal. */}
       <MetricCard
         delayMs={0}
         icon={<Layers className="h-3.5 w-3.5" />}
         label="Diversification Index"
-        value={formatNum(summary.diversificationIndex)}
-        valueClassName={diversificationBand(summary.diversificationIndex)}
-        subtitle="0 = concentrated · 1 = diversified"
+        value={
+          diversificationCellCount <= 1 ? (
+            <span title="Only one manager × product cell — nothing to measure">—</span>
+          ) : (
+            formatNum(summary.diversificationIndex)
+          )
+        }
+        valueClassName={diversificationCellCount <= 1 ? undefined : diversificationBand(summary.diversificationIndex)}
+        subtitle={
+          diversificationCellCount <= 1
+            ? "Only one manager × product cell — nothing to measure"
+            : "0 = concentrated · 1 = diversified"
+        }
       />
 
       <MetricCard
@@ -70,9 +99,9 @@ export function PortfolioSummaryCards({ summary }: { summary: PortfolioSummary }
           )
         }
         subtitle={
-          cluster ? (
-            <span className="font-mono">
-              {cluster.code} · ×{formatNum(cluster.lift)} lift · {formatNum(cluster.share * 100)}% of deals
+          cluster && lift ? (
+            <span className="font-mono" title={lift.label}>
+              {cluster.code} · {lift.text} lift · {formatNum(cluster.share * 100)}% of deals
             </span>
           ) : (
             "No dominant cluster — risk is well spread"
