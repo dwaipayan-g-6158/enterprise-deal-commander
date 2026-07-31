@@ -7,6 +7,8 @@ import {
   significantCodes,
   recurringActiveCodes,
   pickHighestCorrelationCluster,
+  normalizePerson,
+  UNASSIGNED,
   type MetricsRecord,
   type GroupCorrelation,
   type PortfolioMetricsConfig,
@@ -57,6 +59,53 @@ describe("computeDealRisk", () => {
     expect(
       computeDealRisk({ healthStatus: "RED", maxActiveAlertWeight: 1000 }),
     ).toBeLessThanOrEqual(100);
+  });
+});
+
+describe("normalizePerson", () => {
+  it("returns the name as-is if already clean", () => {
+    expect(normalizePerson("Alice")).toBe("Alice");
+  });
+
+  it("trims trailing whitespace", () => {
+    expect(normalizePerson("Alice ")).toBe("Alice");
+  });
+
+  it("trims leading whitespace", () => {
+    expect(normalizePerson(" Alice")).toBe("Alice");
+  });
+
+  it("trims both leading and trailing whitespace", () => {
+    expect(normalizePerson("  Alice  ")).toBe("Alice");
+  });
+
+  it("folds a whitespace-only string to UNASSIGNED", () => {
+    expect(normalizePerson("   ")).toBe(UNASSIGNED);
+  });
+
+  it("folds an empty string to UNASSIGNED", () => {
+    expect(normalizePerson("")).toBe(UNASSIGNED);
+  });
+
+  it("folds null to UNASSIGNED", () => {
+    expect(normalizePerson(null)).toBe(UNASSIGNED);
+  });
+
+  it("folds undefined to UNASSIGNED", () => {
+    expect(normalizePerson(undefined)).toBe(UNASSIGNED);
+  });
+
+  it("does NOT case-fold — alice and Alice stay distinct", () => {
+    expect(normalizePerson("alice")).toBe("alice");
+    expect(normalizePerson("Alice")).toBe("Alice");
+    expect(normalizePerson("alice")).not.toBe(normalizePerson("Alice"));
+  });
+
+  it("is idempotent", () => {
+    const value = "  Alice  ";
+    const once = normalizePerson(value);
+    const twice = normalizePerson(once);
+    expect(twice).toBe(once);
   });
 });
 
@@ -111,6 +160,19 @@ describe("buildRiskCells", () => {
     expect(cells[0].person).toBe("J. Chen");
     expect(cells[0].product).toBe("DataSync Pro");
     expect(cells[0].dealCount).toBe(2);
+  });
+
+  it("merges trailing/leading whitespace variants into one cell", () => {
+    const records = [
+      rec({ dealId: "a", accountManager: "Alice ", products: ["AD360"] }),
+      rec({ dealId: "b", accountManager: "Alice", products: ["AD360"] }),
+    ];
+    const cells = buildRiskCells(records, "accountManager");
+    expect(cells).toHaveLength(1);
+    const cell = cells[0];
+    expect(cell.person).toBe("Alice");
+    expect(cell.dealCount).toBe(2);
+    expect(cell.deals.map((d) => d.id).sort()).toEqual(["a", "b"]);
   });
 });
 

@@ -97,7 +97,20 @@ export const DEFAULT_PORTFOLIO_CONFIG: PortfolioMetricsConfig = {
 /** @deprecated kept for any external import; equals DEFAULT_PORTFOLIO_CONFIG.minConfidenceDeals */
 export const MIN_CONFIDENCE_DEALS = DEFAULT_PORTFOLIO_CONFIG.minConfidenceDeals;
 
-const UNASSIGNED = "Unassigned";
+/** Bucket label for a deal with no (or blank) person on the axis. */
+export const UNASSIGNED = "Unassigned";
+
+/**
+ * Canonical person-axis key. Trims surrounding whitespace and folds blank /
+ * whitespace-only / missing values onto UNASSIGNED, so `"Alice "`, `"Alice"`,
+ * `""`, `"  "` and `null` can never split into separate rows in one view and
+ * merge in another. Deliberately does NOT case-fold — `"alice"` and `"Alice"`
+ * stay distinct, because these are display names, not identifiers, and
+ * collapsing case would silently rename a person in the UI. Idempotent.
+ */
+export function normalizePerson(value: string | null | undefined): string {
+  return (value ?? "").trim() || UNASSIGNED;
+}
 
 function clamp(n: number, lo: number, hi: number): number {
   return Math.max(lo, Math.min(hi, n));
@@ -143,7 +156,7 @@ export function buildRiskCells(
     { person: string; product: string; recs: MetricsRecord[] }
   >();
   for (const r of records) {
-    const person = (r[axis] || "").trim() || UNASSIGNED;
+    const person = normalizePerson(r[axis]);
     for (const product of new Set(r.products)) {
       const key = JSON.stringify([person, product]);
       let group = groups.get(key);

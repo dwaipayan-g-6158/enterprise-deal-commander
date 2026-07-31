@@ -14,6 +14,8 @@ import {
   diversificationIndex,
   pickHighestCorrelationCluster,
   recurringActiveCodes,
+  normalizePerson,
+  UNASSIGNED,
   type GroupCorrelation,
   type MetricsRecord,
 } from "./portfolio-metrics";
@@ -185,8 +187,8 @@ export async function computePortfolioAnalysis() {
     dealName: d.dealName,
     accountName: d.accountName,
     salesStage: d.salesStage,
-    accountManager: d.team.accountManager,
-    technicalLead: d.team.technicalLead,
+    accountManager: normalizePerson(d.team.accountManager),
+    technicalLead: normalizePerson(d.team.technicalLead),
     daysInStage: d.daysInStage,
     tcv: d.financials.normalizedTCV,
     healthStatus: d.governance.healthStatus,
@@ -219,7 +221,7 @@ export async function computePortfolioAnalysis() {
   const groupBy = (key: "accountManager" | "technicalLead") => {
     const groups = new Map<string, PortfolioRecord[]>();
     for (const r of records) {
-      const k = r[key] || "Unassigned";
+      const k = normalizePerson(r[key]);
       if (!groups.has(k)) groups.set(k, []);
       groups.get(k)!.push(r);
     }
@@ -238,7 +240,7 @@ export async function computePortfolioAnalysis() {
 
   const tlGroups = groupBy("technicalLead");
   const byTechnicalLead = [...tlGroups.entries()]
-    .filter(([tl]) => tl !== "Unassigned")
+    .filter(([tl]) => tl !== UNASSIGNED)
     .map(([tl, recs]) => ({
       technicalLead: tl,
       dealCount: recs.length,
@@ -248,7 +250,7 @@ export async function computePortfolioAnalysis() {
       ),
     }));
 
-  const noTlRecs = tlGroups.get("Unassigned") ?? [];
+  const noTlRecs = tlGroups.get(UNASSIGNED) ?? [];
   const noTechnicalLeadCycleTimeDays =
     noTlRecs.length > 0
       ? round2(noTlRecs.reduce((s, r) => s + r.daysInStage, 0) / noTlRecs.length)
