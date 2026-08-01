@@ -33,15 +33,18 @@ export default function Settings() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
-  // Radix Tabs unmounts inactive TabsContent, so an unsaved edit on the
-  // Thresholds or Score Weights tab vanishes silently the instant the user
-  // clicks another tab. Making Tabs controlled here lets handleTabChange
-  // intercept the switch and confirm first. Score Weights' own dirty state
-  // lives inside ScoringWeightsSettings (it owns the pct-editing state), so
-  // it's lifted just far enough to reach this guard via onDirtyChange — the
-  // other tabs either auto-save per item (Team, Webhooks, Smart Alerts,
-  // Custom Patterns) or have no unsaved-input concept (Achievements, Users),
-  // so they don't need an entry here.
+  // Radix Tabs unmounts inactive TabsContent, so any component state that
+  // lives *inside* a tab's own subtree vanishes silently the instant the
+  // user clicks another tab. Score Weights' pct-editing state lives inside
+  // ScoringWeightsSettings, so it's genuinely lost on unmount — its dirty
+  // flag is lifted just far enough to reach this guard via onDirtyChange.
+  // Thresholds is different: `localValues` below lives in this page
+  // component itself (which never unmounts on a tab switch), so an edit
+  // there survives switching away and back — nothing to warn about, so
+  // Thresholds intentionally has no entry in dirtyByTab. The other tabs
+  // either auto-save per item (Team, Webhooks, Smart Alerts, Custom
+  // Patterns) or have no unsaved-input concept (Achievements, Users), so
+  // they don't need an entry here either.
   const [activeTab, setActiveTab] = useState("thresholds");
   const [weightsDirty, setWeightsDirty] = useState(false);
 
@@ -58,7 +61,11 @@ export default function Settings() {
   const hasChanges = thresholds.some(t => localValues[t.parameterKey] !== undefined && localValues[t.parameterKey] !== t.parameterValue);
 
   const handleTabChange = (next: string) => {
-    const dirtyByTab = { thresholds: hasChanges, weights: weightsDirty };
+    // Thresholds is deliberately excluded: its edits live in this
+    // component's own state and survive a tab switch, so there is nothing
+    // to discard and nothing to warn about. Only Score Weights can
+    // actually lose unsaved input on unmount.
+    const dirtyByTab = { weights: weightsDirty };
     if (
       shouldConfirmTabSwitch(activeTab, next, dirtyByTab) &&
       !window.confirm("You have unsaved changes on this tab. Switch tabs and discard them?")
