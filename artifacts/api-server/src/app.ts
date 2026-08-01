@@ -89,6 +89,12 @@ app.use(
       return;
     }
     if (err instanceof ZodError) {
+      // Also fires for RESPONSE-schema validation failures (a `.parse()` on the
+      // way OUT, after a DB write may have already succeeded) — without this,
+      // that case was a silent, undiagnosable 400 instead of a logged one. Not
+      // distinguishing request-vs-response here; every occurrence just needs to
+      // be logged so it's diagnosable, matching the generic 500 fallback below.
+      req.log?.warn({ err }, "Zod validation error");
       sendError(res, badRequest("Invalid request", err.issues));
       return;
     }
