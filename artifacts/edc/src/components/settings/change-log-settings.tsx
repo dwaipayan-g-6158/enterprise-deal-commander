@@ -7,6 +7,7 @@ import {
   useRollbackSettingsChange,
   useExportSettingsConfig,
   getExportSettingsConfigQueryKey,
+  getListEngineThresholdsQueryKey,
   type SettingsChangeLogEntry,
 } from "@workspace/api-client-react";
 import {
@@ -141,6 +142,15 @@ export function ChangeLogSettings() {
     try {
       await rollback.mutateAsync({ id: rollbackTarget.id });
       await invalidate();
+      // Rollback is only supported for engine_thresholds today, and it writes
+      // to the same table the Thresholds tab reads via useListEngineThresholds
+      // (pages/settings.tsx). That hook lives in the page component (never
+      // unmounted by switching tabs) and refetchOnWindowFocus is disabled
+      // app-wide, so without this the Thresholds tab would keep showing the
+      // pre-rollback value until a full page reload — inviting an admin to
+      // "fix" what looks like a failed rollback by re-applying the value they
+      // just rolled back away from.
+      await qc.invalidateQueries({ queryKey: getListEngineThresholdsQueryKey() });
       setRollbackTarget(null);
       toast({ title: "Rolled back", description: `${rollbackTarget.settingKey} restored to its previous value.` });
     } catch (err) {
