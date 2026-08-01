@@ -18,6 +18,7 @@ import { TargetsSettings } from "@/components/settings/targets-settings";
 import { ScoringWeightsSettings } from "@/components/settings/scoring-weights-settings";
 import { AchievementsSettings } from "@/components/settings/achievements-settings";
 import { UsersSettings } from "@/components/settings/users-settings";
+import { ChangeLogSettings } from "@/components/settings/change-log-settings";
 import { AdminOnly, ReadOnlyNotice } from "@/components/auth/write-gate";
 import { useCanWrite } from "@/lib/auth/role-context";
 import { serverMessage } from "@/lib/server-message";
@@ -43,7 +44,8 @@ export default function Settings() {
   // there survives switching away and back — nothing to warn about, so
   // Thresholds intentionally has no entry in dirtyByTab. The other tabs
   // either auto-save per item (Team, Webhooks, Smart Alerts, Custom
-  // Patterns) or have no unsaved-input concept (Achievements, Users), so
+  // Patterns) or have no unsaved-input concept (Achievements, Users,
+  // Change Log — its own actions are confirm-gated, not edit-then-save), so
   // they don't need an entry here either.
   const [activeTab, setActiveTab] = useState("thresholds");
   const [weightsDirty, setWeightsDirty] = useState(false);
@@ -119,6 +121,7 @@ export default function Settings() {
           <TabsTrigger value="team">Team</TabsTrigger>
           <TabsTrigger value="achievements">Achievements</TabsTrigger>
           <TabsTrigger value="users">Users</TabsTrigger>
+          <TabsTrigger value="change-log">Change Log</TabsTrigger>
         </TabsList>
 
         <TabsContent value="thresholds" className="pt-4 space-y-4">
@@ -187,6 +190,9 @@ export default function Settings() {
         </TabsContent>
         <TabsContent value="users" className="pt-4">
           <UsersSettings />
+        </TabsContent>
+        <TabsContent value="change-log" className="pt-4">
+          <ChangeLogSettings />
         </TabsContent>
       </Tabs>
     </div>
