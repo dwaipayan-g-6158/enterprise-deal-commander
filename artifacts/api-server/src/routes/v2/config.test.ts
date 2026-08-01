@@ -93,12 +93,21 @@ async function createDeal(tag: string, overrides: { archivedAt?: Date; deletedAt
 // any other test's or the live app's actual scoring weights.
 const TEST_FEATURE_ID = "test_probe_scoring_weight";
 
+// Separate, never-before-seen feature id for the oldValue regression below —
+// it needs a featureId with NO pre-existing scoring_model_weights rows so the
+// "brand-new factor" (genuinely null oldValue) case is unambiguous, which
+// TEST_FEATURE_ID above can't guarantee once the F2 test has already inserted
+// a row for it.
+const OLD_VALUE_TEST_FEATURE_ID = "test_probe_scoring_weight_oldvalue";
+
 afterAll(async () => {
   if (createdDealIds.length > 0) {
     await db.delete(enterpriseDeals).where(inArray(enterpriseDeals.id, createdDealIds));
   }
   await db.delete(scoringModelWeights).where(eq(scoringModelWeights.featureId, TEST_FEATURE_ID));
   await db.delete(settingsChangeLog).where(eq(settingsChangeLog.settingKey, TEST_FEATURE_ID));
+  await db.delete(scoringModelWeights).where(eq(scoringModelWeights.featureId, OLD_VALUE_TEST_FEATURE_ID));
+  await db.delete(settingsChangeLog).where(eq(settingsChangeLog.settingKey, OLD_VALUE_TEST_FEATURE_ID));
   await pool.end();
 });
 
@@ -124,6 +133,37 @@ describe("PUT /config/scoring-weights — inline re-score (F2)", () => {
     expect(updated).toBe(1);
     expect(Number.isInteger(rescored)).toBe(true);
     expect(rescored).toBeGreaterThanOrEqual(0);
+  });
+});
+
+describe("PUT /config/scoring-weights — audit entries record the real prior weight, not always null", () => {
+  it("logs oldValue: null for a brand-new factor, then the real prior weight on the next PUT", async () => {
+    const handler = getHandler("put", "/config/scoring-weights");
+    const put = async (weight: number) => {
+      const fakeReq = {
+        body: { weights: [{ feature_id: OLD_VALUE_TEST_FEATURE_ID, weight }] },
+        actor: { id: "test-actor", username: "test-actor", displayName: "Test Actor", role: "admin" },
+      } as unknown as Request;
+      const fakeRes = { json: () => {} } as unknown as Response;
+      await handler(fakeReq, fakeRes);
+    };
+
+    await put(0.3);
+    await put(0.6);
+
+    const rows = await db
+      .select()
+      .from(settingsChangeLog)
+      .where(eq(settingsChangeLog.settingKey, OLD_VALUE_TEST_FEATURE_ID))
+      .orderBy(settingsChangeLog.changedAt);
+    expect(rows).toHaveLength(2);
+    // First-ever PUT for this featureId: no prior row exists — null is the
+    // legitimate case here, not a hardcoded shortcut.
+    expect(rows[0].oldValue).toBeNull();
+    expect(Number(rows[0].newValue)).toBeCloseTo(0.3, 5);
+    // Second PUT: oldValue must be the real weight set by the first PUT.
+    expect(Number(rows[1].oldValue)).toBeCloseTo(0.3, 5);
+    expect(Number(rows[1].newValue)).toBeCloseTo(0.6, 5);
   });
 });
 

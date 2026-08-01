@@ -778,6 +778,23 @@ router.put("/config/scoring-weights", async (req: Request, res: Response) => {
   const body = parsed.data;
   const actor = getActor(req);
   const today = new Date().toISOString().slice(0, 10);
+  // Latest calibrated weight per featureId, so each audit entry can record the
+  // real prior value instead of a hardcoded null — same "latest row per
+  // featureId" dedup GET /config/scoring-weights above already does. A
+  // featureId with no prior row (e.g. a brand-new custom factor) legitimately
+  // has no previous weight, so it stays null.
+  const priorRows = await db
+    .select({
+      featureId: scoringModelWeights.featureId,
+      calibratedWeight: scoringModelWeights.calibratedWeight,
+      calibrationDate: scoringModelWeights.calibrationDate,
+    })
+    .from(scoringModelWeights)
+    .orderBy(desc(scoringModelWeights.calibrationDate));
+  const priorByFeature = new Map<string, number>();
+  for (const r of priorRows) {
+    if (!priorByFeature.has(r.featureId)) priorByFeature.set(r.featureId, Number(r.calibratedWeight));
+  }
   for (const w of body.weights) {
     await db.insert(scoringModelWeights).values({
       featureId: w.feature_id,
@@ -790,7 +807,7 @@ router.put("/config/scoring-weights", async (req: Request, res: Response) => {
       settingKey: w.feature_id,
       entityId: w.feature_id,
       action: "update",
-      oldValue: null,
+      oldValue: priorByFeature.get(w.feature_id) ?? null,
       newValue: w.weight,
       dataType: "number",
       actor: actor.username,
