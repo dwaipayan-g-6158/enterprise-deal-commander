@@ -1944,6 +1944,11 @@ export const ExportSettingsConfigResponse = zod.object({
 })
 
 
+export const importSettingsConfigBodyScoringModelWeightsItemCalibratedWeightMin = 0;
+export const importSettingsConfigBodyScoringModelWeightsItemCalibratedWeightMax = 1;
+
+
+
 export const ImportSettingsConfigBody = zod.object({
   "engineThresholds": zod.array(zod.object({
   "parameterKey": zod.string(),
@@ -1951,7 +1956,7 @@ export const ImportSettingsConfigBody = zod.object({
 })),
   "scoringModelWeights": zod.array(zod.object({
   "featureId": zod.string(),
-  "calibratedWeight": zod.number()
+  "calibratedWeight": zod.number().min(importSettingsConfigBodyScoringModelWeightsItemCalibratedWeightMin).max(importSettingsConfigBodyScoringModelWeightsItemCalibratedWeightMax)
 }))
 })
 

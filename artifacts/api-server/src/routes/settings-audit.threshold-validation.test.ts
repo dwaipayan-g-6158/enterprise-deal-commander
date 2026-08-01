@@ -1,7 +1,7 @@
 import { describe, it, expect, afterAll } from "vitest";
 import type { Request, Response } from "express";
 import { and, eq, inArray } from "drizzle-orm";
-import { db, pool, engineThresholds, settingsChangeLog } from "@workspace/db";
+import { db, pool, engineThresholds, settingsChangeLog, scoringModelWeights } from "@workspace/db";
 import router from "./settings-audit";
 
 // M4 regression cover: `engine_thresholds` is written by THREE routes. Task 12
@@ -199,5 +199,63 @@ describe("POST /settings/config/import — threshold bound validation", () => {
       .where(eq(engineThresholds.parameterKey, key));
     const newLogIds = (await importLogIds(key)).filter((id) => !priorLogIds.has(id));
     createdLogIds.push(...newLogIds);
+  });
+});
+
+// This is the one remaining write path to scoring_model_weights that bypassed
+// the [0,1] bound PUT /config/scoring-weights already enforces via
+// ScoringWeightsUpdate's OpenAPI contract — see the fix for the final
+// whole-branch review's config-import scoring-weight bound finding. Proves
+// the same bound now also applies to ImportSettingsConfigBody's
+// scoringModelWeights[].calibratedWeight.
+describe("POST /settings/config/import — scoring weight bound validation", () => {
+  const probeFeatureId = "test_import_bound_probe";
+
+  it("rejects an out-of-range calibratedWeight with 400, writing nothing", async () => {
+    const before = await db
+      .select()
+      .from(scoringModelWeights)
+      .where(eq(scoringModelWeights.featureId, probeFeatureId));
+
+    const result = await callExpectingThrow(
+      "/settings/config/import",
+      fakeReq({
+        body: {
+          engineThresholds: [],
+          scoringModelWeights: [{ featureId: probeFeatureId, calibratedWeight: 1.5 }],
+        },
+      }),
+    );
+    expect(result.status).toBe(400);
+
+    const after = await db
+      .select()
+      .from(scoringModelWeights)
+      .where(eq(scoringModelWeights.featureId, probeFeatureId));
+    expect(after).toEqual(before);
+  });
+
+  it("rejects a negative calibratedWeight with 400, writing nothing", async () => {
+    const before = await db
+      .select()
+      .from(scoringModelWeights)
+      .where(eq(scoringModelWeights.featureId, probeFeatureId));
+
+    const result = await callExpectingThrow(
+      "/settings/config/import",
+      fakeReq({
+        body: {
+          engineThresholds: [],
+          scoringModelWeights: [{ featureId: probeFeatureId, calibratedWeight: -0.1 }],
+        },
+      }),
+    );
+    expect(result.status).toBe(400);
+
+    const after = await db
+      .select()
+      .from(scoringModelWeights)
+      .where(eq(scoringModelWeights.featureId, probeFeatureId));
+    expect(after).toEqual(before);
   });
 });

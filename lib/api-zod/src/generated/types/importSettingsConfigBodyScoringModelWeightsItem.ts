@@ -8,5 +8,9 @@
 
 export type ImportSettingsConfigBodyScoringModelWeightsItem = {
   featureId: string;
+  /**
+     * @minimum 0
+     * @maximum 1
+     */
   calibratedWeight: number;
 };

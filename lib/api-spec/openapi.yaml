@@ -3617,7 +3617,7 @@ components:
             type: object
             properties:
               featureId: { type: string }
-              calibratedWeight: { type: number }
+              calibratedWeight: { type: number, minimum: 0, maximum: 1 }
             required: [featureId, calibratedWeight]
       required: [engineThresholds, scoringModelWeights]
     FxRate:
