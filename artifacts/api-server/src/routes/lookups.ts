@@ -430,6 +430,21 @@ router.put(
     const before = await db.select().from(engineThresholds);
     const beforeByKey = new Map(before.map((r) => [r.parameterKey, r]));
     const currentMap = new Map(before.map((r) => [r.parameterKey, { parameterValue: r.parameterValue, dataType: r.dataType }]));
+
+    // validateThresholdUpdate only applies its numeric/bounds rules to keys
+    // it recognizes by name (POSITIVE_WEIGHT_KEYS etc.) or that are already
+    // present in `current` — a genuinely unknown parameter_key sails through
+    // both and would otherwise get upserted into engine_thresholds with zero
+    // validation at all. Reject the whole batch up front instead.
+    const unknownKeys = [...new Set(
+      parsed.data.updates
+        .map((u) => u.parameter_key)
+        .filter((key) => !beforeByKey.has(key)),
+    )];
+    if (unknownKeys.length > 0) {
+      throw badRequest(`Unrecognized engine threshold parameter_key(s): ${unknownKeys.join(", ")}`);
+    }
+
     const validation = validateThresholdUpdate(parsed.data.updates, currentMap);
     if (!validation.valid) {
       throw badRequest(validation.error ?? "Invalid threshold update");
