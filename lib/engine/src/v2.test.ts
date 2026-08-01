@@ -149,6 +149,16 @@ describe("predictive scoring", () => {
     expect(r.breakdown.find((b) => b.featureId === "stage_velocity")?.weight).toBe(13);
   });
 
+  it("stays finite/0 when a factor's extract() could theoretically produce NaN", () => {
+    // progressPct: NaN propagates through gate_momentum's clamp01/sigmoid chain
+    // into weightedSum, making rawScoreTotal itself NaN. Math.max/Math.min don't
+    // absorb NaN, so without the Number.isFinite guard this would return NaN
+    // instead of a clamped, valid score.
+    const r = computePredictiveScore({ ...baseScoringInput, progressPct: NaN });
+    expect(Number.isFinite(r.score)).toBe(true);
+    expect(r.score).toBe(0);
+  });
+
   it("playbook_adherence is neutral without a playbook, rewards adherence, and penalises gaps", () => {
     const neutral = computePredictiveScore(baseScoringInput); // no playbook fields
     const adhering = computePredictiveScore({

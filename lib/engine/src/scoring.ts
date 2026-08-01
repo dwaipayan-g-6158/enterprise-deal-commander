@@ -211,7 +211,12 @@ export function computePredictiveScore(
   }
 
   const rawScoreTotal = totalWeight > 0 ? Math.round((weightedSum / totalWeight) * 100) : 0;
-  const score = Math.max(0, Math.min(100, rawScoreTotal));
+  // Math.max/Math.min both propagate NaN rather than absorbing it, so a NaN
+  // rawScoreTotal (unreachable via any currently-known weight-corruption path —
+  // those are all guarded above — but not provably impossible from a corrupt
+  // factor input) would otherwise slip past the clamp and break the "score is
+  // always in [0,100]" invariant. Defense-in-depth only.
+  const score = Number.isFinite(rawScoreTotal) ? Math.max(0, Math.min(100, rawScoreTotal)) : 0;
 
   const dataPoints = [
     input.daysToClose != null,
