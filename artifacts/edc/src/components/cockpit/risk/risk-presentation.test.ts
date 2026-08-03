@@ -31,6 +31,21 @@ describe("priorityPresentation", () => {
     expect(priorityPresentation("UNKNOWN")).toEqual({ Icon: Info, className: "text-muted-foreground" });
     expect(priorityPresentation("")).toEqual({ Icon: Info, className: "text-muted-foreground" });
   });
+
+  // blockers-panel routes blocker severity through this same scale. Those values
+  // come from the blocker_severities lookup (seeded Low/Medium/High, title-case)
+  // rather than the RiskActionPriority union, so nothing else connects the two.
+  it("covers the seeded blocker severities once uppercased at the boundary", () => {
+    for (const name of ["Low", "Medium", "High"]) {
+      expect(priorityPresentation(name.toUpperCase()).className).toMatch(/^text-/);
+    }
+  });
+
+  it("degrades an admin-added severity instead of rendering it uncoloured", () => {
+    // severity_name is an editable varchar(10), so a name outside the union is
+    // reachable without a code change.
+    expect(priorityPresentation("URGENT")).toEqual(priorityPresentation("LOW"));
+  });
 });
 
 describe("dimensionBarSegments", () => {

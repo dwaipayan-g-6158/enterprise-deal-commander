@@ -22,6 +22,8 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { useCockpitInvalidate } from "./use-invalidate";
 import { Trash2, CheckCircle, ShieldX } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { priorityPresentation } from "./risk/risk-presentation";
 import { AdminOnly } from "@/components/auth/write-gate";
 
 export function BlockersPanel({ dealId }: { dealId: string }) {
@@ -148,14 +150,34 @@ export function BlockersPanel({ dealId }: { dealId: string }) {
           </CardContent>
         </Card>
       ) : (
-        list.map((b) => (
+        list.map((b) => {
+          // Blocker severity is a lookup row (Low/Medium/High, admin-editable),
+          // so it goes through the shared priority scale rather than a local map:
+          // that scale's default branch degrades an unrecognised name to a
+          // neutral marker instead of rendering it uncoloured. Uppercased at the
+          // boundary because the lookup stores title-case.
+          // Before this, every unresolved blocker was `variant="destructive"`,
+          // which put the word "Low" on an urgent red badge.
+          const { Icon: SevIcon, className: sevCls } = priorityPresentation(
+            b.severity?.toUpperCase() ?? "",
+          );
+          return (
           <Card key={b.id} className={b.isResolved ? "opacity-60" : ""}>
             <CardContent className="p-4 flex items-start gap-3">
-              <ShieldX className={`h-5 w-5 shrink-0 mt-0.5 ${b.isResolved ? "text-muted-foreground" : "text-destructive"}`} />
+              {b.isResolved ? (
+                <ShieldX className="h-5 w-5 shrink-0 mt-0.5 text-muted-foreground" />
+              ) : (
+                <SevIcon className={cn("h-5 w-5 shrink-0 mt-0.5", sevCls)} />
+              )}
               <div className="flex-1">
                 <div className="flex items-center gap-2 mb-1">
                   <Badge variant="outline">{b.category}</Badge>
-                  <Badge variant={b.isResolved ? "secondary" : "destructive"}>{b.severity}</Badge>
+                  <Badge
+                    variant={b.isResolved ? "secondary" : "outline"}
+                    className={b.isResolved ? "" : sevCls}
+                  >
+                    {b.severity}
+                  </Badge>
                   {b.isResolved && <Badge variant="secondary">Resolved</Badge>}
                 </div>
                 <p className="text-sm">{b.description}</p>
@@ -177,7 +199,8 @@ export function BlockersPanel({ dealId }: { dealId: string }) {
               </AdminOnly>
             </CardContent>
           </Card>
-        ))
+          );
+        })
       )}
     </div>
   );
