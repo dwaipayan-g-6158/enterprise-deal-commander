@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { CalendarClock } from "lucide-react";
 import { compactCurrency, HEALTH_DOT } from "./_shared";
+import { HEALTH_SHORT_LABEL } from "@/lib/semantic-colors";
 import { buildTimeline, type TimelineBucket } from "./close-timeline-model";
 
 type TimelineCardDeal = TimelineBucket["deals"][number];
@@ -125,7 +126,7 @@ export function CloseTimeline({ reportingCurrency }: { reportingCurrency: string
                   <span className="font-mono font-medium text-red-500">
                     {compactCurrency(redTcv, reportingCurrency)}
                   </span>{" "}
-                  (RED deals)
+                  ({HEALTH_SHORT_LABEL.RED} deals)
                 </span>
               )}
               {noDateCount > 0 && <span>{noDateCount} with no close date set</span>}

@@ -2,7 +2,7 @@ import { useListDeals } from "@workspace/api-client-react";
 import { useLocation } from "wouter";
 import { Badge } from "@/components/ui/badge";
 import { formatCurrency } from "@/components/cockpit/use-invalidate";
-import { HEALTH_BADGE_CLASS, HEALTH_LABEL, type Health } from "@/lib/semantic-colors";
+import { HEALTH_BADGE_CLASS, HEALTH_LABEL, HEALTH_SHORT_LABEL, type Health } from "@/lib/semantic-colors";
 
 const healthColor: Record<string, string> = {
   RED: "bg-destructive text-white",
@@ -27,7 +27,8 @@ export default function MobileHome() {
       <div className="sticky top-0 bg-background pb-2">
         <h1 className="text-xl font-bold">EDC</h1>
         <p className="text-sm text-muted-foreground">
-          Pipeline: <span className="font-mono">{formatCurrency(totalTcv, "USD")}</span> · {redCount} RED
+          Pipeline: <span className="font-mono">{formatCurrency(totalTcv, "USD")}</span> · {redCount}{" "}
+          {HEALTH_SHORT_LABEL.RED}
         </p>
       </div>
       {deals.map((d) => (

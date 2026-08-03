@@ -3,7 +3,7 @@ import type { Deal, Intelligence } from "@workspace/api-client-react";
 import { CheckCircle, AlertTriangle, ShieldAlert, Lock } from "lucide-react";
 import { formatCurrency } from "./use-invalidate";
 import { formatDate, formatDateTime } from "@/lib/format";
-import { HEALTH_CLASS, type Health } from "@/lib/semantic-colors";
+import { HEALTH_CLASS, HEALTH_SHORT_LABEL, type Health } from "@/lib/semantic-colors";
 import { EdcLogoMark } from "@/components/edc-logo-mark";
 import { cn } from "@/lib/utils";
 
@@ -183,7 +183,9 @@ export function BriefingPresentation({
             )}
           >
             <span className={cn("h-2.5 w-2.5 rounded-full", healthCls.dot)} />
-            {health}
+            {/* Short form: this is text-3xl inside a min-w-[14rem] tile, where
+                the long wording wraps. */}
+            {HEALTH_SHORT_LABEL[health as Health] ?? health}
           </p>
           <p className="mt-1 text-sm text-muted-foreground">
             {riskSummary}
@@ -252,7 +254,7 @@ export function BriefingPresentation({
       <div>
         <SectionHeader>Risk Posture</SectionHeader>
         {alerts.length === 0 ? (
-          <div className="flex items-center gap-2 text-sky-600 dark:text-sky-400">
+          <div className={`flex items-center gap-2 ${HEALTH_CLASS.GREEN.text}`}>
             <CheckCircle className="h-4 w-4" />
             <span className="text-sm">No active risk patterns.</span>
           </div>

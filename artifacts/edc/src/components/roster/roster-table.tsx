@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/table";
 import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
+import { HEALTH_SHORT_LABEL } from "@/lib/semantic-colors";
 import { formatCurrency } from "@/components/cockpit/use-invalidate";
 import { COLUMNS } from "./model/roster-columns";
 import type { ColumnId, Density, Health, RosterRow, SortSpec } from "./model/roster-types";
@@ -279,7 +280,11 @@ function GroupHeaderRow({
                 real reporting currency, not a hardcoded "USD" — that used to
                 mislabel every subtotal the moment reporting_currency wasn't USD. */}
             {group.rows.length} · {formatCurrency(group.totalTCV, reportingCurrency)}
-            {group.redCount > 0 && <span className="ml-1 text-red-500">· {group.redCount} RED</span>}
+            {group.redCount > 0 && (
+              <span className="ml-1 text-red-500">
+                · {group.redCount} {HEALTH_SHORT_LABEL.RED}
+              </span>
+            )}
           </span>
         </button>
       </TableCell>

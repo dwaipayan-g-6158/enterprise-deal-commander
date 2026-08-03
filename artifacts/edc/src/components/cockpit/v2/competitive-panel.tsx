@@ -21,16 +21,21 @@ import {
 import { Combobox } from "@/components/ui/combobox";
 import { useToast } from "@/hooks/use-toast";
 import { Trash2, Swords } from "lucide-react";
+import { OUTCOME_CLASS } from "@/lib/semantic-colors";
 import { Empty, EmptyHeader, EmptyMedia, EmptyTitle, EmptyDescription } from "@/components/ui/empty";
 import { AdminOnly } from "@/components/auth/write-gate";
 import { useCanWrite } from "@/lib/auth/role-context";
 
 const STATUSES = ["Active", "Displaced", "Lost To", "Won Against"];
+// The two outcome-shaped statuses read off OUTCOME_CLASS so beating a competitor
+// is the same colour as winning the deal, and losing to one is slate rather than
+// red (red stays reserved for live danger). Active/Displaced are competitive
+// posture, not outcomes, so they keep their own colours.
 const statusColor: Record<string, string> = {
   Active: "bg-amber-500 text-white",
   Displaced: "bg-muted text-muted-foreground",
-  "Won Against": "bg-emerald-500 text-white",
-  "Lost To": "bg-destructive text-white",
+  "Won Against": OUTCOME_CLASS.won.badge,
+  "Lost To": OUTCOME_CLASS.lost.badge,
 };
 
 export function CompetitivePanel({

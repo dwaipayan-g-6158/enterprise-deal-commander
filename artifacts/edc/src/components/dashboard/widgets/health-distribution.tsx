@@ -2,7 +2,7 @@ import { useGetVitalSigns } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { HealthDonut } from "@/components/cockpit/charts/health-donut";
 import { compactCurrency, type Health } from "./_shared";
-import { HEALTH_CLASS } from "@/lib/semantic-colors";
+import { HEALTH_CLASS, HEALTH_SHORT_LABEL } from "@/lib/semantic-colors";
 
 interface VitalSignsData {
   baseline: { redAlerts: number } | null;
@@ -15,11 +15,9 @@ interface Props {
   onSelect: (band: Health) => void;
 }
 
-const LEGEND: { band: Health; label: string; dot: string }[] = [
-  { band: "GREEN", label: "Green", dot: HEALTH_CLASS.GREEN.dot },
-  { band: "YELLOW", label: "Yellow", dot: HEALTH_CLASS.YELLOW.dot },
-  { band: "RED", label: "Red", dot: HEALTH_CLASS.RED.dot },
-];
+// Order only — wording and colour are read off the shared maps so this legend
+// can't drift from the badges it explains.
+const LEGEND: Health[] = ["GREEN", "YELLOW", "RED"];
 
 // Widget 2 — Health Distribution. Donut (hole carries the total) plus the ratio
 // legend, % healthy, $ at risk and a week-over-week RED trend.
@@ -41,7 +39,8 @@ export function HealthDistribution({ counts, tcvAtRisk, reportingCurrency, onSel
           <HealthDonut green={counts.GREEN} yellow={counts.YELLOW} red={counts.RED} />
 
           <div className="space-y-2">
-            {LEGEND.map(({ band, label, dot }) => {
+            {LEGEND.map((band) => {
+              const label = HEALTH_SHORT_LABEL[band];
               const value = counts[band];
               const pct = Math.round((value / total) * 100);
               return (
@@ -53,7 +52,7 @@ export function HealthDistribution({ counts, tcvAtRisk, reportingCurrency, onSel
                   aria-label={`${value} ${label} deals`}
                   className="flex w-full items-center gap-2 rounded-md px-2 py-1 -mx-2 text-sm transition-colors hover:bg-muted/50 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
-                  <span className={`h-2.5 w-2.5 rounded-full ${dot}`} />
+                  <span className={`h-2.5 w-2.5 rounded-full ${HEALTH_CLASS[band].dot}`} />
                   <span className="font-mono font-medium tabular-nums">{value}</span>
                   <span className="text-muted-foreground">{label}</span>
                   <span className="ml-auto font-mono text-xs text-muted-foreground">{pct}%</span>
@@ -74,7 +73,7 @@ export function HealthDistribution({ counts, tcvAtRisk, reportingCurrency, onSel
           {redDelta != null && redDelta !== 0 && (
             <span className={`font-medium ${redDelta > 0 ? "text-red-500" : HEALTH_CLASS.GREEN.text}`}>
               {redDelta > 0 ? "+" : ""}
-              {redDelta} RED this week
+              {redDelta} {HEALTH_SHORT_LABEL.RED} this week
             </span>
           )}
         </div>

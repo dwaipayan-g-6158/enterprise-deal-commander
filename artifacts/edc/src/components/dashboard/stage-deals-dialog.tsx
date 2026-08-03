@@ -13,7 +13,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { ChevronRight, Layers } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { rowMotion } from "./widgets/_shared";
-import { HEALTH_CLASS, type Health } from "@/lib/semantic-colors";
+import { HEALTH_CLASS, HEALTH_LABEL, type Health } from "@/lib/semantic-colors";
 
 const HEALTH_DOT: Record<Health, string> = {
   GREEN: HEALTH_CLASS.GREEN.dot,
@@ -111,7 +111,7 @@ export function StageDealsDialog({
                               HEALTH_DOT[(deal.healthStatus as Health) ?? "GREEN"] ??
                               "bg-muted-foreground"
                             }`}
-                            title={deal.healthStatus}
+                            title={HEALTH_LABEL[deal.healthStatus as Health] ?? deal.healthStatus}
                           />
                           <div className="min-w-0 flex-1">
                             <p className="truncate text-sm font-medium">

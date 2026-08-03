@@ -17,12 +17,13 @@ import {
 } from "./wheel-horizontal-scroll";
 import { HEALTH_CLASS, OUTCOME_CLASS, RISK_LEVEL_CLASS, type RiskLevel } from "@/lib/semantic-colors";
 
-// Sourced from the shared HEALTH_CLASS map (lib/semantic-colors.ts) — this
-// used to be a private Record hardcoding GREEN as emerald, the exact
-// collision this file was reported for: a low-risk open deal and a
-// Closed-Won deal both rendered "border-l-emerald-500". Won/lost accent
-// colours (below, in renderCard/ClusterTab) now come from OUTCOME_CLASS
-// instead, so the two channels can no longer collide by construction.
+// Sourced from the shared HEALTH_CLASS map (lib/semantic-colors.ts) — this used
+// to be a private Record, which is how the collision this file was reported for
+// arose: a healthy open deal and a Closed-Won deal both rendered
+// "border-l-emerald-500". Health keeps emerald (it is the traffic light); what
+// fixed the collision was Closed-Won moving to violet. Won/lost accents (below,
+// in renderCard/ClusterTab) come from OUTCOME_CLASS, so as long as neither map
+// is re-privatised the two channels cannot collide by construction.
 //
 // These are now a FALLBACK, not the primary path: useListDeals carries no
 // risk level, so renderCard prefers the 4-state riskLevel from the roster

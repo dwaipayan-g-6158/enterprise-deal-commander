@@ -3,6 +3,9 @@
 // RosterRow[] into per-stage columns with At-Risk / On-Track sections and
 // value/count rollups, and carries the small helpers the drag layer needs.
 import type { PipelineStage } from "@workspace/api-client-react";
+// Relative, not `@/` — this module is node-tested through a vitest config with
+// no alias resolution (same reason risk-model.ts imports it relatively).
+import { HEALTH_SHORT_LABEL } from "../../../lib/semantic-colors";
 import type { RosterRow } from "./roster-types";
 
 // A deal's sales stage can be terminal (the deal is decided) while its lifecycle
@@ -71,9 +74,9 @@ function bandsFor(bandBy: BandBy): BandDef[] {
       ];
     case "health":
       return [
-        { key: "red", label: "Red", match: (r) => r.healthStatus === "RED" },
-        { key: "yellow", label: "Yellow", match: (r) => r.healthStatus === "YELLOW" },
-        { key: "green", label: "Green", match: () => true },
+        { key: "red", label: HEALTH_SHORT_LABEL.RED, match: (r) => r.healthStatus === "RED" },
+        { key: "yellow", label: HEALTH_SHORT_LABEL.YELLOW, match: (r) => r.healthStatus === "YELLOW" },
+        { key: "green", label: HEALTH_SHORT_LABEL.GREEN, match: () => true },
       ];
     case "committed":
       return [

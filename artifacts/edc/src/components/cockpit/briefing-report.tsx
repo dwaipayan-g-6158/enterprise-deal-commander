@@ -4,6 +4,9 @@ import { CheckCircle, AlertTriangle, ShieldAlert, Lock } from "lucide-react";
 import { formatCurrency } from "./use-invalidate";
 import { formatDate, formatDateTime } from "@/lib/format";
 import { PETAL_PATHS, VIEW_BOX } from "@/components/edc-logo-mark";
+// Wording only — every COLOUR in this file must stay a hardcoded literal (see
+// the note below), so BRIEFING_HEALTH_HEX is copied by hand, not imported.
+import { HEALTH_SHORT_LABEL, type Health } from "@/lib/semantic-colors";
 
 // The branded document rendered on screen, captured to PNG (html-to-image),
 // and printed to PDF (window.print()). Every color below is a HARDCODED
@@ -79,8 +82,8 @@ function SectionHeader({ children }: { children: ReactNode }) {
 // values are copied from; keep the two in sync by hand.
 function healthTone(health: string) {
   if (health === "RED") return { text: "text-[#DC2626]", dot: "bg-[#DC2626]" }; // BRIEFING_HEALTH_HEX.RED
-  if (health === "YELLOW") return { text: "text-[#D97706]", dot: "bg-[#D97706]" }; // BRIEFING_HEALTH_HEX.YELLOW
-  return { text: "text-[#0284C7]", dot: "bg-[#0284C7]" }; // BRIEFING_HEALTH_HEX.GREEN
+  if (health === "YELLOW") return { text: "text-[#CA8A04]", dot: "bg-[#CA8A04]" }; // BRIEFING_HEALTH_HEX.YELLOW
+  return { text: "text-[#059669]", dot: "bg-[#059669]" }; // BRIEFING_HEALTH_HEX.GREEN
 }
 
 export function BriefingReport({
@@ -223,7 +226,7 @@ export function BriefingReport({
           </p>
           <p className={`mt-3 flex items-center gap-2 text-[28px] font-bold ${tone.text}`}>
             <span className={`h-3 w-3 rounded-full ${tone.dot}`} />
-            {health}
+            {HEALTH_SHORT_LABEL[health as Health] ?? health}
           </p>
           <p className="mt-2 text-[11.5px] text-slate-400">{riskSummary}</p>
         </div>
@@ -292,7 +295,7 @@ export function BriefingReport({
       <div className="mt-9">
         <SectionHeader>Risk Posture</SectionHeader>
         {alerts.length === 0 ? (
-          <div className="flex items-center gap-2 break-inside-avoid text-[#0284C7]">
+          <div className="flex items-center gap-2 break-inside-avoid text-[#059669]">
             <CheckCircle className="h-5 w-5" />
             <span className="text-lg">No active risk patterns.</span>
           </div>
@@ -304,13 +307,13 @@ export function BriefingReport({
                 className={`flex items-start gap-3 break-inside-avoid rounded-md border border-slate-200 border-l-4 px-4 py-3 ${
                   a.severity === "RED"
                     ? "border-l-[#DC2626] bg-[#FEF2F2]"
-                    : "border-l-[#D97706] bg-[#FFFBEB]"
+                    : "border-l-[#CA8A04] bg-[#FEFCE8]"
                 }`}
               >
                 {a.severity === "RED" ? (
                   <ShieldAlert className="mt-0.5 h-[18px] w-[18px] shrink-0 text-[#DC2626]" />
                 ) : (
-                  <AlertTriangle className="mt-0.5 h-[18px] w-[18px] shrink-0 text-[#D97706]" />
+                  <AlertTriangle className="mt-0.5 h-[18px] w-[18px] shrink-0 text-[#CA8A04]" />
                 )}
                 <div>
                   <p className="text-[14.5px] leading-relaxed text-slate-900">

@@ -1,11 +1,11 @@
 import { Pie, PieChart, Cell, Label } from "recharts";
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart";
-import { HEALTH_HSL } from "@/lib/semantic-colors";
+import { HEALTH_HSL, HEALTH_SHORT_LABEL } from "@/lib/semantic-colors";
 
 const config: ChartConfig = {
-  GREEN: { label: "Green", color: HEALTH_HSL.GREEN },
-  YELLOW: { label: "Yellow", color: HEALTH_HSL.YELLOW },
-  RED: { label: "Red", color: HEALTH_HSL.RED },
+  GREEN: { label: HEALTH_SHORT_LABEL.GREEN, color: HEALTH_HSL.GREEN },
+  YELLOW: { label: HEALTH_SHORT_LABEL.YELLOW, color: HEALTH_HSL.YELLOW },
+  RED: { label: HEALTH_SHORT_LABEL.RED, color: HEALTH_HSL.RED },
 };
 
 const FILL: Record<string, string> = {

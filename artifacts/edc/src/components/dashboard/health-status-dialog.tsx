@@ -15,28 +15,13 @@ import { ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { rowMotion } from "./widgets/_shared";
 import { terminalOutcome } from "@/components/roster/model/board";
-import { HEALTH_CLASS, type Health } from "@/lib/semantic-colors";
+import { HEALTH_CLASS, HEALTH_SHORT_LABEL, type Health } from "@/lib/semantic-colors";
 
-const HEALTH_META: Record<
-  Health,
-  { label: string; dot: string; activeBtn: string }
-> = {
-  GREEN: {
-    label: "Green",
-    dot: HEALTH_CLASS.GREEN.dot,
-    activeBtn: `border-sky-500 ${HEALTH_CLASS.GREEN.bg} ${HEALTH_CLASS.GREEN.text}`,
-  },
-  YELLOW: {
-    label: "Yellow",
-    dot: HEALTH_CLASS.YELLOW.dot,
-    activeBtn: `border-amber-500 ${HEALTH_CLASS.YELLOW.bg} ${HEALTH_CLASS.YELLOW.text}`,
-  },
-  RED: {
-    label: "Red",
-    dot: HEALTH_CLASS.RED.dot,
-    activeBtn: `border-red-500 ${HEALTH_CLASS.RED.bg} ${HEALTH_CLASS.RED.text}`,
-  },
-};
+// Every slot is read off HEALTH_CLASS rather than hand-written. The band button
+// used to hardcode `border-sky-500`, which then silently kept pointing at the
+// risk ramp after health moved off it.
+const activeBandClass = (h: Health) =>
+  `${HEALTH_CLASS[h].border} ${HEALTH_CLASS[h].bg} ${HEALTH_CLASS[h].text}`;
 
 const ORDER: Health[] = ["RED", "YELLOW", "GREEN"];
 
@@ -153,7 +138,6 @@ export function HealthStatusDialog({
 
         <div className="flex gap-2">
           {ORDER.map((h) => {
-            const meta = HEALTH_META[h];
             const isActive = selected === h;
             return (
               <button
@@ -163,12 +147,12 @@ export function HealthStatusDialog({
                 aria-pressed={isActive}
                 className={`flex flex-1 items-center justify-center gap-2 rounded-md border px-3 py-2 text-sm font-medium cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
                   isActive
-                    ? meta.activeBtn
+                    ? activeBandClass(h)
                     : "border-border text-muted-foreground hover:border-primary/50"
                 }`}
               >
-                <span className={`h-2.5 w-2.5 rounded-full ${meta.dot}`} />
-                {meta.label}
+                <span className={`h-2.5 w-2.5 rounded-full ${HEALTH_CLASS[h].dot}`} />
+                {HEALTH_SHORT_LABEL[h]}
                 <span className="font-mono">{counts[h] ?? 0}</span>
               </button>
             );
@@ -219,7 +203,7 @@ export function HealthStatusDialog({
                 >
                   {deals.length === 0 ? (
                     <p className="py-8 text-center text-sm text-muted-foreground">
-                      Nothing in the {HEALTH_META[selected].label.toLowerCase()} bucket right now.
+                      Nothing in this band right now.
                     </p>
                   ) : (
                     <ul className="divide-y">
@@ -236,7 +220,7 @@ export function HealthStatusDialog({
                             className="flex w-full items-center gap-3 px-2 -mx-2 py-2.5 text-left rounded-md transition-colors hover:bg-muted/40 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                           >
                             <span
-                              className={`h-2.5 w-2.5 shrink-0 rounded-full ${HEALTH_META[selected].dot}`}
+                              className={`h-2.5 w-2.5 shrink-0 rounded-full ${HEALTH_CLASS[selected].dot}`}
                             />
                             <div className="min-w-0 flex-1">
                               <p className="truncate text-sm font-medium">

@@ -131,7 +131,7 @@ describe("buildBoard", () => {
       row({ id: "g", salesStageId: 1, healthStatus: "GREEN" }),
     ];
     const col = buildBoard(rows, STAGES, "health").find((c) => c.stage.id === 1)!;
-    expect(col.sections.map((s) => s.label)).toEqual(["Red", "Green"]); // no Yellow band
+    expect(col.sections.map((s) => s.label)).toEqual(["Critical", "Healthy"]); // no Needs-Attention band
     expect(secRows(col, "red")).toEqual(["r"]);
     expect(secRows(col, "green")).toEqual(["g"]);
   });

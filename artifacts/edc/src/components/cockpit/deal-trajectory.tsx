@@ -10,7 +10,12 @@ import {
 } from "recharts";
 import { ChevronDown } from "lucide-react";
 import { useGetDealTrajectory } from "@workspace/api-client-react";
-import { HEALTH_HSL, HEALTH_RGB } from "@/lib/semantic-colors";
+import {
+  HEALTH_HSL,
+  HEALTH_RGB,
+  HEALTH_LABEL as SHARED_HEALTH_LABEL,
+  HEALTH_SHORT_LABEL as SHARED_HEALTH_SHORT_LABEL,
+} from "@/lib/semantic-colors";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -67,15 +72,25 @@ interface ChartRow extends TrajectoryPoint {
 
 type Metric = "score" | "gate" | "tcv" | "playbook" | "meddpicc";
 
-// ---- Health label + the dot color used inside the chart/tooltip --------------
+// ---- Health wording + the dot color used inside the chart/tooltip ------------
+// All three are local aliases of the shared maps, narrowed to this file's own
+// nullable Health. Prose sentences take the long wording; the fixed-height KPI
+// cells and the one-line legend take the short form, which is the only one that
+// fits them.
 const HEALTH_LABEL: Record<NonNullable<Health>, string> = {
-  RED: "Red",
-  YELLOW: "Yellow",
-  GREEN: "Green",
+  RED: SHARED_HEALTH_LABEL.RED,
+  YELLOW: SHARED_HEALTH_LABEL.YELLOW,
+  GREEN: SHARED_HEALTH_LABEL.GREEN,
+};
+
+const HEALTH_LABEL_SHORT: Record<NonNullable<Health>, string> = {
+  RED: SHARED_HEALTH_SHORT_LABEL.RED,
+  YELLOW: SHARED_HEALTH_SHORT_LABEL.YELLOW,
+  GREEN: SHARED_HEALTH_SHORT_LABEL.GREEN,
 };
 
 // Inline colors (used for the recharts dot/label fill, where a Tailwind class
-// can't reach). These mirror HEALTH_CLASS's sky/amber/red — NOT --chart-2,
+// can't reach). These mirror HEALTH_CLASS's emerald/yellow/red — NOT --chart-2,
 // which is a plain categorical series token (see METRIC_COLOR.tcv below) and
 // must not double as a health colour.
 const HEALTH_HEX: Record<NonNullable<Health>, string> = {
@@ -346,7 +361,7 @@ function TrajectoryTooltip({ active, payload }: TooltipProps) {
                 style={{ backgroundColor: HEALTH_HEX[row.health] }}
               />
             )}
-            {row.health ? HEALTH_LABEL[row.health] : "—"}
+            {row.health ? HEALTH_LABEL_SHORT[row.health] : "—"}
           </span>
         </div>
         <TooltipRow label="Stage" value={row.stage ?? "—"} />
@@ -393,7 +408,7 @@ function HealthTrendChip({ summary }: { summary: Summary }) {
   if (summary.healthTrend === "flat" || !summary.health.first) {
     return (
       <span className="text-xs text-muted-foreground">
-        steady {HEALTH_LABEL[summary.health.last]}
+        steady {HEALTH_LABEL_SHORT[summary.health.last]}
       </span>
     );
   }
@@ -402,7 +417,7 @@ function HealthTrendChip({ summary }: { summary: Summary }) {
     <span
       className={`flex items-center gap-0.5 text-xs font-medium ${improved ? "text-emerald-500" : "text-red-500"}`}
     >
-      {improved ? "↑" : "↓"} from {HEALTH_LABEL[summary.health.first]}
+      {improved ? "↑" : "↓"} from {HEALTH_LABEL_SHORT[summary.health.first]}
     </span>
   );
 }
@@ -429,7 +444,7 @@ function KpiStrip({ summary }: { summary: Summary }) {
           {health.last ? (
             <span className={`flex items-center gap-1.5 text-base font-semibold ${HEALTH_TEXT[health.last as Shared_Health]}`}>
               <span className={`h-2.5 w-2.5 rounded-full ${HEALTH_DOT[health.last as Shared_Health]}`} />
-              {HEALTH_LABEL[health.last]}
+              {HEALTH_LABEL_SHORT[health.last]}
             </span>
           ) : (
             <span className="text-base font-semibold">—</span>
@@ -656,7 +671,7 @@ function StageRail({ segments }: { segments: StageSegment[] }) {
           {(["RED", "YELLOW", "GREEN"] as const).map((h) => (
             <span key={h} className="inline-flex items-center gap-1.5">
               <span className={`h-2 w-2 rounded-full ${HEALTH_DOT[h as Shared_Health]}`} />
-              {HEALTH_LABEL[h]}
+              {HEALTH_LABEL_SHORT[h]}
             </span>
           ))}
         </span>
@@ -777,7 +792,7 @@ function SparseBody({ point }: { point: TrajectoryPoint | undefined }) {
             {point?.health ? (
               <span className={`flex items-center gap-1.5 text-base font-semibold ${HEALTH_TEXT[point.health as Shared_Health]}`}>
                 <span className={`h-2.5 w-2.5 rounded-full ${HEALTH_DOT[point.health as Shared_Health]}`} />
-                {HEALTH_LABEL[point.health]}
+                {HEALTH_LABEL_SHORT[point.health]}
               </span>
             ) : (
               <span className="text-base font-semibold">—</span>

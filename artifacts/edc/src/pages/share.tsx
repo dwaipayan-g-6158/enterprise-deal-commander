@@ -3,7 +3,7 @@ import { useParams } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { AlertTriangle, ShieldAlert, Activity, CheckCircle } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { HEALTH_BADGE_CLASS, HEALTH_LABEL, RISK_LEVEL_CLASS, type Health } from "@/lib/semantic-colors";
+import { HEALTH_BADGE_CLASS, HEALTH_CLASS, HEALTH_LABEL, type Health } from "@/lib/semantic-colors";
 
 export default function Share() {
   const params = useParams();
@@ -79,9 +79,12 @@ export default function Share() {
                 ))}
               </div>
             ) : (
-              <div className={`p-4 rounded-md border flex items-center gap-3 ${RISK_LEVEL_CLASS.LOW.bg}`}>
-                <CheckCircle className={`w-5 h-5 ${RISK_LEVEL_CLASS.LOW.text}`} />
-                <span className={`text-sm font-medium ${RISK_LEVEL_CLASS.LOW.text}`}>No critical risk patterns detected.</span>
+              // An all-clear is a health statement, not a risk tier: it matches the
+              // briefing's own "No active risk patterns" line (screen and print),
+              // which has always used the health-GREEN colour.
+              <div className={`p-4 rounded-md border flex items-center gap-3 ${HEALTH_CLASS.GREEN.bg}`}>
+                <CheckCircle className={`w-5 h-5 ${HEALTH_CLASS.GREEN.text}`} />
+                <span className={`text-sm font-medium ${HEALTH_CLASS.GREEN.text}`}>No critical risk patterns detected.</span>
               </div>
             )}
           </div>

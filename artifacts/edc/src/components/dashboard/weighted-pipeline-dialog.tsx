@@ -18,6 +18,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Scale, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { compactCurrency, fullCurrency, HEALTH_DOT, rowMotion, type Health } from "./widgets/_shared";
+import { HEALTH_LABEL } from "@/lib/semantic-colors";
 import { terminalOutcome } from "@/components/roster/model/board";
 
 interface Enrichment {
@@ -32,8 +33,6 @@ interface WeightedPipelineDialogProps {
   totalTCV: number;
   reportingCurrency: string;
 }
-
-const HEALTH_LABEL: Record<Health, string> = { GREEN: "Green", YELLOW: "Yellow", RED: "Red" };
 
 export function WeightedPipelineDialog({
   open,

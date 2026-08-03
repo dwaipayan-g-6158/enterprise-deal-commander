@@ -6,6 +6,7 @@ import { ArrowRight } from "lucide-react";
 import { terminalOutcome } from "@/components/roster/model/board";
 import { formatDate } from "@/lib/format";
 import { compactCurrency, daysUntil, HEALTH_DOT, type Health } from "./_shared";
+import { HEALTH_LABEL } from "@/lib/semantic-colors";
 
 interface Enrichment {
   id: string;
@@ -111,7 +112,7 @@ export function DealRoster({ reportingCurrency }: { reportingCurrency: string })
                         <span
                           className={`mx-auto block h-2.5 w-2.5 rounded-full ${HEALTH_DOT[health] ?? "bg-muted"}`}
                           role="img"
-                          aria-label={health}
+                          aria-label={HEALTH_LABEL[health] ?? health}
                         />
                       </td>
                       <td className="py-2 px-2 text-right font-mono">{e?.score ?? "—"}</td>

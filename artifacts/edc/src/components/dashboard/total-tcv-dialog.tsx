@@ -14,13 +14,13 @@ import { TrendingUp, ChevronRight, ArrowRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { rowMotion } from "./widgets/_shared";
 import { terminalOutcome } from "@/components/roster/model/board";
-import { HEALTH_CLASS, type Health } from "@/lib/semantic-colors";
+import { HEALTH_CLASS, HEALTH_SHORT_LABEL, type Health } from "@/lib/semantic-colors";
 
 const HEALTH_META: Record<Health, { label: string; bar: string; dot: string }> =
   {
-    GREEN: { label: "Green", bar: HEALTH_CLASS.GREEN.fill, dot: HEALTH_CLASS.GREEN.dot },
-    YELLOW: { label: "Yellow", bar: HEALTH_CLASS.YELLOW.fill, dot: HEALTH_CLASS.YELLOW.dot },
-    RED: { label: "Red", bar: HEALTH_CLASS.RED.fill, dot: HEALTH_CLASS.RED.dot },
+    GREEN: { label: HEALTH_SHORT_LABEL.GREEN, bar: HEALTH_CLASS.GREEN.fill, dot: HEALTH_CLASS.GREEN.dot },
+    YELLOW: { label: HEALTH_SHORT_LABEL.YELLOW, bar: HEALTH_CLASS.YELLOW.fill, dot: HEALTH_CLASS.YELLOW.dot },
+    RED: { label: HEALTH_SHORT_LABEL.RED, bar: HEALTH_CLASS.RED.fill, dot: HEALTH_CLASS.RED.dot },
   };
 
 interface TotalTcvDialogProps {

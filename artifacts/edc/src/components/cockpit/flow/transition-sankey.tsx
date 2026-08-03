@@ -84,7 +84,7 @@ interface StageGlyph {
   rgb: string;
 }
 const PIPELINE_RGB = "95,141,247"; // matches --primary (hsl(222,90%,67%)) in index.css
-const WON_RGB = OUTCOME_RGB.won; // deep emerald — matches conversion-matrix "win" / breakdown "won"
+const WON_RGB = OUTCOME_RGB.won; // violet — matches conversion-matrix "win" / breakdown "won"
 const LOST_RGB = OUTCOME_RGB.lost; // slate — matches conversion-matrix "loss" / breakdown "lost"; NOT red, which is reserved for live HIGH risk
 const FALLBACK_GLYPH: StageGlyph = { Icon: Circle, rgb: "148,163,184" };
 

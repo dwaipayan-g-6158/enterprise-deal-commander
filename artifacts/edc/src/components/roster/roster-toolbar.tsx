@@ -14,6 +14,7 @@ import { MoreFiltersPanel } from "./more-filters-panel";
 import { ColumnCustomizer } from "./column-customizer";
 import { DensityToggle } from "./density-toggle";
 import { VELOCITY_FILTER_OPTIONS, VELOCITY_LABEL } from "./model/velocity";
+import { HEALTH_LABEL } from "@/lib/semantic-colors";
 import type { BandBy } from "./model/board";
 import type {
   ColumnLayout,
@@ -41,10 +42,13 @@ const BAND_OPTIONS: { value: BandBy; label: string }[] = [
   { value: "none", label: "Band: None" },
 ];
 
+// The long wording, not the short form: a filter list has room, and matching the
+// Health column's badge text exactly is what makes the filter obviously the same
+// axis as the column.
 const HEALTH_OPTIONS: FilterOption[] = [
-  { value: "RED", label: "Red" },
-  { value: "YELLOW", label: "Yellow" },
-  { value: "GREEN", label: "Green" },
+  { value: "RED", label: HEALTH_LABEL.RED },
+  { value: "YELLOW", label: HEALTH_LABEL.YELLOW },
+  { value: "GREEN", label: HEALTH_LABEL.GREEN },
 ];
 
 const VELOCITY_OPTIONS: FilterOption[] = VELOCITY_FILTER_OPTIONS.map((v) => ({ value: v, label: VELOCITY_LABEL[v] }));
