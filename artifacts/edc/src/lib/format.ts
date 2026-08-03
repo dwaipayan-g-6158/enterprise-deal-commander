@@ -211,19 +211,56 @@ export function relativeTime(iso: string | null | undefined): string {
 }
 
 /**
+ * Whole calendar days from the local day containing `now` to the local
+ * calendar day of `value` — negative in the past, 0 for "today". `now` is
+ * injected (defaulting to the real clock) so pure pipelines like the roster's
+ * derive-rows can pass a fixed clock and stay node-testable.
+ *
+ * Goes through dateParts(), so a date-only "YYYY-MM-DD" string (expectedCloseDate
+ * and friends) is read by string surgery and NEVER handed to `new Date(string)`
+ * — per this file's header rule, that parses as UTC midnight and is off by one
+ * in every non-UTC zone. This used to be reimplemented three times (here as
+ * dayLabel's inline math, in dashboard/widgets/_shared.tsx's daysUntil, and in
+ * the roster's derive-rows/timeline close-date logic) and only this copy got
+ * the UTC-midnight fix — the other two silently disagreed with it, including
+ * a case where a deal due TODAY read as overdue in the roster in IST past
+ * ~17:30. There is now exactly one copy of this formula.
+ */
+export function calendarDaysUntil(value: DateInput, now: number = Date.now()): number | null {
+  const p = dateParts(value);
+  if (!p) return null;
+  const target = new Date(p.y, p.mo - 1, p.d).getTime();
+  const n = new Date(now);
+  const today = new Date(n.getFullYear(), n.getMonth(), n.getDate()).getTime();
+  return Math.round((target - today) / 86_400_000);
+}
+
+/**
+ * Days remaining (inclusive of today) until the end of the LOCAL calendar
+ * quarter containing `now` — 0 on the quarter's last day. Deliberately LOCAL,
+ * the opposite convention from quarterStartISO/todayUTCISO below: those exist
+ * only for pipeline_targets.period_start, a bare date-only column with no
+ * local time attached at all, so UTC is the one frame every client can agree
+ * on. A roster close-date filter is answering "what can still land this
+ * quarter" for a person in their own timezone, so it must use the local
+ * calendar quarter instead.
+ */
+export function daysLeftInLocalQuarter(now: number = Date.now()): number {
+  const n = new Date(now);
+  const monthAfterQuarter = Math.floor(n.getMonth() / 3) * 3 + 3;
+  const lastDay = new Date(n.getFullYear(), monthAfterQuarter, 0); // day 0 = last day of prev month
+  return calendarDaysUntil(lastDay, now) ?? 0;
+}
+
+/**
  * Day-group heading for a timeline: "Today" / "Yesterday" / "15/07/2026".
  * Deliberately falls back to the house DD/MM/YYYY rather than inventing a
  * second date format (e.g. "Mon 15 Jul") — per this file's header rule, one
- * absolute format for the whole app. Compares local midnight to local
- * midnight, like daysUntil in dashboard/widgets/_shared.tsx.
+ * absolute format for the whole app.
  */
 export function dayLabel(value: DateInput): string {
-  const p = dateParts(value);
-  if (!p) return "Unknown date";
-  const target = new Date(p.y, p.mo - 1, p.d);
-  const now = new Date();
-  const todayMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const diffDays = Math.round((target.getTime() - todayMidnight.getTime()) / 86_400_000);
+  if (!dateParts(value)) return "Unknown date";
+  const diffDays = calendarDaysUntil(value);
   if (diffDays === 0) return "Today";
   if (diffDays === -1) return "Yesterday";
   return formatDate(value, "Unknown date");

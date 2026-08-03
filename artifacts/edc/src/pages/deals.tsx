@@ -6,7 +6,9 @@ import {
   useRestoreDeal,
   useListPipelineStages,
   useListTags,
+  useListEngineThresholds,
   getListDealsQueryKey,
+  getGetRosterEnrichmentQueryKey,
 } from "@workspace/api-client-react";
 import { PersonalityLine } from "@/components/personality-line";
 import { useQueryClient } from "@tanstack/react-query";
@@ -47,12 +49,14 @@ import { LossAutopsySheet } from "@/components/autopsy/loss-autopsy-sheet";
 import { ToastAction } from "@/components/ui/toast";
 import type { RowActions } from "@/components/roster/row-context-menu";
 import { terminalOutcome, type BoardStage } from "@/components/roster/model/board";
+import { pruneSelection } from "@/components/roster/model/selection";
 import { cn } from "@/lib/utils";
 import { useCanWrite } from "@/lib/auth/role-context";
 import { AdminOnly } from "@/components/auth/write-gate";
 import type { FilterOption } from "@/components/roster/multi-select-filter";
 import { COLUMNS } from "@/components/roster/model/roster-columns";
-import type { ColumnId, RosterRow } from "@/components/roster/model/roster-types";
+import { DEFAULT_FILTERS, DEFAULT_SORT, type ColumnId, type RosterRow } from "@/components/roster/model/roster-types";
+import { encodeRosterUrl } from "@/components/roster/model/roster-url";
 
 function useDebounced<T>(value: T, delay = 300): T {
   const [debounced, setDebounced] = useState(value);
@@ -79,6 +83,7 @@ export default function Deals() {
     setGroup,
     toggleSort,
     selectSavedView,
+    setView,
     density,
     setDensity,
     columnLayout,
@@ -92,7 +97,14 @@ export default function Deals() {
   } = useRosterState();
   const filters = view.filters;
 
-  const savedViews = useSavedViews({ view, viewId, customViews, setCustomViews, selectSavedView });
+  const savedViews = useSavedViews({
+    view,
+    viewId,
+    customViews,
+    setCustomViews,
+    selectSavedView,
+    clearViewId: () => setView(view, null),
+  });
   const [saveOpen, setSaveOpen] = useState(false);
   const [manageOpen, setManageOpen] = useState(false);
 
@@ -102,7 +114,16 @@ export default function Deals() {
   const [searchInput, setSearchInput] = useState(filters.search);
   const debouncedSearch = useDebounced(searchInput, 300);
   useEffect(() => {
-    if (debouncedSearch !== filters.search) setFilters({ search: debouncedSearch });
+    // Mirror the server's 2-character search minimum (routes/deals.ts's
+    // `searchTerm.length >= 2` gate) before it ever reaches `filters.search`.
+    // A single typed character used to activate the search filter chip and
+    // add a search param the server silently ignores below its own minimum
+    // — the chip claimed a filter was applied while the table quietly showed
+    // every row. The input box itself (searchInput) still shows exactly what
+    // was typed; only the committed filter value holds back at 1 character.
+    const trimmed = debouncedSearch.trim();
+    const effective = trimmed.length === 1 ? "" : debouncedSearch;
+    if (effective !== filters.search) setFilters({ search: effective });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [debouncedSearch]);
   useEffect(() => {
@@ -180,6 +201,16 @@ export default function Deals() {
     [tagsData],
   );
 
+  // Group subtotals sum normalizedTCV (the reporting-currency amount), so the
+  // label next to them must name that currency rather than hardcoding "USD" —
+  // wrong the moment thresholds.reporting_currency isn't USD. Defaults match
+  // the server's own default (see engine-recompute.ts's DEFAULT_THRESHOLDS).
+  const { data: thresholdsData } = useListEngineThresholds();
+  const reportingCurrency = useMemo(
+    () => thresholdsData?.data?.find((t) => t.parameterKey === "reporting_currency")?.parameterValue ?? "USD",
+    [thresholdsData],
+  );
+
   // Selection / group-collapse / preview live in component memory.
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
@@ -197,23 +228,57 @@ export default function Deals() {
     [derived.flat, previewDealId],
   );
 
-  // Clear selection whenever the result set's identity changes.
-  useEffect(() => {
-    setSelected(new Set());
-  }, [filters.state, filters.closure, filters.search, filters.health.join(","), filters.velocity.join(",")]);
+  const flatIds = useMemo(() => derived.flat.map((r) => r.id), [derived.flat]);
 
-  const flatIds = derived.flat.map((r) => r.id);
+  // Selection is kept as an invariant `selected ⊆ visible`, not cleared on an
+  // ad-hoc list of filter fields — any filter/search/sort change that shrinks
+  // `derived.flat` prunes the rows that fell off screen, so a bulk Archive/
+  // Delete can never be armed against a deal the user can no longer see (the
+  // bug this fixes: select 2 deals, narrow the Stage filter to exclude them,
+  // and the bulk bar still read "2 selected" with Delete enabled). Rows in a
+  // *collapsed* group stay selected — they're still in derived.flat, only
+  // hidden by the group toggle, which is a display concern, not a filter.
+  useEffect(() => {
+    setSelected((prev) => pruneSelection(prev, flatIds));
+  }, [flatIds]);
+  // A selection pruned to empty means the confirm dialog would be asking
+  // about zero deals; close it rather than let it linger.
+  useEffect(() => {
+    if (selected.size === 0) setConfirm(null);
+  }, [selected.size]);
+
   const allSelected = flatIds.length > 0 && flatIds.every((id) => selected.has(id));
+
+  // Shift-click extends the selection from the last plain-clicked row to the
+  // target row (inclusive), like a file manager or spreadsheet — the anchor
+  // is the row index of the last non-shift toggle, resolved against the
+  // current `derived.flat` order so grouping/sorting changes don't leave a
+  // stale anchor pointing at the wrong row.
+  const [anchorId, setAnchorId] = useState<string | null>(null);
 
   const toggleAll = () =>
     setSelected(allSelected ? new Set() : new Set(flatIds));
-  const toggleOne = (id: string) =>
+  const toggleOne = (id: string, shiftKey = false) => {
+    const idx = derived.flat.findIndex((r) => r.id === id);
+    const anchorIdx = anchorId != null ? derived.flat.findIndex((r) => r.id === anchorId) : -1;
+    if (shiftKey && idx !== -1 && anchorIdx !== -1) {
+      const [lo, hi] = anchorIdx < idx ? [anchorIdx, idx] : [idx, anchorIdx];
+      const rangeIds = derived.flat.slice(lo, hi + 1).map((r) => r.id);
+      setSelected((prev) => {
+        const next = new Set(prev);
+        rangeIds.forEach((rid) => next.add(rid));
+        return next;
+      });
+      return;
+    }
     setSelected((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
       else next.add(id);
       return next;
     });
+    setAnchorId(id);
+  };
 
   const toggleGroup = (key: string) =>
     setCollapsedGroups((prev) => {
@@ -227,11 +292,24 @@ export default function Deals() {
   const onColumnResize = (id: ColumnId, width: number) =>
     setColumnLayout({ ...columnLayout, width: { ...columnLayout.width, [id]: width } });
 
-  const invalidate = () => queryClient.invalidateQueries({ queryKey: getListDealsQueryKey() });
+  // Also busts the roster-enrichment sidecar (score/gates/risk/velocity), the
+  // same pair use-stage-move.ts invalidates on a stage change — without it,
+  // those columns kept showing stale values after a bulk archive/restore.
+  const invalidate = () =>
+    Promise.all([
+      queryClient.invalidateQueries({ queryKey: getListDealsQueryKey() }),
+      queryClient.invalidateQueries({ queryKey: getGetRosterEnrichmentQueryKey() }),
+    ]);
 
   const runBulk = async (action: "archive" | "delete" | "restore") => {
-    const ids = Array.from(selected);
-    if (ids.length === 0) return;
+    // Re-prune at the point of action, not just via the effect above — this
+    // is the actual safety guarantee for a destructive action, since it can't
+    // be defeated by a stale render or an effect that hasn't flushed yet.
+    const ids = Array.from(pruneSelection(selected, flatIds));
+    if (ids.length === 0) {
+      setConfirm(null);
+      return;
+    }
     const mut = action === "archive" ? archiveDeal : action === "delete" ? deleteDeal : restoreDeal;
     const results = await Promise.allSettled(ids.map((id) => mut.mutateAsync({ id })));
     const failed = results.filter((r) => r.status === "rejected").length;
@@ -284,8 +362,20 @@ export default function Deals() {
 
   const someSelected = selected.size > 0;
   const grouped = view.group !== "none";
-  const hasActiveFilters =
-    filters.search.trim() !== "" || filters.health.length > 0 || filters.velocity.length > 0;
+  // "Any filter is narrowing the set" — reuses the canonical view-serializer
+  // (the same technique use-saved-views.ts's sameView already uses) instead
+  // of a hand-maintained list of filter fields, which used to cover only
+  // search/health/velocity: a TCV range, a stage, an account manager, etc.
+  // could empty the table while this said "no active filters", so the empty
+  // state below claimed "Your active pipeline is empty" (with a Create-deal
+  // CTA) even though 13 deals existed and 0 matched the filters. `state` and
+  // `closure` are excluded deliberately — they select a tab (Active/Closed/
+  // Archived), not a narrowing filter, and have their own empty-state branch.
+  const hasActiveFilters = useMemo(() => {
+    const asFiltersOnlyView = (f: typeof filters) => encodeRosterUrl({ filters: f, sort: DEFAULT_SORT, group: "none" });
+    const baseline = { ...DEFAULT_FILTERS, state: filters.state, closure: filters.closure };
+    return asFiltersOnlyView(filters) !== asFiltersOnlyView(baseline);
+  }, [filters]);
 
   const emptyMessage = hasActiveFilters
     ? "Nothing matched those filters. Try adjusting them."
@@ -462,6 +552,7 @@ export default function Deals() {
                   onRowClick={(row) => setPreviewDealId(row.id)}
                   previewId={previewDealId}
                   rowActions={rowActions}
+                  reportingCurrency={reportingCurrency}
                 />
               </Card>
             )}

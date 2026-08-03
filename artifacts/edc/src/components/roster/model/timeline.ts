@@ -2,6 +2,7 @@
 // already-filtered/sorted rows by month of expectedCloseDate into a horizontal
 // rail: Overdue first, months ascending, "No close date" last. No React/JSX so
 // it stays node-testable (mirrors model/board.ts).
+import { calendarDaysUntil, dayKey } from "../../../lib/format";
 import type { RosterRow } from "./roster-types";
 
 export type TimelineKind = "overdue" | "month" | "none";
@@ -15,8 +16,6 @@ export interface TimelineColumn {
   /** Sum of normalizedTCV across the column (cross-currency comparable). */
   totalTCV: number;
 }
-
-const MS_PER_DAY = 86_400_000;
 
 interface Bucket {
   key: string;
@@ -37,25 +36,31 @@ export function buildTimeline(rows: RosterRow[], now: number): TimelineColumn[] 
   const overdue: Bucket = { key: "overdue", label: "Overdue", kind: "overdue", rows: [], totalTCV: 0 };
   const noDate: Bucket = { key: "none", label: "No close date", kind: "none", rows: [], totalTCV: 0 };
   const months = new Map<string, Bucket>();
-  const today = new Date(now);
-  const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
 
   for (const row of rows) {
     const tcv = row.normalizedTCV ?? 0;
     const iso = row.expectedCloseDate;
-    const dt = iso ? new Date(iso) : null;
-    if (!dt || Number.isNaN(dt.getTime())) {
+    // calendarDaysUntil reads a date-only "YYYY-MM-DD" string via string
+    // surgery, never `new Date(iso)` — that used to parse it as UTC midnight
+    // and compare against a local `todayStart`, misclassifying a deal due
+    // today as overdue (or not) depending on the viewer's timezone offset.
+    const days = calendarDaysUntil(iso, now);
+    if (days == null) {
       noDate.rows.push(row);
       noDate.totalTCV += tcv;
       continue;
     }
-    if (dt.getTime() < todayStart) {
+    if (days < 0) {
       overdue.rows.push(row);
       overdue.totalTCV += tcv;
       continue;
     }
-    const key = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}`;
-    const label = dt.toLocaleDateString("en-US", { month: "short", year: "numeric" });
+    // dayKey is the same TZ-safe date-only parse; slice to the month. The
+    // label is then built from local Date *parts* (never a re-parsed
+    // string), which is the safe direction per lib/format.ts's own rule.
+    const key = dayKey(iso).slice(0, 7);
+    const [y, mo] = key.split("-").map(Number);
+    const label = new Date(y, mo - 1, 1).toLocaleDateString("en-US", { month: "short", year: "numeric" });
     const b = months.get(key) ?? { key, label, kind: "month" as const, rows: [], totalTCV: 0 };
     b.rows.push(row);
     b.totalTCV += tcv;

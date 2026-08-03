@@ -52,6 +52,11 @@ function buildChips(
   f.tags.forEach((id) => chips.push({ key: `tag-${id}`, label: `Tag: ${tagLabel.get(id) ?? id}`, onRemove: removeFrom("tags", id) }));
   if (f.hasCompetitors != null)
     chips.push({ key: "cmp", label: f.hasCompetitors ? "Has competitor" : "No competitor", onRemove: () => setFilters({ hasCompetitors: null }) });
+  // Was missing entirely: filtering by Committed alone left zero chips, which
+  // (via the early return below) hid the whole chip row — including "Showing
+  // N of M" and Clear all — with no explanation for why rows disappeared.
+  if (f.committed != null)
+    chips.push({ key: "cmt", label: f.committed ? "Committed" : "Not committed", onRemove: () => setFilters({ committed: null }) });
   return chips;
 }
 
@@ -71,8 +76,11 @@ export function FilterChips({
   const chips = buildChips(filters, setFilters, tagOptions);
   if (chips.length === 0) return null;
 
-  // Clear everything except the active/archived/deleted state selector.
-  const clearAll = () => setFilters({ ...DEFAULT_FILTERS, state: filters.state });
+  // Clear everything except the active/archived/deleted state and the
+  // open/closed/all closure — those are the tab the user is on, not a
+  // narrowing filter. Dropping `closure` here used to silently flip a
+  // "Closed" tab view back to "open", making every visible row vanish.
+  const clearAll = () => setFilters({ ...DEFAULT_FILTERS, state: filters.state, closure: filters.closure });
 
   return (
     <div className="flex flex-wrap items-center gap-2" role="status" aria-live="polite">

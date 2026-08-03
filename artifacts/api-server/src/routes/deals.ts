@@ -45,6 +45,28 @@ import { emitDealEvent } from "../lib/events";
 // routes/index.ts for why a per-router copy is worse than none.
 const router: IRouter = Router();
 
+// Allowlist for GET /deals?sort=<key>. Previously any string was accepted and
+// used as a raw property lookup on the serialized deal — an unrecognized key
+// silently sorted nothing (every comparison undefined === undefined), and a
+// legitimate numeric key with any null value (e.g. winProbabilityPct) fell
+// through to `String(...)` comparison, which orders "10" before "9". Mirrors
+// the parameter_key allowlist rejection already used for engine thresholds
+// (routes/lookups.ts).
+const SORTABLE_DEAL_KEYS = new Set([
+  "dealName",
+  "accountName",
+  "salesStage",
+  "accountManager",
+  "technicalLead",
+  "calculatedTCV",
+  "normalizedTCV",
+  "healthStatus",
+  "expectedCloseDate",
+  "winProbabilityPct",
+  "createdAt",
+  "updatedAt",
+]);
+
 router.get("/deals", async (req: Request, res: Response) => {
   const q = ListDealsQueryParams.parse(req.query);
   const state = q.state ?? "active";
@@ -165,11 +187,26 @@ router.get("/deals", async (req: Request, res: Response) => {
   if (q.sort) {
     const desc_ = q.sort.startsWith("-");
     const key = desc_ ? q.sort.slice(1) : q.sort;
+    if (!SORTABLE_DEAL_KEYS.has(key)) {
+      throw badRequest(`Unrecognized sort key: ${key}`);
+    }
     items.sort((a, b) => {
       const av = (a as Record<string, unknown>)[key];
       const bv = (b as Record<string, unknown>)[key];
-      if (typeof av === "number" && typeof bv === "number") {
-        return desc_ ? bv - av : av - bv;
+      // Numeric fields (calculatedTCV, winProbabilityPct, ...) can be null —
+      // that used to fall through to `String(av).localeCompare(String(bv))`,
+      // which for a null vs. a real number compares the literal strings
+      // "null"/"undefined" against a numeral lexicographically (so, e.g., a
+      // real value of 9 could sort after 10). Null now sorts last in both
+      // directions, matching the roster's own client-side comparator
+      // convention (roster-columns.ts's numCompare).
+      if (typeof av === "number" || typeof bv === "number" || av == null || bv == null) {
+        if (av == null && bv == null) return 0;
+        if (av == null) return 1;
+        if (bv == null) return -1;
+        const an = Number(av);
+        const bn = Number(bv);
+        return desc_ ? bn - an : an - bn;
       }
       return desc_
         ? String(bv).localeCompare(String(av))

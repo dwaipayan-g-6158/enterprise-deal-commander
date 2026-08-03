@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { DEFAULT_FILTERS, DEFAULT_SORT, type RosterView } from "./roster-types";
 import { decodeRosterUrl, encodeRosterUrl, encodeSort, decodeSort, isDefaultView } from "./roster-url";
+import { COLUMNS } from "./roster-columns";
 
 const defaultView: RosterView = { filters: DEFAULT_FILTERS, sort: DEFAULT_SORT, group: "none" };
 
@@ -59,6 +60,12 @@ describe("encode/decode round-trip", () => {
   it("tolerates a leading ?", () => {
     expect(decodeRosterUrl("?q=hi").view.filters.search).toBe("hi");
   });
+
+  it("ignores the removed `blk` (hasBlockers) param — dead filter surface, no UI, never applied", () => {
+    const decoded = decodeRosterUrl("blk=1");
+    expect(decoded.view.filters).not.toHaveProperty("hasBlockers");
+    expect(decoded.view).toEqual(defaultView);
+  });
 });
 
 describe("closure codec", () => {
@@ -98,5 +105,24 @@ describe("sort codec", () => {
   it("round-trips the riskLevel sort key", () => {
     expect(encodeSort([{ key: "riskLevel", dir: "desc" }])).toBe("-riskLevel");
     expect(decodeSort("-riskLevel")).toEqual([{ key: "riskLevel", dir: "desc" }]);
+  });
+
+  it("covers every sortable column in COLUMNS (regression: lastActivity was missing)", () => {
+    // The bug this guards against: COLUMNS.lastActivity was `sortable: true`
+    // and offered by the column customizer, but the internal SORT_KEYS
+    // allowlist omitted it. Since the URL is the source of truth, sorting by
+    // Last Activity wrote `so=lastActivity`, decodeSort silently dropped the
+    // unrecognized key, and the roster fell back to the default TCV sort
+    // while the URL still claimed Last Activity was the active sort. Round-
+    // tripping every sortable id here means a future sortable column can't
+    // omit itself from the allowlist without this test failing.
+    const sortableIds = Object.values(COLUMNS)
+      .filter((c) => c.sortable)
+      .map((c) => c.id);
+    expect(sortableIds.length).toBeGreaterThan(0);
+    for (const id of sortableIds) {
+      const spec = { key: id, dir: "asc" as const };
+      expect(decodeSort(encodeSort([spec]))).toEqual([spec]);
+    }
   });
 });

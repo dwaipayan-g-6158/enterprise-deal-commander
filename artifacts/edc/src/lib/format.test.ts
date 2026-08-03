@@ -10,6 +10,8 @@ import {
   compactUSD,
   quarterStartISO,
   todayUTCISO,
+  calendarDaysUntil,
+  daysLeftInLocalQuarter,
 } from "./format";
 
 describe("formatDate — date-only strings (never constructs a Date)", () => {
@@ -119,6 +121,82 @@ describe("todayISO", () => {
 
   it("is a YYYY-MM-DD string", () => {
     expect(todayISO()).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+  });
+});
+
+describe("calendarDaysUntil — local calendar-day diff, the roster's overdue/quarter canary", () => {
+  // 27 Jun 2026, LOCAL parts — not `new Date("2026-06-27T...Z")`, whose local
+  // calendar day varies by machine timezone and would make these tests flaky.
+  const localDay = (hour = 12) => new Date(2026, 5, 27, hour).getTime();
+
+  it("is 0 for today regardless of the hour — the canary for the UTC-midnight bug", () => {
+    // The bug this fixes: a date-only string handed to `new Date(iso)` parses
+    // as UTC midnight, so comparing it against `now` (a real instant) used to
+    // go negative once local time passed the UTC offset boundary — a deal due
+    // TODAY read as overdue in IST past ~17:30. calendarDaysUntil must read 0
+    // at every hour of today, not just the morning.
+    for (const hour of [0, 9, 17, 18, 23]) {
+      expect(calendarDaysUntil("2026-06-27", localDay(hour))).toBe(0);
+    }
+  });
+
+  it("is negative for a past date, positive for a future one", () => {
+    expect(calendarDaysUntil("2026-06-22", localDay())).toBe(-5);
+    expect(calendarDaysUntil("2026-07-27", localDay())).toBe(30);
+  });
+
+  it("agrees whether given a date-only string or an equivalent local-midnight instant", () => {
+    const asString = calendarDaysUntil("2026-07-10", localDay());
+    const asInstant = calendarDaysUntil(new Date(2026, 6, 10), localDay());
+    expect(asInstant).toBe(asString);
+  });
+
+  it("returns null for missing/unparseable input", () => {
+    expect(calendarDaysUntil(null, localDay())).toBeNull();
+    expect(calendarDaysUntil(undefined, localDay())).toBeNull();
+    expect(calendarDaysUntil("", localDay())).toBeNull();
+    expect(calendarDaysUntil("not-a-date", localDay())).toBeNull();
+  });
+
+  it("rounds a DST-shortened/lengthened day to a whole day", () => {
+    // A 23h or 25h local day (DST transition) must still count as exactly one
+    // calendar day, not 0.958 or 1.042 rounding down/up unpredictably.
+    expect(calendarDaysUntil("2026-06-28", localDay(23))).toBe(1);
+  });
+
+  it("defaults `now` to the real clock when omitted", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 5, 27, 12));
+    try {
+      expect(calendarDaysUntil("2026-06-27")).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
+describe("daysLeftInLocalQuarter — a real calendar quarter, not a flat day count", () => {
+  const at = (y: number, mo: number, d: number, h = 12) => new Date(y, mo - 1, d, h).getTime();
+
+  it("computes days remaining in Q3 from an early-quarter date", () => {
+    // 2026-08-03 -> Q3 ends 2026-09-30 -> 58 days left. This is the case that
+    // exposed the bug: the old flat `<= 92` bound admitted deals through
+    // ~2026-11-03, a month into Q4, under a label that says "This quarter".
+    expect(daysLeftInLocalQuarter(at(2026, 8, 3))).toBe(58);
+  });
+
+  it("is 0 on the last day of the quarter", () => {
+    expect(daysLeftInLocalQuarter(at(2026, 9, 30))).toBe(0);
+  });
+
+  it("handles the year-end quarter rollover", () => {
+    expect(daysLeftInLocalQuarter(at(2026, 12, 15))).toBe(16); // through 2026-12-31
+  });
+
+  it("handles Q1/Q2/Q4 boundaries, not just Q3", () => {
+    expect(daysLeftInLocalQuarter(at(2026, 1, 1))).toBe(89); // Q1 ends 2026-03-31
+    expect(daysLeftInLocalQuarter(at(2026, 4, 1))).toBe(90); // Q2 ends 2026-06-30
+    expect(daysLeftInLocalQuarter(at(2026, 10, 1))).toBe(91); // Q4 ends 2026-12-31
   });
 });
 

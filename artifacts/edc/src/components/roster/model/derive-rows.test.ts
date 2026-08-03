@@ -1,10 +1,25 @@
 import { describe, it, expect } from "vitest";
+import { calendarDaysUntil } from "../../../lib/format";
 import { computeDerivedRows } from "./derive-rows";
 import { DEFAULT_FILTERS, DEFAULT_SORT, type RosterRow, type RosterView } from "./roster-types";
 
-// Fixed clock so close-date presets are deterministic.
-const NOW = new Date("2026-06-27T00:00:00Z").getTime();
+// Fixed clock so close-date presets are deterministic. Built from LOCAL parts
+// (not `new Date("2026-06-27T00:00:00Z")`) — a UTC-instant fixture's local
+// calendar day varies by machine timezone (27 Jun in IST, 26 Jun in UTC-5),
+// which would make date-only assertions flaky/machine-dependent. Noon avoids
+// accidentally landing on the boundary itself.
+const NOW = new Date(2026, 5, 27, 12, 0, 0).getTime();
 const inDays = (n: number) => new Date(NOW + n * 86_400_000).toISOString();
+// A date-only "YYYY-MM-DD" string `n` calendar days from NOW's local day —
+// this is the shape expectedCloseDate actually serializes as in production,
+// unlike `inDays`'s full timestamp.
+function onDay(n: number): string {
+  const d = new Date(2026, 5, 27 + n);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+// NOW at a given local hour of the same day — for the "due today, at every
+// hour" regression that the old UTC-midnight-parse bug failed past ~18:00 IST.
+const atHour = (h: number) => new Date(2026, 5, 27, h).getTime();
 
 let seq = 0;
 function row(p: Partial<RosterRow> = {}): RosterRow {
@@ -89,6 +104,129 @@ describe("computeDerivedRows — filtering", () => {
     const rows = [row({ competitorId: 3 }), row({ competitorId: null })];
     expect(computeDerivedRows(rows, viewWith({ hasCompetitors: true }), NOW).matchedCount).toBe(1);
     expect(computeDerivedRows(rows, viewWith({ hasCompetitors: false }), NOW).matchedCount).toBe(1);
+  });
+});
+
+describe("closeWithin — calendar-day semantics (regression: TZ rounding)", () => {
+  const matches = (iso: string, preset: RosterView["filters"]["closePreset"], now = NOW) =>
+    computeDerivedRows([row({ expectedCloseDate: iso })], viewWith({ closePreset: preset }), now).matchedCount === 1;
+
+  it("a deal due TODAY is never overdue, at any hour of today", () => {
+    // The bug: `new Date(iso).getTime() - now` read a date-only string as UTC
+    // midnight, so once local time passed the UTC offset boundary (~18:00 in
+    // IST) a deal due today rounded to -1 day and was misclassified overdue.
+    for (const h of [0, 9, 17, 18, 23]) {
+      expect(matches(onDay(0), "overdue", atHour(h))).toBe(false);
+    }
+  });
+
+  it("a deal due TODAY is inside every forward window, at any hour of today", () => {
+    for (const h of [0, 9, 17, 18, 23]) {
+      expect(matches(onDay(0), "30d", atHour(h))).toBe(true);
+    }
+  });
+
+  it("yesterday is overdue, tomorrow is not", () => {
+    expect(matches(onDay(-1), "overdue")).toBe(true);
+    expect(matches(onDay(1), "overdue")).toBe(false);
+  });
+
+  it("30d/60d/90d are inclusive at the boundary day, exclusive one day past it", () => {
+    expect(matches(onDay(30), "30d")).toBe(true);
+    expect(matches(onDay(31), "30d")).toBe(false);
+    expect(matches(onDay(60), "60d")).toBe(true);
+    expect(matches(onDay(61), "60d")).toBe(false);
+    expect(matches(onDay(90), "90d")).toBe(true);
+    expect(matches(onDay(91), "90d")).toBe(false);
+  });
+
+  it("a date-only string and the equivalent same-local-day timestamp classify identically", () => {
+    expect(matches(onDay(10), "30d")).toBe(matches(inDays(10), "30d"));
+  });
+
+  it("an unparseable close date is excluded from every real preset, included only by 'any'", () => {
+    for (const preset of ["overdue", "30d", "60d", "90d", "quarter"] as const) {
+      expect(matches("not-a-date", preset)).toBe(false);
+    }
+    expect(matches("not-a-date", "any")).toBe(true);
+  });
+
+  it("a null close date is excluded from every real preset (pre-existing behavior, locked)", () => {
+    const rows = [row({ expectedCloseDate: null })];
+    for (const preset of ["overdue", "30d", "60d", "90d", "quarter"] as const) {
+      expect(computeDerivedRows(rows, viewWith({ closePreset: preset }), NOW).matchedCount).toBe(0);
+    }
+    expect(computeDerivedRows(rows, viewWith({ closePreset: "any" }), NOW).matchedCount).toBe(1);
+  });
+});
+
+describe("closeWithin — 'This quarter' is a real calendar quarter, not a flat day count", () => {
+  const matchesOn = (offsetFromToday: number, now: number) =>
+    computeDerivedRows(
+      [row({ expectedCloseDate: onDayFrom(now, offsetFromToday) })],
+      viewWith({ closePreset: "quarter" }),
+      now,
+    ).matchedCount === 1;
+
+  function onDayFrom(now: number, n: number): string {
+    const base = new Date(now);
+    const d = new Date(base.getFullYear(), base.getMonth(), base.getDate() + n);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  }
+
+  it("from 2026-08-03 (Q3), admits through 2026-09-30 and excludes 2026-10-01", () => {
+    const now = new Date(2026, 7, 3, 12).getTime();
+    expect(matchesOn(58, now)).toBe(true); // 2026-09-30
+    expect(matchesOn(59, now)).toBe(false); // 2026-10-01
+  });
+
+  it("this is the case a flat '<= 92 days' bound got wrong — the mislabel this fixes", () => {
+    // Under the old flat 92-day window, day 70 (well into Q4) still matched
+    // "This quarter" — a real calendar quarter must exclude it, even though
+    // the same deal legitimately belongs in the "next 90 days" preset.
+    const now = new Date(2026, 7, 3, 12).getTime();
+    expect(matchesOn(70, now)).toBe(false); // "quarter": excluded, it's in Q4
+    const withinNinety = computeDerivedRows(
+      [row({ expectedCloseDate: onDayFrom(now, 70) })],
+      viewWith({ closePreset: "90d" }),
+      now,
+    ).matchedCount;
+    expect(withinNinety).toBe(1); // "90d": still correctly included
+  });
+
+  it("on the last day of the quarter, admits only today", () => {
+    const now = new Date(2026, 8, 30, 12).getTime(); // 2026-09-30
+    expect(matchesOn(0, now)).toBe(true);
+    expect(matchesOn(1, now)).toBe(false); // 2026-10-01
+  });
+
+  it("rolls over the year boundary (Q4 -> Q1)", () => {
+    const now = new Date(2026, 11, 15, 12).getTime(); // 2026-12-15
+    expect(matchesOn(16, now)).toBe(true); // 2026-12-31
+    expect(matchesOn(17, now)).toBe(false); // 2027-01-01
+  });
+
+  it("an overdue deal is never 'closing this quarter'", () => {
+    const now = new Date(2026, 7, 3, 12).getTime();
+    expect(matchesOn(-1, now)).toBe(false);
+  });
+});
+
+describe("closeWithin agrees with calendarDaysUntil (cross-implementation guard)", () => {
+  it("the Overdue filter's verdict matches calendarDaysUntil's sign, at every offset", () => {
+    // This is the guard against the historical bug class: the roster's Overdue
+    // filter and CloseDateCell's red-date styling used two different date-math
+    // implementations and could disagree on the same row. Both now delegate to
+    // calendarDaysUntil, so this must hold by construction.
+    for (const offset of [-2, -1, 0, 1, 30]) {
+      const iso = onDay(offset);
+      const filterSaysOverdue = computeDerivedRows(
+        [row({ expectedCloseDate: iso })],
+        viewWith({ closePreset: "overdue" }),
+        NOW,
+      ).matchedCount === 1;
+      expect(filterSaysOverdue).toBe((calendarDaysUntil(iso, NOW) ?? 0) < 0);
+    }
   });
 });
 

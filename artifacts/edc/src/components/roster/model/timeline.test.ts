@@ -2,8 +2,11 @@ import { describe, it, expect } from "vitest";
 import { buildTimeline } from "./timeline";
 import type { RosterRow } from "./roster-types";
 
-const NOW = new Date("2026-06-27T12:00:00Z").getTime();
+// Local parts, not a UTC-instant string — see derive-rows.test.ts's NOW for
+// why a UTC fixture's local calendar day is machine-dependent.
+const NOW = new Date(2026, 5, 27, 12, 0, 0).getTime();
 const onDay = (iso: string) => iso;
+const atHour = (h: number) => new Date(2026, 5, 27, h).getTime();
 
 let seq = 0;
 function row(p: Partial<RosterRow> = {}): RosterRow {
@@ -68,5 +71,25 @@ describe("buildTimeline", () => {
     ];
     const [july] = buildTimeline(rows, NOW);
     expect(july.rows.map((r) => r.id)).toEqual(["a", "b"]); // input order, not date order
+  });
+
+  it("a deal due TODAY never lands in Overdue, at any hour of today (regression: TZ rounding)", () => {
+    // The bug: `new Date(iso)` read a date-only string as UTC midnight and
+    // was compared against a local `todayStart`, so a deal due today could
+    // land in Overdue (or escape it) depending on the viewer's timezone
+    // offset and the hour of day — the same class of bug already fixed in
+    // derive-rows.ts's closeWithin and CloseDateCell's overdue styling.
+    for (const h of [0, 9, 17, 18, 23]) {
+      const cols = buildTimeline([row({ expectedCloseDate: "2026-06-27" })], atHour(h));
+      expect(cols.some((c) => c.kind === "overdue")).toBe(false);
+      expect(cols.find((c) => c.kind === "month")?.rows).toHaveLength(1);
+    }
+  });
+
+  it("yesterday is overdue, at any hour of today", () => {
+    for (const h of [0, 9, 17, 18, 23]) {
+      const cols = buildTimeline([row({ expectedCloseDate: "2026-06-26" })], atHour(h));
+      expect(cols[0].kind).toBe("overdue");
+    }
   });
 });

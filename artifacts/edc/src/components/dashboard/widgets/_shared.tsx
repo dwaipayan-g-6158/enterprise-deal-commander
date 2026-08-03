@@ -9,7 +9,7 @@
 // close-timeline-model.ts.
 import { ArrowDown, ArrowUp } from "lucide-react";
 import type { Target, Transition } from "framer-motion";
-import { humanizeCode, relativeTime } from "../../../lib/format";
+import { calendarDaysUntil, humanizeCode, relativeTime } from "../../../lib/format";
 import { HEALTH_CLASS, type Health } from "../../../lib/semantic-colors";
 
 export type { Health };
@@ -55,26 +55,15 @@ export function fullCurrency(n: number, currency = "USD"): string {
 }
 
 /**
- * Calendar days from local today to `iso` (negative if in the past). Compares
- * local midnight to local midnight — NOT `d.getTime() - Date.now()`, which
- * for a date-only "YYYY-MM-DD" string (expectedCloseDate etc.) reads it as
- * UTC midnight and is off by one day in every negative-offset zone. That
- * mismatch used to be invisible because the *displayed* date had the same
- * bug; now that display is TZ-correct (see lib/format.ts), this must be too,
- * or the "3d overdue" colour and the shown date would visibly disagree at
- * the day boundary.
+ * Calendar days from local today to `iso` (negative if in the past). One-line
+ * alias of lib/format.ts's calendarDaysUntil — kept here under its original
+ * name so this module's existing importers (cells.tsx, dashboard/widgets/
+ * deal-roster.tsx, cockpit/risk/managed-risks.tsx) don't need touching. See
+ * calendarDaysUntil's own comment for why this must never read a date-only
+ * "YYYY-MM-DD" string through `new Date(iso)` directly.
  */
 export function daysUntil(iso: string | null | undefined): number | null {
-  if (!iso) return null;
-  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso.trim());
-  const target = m
-    ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])) // local midnight
-    : new Date(iso);
-  if (Number.isNaN(target.getTime())) return null;
-  const targetMidnight = new Date(target.getFullYear(), target.getMonth(), target.getDate());
-  const todayMidnight = new Date();
-  todayMidnight.setHours(0, 0, 0, 0);
-  return Math.round((targetMidnight.getTime() - todayMidnight.getTime()) / 86_400_000);
+  return calendarDaysUntil(iso);
 }
 
 /**

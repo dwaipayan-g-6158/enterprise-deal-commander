@@ -98,7 +98,6 @@ export interface RosterFilters {
   accountManager: string[];
   technicalLead: string[];
   tags: string[];
-  hasBlockers: boolean | null;
   hasCompetitors: boolean | null;
   committed: boolean | null;
 }
@@ -141,7 +140,6 @@ export const DEFAULT_FILTERS: RosterFilters = {
   accountManager: [],
   technicalLead: [],
   tags: [],
-  hasBlockers: null,
   hasCompetitors: null,
   committed: null,
 };

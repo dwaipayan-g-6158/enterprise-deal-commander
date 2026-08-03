@@ -36,6 +36,9 @@ interface RosterTableProps {
   onRowClick: (row: RosterRow) => void;
   previewId: string | null;
   rowActions: RowActions;
+  /** Group subtotals sum normalizedTCV (reporting-currency amounts), so the
+   *  label must name that currency rather than assume USD. */
+  reportingCurrency: string;
 }
 
 const MIN_COL_WIDTH = 60;
@@ -64,12 +67,27 @@ export function RosterTable(props: RosterTableProps) {
     onRowClick,
     previewId,
     rowActions,
+    reportingCurrency,
   } = props;
 
   const pad = DENSITY_PAD[density];
   const text = DENSITY_TEXT[density];
   const sortByKey = new Map(sort.map((s) => [s.key, s]));
   const colCount = visibleColumns.length + 1; // selection
+
+  const someSelected = derived.flat.some((r) => selection.has(r.id));
+
+  // Row checkboxes need the held modifier key to support shift-click range
+  // selection, but Radix's onCheckedChange callback doesn't carry the native
+  // event. Capturing it on pointerdown/keydown (which fire before the click
+  // that triggers onCheckedChange) avoids the alternative of wiring a
+  // *second* handler (onClick) alongside onCheckedChange — that used to fire
+  // both on every shift-click, toggling the row twice and net-cancelling, so
+  // shift-click silently did nothing.
+  const shiftHeldRef = useRef(false);
+  const captureShiftKey = (e: { shiftKey: boolean }) => {
+    shiftHeldRef.current = e.shiftKey;
+  };
 
   // Column resize: track drag start in a ref, surface a live width for feedback,
   // persist once on mouse-up (handled by the parent).
@@ -123,7 +141,7 @@ export function RosterTable(props: RosterTableProps) {
         <TableRow>
           <TableHead className="w-[40px]">
             <Checkbox
-              checked={allSelected}
+              checked={allSelected ? true : someSelected ? "indeterminate" : false}
               onCheckedChange={onToggleAll}
               aria-label="Select all"
               disabled={derived.flat.length === 0}
@@ -184,6 +202,7 @@ export function RosterTable(props: RosterTableProps) {
                 colCount={colCount}
                 collapsed={collapsedGroups.has(group.key)}
                 onToggle={() => onToggleGroup(group.key)}
+                reportingCurrency={reportingCurrency}
               />
             )}
             {!(grouped && collapsedGroups.has(group.key)) &&
@@ -203,10 +222,9 @@ export function RosterTable(props: RosterTableProps) {
                       <TableCell className={pad} onClick={(e) => e.stopPropagation()}>
                         <Checkbox
                           checked={selection.has(row.id)}
-                          onCheckedChange={() => onToggleRow(row.id, false)}
-                          onClick={(e) => {
-                            if ((e as unknown as MouseEvent).shiftKey) onToggleRow(row.id, true);
-                          }}
+                          onCheckedChange={() => onToggleRow(row.id, shiftHeldRef.current)}
+                          onPointerDown={captureShiftKey}
+                          onKeyDown={captureShiftKey}
                           aria-label={`Select ${row.dealName}`}
                         />
                       </TableCell>
@@ -237,11 +255,13 @@ function GroupHeaderRow({
   colCount,
   collapsed,
   onToggle,
+  reportingCurrency,
 }: {
   group: RosterGroup;
   colCount: number;
   collapsed: boolean;
   onToggle: () => void;
+  reportingCurrency: string;
 }) {
   return (
     <TableRow className="bg-muted/40 hover:bg-muted/50">
@@ -255,7 +275,10 @@ function GroupHeaderRow({
           {collapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
           {group.label}
           <span className="text-xs text-muted-foreground font-normal">
-            {group.rows.length} · {formatCurrency(group.totalTCV, "USD")}
+            {/* totalTCV sums normalizedTCV, so it must be labeled with the
+                real reporting currency, not a hardcoded "USD" — that used to
+                mislabel every subtotal the moment reporting_currency wasn't USD. */}
+            {group.rows.length} · {formatCurrency(group.totalTCV, reportingCurrency)}
             {group.redCount > 0 && <span className="ml-1 text-red-500">· {group.redCount} RED</span>}
           </span>
         </button>

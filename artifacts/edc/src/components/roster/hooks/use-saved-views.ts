@@ -20,8 +20,10 @@ export function useSavedViews(args: {
   customViews: SavedView[];
   setCustomViews: (next: SavedView[] | ((prev: SavedView[]) => SavedView[])) => void;
   selectSavedView: (sv: SavedView) => void;
+  /** Clears the `?view=` URL pointer without touching the current filters/sort/group. */
+  clearViewId: () => void;
 }) {
-  const { view, viewId, customViews, setCustomViews, selectSavedView } = args;
+  const { view, viewId, customViews, setCustomViews, selectSavedView, clearViewId } = args;
 
   const allViews = useMemo(() => [...BUILTIN_VIEWS, ...customViews], [customViews]);
   const activeView = useMemo(() => allViews.find((v) => v.id === viewId) ?? null, [allViews, viewId]);
@@ -49,6 +51,10 @@ export function useSavedViews(args: {
 
   const deleteView = (id: string) => {
     setCustomViews((prev) => prev.filter((v) => v.id !== id));
+    // Deleting the view the URL currently points at used to leave `?view=<id>`
+    // dangling — a shared/bookmarked link that resolves to nothing, since
+    // decodeRosterUrl just reports the pointer without validating it exists.
+    if (id === viewId) clearViewId();
   };
 
   return { allViews, customViews, activeView, dirty, canSaveToActive, createView, saveToView, renameView, deleteView };

@@ -12,7 +12,13 @@ export const VELOCITY_LABEL: Record<VelocityBucket, string> = {
 
 /**
  * Severity ranking for sorting. Higher = worse. STALLED is the most urgent;
- * NO_DATE has no signal so it sorts to the bottom.
+ * NO_DATE has no signal so it ranks lowest — same convention as every other
+ * null-valued numeric column in this table (roster-columns.ts's numCompare
+ * falls back no-signal rows to `-Infinity`): it sorts first in ascending
+ * order and last in descending, exactly like a null Score or null Risk.
+ * (This comment previously said NO_DATE "sorts to the bottom" unconditionally,
+ * which isn't true of either direction on its own — direction is a user
+ * toggle, so "the bottom" always means "whichever end low ranks land on".)
  */
 export const VELOCITY_RANK: Record<VelocityBucket, number> = {
   STALLED: 4,

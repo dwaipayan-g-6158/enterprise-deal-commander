@@ -23,6 +23,12 @@ const HEALTHS: Health[] = ["GREEN", "YELLOW", "RED"];
 const VELOCITIES: VelocityBucket[] = ["FAST", "NORMAL", "SLOW", "STALLED", "NO_DATE"];
 const GROUPS: GroupBy[] = ["none", "salesStage", "healthStatus", "accountManager"];
 const CLOSE_PRESETS: CloseDatePreset[] = ["any", "overdue", "30d", "60d", "90d", "quarter"];
+// Was missing "lastActivity" (12 of 13 sortable ColumnIds were listed) — since
+// the URL is the source of truth, sorting by Last Activity wrote `so=lastActivity`
+// to the URL, decodeSort silently dropped the unrecognized key, and the empty
+// result fell back to DEFAULT_SORT (TCV desc) with no indication anything had
+// gone wrong. See roster-url.test.ts's SORT_KEYS-completeness guard, which
+// exists so a future sortable column can't omit itself from here again.
 const SORT_KEYS: ColumnId[] = [
   "dealName",
   "accountName",
@@ -33,6 +39,7 @@ const SORT_KEYS: ColumnId[] = [
   "score",
   "gatesPct",
   "velocity",
+  "lastActivity",
   "accountManager",
   "technicalLead",
   "expectedCloseDate",
@@ -93,7 +100,6 @@ export function encodeRosterUrl(view: RosterView, viewId?: string | null): strin
   if (f.accountManager.length) p.set("am", csv(f.accountManager));
   if (f.technicalLead.length) p.set("tl", csv(f.technicalLead));
   if (f.tags.length) p.set("tags", csv(f.tags));
-  if (f.hasBlockers != null) p.set("blk", f.hasBlockers ? "1" : "0");
   if (f.hasCompetitors != null) p.set("cmp", f.hasCompetitors ? "1" : "0");
   if (f.committed != null) p.set("cmt", f.committed ? "1" : "0");
 
@@ -130,7 +136,6 @@ export function decodeRosterUrl(search: string): { view: RosterView; viewId: str
     accountManager: splitCsv(p.get("am")),
     technicalLead: splitCsv(p.get("tl")),
     tags: splitCsv(p.get("tags")),
-    hasBlockers: parseBool(p.get("blk")),
     hasCompetitors: parseBool(p.get("cmp")),
     committed: parseBool(p.get("cmt")),
   };
