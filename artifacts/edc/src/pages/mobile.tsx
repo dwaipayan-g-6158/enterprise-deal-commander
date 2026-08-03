@@ -2,7 +2,7 @@ import { useListDeals } from "@workspace/api-client-react";
 import { useLocation } from "wouter";
 import { Badge } from "@/components/ui/badge";
 import { formatCurrency } from "@/components/cockpit/use-invalidate";
-import { HEALTH_BADGE_CLASS } from "@/lib/semantic-colors";
+import { HEALTH_BADGE_CLASS, HEALTH_LABEL, type Health } from "@/lib/semantic-colors";
 
 const healthColor: Record<string, string> = {
   RED: "bg-destructive text-white",
@@ -38,7 +38,9 @@ export default function MobileHome() {
         >
           <div className="flex items-center justify-between">
             <span className="font-semibold">{d.accountName}</span>
-            <Badge className={healthColor[d.healthStatus] ?? ""}>{d.healthStatus}</Badge>
+            <Badge className={healthColor[d.healthStatus] ?? ""}>
+              {HEALTH_LABEL[d.healthStatus as Health] ?? d.healthStatus}
+            </Badge>
           </div>
           <p className="text-sm text-muted-foreground">{d.dealName}</p>
           <p className="text-2xl font-bold font-mono mt-1">

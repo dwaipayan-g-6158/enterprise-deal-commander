@@ -5,6 +5,7 @@ import {
   RISK_LEVEL_CLASS,
   RISK_LEVEL_SHORT_LABEL,
   HEALTH_CLASS,
+  HEALTH_LABEL,
   OUTCOME_CLASS,
   RISK_LEVEL_HSL,
   HEALTH_HSL,
@@ -81,6 +82,31 @@ describe("semantic assertions — the actual bug fix, pinned", () => {
     expect(Object.values(RISK_LEVEL_CLASS.MODERATE).join(" ")).toMatch(/amber-/);
     expect(Object.values(RISK_LEVEL_CLASS.ELEVATED).join(" ")).toMatch(/orange-/);
     expect(Object.values(RISK_LEVEL_CLASS.HIGH).join(" ")).toMatch(/red-/);
+  });
+});
+
+describe("HEALTH_LABEL — the badge's text must never restate its own swatch", () => {
+  // Health color is deliberately NOT g/y/r (see the file header + the
+  // "LOW/GREEN is sky" pin above), so showing the raw enum as the badge's
+  // own text used to contradict its own color (a "GREEN" badge rendering
+  // sky-blue reads as a bug even though the color is correct). Pinned so a
+  // future edit can't silently reintroduce the literal enum as display text.
+  it("no health label equals its own key", () => {
+    for (const h of HEALTHS) {
+      expect(HEALTH_LABEL[h]).not.toBe(h);
+    }
+  });
+
+  it("every health state has a non-empty label", () => {
+    for (const h of HEALTHS) {
+      expect(HEALTH_LABEL[h]).toBeTruthy();
+    }
+  });
+
+  it("no label reuses a color word (green/yellow/red/blue/sky/amber) as text", () => {
+    for (const h of HEALTHS) {
+      expect(HEALTH_LABEL[h].toLowerCase()).not.toMatch(/green|yellow|red|blue|sky|amber/);
+    }
   });
 });
 

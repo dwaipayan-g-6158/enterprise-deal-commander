@@ -8,7 +8,7 @@ import { daysUntil } from "@/components/dashboard/widgets/_shared";
 import { formatDate } from "@/lib/format";
 import { formatCurrency } from "@/components/cockpit/use-invalidate";
 import { RISK_LEVEL_CLASS, RISK_LEVEL_LABEL, type RiskLevel } from "@/components/cockpit/risk/risk-model";
-import { HEALTH_BADGE_CLASS, HEALTH_CLASS, OUTCOME_CLASS } from "@/lib/semantic-colors";
+import { HEALTH_BADGE_CLASS, HEALTH_CLASS, HEALTH_LABEL, OUTCOME_CLASS } from "@/lib/semantic-colors";
 import { VELOCITY_LABEL } from "./model/velocity";
 import { terminalOutcome } from "./model/board";
 import type { ColumnId, Health, RosterRow, VelocityBucket } from "./model/roster-types";
@@ -18,6 +18,12 @@ import type { ColumnId, Health, RosterRow, VelocityBucket } from "./model/roster
 export { terminalOutcome };
 
 export function HealthBadge({ health }: { health: string }) {
+  // `health` stays a bare `string` here (not tightened to `Health`) because
+  // its callers pass `row.healthStatus`, which the generated Deal schema
+  // types as `string` rather than the Health union (openapi.yaml gap, same
+  // one derive-rows.ts's `as never` cast works around) — HEALTH_LABEL falls
+  // back to the raw value for anything unexpected rather than crashing.
+  const label = HEALTH_LABEL[health as Health] ?? health;
   return (
     <Badge
       variant={health === "RED" ? "destructive" : health === "YELLOW" ? "default" : "secondary"}
@@ -26,7 +32,7 @@ export function HealthBadge({ health }: { health: string }) {
         health === "GREEN" && HEALTH_BADGE_CLASS.GREEN,
       )}
     >
-      {health}
+      {label}
     </Badge>
   );
 }

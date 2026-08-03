@@ -122,6 +122,21 @@ export const HEALTH_BADGE_CLASS: Record<Health, string> = {
   RED: "", // callers use variant="destructive" instead of a class override
 };
 
+/** Human-facing word for the Health badge — deliberately NOT the literal
+ *  enum, and deliberately distinct wording from RISK_LEVEL_LABEL (Health and
+ *  Risk are adjacent columns/badges in the roster and cockpit). Green is
+ *  reserved for Closed-Won (see this file's header), so a GREEN badge
+ *  renders sky-blue and a YELLOW badge renders amber — showing the raw enum
+ *  word as the badge's own text used to contradict its own swatch (a
+ *  "GREEN" badge that isn't green reads as a bug even though the color is
+ *  correct). This is what the badge SAYS; HEALTH_BADGE_CLASS/HEALTH_CLASS
+ *  still own what it LOOKS like. */
+export const HEALTH_LABEL: Record<Health, string> = {
+  GREEN: "Healthy",
+  YELLOW: "Needs Attention",
+  RED: "Critical",
+};
+
 interface OutcomeClass {
   text: string;
   bg: string;

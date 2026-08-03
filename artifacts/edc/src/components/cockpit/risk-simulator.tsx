@@ -34,7 +34,7 @@ import {
 } from "@/components/ui/select";
 import { ShieldAlert, AlertTriangle, RotateCcw, ArrowRight, Sparkles } from "lucide-react";
 import { formatCurrency } from "./use-invalidate";
-import { HEALTH_BADGE_CLASS } from "@/lib/semantic-colors";
+import { HEALTH_BADGE_CLASS, HEALTH_LABEL } from "@/lib/semantic-colors";
 
 interface SimState {
   sales_stage: string;
@@ -59,7 +59,7 @@ function HealthBadge({ status }: { status: "RED" | "YELLOW" | "GREEN" }) {
             : ""
       }
     >
-      {status}
+      {HEALTH_LABEL[status]}
     </Badge>
   );
 }
