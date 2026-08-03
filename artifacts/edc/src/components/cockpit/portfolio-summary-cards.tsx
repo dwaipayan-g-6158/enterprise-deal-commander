@@ -77,11 +77,15 @@ export function PortfolioSummaryCards({
   diversificationCellCount: number;
 }) {
   const cluster = summary.highestCorrelationCluster;
+  // Matches the Risk Heatmap axis-toggle labels (portfolio-risk-heatmap.tsx)
+  // rather than the full "Account Manager"/"Technical Lead" — this card's
+  // value row has to fit a variable-length name plus this badge in a
+  // quarter-width card, and the shorter label leaves more room for the name.
   const scopeLabel =
     cluster?.scope === "manager"
-      ? "Account Manager"
+      ? "Acct Manager"
       : cluster?.scope === "lead"
-        ? "Technical Lead"
+        ? "Tech Lead"
         : "Product";
   const lift = cluster ? liftPresentation(cluster.lift) : null;
   const diversificationCaveatInfo = diversificationCaveat(diversificationCellCount);
@@ -132,7 +136,12 @@ export function PortfolioSummaryCards({
         tooltip="The manager, technical lead, or product group where one risk-alert code shows up disproportionately more than its portfolio-wide baseline rate (the 'lift'). 'None significant' means no group clears the bar for group size, share of deals affected, and lift above baseline."
         value={
           cluster ? (
-            <span className="flex items-center gap-2">
+            // flex-wrap (not nowrap): the name is the primary value here, the
+            // scope badge is secondary context. When both don't fit on one
+            // line, the badge — the last flex child — wraps to its own line
+            // instead of squeezing the name down to a couple of truncated
+            // characters (the bug this fixes: "Nithya" rendering as "Nit…").
+            <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
               <span className="truncate" title={cluster.name}>{cluster.name}</span>
               <Badge variant="secondary" className="shrink-0 text-[10px]">{scopeLabel}</Badge>
             </span>
