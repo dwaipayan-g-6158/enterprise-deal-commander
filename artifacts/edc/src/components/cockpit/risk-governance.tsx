@@ -41,6 +41,7 @@ import {
 } from "lucide-react";
 import { AdminOnly } from "@/components/auth/write-gate";
 import { type DealRisk } from "./risk/risk-model";
+import { HEALTH_CLASS, HEALTH_SHORT_LABEL, type Health } from "@/lib/semantic-colors";
 import { RiskScoreCard } from "./risk/risk-score-card";
 import { ManagedRisks } from "./risk/managed-risks";
 import { SNOOZE_FIELDS } from "./risk/snooze-fields";
@@ -179,27 +180,27 @@ function AlertCard({ dealId, alert }: { dealId: string; alert: Alert }) {
   };
 
   const isRed = alert.severity === "RED";
-  const codeColorCls = isRed
-    ? "bg-red-500/10 border-red-500/30 text-red-600 dark:text-red-400"
-    : "bg-amber-500/10 border-amber-500/30 text-amber-600 dark:text-amber-400";
+  // Severity shares health's enum and its palette, so the whole card reads off
+  // HEALTH_CLASS. The amber this replaced belonged to the risk ramp — a
+  // different scale — and stopped matching health-YELLOW when it became true
+  // yellow.
+  const sev = isRed ? HEALTH_CLASS.RED : HEALTH_CLASS.YELLOW;
+  const codeColorCls = cn(sev.bg, sev.border, sev.text);
+  const SevIcon = isRed ? ShieldAlert : AlertTriangle;
 
   return (
-    <Card className={cn("border-l-4", isRed ? "border-l-destructive" : "border-l-amber-500")}>
+    <Card className={cn("border-l-4", sev.borderL)}>
       <CardContent className="p-4 space-y-3">
         {/* Header: icon + code badge + severity */}
         <div className="flex gap-3">
-          {isRed ? (
-            <ShieldAlert className="w-5 h-5 text-destructive shrink-0 mt-0.5" />
-          ) : (
-            <AlertTriangle className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
-          )}
+          <SevIcon className={cn("w-5 h-5 shrink-0 mt-0.5", sev.text)} />
           <div className="flex-1 min-w-0 space-y-1.5">
             <div className="flex items-center gap-2 flex-wrap">
               <code className={cn("inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-mono font-medium border", codeColorCls)}>
                 {alert.code}
               </code>
               <span className={cn("inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold", codeColorCls)}>
-                {alert.severity}
+                {HEALTH_SHORT_LABEL[alert.severity as Health] ?? alert.severity}
               </span>
             </div>
             <p className="text-sm leading-snug">{alert.message}</p>
@@ -267,9 +268,9 @@ function AlertCard({ dealId, alert }: { dealId: string; alert: Alert }) {
               onClick={() => setShowAccept((s) => !s)}
               className={cn(
                 "gap-1.5",
-                isRed
-                  ? "border-destructive/40 text-destructive hover:bg-destructive/5 hover:border-destructive"
-                  : "border-amber-500/40 text-amber-600 dark:text-amber-400 hover:bg-amber-500/5 hover:border-amber-500",
+                sev.border,
+                sev.text,
+                isRed ? "hover:bg-red-500/5" : "hover:bg-yellow-500/5",
               )}
             >
               <ShieldOff className="h-3.5 w-3.5" /> Accept Risk

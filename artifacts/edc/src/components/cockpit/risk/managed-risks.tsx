@@ -18,12 +18,15 @@ import { AdminOnly } from "@/components/auth/write-gate";
 import { relativeTime, daysUntil } from "@/components/dashboard/widgets/_shared";
 import { DISPOSITION_PRESENTATION, DISPOSITION_PRIORITY } from "./disposition-presentation";
 import { formatExplanationValue } from "./risk-presentation";
+import { HEALTH_CLASS, HEALTH_SHORT_LABEL, type Health } from "@/lib/semantic-colors";
 import { snoozeFieldLabel } from "./snooze-fields";
 
+// Derived, not authored: alert severity shares health's enum and its palette, and
+// the hardcoded amber this replaced silently kept pointing at the risk ramp after
+// health-YELLOW moved to true yellow.
 function severityChipClass(severity: string) {
-  return severity === "RED"
-    ? "bg-red-500/10 border-red-500/30 text-red-600 dark:text-red-400"
-    : "bg-amber-500/10 border-amber-500/30 text-amber-600 dark:text-amber-400";
+  const c = severity === "RED" ? HEALTH_CLASS.RED : HEALTH_CLASS.YELLOW;
+  return `${c.bg} ${c.border} ${c.text}`;
 }
 
 function snoozeExpiryText(snoozeUntil: string | null): string {
@@ -67,7 +70,7 @@ function ManagedRiskRow({ dealId, alert }: { dealId: string; alert: Alert }) {
               severityChipClass(alert.severity),
             )}
           >
-            {alert.severity}
+            {HEALTH_SHORT_LABEL[alert.severity as Health] ?? alert.severity}
           </span>
           {alert.explanation && (
             <HoverCard openDelay={150}>

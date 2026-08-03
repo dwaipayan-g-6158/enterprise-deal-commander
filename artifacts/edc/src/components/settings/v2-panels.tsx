@@ -49,6 +49,7 @@ import { Trash2, Plus, FlaskConical } from "lucide-react";
 import { AdminOnly, ReadOnlyNotice } from "@/components/auth/write-gate";
 import { useCanWrite } from "@/lib/auth/role-context";
 import { serverMessage } from "@/lib/server-message";
+import { HEALTH_BADGE_CLASS, HEALTH_LABEL, type Health } from "@/lib/semantic-colors";
 
 const WEBHOOK_EVENTS = [
   "deal.created",
@@ -529,7 +530,15 @@ export function CustomPatternsSettings() {
       <CardContent className="space-y-4">
         {patterns.map((p) => (
           <div key={p.id} className="flex items-center gap-3 rounded-md border p-3">
-            <Badge className={p.severity === "RED" ? "bg-destructive text-white" : "bg-amber-500 text-white"}>{p.severity}</Badge>
+            {/* Alert severity shares health's enum AND its palette (see
+                briefing-presentation's alert rows), so this mirrors the roster's
+                HealthBadge rather than hand-rolling a third badge variant. */}
+            <Badge
+              variant={p.severity === "RED" ? "destructive" : "default"}
+              className={p.severity === "YELLOW" ? HEALTH_BADGE_CLASS.YELLOW : ""}
+            >
+              {HEALTH_LABEL[p.severity as Health] ?? p.severity}
+            </Badge>
             <div className="flex-1">
               <p className="font-medium">{p.patternName}</p>
               <p className="text-xs text-muted-foreground">weight {p.weight} · fired {p.triggerCount}×</p>
@@ -556,8 +565,13 @@ export function CustomPatternsSettings() {
               // SelectItems below are the only values that can ever arrive.
               onValueChange={(v) => updateForm({ severity: v as CustomPatternInputSeverity })}
             >
-              <SelectTrigger className="w-28"><SelectValue /></SelectTrigger>
-              <SelectContent><SelectItem value="RED">RED</SelectItem><SelectItem value="YELLOW">YELLOW</SelectItem></SelectContent>
+              {/* w-44, not w-28: "Needs Attention" plus the chevron doesn't fit
+                  112px. The row is flex-wrap, so widening reflows it. */}
+              <SelectTrigger className="w-44"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="RED">{HEALTH_LABEL.RED}</SelectItem>
+                <SelectItem value="YELLOW">{HEALTH_LABEL.YELLOW}</SelectItem>
+              </SelectContent>
             </Select>
             <Input type="number" className="w-24" value={form.weight} onChange={(e) => updateForm({ weight: Number(e.target.value) })} />
           </div>

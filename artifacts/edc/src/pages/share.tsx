@@ -5,6 +5,10 @@ import { AlertTriangle, ShieldAlert, Activity, CheckCircle } from "lucide-react"
 import { Badge } from "@/components/ui/badge";
 import { HEALTH_BADGE_CLASS, HEALTH_CLASS, HEALTH_LABEL, type Health } from "@/lib/semantic-colors";
 
+/** Alert severity uses the health scale — RED/YELLOW are the same two states. */
+const sevClass = (severity: string) =>
+  severity === "RED" ? HEALTH_CLASS.RED : HEALTH_CLASS.YELLOW;
+
 export default function Share() {
   const params = useParams();
   const token = params.token as string;
@@ -67,9 +71,13 @@ export default function Share() {
             {card.alerts.length > 0 ? (
               <div className="space-y-3">
                 {card.alerts.map((alert, i) => (
-                  <div key={i} className={`p-4 rounded-md border-l-4 bg-card ${alert.severity === 'RED' ? 'border-l-destructive bg-destructive/5' : 'border-l-amber-500 bg-amber-500/5'}`}>
+                  // Severity rides the health palette (its print counterpart in
+                  // briefing-report.tsx carries the same two hexes by hand).
+                  <div key={i} className={`p-4 rounded-md border-l-4 bg-card ${sevClass(alert.severity).borderL} ${sevClass(alert.severity).bg}`}>
                     <div className="flex gap-3">
-                      {alert.severity === 'RED' ? <ShieldAlert className="w-5 h-5 text-destructive shrink-0" /> : <AlertTriangle className="w-5 h-5 text-amber-500 shrink-0" />}
+                      {alert.severity === 'RED'
+                        ? <ShieldAlert className={`w-5 h-5 shrink-0 ${HEALTH_CLASS.RED.text}`} />
+                        : <AlertTriangle className={`w-5 h-5 shrink-0 ${HEALTH_CLASS.YELLOW.text}`} />}
                       <div>
                         <p className="font-semibold text-sm">{alert.message}</p>
                         <p className="text-xs text-muted-foreground font-mono mt-1">{alert.code}</p>

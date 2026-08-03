@@ -34,7 +34,20 @@ import {
 } from "@/components/ui/select";
 import { ShieldAlert, AlertTriangle, RotateCcw, ArrowRight, Sparkles } from "lucide-react";
 import { formatCurrency } from "./use-invalidate";
-import { HEALTH_BADGE_CLASS, HEALTH_LABEL } from "@/lib/semantic-colors";
+import { HEALTH_BADGE_CLASS, HEALTH_CLASS, HEALTH_LABEL } from "@/lib/semantic-colors";
+
+/** Severity icon for an alert row. Shared by the "New risks" and "after" lists,
+ *  which rendered the same ternary twice. Colour comes from HEALTH_CLASS because
+ *  severity and health are the same scale. */
+function AlertSeverityIcon({ severity }: { severity: string }) {
+  const isRed = severity === "RED";
+  const Icon = isRed ? ShieldAlert : AlertTriangle;
+  return (
+    <Icon
+      className={`h-4 w-4 shrink-0 mt-0.5 ${(isRed ? HEALTH_CLASS.RED : HEALTH_CLASS.YELLOW).text}`}
+    />
+  );
+}
 
 interface SimState {
   sales_stage: string;
@@ -317,11 +330,7 @@ export function RiskSimulator({
                   </p>
                   {added.map((a) => (
                     <div key={a.code} className="flex items-start gap-2 text-sm">
-                      {a.severity === "RED" ? (
-                        <ShieldAlert className="h-4 w-4 text-destructive shrink-0 mt-0.5" />
-                      ) : (
-                        <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0 mt-0.5" />
-                      )}
+                      <AlertSeverityIcon severity={a.severity} />
                       <span>{a.message}</span>
                     </div>
                   ))}
@@ -356,11 +365,7 @@ export function RiskSimulator({
               ) : (
                 result.governance.alerts.map((a) => (
                   <div key={a.code} className="flex items-start gap-2 text-sm">
-                    {a.severity === "RED" ? (
-                      <ShieldAlert className="h-4 w-4 text-destructive shrink-0 mt-0.5" />
-                    ) : (
-                      <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0 mt-0.5" />
-                    )}
+                    <AlertSeverityIcon severity={a.severity} />
                     <span>{a.message}</span>
                   </div>
                 ))

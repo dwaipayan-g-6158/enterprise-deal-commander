@@ -1,6 +1,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ShieldAlert, ArrowRight } from "lucide-react";
 import { compactCurrency, humanizeCode } from "./_shared";
+import { HEALTH_CLASS } from "@/lib/semantic-colors";
 
 interface AlertEntry {
   dealId: string;
@@ -55,6 +56,9 @@ export function CriticalAlertsFeed({
           <div className="space-y-3">
             {top.map((a, i) => {
               const isRed = a.alert.severity === "RED";
+              // Severity is the health scale, so read the accent off HEALTH_CLASS
+              // rather than the amber that used to stand in for health-YELLOW.
+              const sev = isRed ? HEALTH_CLASS.RED : HEALTH_CLASS.YELLOW;
               const tcv = tcvByDealId[a.dealId];
               return (
                 <button
@@ -63,13 +67,13 @@ export function CriticalAlertsFeed({
                   onClick={() => onSelect(a.dealId)}
                   aria-label={`View ${a.dealName}: ${humanizeCode(a.alert.code)}`}
                   className={`group block w-full rounded-md border border-l-4 bg-card p-3 text-left transition-colors hover:border-primary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
-                    isRed ? "border-l-red-500" : "border-l-amber-500"
+                    sev.borderL
                   }`}
                 >
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
                       <p className="flex items-center gap-2 text-sm font-semibold">
-                        <span className={`h-2 w-2 shrink-0 rounded-full ${isRed ? "bg-red-500" : "bg-amber-500"}`} />
+                        <span className={`h-2 w-2 shrink-0 rounded-full ${sev.dot}`} />
                         <span className="truncate">{a.dealName}</span>
                         {tcv != null && (
                           <span className="shrink-0 font-mono text-xs text-muted-foreground">
