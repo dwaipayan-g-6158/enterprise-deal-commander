@@ -18,7 +18,6 @@ export interface RosterGroup {
 export interface DerivedRows {
   groups: RosterGroup[]; // one group with key "" when group === "none"
   flat: RosterRow[]; // post-filter+sort, flattened in group/display order
-  totalCount: number; // rows before client filters
   matchedCount: number; // rows after client filters
 }
 
@@ -149,7 +148,6 @@ export function computeDerivedRows(rows: RosterRow[], view: RosterView, now: num
     return {
       groups: [{ key: "", label: "", rows: sorted, totalTCV, redCount }],
       flat: sorted,
-      totalCount: rows.length,
       matchedCount: sorted.length,
     };
   }
@@ -180,7 +178,6 @@ export function computeDerivedRows(rows: RosterRow[], view: RosterView, now: num
   return {
     groups,
     flat: groups.flatMap((g) => g.rows),
-    totalCount: rows.length,
     matchedCount: filtered.length,
   };
 }

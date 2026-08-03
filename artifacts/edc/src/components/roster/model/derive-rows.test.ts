@@ -63,7 +63,6 @@ describe("computeDerivedRows — filtering", () => {
     const rows = [row({ healthStatus: "RED" }), row({ healthStatus: "GREEN" }), row({ healthStatus: "YELLOW" })];
     const out = computeDerivedRows(rows, viewWith({ health: ["RED", "YELLOW"] }), NOW);
     expect(out.matchedCount).toBe(2);
-    expect(out.totalCount).toBe(3);
   });
 
   it("filters by velocity bucket", () => {

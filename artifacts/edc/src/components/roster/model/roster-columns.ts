@@ -15,12 +15,10 @@ export interface ColumnDef {
   sortable: boolean;
   /** Numeric columns right-align and use a monospace cell. */
   numeric?: boolean;
-  /** Sort/group/filter value (also the default export value when no exportValue). */
+  /** Sort/group/filter value. */
   accessor: (row: RosterRow) => string | number | null;
   /** Custom comparator (asc). Falls back to accessor compare. */
   comparator?: (a: RosterRow, b: RosterRow) => number;
-  /** Plain-text value for CSV/JSON export. */
-  exportValue?: (row: RosterRow) => string;
 }
 
 function numCompare(a: number | null, b: number | null): number {
@@ -71,7 +69,6 @@ export const COLUMNS: Record<ColumnId, ColumnDef> = {
     numeric: true,
     accessor: (r) => r.calculatedTCV ?? 0,
     comparator: (a, b) => numCompare(a.calculatedTCV ?? 0, b.calculatedTCV ?? 0),
-    exportValue: (r) => String(r.calculatedTCV ?? 0),
   },
   healthStatus: {
     id: "healthStatus",
@@ -91,7 +88,6 @@ export const COLUMNS: Record<ColumnId, ColumnDef> = {
     numeric: true,
     accessor: (r) => r.riskScore,
     comparator: (a, b) => numCompare(a.riskScore, b.riskScore),
-    exportValue: (r) => (r.riskScore == null ? "" : String(r.riskScore)),
   },
   score: {
     id: "score",
@@ -102,7 +98,6 @@ export const COLUMNS: Record<ColumnId, ColumnDef> = {
     numeric: true,
     accessor: (r) => r.score,
     comparator: (a, b) => numCompare(a.score, b.score),
-    exportValue: (r) => (r.score == null ? "" : String(r.score)),
   },
   gatesPct: {
     id: "gatesPct",
@@ -112,7 +107,6 @@ export const COLUMNS: Record<ColumnId, ColumnDef> = {
     sortable: true,
     accessor: (r) => r.gatesPct,
     comparator: (a, b) => numCompare(a.gatesPct, b.gatesPct),
-    exportValue: (r) => `${r.gatesPct}%`,
   },
   velocity: {
     id: "velocity",
@@ -122,7 +116,6 @@ export const COLUMNS: Record<ColumnId, ColumnDef> = {
     sortable: true,
     accessor: (r) => r.velocity,
     comparator: (a, b) => VELOCITY_RANK[a.velocity] - VELOCITY_RANK[b.velocity],
-    exportValue: (r) => VELOCITY_LABEL[r.velocity],
   },
   lastActivity: {
     id: "lastActivity",
@@ -133,7 +126,6 @@ export const COLUMNS: Record<ColumnId, ColumnDef> = {
     numeric: true,
     accessor: (r) => r.daysSinceLastActivity,
     comparator: (a, b) => numCompare(a.daysSinceLastActivity, b.daysSinceLastActivity),
-    exportValue: (r) => (r.daysSinceLastActivity == null ? "" : `${r.daysSinceLastActivity}d`),
   },
   accountManager: {
     id: "accountManager",
@@ -161,7 +153,6 @@ export const COLUMNS: Record<ColumnId, ColumnDef> = {
     sortable: true,
     accessor: (r) => r.expectedCloseDate ?? null,
     comparator: (a, b) => strCompare(a.expectedCloseDate ?? null, b.expectedCloseDate ?? null),
-    exportValue: (r) => r.expectedCloseDate ?? "",
   },
 };
 
