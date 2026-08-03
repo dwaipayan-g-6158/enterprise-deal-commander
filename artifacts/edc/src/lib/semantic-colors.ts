@@ -240,6 +240,16 @@ export const HEALTH_HSL: Record<Health, string> = {
   RED: RISK_LEVEL_HSL.HIGH,
 };
 
+/** Outcome's chart form. Shades match OUTCOME_RGB so a donut and a sankey
+ *  ribbon showing the same won/lost split can't disagree. This existed only as
+ *  RGB before, which is why winloss-donut.tsx hand-rolled `--chart-2` for won
+ *  and `--destructive` for lost — the latter breaking the "lost is never red"
+ *  rule in the header. */
+export const OUTCOME_HSL: Record<Outcome, string> = {
+  won: "hsl(262 83% 58%)", // violet-600
+  lost: "hsl(215 16% 47%)", // slate-500
+};
+
 /** Bare "r,g,b" triples for `rgba()` composition (tint fills, sankey/matrix flows). */
 export const RISK_LEVEL_RGB: Record<RiskLevel, string> = {
   LOW: "14,165,233", // sky-500

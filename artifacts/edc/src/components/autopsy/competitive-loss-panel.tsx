@@ -4,6 +4,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Empty, EmptyHeader, EmptyMedia, EmptyTitle, EmptyDescription } from "@/components/ui/empty";
 import { Swords } from "lucide-react";
 import { compactUSD } from "@/lib/format";
+import { OUTCOME_CLASS } from "@/lib/semantic-colors";
 
 export function CompetitiveLossPanel() {
   // Typed response (GetCompetitiveLossResponse, generated from the
@@ -96,9 +97,9 @@ export function CompetitiveLossPanel() {
                         <TableCell key={name} className="text-center font-mono text-xs tabular-nums">
                           {cell ? (
                             <span>
-                              <span className="text-emerald-500">{cell.wins}W</span>
+                              <span className={OUTCOME_CLASS.won.text}>{cell.wins}W</span>
                               {" / "}
-                              <span className="text-destructive">{cell.losses}L</span>
+                              <span className={OUTCOME_CLASS.lost.text}>{cell.losses}L</span>
                             </span>
                           ) : (
                             <span className="text-muted-foreground">—</span>

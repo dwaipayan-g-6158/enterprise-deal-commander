@@ -11,6 +11,8 @@ import {
   OUTCOME_CLASS,
   RISK_LEVEL_HSL,
   HEALTH_HSL,
+  OUTCOME_HSL,
+  OUTCOME_RGB,
   BRIEFING_HEALTH_HEX,
   BRIEFING_OUTCOME_HEX,
   type RiskLevel,
@@ -46,6 +48,13 @@ describe("key completeness", () => {
   it("OUTCOME_CLASS has both outcomes", () => {
     expect(OUTCOME_CLASS.won).toBeTruthy();
     expect(OUTCOME_CLASS.lost).toBeTruthy();
+  });
+
+  it("every scale has a chart form — a missing one is what makes callers hand-roll their own colours", () => {
+    for (const outcome of ["won", "lost"] as const) {
+      expect(OUTCOME_HSL[outcome]).toMatch(/^hsl\(/);
+      expect(OUTCOME_RGB[outcome]).toMatch(/^\d+,\d+,\d+$/);
+    }
   });
 });
 
@@ -125,6 +134,14 @@ describe("semantic assertions — the actual bug fix, pinned", () => {
     const allWon = Object.values(OUTCOME_CLASS.won).join(" ");
     expect(allWon).toMatch(/violet-/);
     expect(allWon).not.toMatch(/emerald|green-|teal-/);
+  });
+
+  it("lost's chart form is the slate hue, not the destructive token", () => {
+    // The win/loss donut used `hsl(var(--destructive))` for lost until
+    // OUTCOME_HSL existed. --destructive is hue 0; slate is a desaturated blue.
+    const [, hue, sat] = OUTCOME_HSL.lost.match(/hsl\((\d+) (\d+)%/) ?? [];
+    expect(Number(hue)).toBeGreaterThan(180);
+    expect(Number(sat)).toBeLessThan(30);
   });
 
   it("lost is slate, never rose/red/destructive", () => {
