@@ -74,7 +74,7 @@ async function activeDealIds(): Promise<string[]> {
  * /intelligence/portfolio-analysis, GET /api/v2/analytics/engagement AND the
  * background rollup refresh). 8 saturates the pool while leaving headroom.
  */
-const INTEL_CONCURRENCY = 8;
+export const INTEL_CONCURRENCY = 8;
 
 /** Order-preserving bounded-concurrency map (no such helper exists in-repo). */
 export async function mapWithConcurrency<T, R>(

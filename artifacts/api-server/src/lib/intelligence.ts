@@ -722,10 +722,21 @@ export async function assembleDealIntelligence(dealId: string) {
   });
 }
 
-export async function serializeDeal(dealId: string) {
+/**
+ * `loadIntel` is injected rather than chosen here so this module keeps knowing
+ * nothing about the cache: portfolio.ts already imports from this file, so
+ * importing `cachedIntel` back would be a cycle. Read paths (the deal LIST)
+ * pass `cachedIntel`; write paths keep the default uncached assembler, because
+ * a mutation response must reflect the write that just happened rather than a
+ * pre-mutation cache entry — see cachedIntel's own contract in portfolio.ts.
+ */
+export async function serializeDeal(
+  dealId: string,
+  loadIntel: (id: string) => Promise<Awaited<ReturnType<typeof assembleDealIntelligence>>> = assembleDealIntelligence,
+) {
   const dealRow = await getDealWithLookups(dealId);
   if (!dealRow) return null;
-  const intel = await assembleDealIntelligence(dealId);
+  const intel = await loadIntel(dealId);
   const productsOfInterest = await getProductsOfInterest(dealId);
   const selectedAd360Features = await getAd360Features(dealId);
   const extraDrivers = await getExtraComplianceDrivers(dealId);

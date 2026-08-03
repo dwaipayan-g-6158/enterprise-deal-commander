@@ -35,6 +35,7 @@ import {
 import { getActor } from "../lib/auth";
 import { badRequest, notFound, conflict, stageGuardrail, archiveGuardrail } from "../lib/http";
 import { serializeDeal, assembleDealIntelligence, isBlockingRedAlert } from "../lib/intelligence";
+import { cachedIntel, mapWithConcurrency, INTEL_CONCURRENCY } from "../lib/portfolio";
 import { contextualAlertsFor } from "../lib/contextual-alerts";
 import { writeAudit } from "../lib/audit";
 import { emitDealEvent } from "../lib/events";
@@ -149,8 +150,17 @@ router.get("/deals", async (req: Request, res: Response) => {
       .orderBy(desc(enterpriseDeals.updatedAt));
   }
 
+  // `cachedIntel`, not the raw assembler: this is a read path, and the engine run
+  // dominates the cost of serializing a deal. One dashboard load fires five of
+  // these (limit=500/200/200/50/32), so uncached it re-ran the 12-pattern engine
+  // for every deal five times over. The cache is dropped by the event bus on any
+  // deal mutation, so a write is still reflected on the very next read.
+  //
+  // Bounded concurrency for the same reason the portfolio summary uses it —
+  // `Promise.all` over an unbounded page (limit can reach 500) opened one engine
+  // run plus several queries per deal simultaneously and starved the pool.
   let items = (
-    await Promise.all(rows.map((r) => serializeDeal(r.id)))
+    await mapWithConcurrency(rows, INTEL_CONCURRENCY, (r) => serializeDeal(r.id, cachedIntel))
   ).filter((d): d is NonNullable<typeof d> => d !== null);
 
   // Attach the per-deal match provenance for the search dropdown.
