@@ -28,6 +28,8 @@ import {
   cachedIntel,
   computeSummary,
   computePortfolioAnalysis,
+  mapWithConcurrency,
+  INTEL_CONCURRENCY,
 } from "../lib/portfolio";
 import {
   readSummaryRollup,
@@ -273,10 +275,18 @@ router.get("/analytics/autopsy", async (req: Request, res: Response) => {
     .where(and(...filters));
 
   // cachedIntel (not assembleDealIntelligence) so this tab shares the same
-  // cache tier the roster/summary already warm, and Promise.all instead of a
-  // sequential await-in-a-loop — the previous version serialized one
-  // full intelligence assembly per lost deal.
-  const intelResults = await Promise.all(lostRows.map((r) => cachedIntel(r.id)));
+  // cache tier the roster/summary already warm, and a concurrent map instead of
+  // a sequential await-in-a-loop — the previous version serialized one full
+  // intelligence assembly per lost deal.
+  //
+  // Bounded at INTEL_CONCURRENCY rather than an unbounded Promise.all: each
+  // cache miss issues ~15 sequential queries against a 10-connection pool, so
+  // fanning out over every Closed-Lost deal at once queues on the pool and
+  // starves concurrent handlers (see lib/portfolio.ts). Order is preserved,
+  // which the index-keyed `lostRows.forEach` zip below depends on.
+  const intelResults = await mapWithConcurrency(lostRows, INTEL_CONCURRENCY, (r) =>
+    cachedIntel(r.id),
+  );
 
   const groups = new Map<
     number | null,

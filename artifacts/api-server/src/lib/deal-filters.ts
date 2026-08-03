@@ -55,3 +55,19 @@ export function termAwareTcv(row: TcvInput): number {
     pricingModel: row.pricingModel ?? "",
   });
 }
+
+/**
+ * Convert a native-currency TCV into the reporting currency, mirroring the
+ * engine's own F1 normalization EXACTLY (lib/engine/src/index.ts's
+ * `normalizedTCV`): multiply by the rate, and when no rate exists for the pair
+ * fall back to the native value rather than dropping the deal or zeroing it.
+ *
+ * Exists so aggregate routes can report the same currency basis as
+ * `computeSummary` (which sums the engine's `financials.normalizedTCV`) without
+ * paying for a full per-deal intelligence assembly. Mixing the two bases in one
+ * comparison is what made the dashboard's "Total TCV" tile subtract an
+ * un-normalized baseline from a normalized current value.
+ */
+export function normalizeTcv(tcv: number, fxRate: number | null | undefined): number {
+  return fxRate == null ? tcv : tcv * fxRate;
+}

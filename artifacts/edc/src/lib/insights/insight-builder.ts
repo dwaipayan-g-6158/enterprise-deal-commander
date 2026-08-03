@@ -32,6 +32,10 @@ export interface Insight {
  */
 export interface VitalSignsInsightInput {
   weightedPipeline: number;
+  /** Total TCV in the reporting currency — the same basis as `baseline.totalTCV`. */
+  totalTCV: number;
+  /** ISO code the money fields are denominated in; optional so callers predating it still typecheck. */
+  reportingCurrency?: string;
   baseline: { totalTCV: number; activeDeals: number; redAlerts: number } | null;
 }
 
@@ -65,11 +69,18 @@ export interface InsightBuilderInputs {
   memoryInsights?: MemoryInsightsInput | null;
 }
 
-/** Compact currency for insight copy, e.g. "$1.2M". Kept local (no UI import) so this module stays presentation-agnostic. */
-function compactCurrency(n: number): string {
+/**
+ * Compact currency for insight copy, e.g. "$1.2M". Kept local (no UI import) so
+ * this module stays presentation-agnostic.
+ *
+ * `currency` is a parameter, not a hardcoded "USD": the figures below are
+ * reporting-currency sums, so a portfolio reporting in EUR/GBP/INR previously
+ * had a `$` stamped on its own numbers.
+ */
+function compactCurrency(n: number, currency = "USD"): string {
   return new Intl.NumberFormat("en-US", {
     style: "currency",
-    currency: "USD",
+    currency,
     notation: "compact",
     maximumFractionDigits: 1,
   }).format(n);
@@ -80,17 +91,25 @@ function buildComparisonInsight(vitalSigns: VitalSignsInsightInput | null | unde
   // Never fabricate a comparison with no history — the only gate is whether
   // a baseline snapshot exists at all.
   if (!vitalSigns || !baseline) return null;
-  // Note: this compares a *weighted* current figure against an *unweighted*
-  // week-old baseline (there's no weighted-pipeline baseline snapshot to
-  // compare against). `detail` surfaces both raw numbers with honest,
-  // differentiated labels rather than implying they're the same metric.
-  const detail = `Now (weighted): ${compactCurrency(vitalSigns.weightedPipeline)} · Last wk (total TCV): ${compactCurrency(baseline.totalTCV)}`;
-  const delta = vitalSigns.weightedPipeline - baseline.totalTCV;
+  // Both sides are TOTAL TCV — the only week-over-week pair the snapshots can
+  // actually supply like-for-like. This used to subtract the *unweighted*
+  // `baseline.totalTCV` from the *weighted* current pipeline and print the
+  // result as "Weighted pipeline is down $2.8M vs last week": subtraction
+  // between two different metrics. With a $1.4M weighted pipeline against a
+  // $4.2M TCV baseline it announced a $2.8M collapse that never happened, and
+  // no movement in either number could make the sentence true. There is no
+  // weighted baseline to compare against, so the headline now names the metric
+  // it can honestly measure and `detail` reports the weighted figure alongside
+  // instead of folding it into the delta.
+  const cur = vitalSigns.reportingCurrency;
+  const money = (n: number) => compactCurrency(n, cur);
+  const detail = `Total TCV now: ${money(vitalSigns.totalTCV)} · last wk: ${money(baseline.totalTCV)} · weighted now: ${money(vitalSigns.weightedPipeline)}`;
+  const delta = vitalSigns.totalTCV - baseline.totalTCV;
   if (delta === 0) {
     return {
       id: "comparison-wow-pipeline",
       kind: "comparison",
-      text: `Weighted pipeline is holding steady vs last week at ${compactCurrency(vitalSigns.weightedPipeline)}.`,
+      text: `Pipeline TCV is holding steady vs last week at ${money(vitalSigns.totalTCV)}.`,
       detail,
     };
   }
@@ -98,7 +117,7 @@ function buildComparisonInsight(vitalSigns: VitalSignsInsightInput | null | unde
   return {
     id: "comparison-wow-pipeline",
     kind: "comparison",
-    text: `Weighted pipeline is ${direction} ${compactCurrency(Math.abs(delta))} vs last week.`,
+    text: `Pipeline TCV is ${direction} ${money(Math.abs(delta))} vs last week.`,
     detail,
   };
 }

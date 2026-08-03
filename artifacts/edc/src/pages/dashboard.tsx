@@ -3,7 +3,6 @@ import {
   useGetIntelligenceSummary,
   useGetVitalSigns,
   useListPortfolioActivity,
-  useListDeals,
   useDashboardVisit,
 } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -39,7 +38,6 @@ import { DailyBar } from "@/components/dashboard/daily-bar/daily-bar";
 import { CustomizeLayoutControl } from "@/components/dashboard/customize-layout-control";
 import { getRowOrder, saveRowOrder, resetRowOrder } from "@/lib/dashboard-layout/row-order";
 import { defaultStore } from "@/lib/storage";
-import { terminalOutcome } from "@/components/roster/model/board";
 
 type OpenDialog =
   | null
@@ -68,20 +66,13 @@ export default function Dashboard() {
   const { data: activityWrapper } = useListPortfolioActivity({ limit: 8 });
   const activity = activityWrapper?.data ?? [];
 
-  // RED-health deals, used for TCV-at-risk and to attach TCV to alert cards.
-  const { data: redDealsWrapper } = useListDeals({
-    health: "RED",
-    state: "active",
-    limit: 200,
-  });
-  const redDeals = (redDealsWrapper?.data ?? []).filter((d) => terminalOutcome(d.salesStage) == null);
-  const tcvAtRisk = redDeals.reduce(
-    (sum, d) => sum + (d.normalizedTCV ?? d.calculatedTCV ?? 0),
-    0,
-  );
-  const tcvByDealId: Record<string, number> = Object.fromEntries(
-    redDeals.map((d) => [d.id, d.normalizedTCV ?? d.calculatedTCV ?? 0]),
-  );
+  // TCV-at-risk and each alert's own TCV now come from the summary itself
+  // (`tcvAtRiskRed`, and `tcv` on every criticalAlerts entry). This used to be
+  // a separate `useListDeals({ health: "RED", limit: 200 })` fetch, which was
+  // wrong twice over: it capped at 200 deals, and it keyed alert TCV to
+  // RED-HEALTH deals when `criticalAlerts` holds RED-SEVERITY alerts — an alert
+  // on a YELLOW/GREEN deal found no entry and rendered with no money on it.
+  // Dropping it also removes one full-portfolio serialization per page load.
 
   const openHealth = (band: Health) => {
     setHealthInitial(band);
@@ -150,7 +141,12 @@ export default function Dashboard() {
   const reportingCurrency = summary?.reportingCurrency || "USD";
   const totalTCV = summary?.totalTCV ?? 0;
   const activeDeals = summary?.totalDealsMonitored ?? 0;
-  const staleCount = summary?.staleDeals?.length ?? 0;
+  // The TRUE counts, not the capped detail lists' `.length` — see
+  // DETAIL_LIST_LIMIT in the server's computeSummary.
+  const staleCount = summary?.staleDealsTotal ?? 0;
+  const criticalAlertCount = summary?.criticalAlertsTotal ?? 0;
+  const tcvAtRisk = summary?.tcvAtRiskRed ?? 0;
+  const criticalAlerts = summary?.criticalAlerts ?? [];
   const vitalSigns = vitalSignsWrapper?.data as
     | { weightedPipeline: number; avgScore: number | null }
     | undefined;
@@ -159,9 +155,9 @@ export default function Dashboard() {
 
   return (
     <div className="p-8 max-w-[1600px] mx-auto space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-      <DashboardHero />
+      <DashboardHero reportingCurrency={reportingCurrency} />
       <CelebrationWatcher previousVisitAt={previousVisitAt} />
-      <DailyBar previousVisitAt={previousVisitAt} />
+      <DailyBar previousVisitAt={previousVisitAt} reportingCurrency={reportingCurrency} />
 
       {(() => {
         const rowsById: Record<string, ReactNode> = {
@@ -169,11 +165,17 @@ export default function Dashboard() {
             <VitalSignsBar
               totalTCV={totalTCV}
               activeDeals={activeDeals}
-              redAlerts={counts.RED}
+              // The count of RED-severity ALERTS, so this tile agrees with the
+              // "Critical Alerts (N)" card beside it. It used to be
+              // `counts.RED` — the number of RED-HEALTH DEALS — which read as a
+              // flat contradiction whenever an alert fired on a deal whose
+              // health wasn't RED ("Red Alerts: 0" next to "Critical Alerts
+              // (1)"). Opens the alerts dialog to match.
+              redAlerts={criticalAlertCount}
               staleCount={staleCount}
               reportingCurrency={reportingCurrency}
               onOpenTcv={() => setOpenDialog("tcv")}
-              onOpenRed={() => openHealth("RED")}
+              onOpenRed={() => setOpenDialog("alerts")}
               onOpenStale={() => setOpenDialog("stale")}
               onOpenWeightedPipeline={() => setOpenDialog("weightedPipeline")}
               onOpenAvgScore={() => setOpenDialog("avgScore")}
@@ -189,8 +191,8 @@ export default function Dashboard() {
               />
               <PipelineRiskOverview reportingCurrency={reportingCurrency} />
               <CriticalAlertsFeed
-                alerts={summary?.criticalAlerts ?? []}
-                tcvByDealId={tcvByDealId}
+                alerts={criticalAlerts}
+                totalCount={criticalAlertCount}
                 reportingCurrency={reportingCurrency}
                 onViewAll={() => setOpenDialog("alerts")}
                 onSelect={(dealId) => navigate(`/deals/${dealId}`)}
@@ -287,12 +289,14 @@ export default function Dashboard() {
       <CriticalAlertsDialog
         open={openDialog === "alerts"}
         onOpenChange={(o) => setOpenDialog(o ? "alerts" : null)}
-        alerts={summary?.criticalAlerts ?? []}
+        alerts={criticalAlerts}
+        totalCount={criticalAlertCount}
       />
       <StaleDealsDialog
         open={openDialog === "stale"}
         onOpenChange={(o) => setOpenDialog(o ? "stale" : null)}
         staleDeals={summary?.staleDeals ?? []}
+        totalCount={staleCount}
       />
       <HealthStatusDialog
         open={openDialog === "health"}

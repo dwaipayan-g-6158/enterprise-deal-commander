@@ -11,5 +11,6 @@ export interface CriticalAlert {
   dealId: string;
   dealName: string;
   accountName: string;
+  tcv: number;
   alert: Alert;
 }

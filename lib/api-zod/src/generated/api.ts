@@ -1072,6 +1072,7 @@ export const GetIntelligenceSummaryResponse = zod.object({
   "data": zod.object({
   "totalDealsMonitored": zod.number(),
   "totalTCV": zod.number(),
+  "tcvAtRiskRed": zod.number(),
   "reportingCurrency": zod.string(),
   "dealsByHealth": zod.object({
   "GREEN": zod.number(),
@@ -1083,6 +1084,7 @@ export const GetIntelligenceSummaryResponse = zod.object({
   "dealId": zod.string(),
   "dealName": zod.string(),
   "accountName": zod.string(),
+  "tcv": zod.number(),
   "alert": zod.object({
   "code": zod.string(),
   "severity": zod.enum(['RED', 'YELLOW']),
@@ -1114,11 +1116,13 @@ export const GetIntelligenceSummaryResponse = zod.object({
 }),zod.null()]).optional()
 })
 })),
+  "criticalAlertsTotal": zod.number(),
   "staleDeals": zod.array(zod.object({
   "dealId": zod.string(),
   "dealName": zod.string(),
   "daysInStage": zod.number()
 })),
+  "staleDealsTotal": zod.number(),
   "changesSinceLastReview": zod.object({
   "dealsWithChanges": zod.number(),
   "topMovers": zod.array(zod.object({

@@ -32,6 +32,9 @@ export function InsightSegment() {
   const { data: summaryWrapper, isLoading: isLoadingSummary } = useGetIntelligenceSummary();
   const { data: memoryWrapper, isLoading: isLoadingMemory } = useGetMemoryInsights();
 
+  // Carries totalTCV + reportingCurrency as well as weightedPipeline: the
+  // week-over-week comparison is TCV-vs-TCV (see buildComparisonInsight), and
+  // the copy formats in the portfolio's own currency rather than assuming USD.
   const vitalSigns = vitalSignsWrapper?.data as VitalSignsInsightInput | undefined;
   const summary = summaryWrapper?.data as SummaryInsightInput | undefined;
   const memoryInsights = memoryWrapper?.data as MemoryInsightsInput | undefined;

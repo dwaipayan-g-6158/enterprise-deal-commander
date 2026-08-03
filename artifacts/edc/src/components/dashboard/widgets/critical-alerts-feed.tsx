@@ -7,41 +7,47 @@ interface AlertEntry {
   dealId: string;
   dealName: string;
   accountName: string;
+  /** The alerted deal's normalizedTCV, carried by the summary per alert. */
+  tcv: number;
   alert: { code: string; severity: string; message: string; weight?: number };
 }
 
 interface Props {
   alerts: AlertEntry[];
-  tcvByDealId: Record<string, number>;
+  /** True alert count. `alerts` is a capped detail list, so its length is not it. */
+  totalCount: number;
   reportingCurrency: string;
   onViewAll: () => void;
   onSelect: (dealId: string) => void;
 }
 
-// Widget 3 — Critical Alerts Feed. The war-room triage queue: top alerts sorted
-// by severity then weight, each card colour-keyed to severity with the money,
-// the name and a readable pattern title.
+// Widget 3 — Critical Alerts Feed. The war-room triage queue: the heaviest
+// alerts, each card carrying the money, the name and a readable pattern title.
+//
+// Every entry here is RED by construction — the server only pushes
+// severity === "RED" alerts into `criticalAlerts` (see computeSummary). This
+// used to sort by severity first and branch its accent colour on
+// `isRed ? RED : YELLOW`, both of which implied a YELLOW case that cannot
+// occur; the sort is now weight-only and the accent is unconditionally RED.
 export function CriticalAlertsFeed({
   alerts,
-  tcvByDealId,
+  totalCount,
   reportingCurrency,
   onViewAll,
   onSelect,
 }: Props) {
-  const sorted = [...alerts].sort((a, b) => {
-    if (a.alert.severity !== b.alert.severity) return a.alert.severity === "RED" ? -1 : 1;
-    return (b.alert.weight ?? 0) - (a.alert.weight ?? 0);
-  });
-  const top = sorted.slice(0, 3);
+  const top = [...alerts]
+    .sort((a, b) => (b.alert.weight ?? 0) - (a.alert.weight ?? 0))
+    .slice(0, 3);
 
   return (
     <Card className="border-destructive/20 bg-destructive/5">
       <CardHeader className="flex flex-row items-center justify-between space-y-0">
         <CardTitle className="flex items-center gap-2 text-destructive">
           <ShieldAlert className="h-5 w-5" />
-          Critical Alerts ({alerts.length})
+          Critical Alerts ({totalCount})
         </CardTitle>
-        {alerts.length > 0 && (
+        {totalCount > 0 && (
           <button
             type="button"
             onClick={onViewAll}
@@ -55,11 +61,9 @@ export function CriticalAlertsFeed({
         {top.length > 0 ? (
           <div className="space-y-3">
             {top.map((a, i) => {
-              const isRed = a.alert.severity === "RED";
               // Severity is the health scale, so read the accent off HEALTH_CLASS
               // rather than the amber that used to stand in for health-YELLOW.
-              const sev = isRed ? HEALTH_CLASS.RED : HEALTH_CLASS.YELLOW;
-              const tcv = tcvByDealId[a.dealId];
+              const sev = HEALTH_CLASS.RED;
               return (
                 <button
                   key={`${a.dealId}-${a.alert.code}-${i}`}
@@ -75,11 +79,9 @@ export function CriticalAlertsFeed({
                       <p className="flex items-center gap-2 text-sm font-semibold">
                         <span className={`h-2 w-2 shrink-0 rounded-full ${sev.dot}`} />
                         <span className="truncate">{a.dealName}</span>
-                        {tcv != null && (
-                          <span className="shrink-0 font-mono text-xs text-muted-foreground">
-                            {compactCurrency(tcv, reportingCurrency)}
-                          </span>
-                        )}
+                        <span className="shrink-0 font-mono text-xs text-muted-foreground">
+                          {compactCurrency(a.tcv, reportingCurrency)}
+                        </span>
                       </p>
                       <p className="mt-1 text-xs font-medium uppercase tracking-wider text-muted-foreground">
                         {humanizeCode(a.alert.code)}

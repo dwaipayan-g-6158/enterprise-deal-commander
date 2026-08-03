@@ -38,7 +38,12 @@ function plural(n: number, word: string): string {
 // Unlike the other segments, the trigger itself carries a live glanceable
 // number — an open-items count on Monday, the pipeline delta chip on Friday —
 // so the "which way is this week trending" signal is visible without a click.
-export function WeekSegment() {
+// `reportingCurrency` is threaded in from `pages/dashboard.tsx` (via DailyBar)
+// rather than defaulted: the pipeline figures below are vital-signs totals
+// denominated in the portfolio's reporting currency, and these three
+// compactCurrency calls used to omit it — falling back to the helper's "USD"
+// default and printing a `$` in front of EUR/GBP/INR amounts.
+export function WeekSegment({ reportingCurrency }: { reportingCurrency: string }) {
   // Locked once per mount — otherwise every render would mint a new
   // `since`/`until` pair (millisecond-precision) for the activity query,
   // triggering a continuous refetch loop (same hazard `dashboard-hero.tsx`'s
@@ -118,7 +123,7 @@ export function WeekSegment() {
               : monday
                 ? `This Week: ${openCount} open item${openCount === 1 ? "" : "s"}`
                 : baseline !== null && vitalSigns
-                  ? `Week Summary: pipeline ${vitalSigns.totalTCV >= baseline.totalTCV ? "up" : "down"} ${compactCurrency(Math.abs(vitalSigns.totalTCV - baseline.totalTCV))} vs last week`
+                  ? `Week Summary: pipeline ${vitalSigns.totalTCV >= baseline.totalTCV ? "up" : "down"} ${compactCurrency(Math.abs(vitalSigns.totalTCV - baseline.totalTCV), reportingCurrency)} vs last week`
                   : "Week Summary"
           }
         >
@@ -133,7 +138,7 @@ export function WeekSegment() {
             <DeltaBadge
               current={vitalSigns.totalTCV}
               baseline={baseline.totalTCV}
-              format={(n) => compactCurrency(n)}
+              format={(n) => compactCurrency(n, reportingCurrency)}
               compact
             />
           )}
@@ -171,7 +176,7 @@ export function WeekSegment() {
                 <DeltaBadge
                   current={vitalSigns.totalTCV}
                   baseline={baseline.totalTCV}
-                  format={(n) => compactCurrency(n)}
+                  format={(n) => compactCurrency(n, reportingCurrency)}
                 />
               </div>
             )}

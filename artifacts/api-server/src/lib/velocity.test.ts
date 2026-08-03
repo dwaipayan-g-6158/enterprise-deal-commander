@@ -56,6 +56,25 @@ describe("computeVelocityRows", () => {
     expect(fast.velocity).toBe("FAST");
   });
 
+  it("does not flag a one-day-old deal SLOW when the stage benchmark is 0 days", () => {
+    // Two other deals entered this stage today, so the leave-one-out median is
+    // 0 — and the ratio bands collapse (0 * 1.5 === 0), which used to make ANY
+    // deal with a single day in stage "SLOW". A 0 median means there's no track
+    // record to compare against yet, so it reports as INSUFFICIENT_DATA rather
+    // than manufacturing a verdict.
+    const rows: VelocityInput[] = [
+      { id: "fresh", stageName: "Discovery", daysInStage: 1 },
+      { id: "today-a", stageName: "Discovery", daysInStage: 0 },
+      { id: "today-b", stageName: "Discovery", daysInStage: 0 },
+    ];
+    const fresh = computeVelocityRows(rows).find((r) => r.id === "fresh")!;
+    expect(fresh.velocity).toBe("INSUFFICIENT_DATA");
+    expect(fresh.benchmarkDays).toBeNull();
+    expect(fresh.deltaDays).toBeNull();
+    // The sample WAS there — it just wasn't usable — so the size stays truthful.
+    expect(fresh.benchmarkSampleSize).toBe(2);
+  });
+
   it("keeps separate stages independent", () => {
     const rows: VelocityInput[] = [
       { id: "a", stageName: "Discovery", daysInStage: 5 },

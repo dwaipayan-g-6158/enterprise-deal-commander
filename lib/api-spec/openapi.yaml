@@ -2735,8 +2735,12 @@ components:
         dealId: { type: string }
         dealName: { type: string }
         accountName: { type: string }
+        # The alerted deal's normalizedTCV. A RED-severity alert can fire on a
+        # deal whose health is not RED, so the client can't recover this from a
+        # RED-health deal list.
+        tcv: { type: number }
         alert: { $ref: "#/components/schemas/Alert" }
-      required: [dealId, dealName, accountName, alert]
+      required: [dealId, dealName, accountName, tcv, alert]
     StaleDeal:
       type: object
       properties:
@@ -2764,19 +2768,37 @@ components:
       properties:
         totalDealsMonitored: { type: integer }
         totalTCV: { type: number }
+        # Σ normalizedTCV of RED-health deals, over the whole cohort.
+        tcvAtRiskRed: { type: number }
         reportingCurrency: { type: string }
         dealsByHealth: { $ref: "#/components/schemas/HealthCounts" }
         dealsByStage:
           type: object
           additionalProperties: { type: integer }
+        # criticalAlerts/staleDeals are capped detail lists; the *Total fields
+        # are the exact counts and are what the UI must display.
         criticalAlerts:
           type: array
           items: { $ref: "#/components/schemas/CriticalAlert" }
+        criticalAlertsTotal: { type: integer }
         staleDeals:
           type: array
           items: { $ref: "#/components/schemas/StaleDeal" }
+        staleDealsTotal: { type: integer }
         changesSinceLastReview: { $ref: "#/components/schemas/ChangesSinceLastReview" }
-      required: [totalDealsMonitored, totalTCV, reportingCurrency, dealsByHealth, dealsByStage, criticalAlerts, staleDeals]
+      required:
+        [
+          totalDealsMonitored,
+          totalTCV,
+          tcvAtRiskRed,
+          reportingCurrency,
+          dealsByHealth,
+          dealsByStage,
+          criticalAlerts,
+          criticalAlertsTotal,
+          staleDeals,
+          staleDealsTotal,
+        ]
     SummaryResponse:
       type: object
       properties:

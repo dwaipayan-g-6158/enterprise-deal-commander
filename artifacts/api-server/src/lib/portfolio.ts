@@ -139,6 +139,14 @@ async function changeCountsSinceReview(
   return new Map(rows.map((r) => [r.dealId, Number(r.changeCount)]));
 }
 
+/**
+ * How many rows the summary's `criticalAlerts` / `staleDeals` detail lists carry.
+ * Was 10, which the "View all" dialogs presented as the complete set. 50 keeps
+ * the response bounded while making those dialogs honest at realistic portfolio
+ * size; the accompanying `*Total` counts stay exact regardless.
+ */
+const DETAIL_LIST_LIMIT = 50;
+
 export async function computeSummary() {
   const { thresholds } = await getThresholds();
   const reportingCurrency = String(thresholds.reporting_currency || "USD");
@@ -148,10 +156,22 @@ export async function computeSummary() {
   const dealsByHealth = { GREEN: 0, YELLOW: 0, RED: 0 };
   const dealsByStage: Record<string, number> = {};
   let totalTCV = 0;
+  // Σ normalizedTCV of RED-HEALTH deals. Computed here, over the full cohort,
+  // because the dashboard used to derive it client-side from a separate
+  // `GET /deals?health=RED&limit=200` call — which capped at 200 deals and cost
+  // an extra full-portfolio serialization per dashboard load.
+  let tcvAtRiskRed = 0;
   const criticalAlerts: {
     dealId: string;
     dealName: string;
     accountName: string;
+    /**
+     * The alerted deal's normalizedTCV. Carried per alert because a RED-severity
+     * alert can fire on a deal whose HEALTH is not RED, so the client cannot
+     * recover this from a RED-health deal list (it previously tried, and those
+     * alert cards silently rendered with no money on them).
+     */
+    tcv: number;
     alert: Intel["governance"]["alerts"][number];
   }[] = [];
   const staleDeals: {
@@ -164,12 +184,16 @@ export async function computeSummary() {
     dealsByHealth[d.governance.healthStatus] += 1;
     dealsByStage[d.salesStage] = (dealsByStage[d.salesStage] ?? 0) + 1;
     totalTCV += d.financials.normalizedTCV;
+    if (d.governance.healthStatus === "RED") {
+      tcvAtRiskRed += d.financials.normalizedTCV;
+    }
     for (const alert of d.governance.alerts) {
       if (alert.severity === "RED") {
         criticalAlerts.push({
           dealId: d.id,
           dealName: d.dealName,
           accountName: d.accountName,
+          tcv: d.financials.normalizedTCV,
           alert,
         });
       }
@@ -200,11 +224,19 @@ export async function computeSummary() {
   return {
     totalDealsMonitored: deals.length,
     totalTCV,
+    tcvAtRiskRed,
     reportingCurrency,
     dealsByHealth,
     dealsByStage,
-    criticalAlerts: criticalAlerts.slice(0, 10),
-    staleDeals: staleDeals.slice(0, 10),
+    // The `*Total` fields are the TRUE counts, before the slice. The UI renders
+    // these ("Critical Alerts (N)", "N stale →"); rendering the sliced array's
+    // own `.length` silently pinned both readouts at the slice size, so a
+    // portfolio with 47 RED alerts reported 10 and the "View all" dialogs could
+    // never reach row 11.
+    criticalAlerts: criticalAlerts.slice(0, DETAIL_LIST_LIMIT),
+    criticalAlertsTotal: criticalAlerts.length,
+    staleDeals: staleDeals.slice(0, DETAIL_LIST_LIMIT),
+    staleDealsTotal: staleDeals.length,
     changesSinceLastReview: {
       dealsWithChanges,
       topMovers: movers.slice(0, 5),

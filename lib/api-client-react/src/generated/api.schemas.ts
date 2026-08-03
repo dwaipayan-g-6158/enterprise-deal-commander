@@ -797,6 +797,7 @@ export interface CriticalAlert {
   dealId: string;
   dealName: string;
   accountName: string;
+  tcv: number;
   alert: Alert;
 }
 
@@ -822,11 +823,14 @@ export type SummaryDealsByStage = {[key: string]: number};
 export interface Summary {
   totalDealsMonitored: number;
   totalTCV: number;
+  tcvAtRiskRed: number;
   reportingCurrency: string;
   dealsByHealth: HealthCounts;
   dealsByStage: SummaryDealsByStage;
   criticalAlerts: CriticalAlert[];
+  criticalAlertsTotal: number;
   staleDeals: StaleDeal[];
+  staleDealsTotal: number;
   changesSinceLastReview?: ChangesSinceLastReview;
 }
 

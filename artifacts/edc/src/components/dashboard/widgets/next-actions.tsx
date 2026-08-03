@@ -44,8 +44,13 @@ export function fmtDue(iso: string): string {
   return `in ${days}d`;
 }
 
-// Widget 7 — Next Actions / What Needs Me. The 48-hour priority list, grouped by
+// Widget 7 — Next Actions / What Needs Me. The open priority list, grouped by
 // urgency: overdue → due this week → playbook steps → upcoming closes.
+//
+// Scope note: `pendingCount` spans everything in the four groups below, and
+// `upcomingCloses` reaches 30 days out — so this is NOT a 48-hour list, which
+// both this comment and the empty state below used to claim while the header
+// counted a month of work.
 export function NextActions({ onViewAll }: { onViewAll: () => void }) {
   const { data, isLoading } = useGetNextActions();
   const [, navigate] = useLocation();
@@ -72,7 +77,10 @@ export function NextActions({ onViewAll }: { onViewAll: () => void }) {
         {isLoading || !d ? (
           <Skeleton className="h-48 w-full" />
         ) : d.pendingCount === 0 ? (
-          <p className="text-sm text-muted-foreground">Nothing needs you in the next 48 hours.</p>
+          <p className="text-sm text-muted-foreground">
+            Nothing needs you right now — no overdue items, nothing due this week, and no
+            closes in the next 30 days.
+          </p>
         ) : (
           <>
             {d.overdue.length > 0 && (

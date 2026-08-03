@@ -9,12 +9,26 @@ interface VitalSignsData {
   weightedPipeline: number;
   activeDeals: number;
   avgScore: number | null;
-  baseline: { totalTCV: number; activeDeals: number; redAlerts: number } | null;
+  baseline: {
+    totalTCV: number;
+    activeDeals: number;
+    /** RED-severity ALERT count — pairs with this bar's Red Alerts tile. */
+    redAlerts: number;
+    /** RED-health DEAL count — pairs with Pipeline Health's RED trend. */
+    redDeals: number;
+  } | null;
 }
 
 interface Props {
+  /**
+   * Fallback only, from `computeSummary`. The rendered figure prefers
+   * `/analytics/vital-signs`' own `totalTCV` so the number and the baseline it
+   * is differenced against always come from one query — the two used to be
+   * read from different endpoints on different currency bases.
+   */
   totalTCV: number;
   activeDeals: number;
+  /** Count of RED-severity alerts (not RED-health deals). */
   redAlerts: number;
   staleCount: number;
   reportingCurrency: string;
@@ -44,6 +58,10 @@ export function VitalSignsBar({
   const vs = data?.data as VitalSignsData | undefined;
   const cur = (n: number) => compactCurrency(n, reportingCurrency);
   const baseline = vs?.baseline ?? null;
+  // Same source as `baseline.totalTCV`, so the value and its delta can never sit
+  // on different currency bases. Falls back to the summary's figure only until
+  // this query resolves — both are normalized to the reporting currency now.
+  const shownTotalTCV = vs?.totalTCV ?? totalTCV;
 
   const cardCls =
     "bg-card border-border shadow-sm cursor-pointer transition-colors hover:border-primary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
@@ -71,9 +89,9 @@ export function VitalSignsBar({
           <TrendingUp className="h-4 w-4 text-primary" />
         </CardHeader>
         <CardContent>
-          <div className="text-3xl font-bold font-mono">{cur(totalTCV)}</div>
+          <div className="text-3xl font-bold font-mono">{cur(shownTotalTCV)}</div>
           <div className="mt-1">
-            <DeltaBadge current={totalTCV} baseline={baseline?.totalTCV} format={cur} />
+            <DeltaBadge current={shownTotalTCV} baseline={baseline?.totalTCV} format={cur} />
           </div>
         </CardContent>
       </Card>

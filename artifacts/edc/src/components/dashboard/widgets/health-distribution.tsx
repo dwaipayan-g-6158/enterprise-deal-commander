@@ -5,7 +5,7 @@ import { compactCurrency, type Health } from "./_shared";
 import { HEALTH_CLASS, HEALTH_SHORT_LABEL } from "@/lib/semantic-colors";
 
 interface VitalSignsData {
-  baseline: { redAlerts: number } | null;
+  baseline: { redDeals: number } | null;
 }
 
 interface Props {
@@ -23,7 +23,11 @@ const LEGEND: Health[] = ["GREEN", "YELLOW", "RED"];
 // legend, % healthy, $ at risk and a week-over-week RED trend.
 export function HealthDistribution({ counts, tcvAtRisk, reportingCurrency, onSelect }: Props) {
   const { data } = useGetVitalSigns();
-  const redBaseline = (data?.data as VitalSignsData | undefined)?.baseline?.redAlerts ?? null;
+  // `redDeals`, not `redAlerts`: `counts.RED` below is a count of RED-HEALTH
+  // DEALS, so the baseline it's differenced against has to be the same
+  // quantity. These used to share one `redAlerts` field, which silently
+  // compared a deal count against an alert count.
+  const redBaseline = (data?.data as VitalSignsData | undefined)?.baseline?.redDeals ?? null;
 
   const total = counts.GREEN + counts.YELLOW + counts.RED || 1;
   const pctHealthy = Math.round((counts.GREEN / total) * 100);

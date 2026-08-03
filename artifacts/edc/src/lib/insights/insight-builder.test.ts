@@ -6,7 +6,7 @@ const NOW = new Date("2026-07-22T12:00:00Z");
 describe("buildInsights — comparison (WoW pipeline)", () => {
   it("produces no comparison insight when baseline is null", () => {
     const inputs: InsightBuilderInputs = {
-      vitalSigns: { weightedPipeline: 1_000_000, baseline: null },
+      vitalSigns: { weightedPipeline: 1_000_000, totalTCV: 1_000_000, baseline: null },
     };
     const insights = buildInsights(inputs, NOW);
     expect(insights.some((i) => i.kind === "comparison")).toBe(false);
@@ -20,7 +20,8 @@ describe("buildInsights — comparison (WoW pipeline)", () => {
   it("produces a comparison insight when baseline is present and pipeline rose", () => {
     const inputs: InsightBuilderInputs = {
       vitalSigns: {
-        weightedPipeline: 1_200_000,
+        weightedPipeline: 400_000,
+        totalTCV: 1_200_000,
         baseline: { totalTCV: 1_000_000, activeDeals: 10, redAlerts: 1 },
       },
     };
@@ -29,12 +30,18 @@ describe("buildInsights — comparison (WoW pipeline)", () => {
     expect(comparison).toBeDefined();
     expect(comparison?.id).toBe("comparison-wow-pipeline");
     expect(comparison?.text).toMatch(/up/i);
+    // Regression guard: the delta must be TCV-vs-TCV (1.2M - 1M = +200K). The
+    // old code subtracted baseline TCV from the WEIGHTED figure, which for this
+    // fixture (400K - 1M) would read "down 600K".
+    expect(comparison?.text).toMatch(/\$200K/);
+    expect(comparison?.text).not.toMatch(/down/i);
   });
 
   it("produces a comparison insight when baseline is present and pipeline fell", () => {
     const inputs: InsightBuilderInputs = {
       vitalSigns: {
-        weightedPipeline: 800_000,
+        weightedPipeline: 1_500_000,
+        totalTCV: 800_000,
         baseline: { totalTCV: 1_000_000, activeDeals: 10, redAlerts: 1 },
       },
     };
@@ -42,18 +49,24 @@ describe("buildInsights — comparison (WoW pipeline)", () => {
     const comparison = insights.find((i) => i.kind === "comparison");
     expect(comparison).toBeDefined();
     expect(comparison?.text).toMatch(/down/i);
+    // Same guard in the other direction: weighted (1.5M) exceeds the baseline,
+    // so the old weighted-minus-TCV delta would have claimed "up 500K".
+    expect(comparison?.text).toMatch(/\$200K/);
+    expect(comparison?.text).not.toMatch(/up/i);
   });
 
   it("describes a flat week without fabricating an up/down direction", () => {
     const inputs: InsightBuilderInputs = {
       vitalSigns: {
-        weightedPipeline: 1_000_000,
+        weightedPipeline: 620_000,
+        totalTCV: 1_000_000,
         baseline: { totalTCV: 1_000_000, activeDeals: 10, redAlerts: 1 },
       },
     };
     const insights = buildInsights(inputs, NOW);
     const comparison = insights.find((i) => i.kind === "comparison");
     expect(comparison).toBeDefined();
+    // Flat on TCV even though the weighted figure differs from the baseline.
     expect(comparison?.text).not.toMatch(/up|down/i);
   });
 
@@ -61,6 +74,7 @@ describe("buildInsights — comparison (WoW pipeline)", () => {
     const inputs: InsightBuilderInputs = {
       vitalSigns: {
         weightedPipeline: 1_200_000,
+        totalTCV: 1_200_000,
         baseline: { totalTCV: 1_000_000, activeDeals: 10, redAlerts: 1 },
       },
     };
@@ -73,6 +87,7 @@ describe("buildInsights — comparison (WoW pipeline)", () => {
     const rising: InsightBuilderInputs = {
       vitalSigns: {
         weightedPipeline: 1_200_000,
+        totalTCV: 1_200_000,
         baseline: { totalTCV: 1_000_000, activeDeals: 10, redAlerts: 1 },
       },
     };
@@ -84,6 +99,7 @@ describe("buildInsights — comparison (WoW pipeline)", () => {
     const steady: InsightBuilderInputs = {
       vitalSigns: {
         weightedPipeline: 1_000_000,
+        totalTCV: 1_000_000,
         baseline: { totalTCV: 1_000_000, activeDeals: 10, redAlerts: 1 },
       },
     };

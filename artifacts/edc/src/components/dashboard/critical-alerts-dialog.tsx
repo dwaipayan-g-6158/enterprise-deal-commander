@@ -51,7 +51,10 @@ interface CriticalAlert {
 interface CriticalAlertsDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** Capped detail list from the summary — may be shorter than `totalCount`. */
   alerts: CriticalAlert[];
+  /** True alert count across the portfolio. */
+  totalCount: number;
 }
 
 const SNOOZE_PRESETS = [7, 14, 30];
@@ -60,6 +63,7 @@ export function CriticalAlertsDialog({
   open,
   onOpenChange,
   alerts,
+  totalCount,
 }: CriticalAlertsDialogProps) {
   const [, navigate] = useLocation();
   const { toast } = useToast();
@@ -89,6 +93,10 @@ export function CriticalAlertsDialog({
           <DialogDescription>
             RED-severity risks across the portfolio requiring disposition. Act on
             each here, or open the deal for full context.
+            {/* Say so when the list is capped, rather than presenting the
+                first N as if they were all of them. */}
+            {totalCount > alerts.length &&
+              ` Showing the ${alerts.length} heaviest of ${totalCount}.`}
           </DialogDescription>
         </DialogHeader>
 

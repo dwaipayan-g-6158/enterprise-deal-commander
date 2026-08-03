@@ -12,13 +12,21 @@ interface Enrichment {
   id: string;
   score: number | null;
   gatesPct: number;
-  deltaDays: number;
+  deltaDays: number | null;
   velocityStatus: string;
 }
 
 const LIMIT = 8;
 
-function VelocityCell({ status, delta }: { status: string; delta: number }) {
+function VelocityCell({ status, delta }: { status: string; delta: number | null }) {
+  // No usable stage benchmark (only open deal in its stage, or a 0-day median):
+  // render the same "—" the Velocity Map widget shows, rather than the
+  // "On Pace" this used to fall through to. Both widgets are fed by the same
+  // computeVelocityRows helper now, so they can no longer disagree about
+  // whether a deal has a benchmark at all.
+  if (status === "INSUFFICIENT_DATA" || delta == null) {
+    return <span className="text-muted-foreground">—</span>;
+  }
   if (status === "NORMAL") return <span className="text-muted-foreground">On Pace</span>;
   const behind = delta > 0;
   return (
@@ -32,9 +40,15 @@ function VelocityCell({ status, delta }: { status: string; delta: number }) {
 // progress and velocity; deep-links to the full roster at /deals.
 export function DealRoster({ reportingCurrency }: { reportingCurrency: string }) {
   const [, navigate] = useLocation();
+  // Sort on the SAME field the rows below display (normalizedTCV, i.e.
+  // currency-converted) — sorting on raw calculatedTCV while rendering the
+  // normalized value left this "top by TCV" table visibly out of descending
+  // order, and picked the wrong top-8, as soon as any deal was booked in a
+  // non-reporting currency. `normalizedTCV` is already in the server's
+  // SORTABLE_DEAL_KEYS allowlist (routes/deals.ts).
   const { data: dealsWrapper, isLoading } = useListDeals({
     state: "active",
-    sort: "-calculatedTCV",
+    sort: "-normalizedTCV",
     limit: LIMIT * 4,
   });
   const { data: enrichWrapper } = useGetRosterEnrichment();

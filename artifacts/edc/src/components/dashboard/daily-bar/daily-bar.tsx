@@ -12,8 +12,11 @@ import { WeekSegment } from "./week-segment";
 // "absent, not empty" gating), so no manual presence-tracking is needed here.
 export function DailyBar({
   previousVisitAt,
+  reportingCurrency,
 }: {
   previousVisitAt: string | null | undefined;
+  /** Passed through to WeekSegment, whose pipeline figures are money. */
+  reportingCurrency: string;
 }) {
   return (
     <div className="flex flex-wrap items-center gap-x-1 gap-y-0.5 divide-x divide-border rounded-xl border bg-card text-card-foreground shadow px-1.5 py-1">
@@ -21,7 +24,7 @@ export function DailyBar({
       <MissionSegment />
       <TodaySegment />
       <InsightSegment />
-      <WeekSegment />
+      <WeekSegment reportingCurrency={reportingCurrency} />
     </div>
   );
 }

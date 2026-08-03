@@ -18,13 +18,17 @@ interface StaleDeal {
 interface StaleDealsDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** Capped detail list from the summary — may be shorter than `totalCount`. */
   staleDeals: StaleDeal[];
+  /** True stale-deal count across the portfolio. */
+  totalCount: number;
 }
 
 export function StaleDealsDialog({
   open,
   onOpenChange,
   staleDeals,
+  totalCount,
 }: StaleDealsDialogProps) {
   const [, navigate] = useLocation();
 
@@ -44,6 +48,10 @@ export function StaleDealsDialog({
           <DialogDescription>
             Deals sitting in their current stage beyond the velocity threshold,
             longest-stalled first.
+            {/* Say so when the list is capped, rather than presenting the
+                first N as if they were all of them. */}
+            {totalCount > staleDeals.length &&
+              ` Showing the ${staleDeals.length} longest-stalled of ${totalCount}.`}
           </DialogDescription>
         </DialogHeader>
 

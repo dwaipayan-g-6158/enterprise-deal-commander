@@ -15,12 +15,21 @@ import { readShownHistory, recordShown } from "@/lib/greetings/shown-history";
 import { defaultStore } from "@/lib/storage";
 import { computeStreak } from "@/lib/streak/compute-streak";
 import { terminalOutcome } from "@/components/roster/model/board";
+import { calendarDaysUntil } from "@/lib/format";
 
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
-const SEVEN_DAYS_MS = 7 * ONE_DAY_MS;
 const NINETY_DAYS_MS = 90 * ONE_DAY_MS;
+/** "Closing this week" window, in local calendar days (inclusive of today). */
+const CLOSE_WINDOW_DAYS = 7;
 
-export function DashboardHero() {
+/**
+ * `reportingCurrency` comes from the intelligence summary via
+ * `pages/dashboard.tsx`. It is REQUIRED, not defaulted: the greeting formats
+ * `normalizedTCV` sums, which are denominated in the portfolio's reporting
+ * currency, and these calls used to omit it entirely — so `compactCurrency`
+ * fell back to its "USD" default and stamped a `$` on EUR/GBP/INR figures.
+ */
+export function DashboardHero({ reportingCurrency }: { reportingCurrency: string }) {
   const { data: me, isLoading: isLoadingMe } = useGetMe();
 
   // Computed once per mount, not on every render — otherwise this timestamp's
@@ -53,16 +62,18 @@ export function DashboardHero() {
   const tcv = (d: (typeof activeDeals)[number]) => d.normalizedTCV ?? d.calculatedTCV ?? 0;
   const procurementDeals = activeDeals.filter((d) => d.salesStage === "Procurement");
   const validationDeals = activeDeals.filter((d) => d.salesStage === "Validation");
-  const nowMs = Date.now();
-  const weekFromNow = nowMs + SEVEN_DAYS_MS;
   const closingThisWeek = activeDeals.filter((d) => {
     // "active" is a lifecycle filter only — a deal that already reached
     // Closed-Won/Closed-Lost stays in this fetch, so it must be excluded here
     // or it inflates the "closing this week" greeting even though it's decided.
     if (terminalOutcome(d.salesStage) != null) return false;
-    if (!d.expectedCloseDate) return false;
-    const t = new Date(d.expectedCloseDate).getTime();
-    return !Number.isNaN(t) && t >= nowMs && t <= weekFromNow;
+    // calendarDaysUntil, not `new Date(str).getTime() >= Date.now()`:
+    // expectedCloseDate is a date-only "YYYY-MM-DD" column, which `new Date`
+    // reads as UTC midnight — already in the past by 00:01 local in any zone
+    // east of UTC, so a deal closing TODAY was silently dropped from this
+    // greeting's count and value. Same helper the roster and timeline use.
+    const days = calendarDaysUntil(d.expectedCloseDate);
+    return days != null && days >= 0 && days <= CLOSE_WINDOW_DAYS;
   });
   const closeThisWeekValueRaw = closingThisWeek.reduce((sum, d) => sum + tcv(d), 0);
   const activeValidationValueRaw = validationDeals.reduce((sum, d) => sum + tcv(d), 0);
@@ -77,11 +88,11 @@ export function DashboardHero() {
     namePart: name ? `, ${name}` : "",
     procurementCount: procurementDeals.length,
     closeThisWeekValueRaw,
-    closeThisWeekValue: compactCurrency(closeThisWeekValueRaw),
+    closeThisWeekValue: compactCurrency(closeThisWeekValueRaw, reportingCurrency),
     closeThisWeekCount: closingThisWeek.length,
     recentPhaseAdvanceCount,
     activeValidationValueRaw,
-    activeValidationValue: compactCurrency(activeValidationValueRaw),
+    activeValidationValue: compactCurrency(activeValidationValueRaw, reportingCurrency),
     overdueActionCount,
     oneStepFromCloseDealName: oneStepDeal?.dealName,
   };

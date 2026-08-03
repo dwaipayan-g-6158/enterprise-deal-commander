@@ -37,9 +37,17 @@ export interface RosterEnrichment {
   daysInStage: number;
   /** Days since the newest meaningful activity-log entry; null if none. */
   daysSinceLastActivity?: number | null;
-  benchmarkDays: number;
-  deltaDays: number;
-  velocityStatus: "FAST" | "NORMAL" | "SLOW";
+  /**
+   * Null when the deal's stage has no usable benchmark: it's closed (no
+   * pipeline motion left to benchmark), it's the only open deal in its stage,
+   * or the median across the others is 0 days. Mirrors `benchmarkDays` on
+   * GET /v2/analytics/velocity — both now come from the same
+   * `computeVelocityRows` helper, so the two endpoints can't disagree about
+   * the same deal. `deriveVelocityBucket` maps this case to NO_DATE ("—").
+   */
+  benchmarkDays: number | null;
+  deltaDays: number | null;
+  velocityStatus: "FAST" | "NORMAL" | "SLOW" | "INSUFFICIENT_DATA";
   riskScore?: number | null;
   riskLevel?: RiskLevel | null;
 }

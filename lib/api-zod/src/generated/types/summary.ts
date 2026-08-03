@@ -14,10 +14,13 @@ import type { SummaryDealsByStage } from './summaryDealsByStage';
 export interface Summary {
   totalDealsMonitored: number;
   totalTCV: number;
+  tcvAtRiskRed: number;
   reportingCurrency: string;
   dealsByHealth: HealthCounts;
   dealsByStage: SummaryDealsByStage;
   criticalAlerts: CriticalAlert[];
+  criticalAlertsTotal: number;
   staleDeals: StaleDeal[];
+  staleDealsTotal: number;
   changesSinceLastReview?: ChangesSinceLastReview;
 }

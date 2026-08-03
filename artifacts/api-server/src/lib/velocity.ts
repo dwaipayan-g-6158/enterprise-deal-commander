@@ -69,6 +69,23 @@ export function computeVelocityRows(rows: VelocityInput[]): VelocityRow[] {
     }
 
     const benchmarkDays = medianOf(others);
+    // A zero median is not a usable benchmark for a RATIO test: the bands below
+    // collapse (0 * 1.5 === 0), so every deal with even one day in stage would
+    // be flagged SLOW. A 0 median means every other open deal in this stage
+    // entered today — there is genuinely no track record to compare against
+    // yet, which is the same "no usable benchmark" case as others.length === 0
+    // above, so it reports identically rather than inventing an absolute
+    // day-count threshold this module has no basis to pick.
+    if (benchmarkDays === 0) {
+      return {
+        ...r,
+        benchmarkDays: null,
+        deltaDays: null,
+        velocity: "INSUFFICIENT_DATA",
+        benchmarkSampleSize: others.length,
+      };
+    }
+
     const deltaDays = r.daysInStage - benchmarkDays;
     const velocity: VelocityRow["velocity"] =
       r.daysInStage > benchmarkDays * 1.5 ? "SLOW" : r.daysInStage < benchmarkDays * 0.5 ? "FAST" : "NORMAL";

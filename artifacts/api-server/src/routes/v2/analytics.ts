@@ -56,17 +56,28 @@ import {
   GetLossDashboardResponse,
 } from "@workspace/api-zod";
 import { notFound } from "../../lib/http";
-import { toISO, getHealthWeights } from "../../lib/intelligence";
+import { toISO, getHealthWeights, getThresholds, getFxRate } from "../../lib/intelligence";
 import { getActor } from "../../lib/auth";
 import { computeDealScore, scoreDeal, rescoreActiveDeals } from "../../lib/scoring";
-import { cachedIntel, computeSummary } from "../../lib/portfolio";
+import {
+  cachedIntel,
+  computeSummary,
+  mapWithConcurrency,
+  INTEL_CONCURRENCY,
+} from "../../lib/portfolio";
 import { computeMemoryHealth } from "../../lib/memory-health";
 import { computeCompetitorIntel, computePlaybookEffectiveness, percentiles } from "../../lib/memory-intel";
 import { pickLatestPerDeal, computeScoreDelta } from "../../lib/roster-enrichment";
 import { clusterProductGaps } from "../../lib/product-gaps";
-import { notDeletedFilter, CLOSED_STAGES, termAwareTcv } from "../../lib/deal-filters";
+import {
+  notDeletedFilter,
+  CLOSED_STAGES,
+  termAwareTcv,
+  normalizeTcv,
+} from "../../lib/deal-filters";
 import { computeVelocityRows } from "../../lib/velocity";
 import { computeLossDashboardMetrics } from "../../lib/loss-dashboard";
+import { calendarDaysUntil, isWithinDays } from "../../lib/calendar-days";
 
 const router: IRouter = Router();
 
@@ -294,16 +305,23 @@ router.get("/analytics/simulation", async (req: Request, res: Response) => {
   // probability excluded rather than defaulted — same convention as
   // computeCoverage's "weighted" ratio (lib/engine/src/flow.ts) and
   // exports.ts's weightedTcv.
-  const withWinProb = deals.filter((d) => d.winProbabilityPct != null);
-  const traditionalWeightedPipeline = withWinProb.reduce((s, d) => {
-    const tcv = (Number(d.productRevenue) || 0) + (Number(d.servicesRevenue) || 0);
-    return s + tcv * (Number(d.winProbabilityPct) / 100);
+  // TCV comes from `sim` (index-parallel to `deals`), i.e. the SAME
+  // term-aware calculateFlatTCV value the simulation itself runs on. This used
+  // to re-derive a flat `productRevenue + servicesRevenue` sum, which dropped
+  // the `× contractTermYears` multiplier under the Multi-Year Committed pricing
+  // model — a 3-year deal contributed a third of its product revenue here
+  // while every other TCV readout in the app (lib/deal-filters.ts's
+  // termAwareTcv, the tile above, /analytics/pipeline) counted the full term.
+  const traditionalWeightedPipeline = deals.reduce((s, d, i) => {
+    if (d.winProbabilityPct == null) return s;
+    return s + sim[i].calculatedTCV * (Number(d.winProbabilityPct) / 100);
   }, 0);
+  const dealsWithoutWinProbability = deals.filter((d) => d.winProbabilityPct == null).length;
   res.json({
     data: {
       ...runPipelineSimulation(sim, iterations),
       traditionalWeightedPipeline: Math.round(traditionalWeightedPipeline),
-      dealsWithoutWinProbability: deals.length - withWinProb.length,
+      dealsWithoutWinProbability,
     },
   });
 });
@@ -445,9 +463,11 @@ interface ActionItem {
 // The Commander's 48-hour priority queue: overdue + due-soon decisions, the
 // next open playbook step per active assignment, and imminent close dates.
 router.get("/analytics/next-actions", async (_req: Request, res: Response) => {
+  // The one clock read for this handler. Both date-only windows below are
+  // measured in LOCAL CALENDAR DAYS off it (see lib/calendar-days.ts), not as
+  // instant arithmetic, so "due today" and "closing today" land in the right
+  // bucket regardless of the host's UTC offset.
   const now = new Date();
-  const in7 = new Date(now.getTime() + 7 * 86_400_000);
-  const in30 = new Date(now.getTime() + 30 * 86_400_000);
 
   // next-actions is a reminder surface, so closed deals (Won or Lost) are
   // excluded — which also excludes archived deals for free, since archiving
@@ -480,7 +500,6 @@ router.get("/analytics/next-actions", async (_req: Request, res: Response) => {
   const dueThisWeek: ActionItem[] = [];
   for (const d of decisions) {
     if (!d.dueDate) continue;
-    const due = new Date(d.dueDate);
     const item: ActionItem = {
       id: d.id,
       dealId: d.dealId,
@@ -490,11 +509,16 @@ router.get("/analytics/next-actions", async (_req: Request, res: Response) => {
       owner: d.owner,
       dueDate: d.dueDate,
     };
-    if (due < now) overdue.push(item);
-    else if (due <= in7) dueThisWeek.push(item);
+    // `due_date` is a date-only column: bucket it by LOCAL CALENDAR DAY, not by
+    // instant. `new Date("2026-08-04") < now` treats a decision due TODAY as
+    // overdue in every timezone east of UTC — and the client's own fmtDue then
+    // labelled that same row "today" inside the Overdue group.
+    const daysUntilDue = calendarDaysUntil(d.dueDate, now);
+    if (daysUntilDue == null) continue;
+    if (daysUntilDue < 0) overdue.push(item);
+    else if (daysUntilDue <= 7) dueThisWeek.push(item);
   }
-  const byDue = (a: ActionItem, b: ActionItem) =>
-    new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime();
+  const byDue = (a: ActionItem, b: ActionItem) => a.dueDate.localeCompare(b.dueDate);
   overdue.sort(byDue);
   dueThisWeek.sort(byDue);
 
@@ -576,18 +600,19 @@ router.get("/analytics/next-actions", async (_req: Request, res: Response) => {
     .from(enterpriseDeals)
     .innerJoin(pipelineStages, eq(enterpriseDeals.salesStageId, pipelineStages.id))
     .where(and(notDeletedFilter, notInArray(pipelineStages.stageName, CLOSED_STAGES)));
+  // Calendar-day window, inclusive at both ends. `expected_close_date` is a
+  // date-only column, so the old `new Date(str) >= now` comparison silently
+  // dropped every deal closing TODAY (UTC midnight is already in the past by
+  // 00:01 local in any zone east of UTC), and `daysToClose` derived from a raw
+  // millisecond difference was off by one depending on the hour of day.
   const upcomingCloses = closeRows
-    .filter((d) => {
-      if (!d.expectedCloseDate) return false;
-      const c = new Date(d.expectedCloseDate);
-      return c >= now && c <= in30;
-    })
+    .filter((d) => isWithinDays(d.expectedCloseDate, 30, now))
     .map((d) => ({
       id: d.id,
       dealName: d.dealName,
       accountName: d.accountName,
       expectedCloseDate: d.expectedCloseDate,
-      daysToClose: Math.round((new Date(d.expectedCloseDate!).getTime() - now.getTime()) / 86_400_000),
+      daysToClose: calendarDaysUntil(d.expectedCloseDate, now) as number,
     }))
     .sort((a, b) => a.daysToClose - b.daysToClose);
 
@@ -608,10 +633,20 @@ router.get("/analytics/next-actions", async (_req: Request, res: Response) => {
 // Weighted pipeline (TCV × close probability) plus a ~7-day-ago baseline drawn
 // from per-deal snapshots, so the dashboard can render week-over-week deltas.
 // Baseline is null when no snapshot history exists (deltas then hide).
+//
+// Every money figure here — current AND baseline — is in the REPORTING currency.
+// This route used to report raw native-currency TCV (calculateFlatTCV) against a
+// raw `dealSnapshots.calculatedTcv` baseline, while the dashboard tile above the
+// delta shows `computeSummary`'s FX-normalized total. The tile therefore
+// subtracted an un-normalized baseline from a normalized current value, and
+// WeightedPipelineDialog's "Blended win rate" divided a raw weighted pipeline by
+// a normalized total (and could exceed 100%). Both sides are normalized now, so
+// this route, computeSummary, and the DailyBar Week segment all agree.
 router.get("/analytics/vital-signs", async (_req: Request, res: Response) => {
   const deals = await db
     .select({
       id: enterpriseDeals.id,
+      dealCurrency: enterpriseDeals.dealCurrency,
       productRevenue: enterpriseDeals.productRevenue,
       servicesRevenue: enterpriseDeals.servicesRevenue,
       contractTermYears: enterpriseDeals.contractTermYears,
@@ -622,20 +657,31 @@ router.get("/analytics/vital-signs", async (_req: Request, res: Response) => {
     .innerJoin(pipelineStages, eq(enterpriseDeals.salesStageId, pipelineStages.id))
     .leftJoin(pricingModels, eq(enterpriseDeals.pricingModelId, pricingModels.id))
     .where(and(notDeletedFilter, notInArray(pipelineStages.stageName, CLOSED_STAGES)));
-  const openIds = new Set(deals.map((d) => d.id));
+  const openIds = deals.map((d) => d.id);
   const scores = await latestScores();
+
+  // One cached getFxRate lookup per DISTINCT currency in the open cohort (in
+  // practice 1-3), not one per deal.
+  const { thresholds } = await getThresholds();
+  const reportingCurrency = String(thresholds.reporting_currency || "USD");
+  const currencies = [...new Set(deals.map((d) => d.dealCurrency ?? reportingCurrency))];
+  const fxByCurrency = new Map(
+    await Promise.all(
+      currencies.map(
+        async (c) => [c, await getFxRate(c, reportingCurrency)] as const,
+      ),
+    ),
+  );
 
   let totalTCV = 0;
   let weightedPipeline = 0;
   let scoreSum = 0;
   let scoreCount = 0;
   for (const d of deals) {
-    const tcv = calculateFlatTCV({
-      productRevenue: Number(d.productRevenue) || 0,
-      servicesRevenue: Number(d.servicesRevenue) || 0,
-      contractTermYears: d.contractTermYears,
-      pricingModel: d.pricingModel ?? "",
-    });
+    const tcv = normalizeTcv(
+      termAwareTcv(d),
+      fxByCurrency.get(d.dealCurrency ?? reportingCurrency),
+    );
     totalTCV += tcv;
     const pct = scores.get(d.id) ?? d.winProbabilityPct ?? 30;
     weightedPipeline += tcv * Math.max(0, Math.min(1, pct / 100));
@@ -648,37 +694,62 @@ router.get("/analytics/vital-signs", async (_req: Request, res: Response) => {
   const avgScore = scoreCount ? Math.round(scoreSum / scoreCount) : null;
 
   const cutoff = new Date(Date.now() - 7 * 86_400_000);
-  const snaps = await db
-    .select({
-      dealId: dealSnapshots.dealId,
-      healthStatus: dealSnapshots.healthStatus,
-      calculatedTcv: dealSnapshots.calculatedTcv,
-      snapshotAt: dealSnapshots.snapshotAt,
-    })
-    .from(dealSnapshots)
-    .where(lte(dealSnapshots.snapshotAt, cutoff))
-    .orderBy(desc(dealSnapshots.snapshotAt));
-  const latestPerDeal = new Map<string, { health: string | null; tcv: number }>();
-  for (const s of snaps) {
-    // Deliberately "currently open, applied retroactively" rather than true
-    // point-in-time stage history (which dealSnapshots.salesStage would
-    // support) — keeping both sides of the delta over the same population
-    // means the week-over-week numbers reflect change within the open
-    // cohort, not deals entering or leaving it.
-    if (!openIds.has(s.dealId)) continue;
-    if (!latestPerDeal.has(s.dealId)) {
-      latestPerDeal.set(s.dealId, { health: s.healthStatus, tcv: Number(s.calculatedTcv) || 0 });
-    }
-  }
-  let baseline: { totalTCV: number; activeDeals: number; redAlerts: number } | null = null;
-  if (latestPerDeal.size > 0) {
+  // DISTINCT ON returns exactly ONE row per deal — the newest snapshot at or
+  // before the cutoff — instead of streaming every historical snapshot row into
+  // the process and reducing in JS. That old scan was unbounded and grew with
+  // the snapshot table forever (periodic rows can't be pruned; they ARE this
+  // baseline). Restricted to the currently-open cohort for the same reason the
+  // original was: keeping both sides of the delta over one population means the
+  // week-over-week numbers reflect change WITHIN the open cohort, not deals
+  // entering or leaving it.
+  const latestSnaps = openIds.length
+    ? await db
+        .selectDistinctOn([dealSnapshots.dealId], {
+          dealId: dealSnapshots.dealId,
+          healthStatus: dealSnapshots.healthStatus,
+          normalizedTcv: dealSnapshots.normalizedTcv,
+          payload: dealSnapshots.payload,
+        })
+        .from(dealSnapshots)
+        .where(
+          and(
+            lte(dealSnapshots.snapshotAt, cutoff),
+            inArray(dealSnapshots.dealId, openIds),
+          ),
+        )
+        .orderBy(dealSnapshots.dealId, desc(dealSnapshots.snapshotAt))
+    : [];
+
+  let baseline: {
+    totalTCV: number;
+    activeDeals: number;
+    redAlerts: number;
+    redDeals: number;
+  } | null = null;
+  if (latestSnaps.length > 0) {
     let bTcv = 0;
-    let bRed = 0;
-    for (const v of latestPerDeal.values()) {
-      bTcv += v.tcv;
-      if (v.health === "RED") bRed++;
+    let bRedAlerts = 0;
+    let bRedDeals = 0;
+    for (const s of latestSnaps) {
+      bTcv += Number(s.normalizedTcv) || 0;
+      // Two DISTINCT baselines, because the dashboard shows two different
+      // quantities that used to share this one field: the "Red Alerts" tile
+      // counts RED-severity ALERTS, while Pipeline Health's "N RED this week"
+      // counts RED-health DEALS. A deal can carry a RED alert without its
+      // health being RED, so one number can't serve both.
+      if (s.healthStatus === "RED") bRedDeals++;
+      const alerts = (s.payload as { governance?: { alerts?: { severity?: string }[] } } | null)
+        ?.governance?.alerts;
+      if (Array.isArray(alerts)) {
+        bRedAlerts += alerts.filter((a) => a?.severity === "RED").length;
+      }
     }
-    baseline = { totalTCV: bTcv, activeDeals: latestPerDeal.size, redAlerts: bRed };
+    baseline = {
+      totalTCV: bTcv,
+      activeDeals: latestSnaps.length,
+      redAlerts: bRedAlerts,
+      redDeals: bRedDeals,
+    };
   }
 
   res.json({
@@ -687,6 +758,7 @@ router.get("/analytics/vital-signs", async (_req: Request, res: Response) => {
       weightedPipeline: Math.round(weightedPipeline),
       activeDeals: deals.length,
       avgScore,
+      reportingCurrency,
       baseline,
     },
   });
@@ -736,19 +808,31 @@ router.get("/analytics/roster", async (_req: Request, res: Response) => {
     gateAgg.set(g.dealId, cur);
   }
 
-  // Benchmark = median days-in-stage across active deals in the same stage
-  // (matches the /analytics/velocity handler).
-  const byStage = new Map<string, number[]>();
-  for (const d of deals) {
-    const k = d.stageName ?? "?";
-    const arr = byStage.get(k) ?? [];
-    arr.push(daysBetween(d.stageEnteredAt));
-    byStage.set(k, arr);
-  }
-  const median = (xs: number[]) => {
-    const s = [...xs].sort((a, b) => a - b);
-    return s.length ? s[Math.floor(s.length / 2)] : 0;
-  };
+  // Benchmark/velocity comes from the SHARED computeVelocityRows helper
+  // (lib/velocity.ts), the same one /analytics/velocity uses. This handler used
+  // to inline its own `median(byStage)` that (a) included the deal being scored
+  // in its own comparison set and (b) spanned closed stages — so the Deal
+  // Roster widget and the Velocity Map widget, side by side on the dashboard,
+  // reported different benchmarkDays/deltaDays for the same deal, and a deal
+  // alone in its stage read "On Pace" here while reading "New" there.
+  //
+  // Only OPEN deals form the population (a Closed-Won deal has no pipeline
+  // motion left to benchmark), matching /analytics/velocity's own filter.
+  // Closed deals still get a row — with the velocity trio null — because this
+  // response's other fields (score, gatesPct, riskLevel, daysSinceLastActivity)
+  // are consumed for every non-deleted deal by the roster page and
+  // use-pipeline-risk.ts.
+  const openVelocityById = new Map(
+    computeVelocityRows(
+      deals
+        .filter((d) => d.stageName != null && !CLOSED_STAGES.includes(d.stageName))
+        .map((d) => ({
+          id: d.id,
+          stageName: d.stageName as string,
+          daysInStage: daysBetween(d.stageEnteredAt),
+        })),
+    ).map((r) => [r.id, r]),
+  );
 
   // Fetch per-deal risk from the cached intelligence tier (intel: prefix,
   // 30 s TTL, event-bus-invalidated on mutation). cachedIntel() wraps
@@ -756,7 +840,16 @@ router.get("/analytics/roster", async (_req: Request, res: Response) => {
   // CacheTtl.intelligence, ...) so this is the same cached path used by the
   // portfolio summary and the single-deal intelligence route — not an uncached
   // O(N) loop.
-  const intelResults = await Promise.all(deals.map((d) => cachedIntel(d.id)));
+  //
+  // Bounded, not a raw Promise.all: on a cache miss each cachedIntel issues
+  // ~15 sequential queries against a 10-connection pool, so fanning out over
+  // EVERY non-deleted deal at once starves concurrent request handlers instead
+  // of going faster (see the INTEL_CONCURRENCY comment in lib/portfolio.ts).
+  // mapWithConcurrency preserves input order, which the index-keyed zip below
+  // depends on.
+  const intelResults = await mapWithConcurrency(deals, INTEL_CONCURRENCY, (d) =>
+    cachedIntel(d.id),
+  );
   const riskByDeal = new Map(
     deals.map((d, i) => {
       const intel = intelResults[i];
@@ -773,10 +866,12 @@ router.get("/analytics/roster", async (_req: Request, res: Response) => {
   const rows = deals.map((d) => {
     const g = gateAgg.get(d.id) ?? { c: 0, t: 0 };
     const days = daysBetween(d.stageEnteredAt);
-    const bench = median(byStage.get(d.stageName ?? "?") ?? [days]);
     const risk = riskByDeal.get(d.id);
     const scoreNow = scores.get(d.id) ?? null;
     const lastActivity = lastActivityByDeal.get(d.id);
+    // Absent for a closed deal (not in the open population above), and null
+    // inside the row itself when the stage has no usable benchmark yet.
+    const vel = openVelocityById.get(d.id);
     return {
       id: d.id,
       dealName: d.dealName,
@@ -785,9 +880,9 @@ router.get("/analytics/roster", async (_req: Request, res: Response) => {
       gatesPct: g.t ? Math.round((g.c / g.t) * 100) : 0,
       daysInStage: days,
       daysSinceLastActivity: lastActivity ? daysBetween(lastActivity) : null,
-      benchmarkDays: bench,
-      deltaDays: days - bench,
-      velocityStatus: days > bench * 1.5 ? "SLOW" : days < bench * 0.5 ? "FAST" : "NORMAL",
+      benchmarkDays: vel?.benchmarkDays ?? null,
+      deltaDays: vel?.deltaDays ?? null,
+      velocityStatus: vel?.velocity ?? "INSUFFICIENT_DATA",
       riskScore: risk?.riskScore ?? null,
       riskLevel: risk?.riskLevel ?? null,
     };
