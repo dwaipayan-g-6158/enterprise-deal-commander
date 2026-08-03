@@ -70,7 +70,7 @@ export function TotalTcvDialog({
   // deal currencies.
   const byHealth: Record<Health, number> = { GREEN: 0, YELLOW: 0, RED: 0 };
   for (const d of deals) {
-    const h = (d.healthStatus as Health) ?? "GREEN";
+    const h = d.healthStatus;
     if (h in byHealth) byHealth[h] += d.normalizedTCV ?? d.calculatedTCV ?? 0;
   }
   const aggregateTotal =
@@ -184,7 +184,7 @@ export function TotalTcvDialog({
                     >
                       <span
                         className={`h-2.5 w-2.5 shrink-0 rounded-full ${
-                          HEALTH_META[(deal.healthStatus as Health) ?? "GREEN"]
+                          HEALTH_META[deal.healthStatus]
                             ?.dot ?? "bg-muted-foreground"
                         }`}
                       />

@@ -216,7 +216,7 @@ export function RosterTable(props: RosterTableProps) {
                       onClick={() => onRowClick(row)}
                       className={cn(
                         "group cursor-pointer",
-                        row.riskLevel ? RISK_BORDER[row.riskLevel] : HEALTH_BORDER[row.healthStatus as Health],
+                        row.riskLevel ? RISK_BORDER[row.riskLevel] : HEALTH_BORDER[row.healthStatus],
                         isPreview && "bg-primary/5 ring-1 ring-inset ring-primary/30",
                       )}
                     >

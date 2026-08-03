@@ -6,13 +6,14 @@
  * OpenAPI spec version: 1.0.0
  */
 import type { Alert } from './alert';
+import type { ShareCardHealthStatus } from './shareCardHealthStatus';
 
 export interface ShareCard {
   dealName: string;
   accountName: string;
   normalizedTCV: number;
   reportingCurrency: string;
-  healthStatus: string;
+  healthStatus: ShareCardHealthStatus;
   salesStage: string;
   progressPercentage: number;
   currentMilestone: string;

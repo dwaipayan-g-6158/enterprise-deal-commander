@@ -8,6 +8,7 @@
 import type { Ad360Feature } from './ad360Feature';
 import type { ComplianceDriver } from './complianceDriver';
 import type { CrossSell } from './crossSell';
+import type { DealHealthStatus } from './dealHealthStatus';
 import type { Tag } from './tag';
 
 export interface Deal {
@@ -65,7 +66,7 @@ export interface Deal {
   complianceDrivers?: ComplianceDriver[];
   calculatedTCV: number;
   normalizedTCV: number;
-  healthStatus: string;
+  healthStatus: DealHealthStatus;
   /** @nullable */
   archivedAt?: string | null;
   /** @nullable */

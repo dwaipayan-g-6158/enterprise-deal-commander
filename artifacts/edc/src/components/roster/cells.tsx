@@ -17,13 +17,7 @@ import type { ColumnId, Health, RosterRow, VelocityBucket } from "./model/roster
 // importers (and the table badge below) keep their import path.
 export { terminalOutcome };
 
-export function HealthBadge({ health }: { health: string }) {
-  // `health` stays a bare `string` here (not tightened to `Health`) because
-  // its callers pass `row.healthStatus`, which the generated Deal schema
-  // types as `string` rather than the Health union (openapi.yaml gap, same
-  // one derive-rows.ts's `as never` cast works around) — HEALTH_LABEL falls
-  // back to the raw value for anything unexpected rather than crashing.
-  const label = HEALTH_LABEL[health as Health] ?? health;
+export function HealthBadge({ health }: { health: Health }) {
   return (
     <Badge
       variant={health === "RED" ? "destructive" : health === "YELLOW" ? "default" : "secondary"}
@@ -32,7 +26,7 @@ export function HealthBadge({ health }: { health: string }) {
         health === "GREEN" && HEALTH_BADGE_CLASS.GREEN,
       )}
     >
-      {label}
+      {HEALTH_LABEL[health]}
     </Badge>
   );
 }

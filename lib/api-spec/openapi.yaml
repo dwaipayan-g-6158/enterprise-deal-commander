@@ -2193,7 +2193,13 @@ components:
           items: { $ref: "#/components/schemas/ComplianceDriver" }
         calculatedTCV: { type: number }
         normalizedTCV: { type: number }
-        healthStatus: { type: string }
+        # Computed, never stored: there is no health_status column on `deals`.
+        # intelligence.ts assigns `intel?.governance.healthStatus ?? "GREEN"`,
+        # i.e. the same value Intelligence.healthStatus already validates against
+        # this enum — so the constraint can't reject anything that used to pass.
+        # NOT applied to DealSnapshot.healthStatus, which reads a stored
+        # varchar(10) with no CHECK constraint behind it.
+        healthStatus: { type: string, enum: [GREEN, YELLOW, RED] }
         archivedAt: { type: ["string", "null"] }
         deletedAt: { type: ["string", "null"] }
         createdAt: { type: string }
@@ -3286,7 +3292,8 @@ components:
         accountName: { type: string }
         normalizedTCV: { type: number }
         reportingCurrency: { type: string }
-        healthStatus: { type: string }
+        # Computed — routes/shared.ts reads intel.governance.healthStatus directly.
+        healthStatus: { type: string, enum: [GREEN, YELLOW, RED] }
         salesStage: { type: string }
         progressPercentage: { type: number }
         currentMilestone: { type: string }

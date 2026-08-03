@@ -82,7 +82,7 @@ export const BoardCard = memo(function BoardCard({
           "rounded-lg border bg-card p-3 transition-colors hover:border-primary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
           draggable ? "cursor-grab active:cursor-grabbing" : "cursor-pointer",
           moving && "opacity-60 pointer-events-none",
-          row.riskLevel ? RISK_BORDER[row.riskLevel] : HEALTH_BORDER[row.healthStatus as Health],
+          row.riskLevel ? RISK_BORDER[row.riskLevel] : HEALTH_BORDER[row.healthStatus],
         )}
       >
         <div className="flex items-start justify-between gap-2">

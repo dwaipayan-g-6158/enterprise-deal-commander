@@ -2,10 +2,14 @@
 // headless layer (url codec, velocity, derived-rows) stays node-testable.
 import type { Deal } from "@workspace/api-client-react";
 import type { RiskLevel } from "@/components/cockpit/risk/risk-model";
+// Re-exported rather than re-declared: HEALTH_LABEL/HEALTH_CLASS are keyed by
+// this union, so a local copy of it could drift from the maps it indexes.
+// Relative path because this model layer is node-tested through a vitest config
+// with no alias resolution (same reason _shared.tsx imports it this way).
+import type { Health } from "../../../lib/semantic-colors";
 
-export type { Deal };
+export type { Deal, Health };
 
-export type Health = "GREEN" | "YELLOW" | "RED";
 export type DealState = "active" | "archived" | "deleted";
 /** Whether a deal's *pipeline stage* is terminal (Closed-Won/Closed-Lost), independent
  * of `DealState` (archived/deleted). "open" (default) hides terminal-stage deals from

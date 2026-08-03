@@ -131,6 +131,15 @@ export interface ResetPasswordInput {
   password: string;
 }
 
+export type DealHealthStatus = typeof DealHealthStatus[keyof typeof DealHealthStatus];
+
+
+export const DealHealthStatus = {
+  GREEN: 'GREEN',
+  YELLOW: 'YELLOW',
+  RED: 'RED',
+} as const;
+
 export interface Ad360Feature {
   id: number;
   code: string;
@@ -217,7 +226,7 @@ export interface Deal {
   complianceDrivers?: ComplianceDriver[];
   calculatedTCV: number;
   normalizedTCV: number;
-  healthStatus: string;
+  healthStatus: DealHealthStatus;
   /** @nullable */
   archivedAt?: string | null;
   /** @nullable */
@@ -1261,12 +1270,21 @@ export interface BatSignalResponse {
   data: BatSignal;
 }
 
+export type ShareCardHealthStatus = typeof ShareCardHealthStatus[keyof typeof ShareCardHealthStatus];
+
+
+export const ShareCardHealthStatus = {
+  GREEN: 'GREEN',
+  YELLOW: 'YELLOW',
+  RED: 'RED',
+} as const;
+
 export interface ShareCard {
   dealName: string;
   accountName: string;
   normalizedTCV: number;
   reportingCurrency: string;
-  healthStatus: string;
+  healthStatus: ShareCardHealthStatus;
   salesStage: string;
   progressPercentage: number;
   currentMilestone: string;

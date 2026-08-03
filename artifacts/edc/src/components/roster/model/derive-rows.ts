@@ -76,7 +76,7 @@ function passesFilters(row: RosterRow, view: RosterView, now: number): boolean {
   const f = view.filters;
   if (!passesClosure(row, f.closure)) return false;
   if (f.stage.length && !f.stage.includes(row.salesStage)) return false;
-  if (f.health.length && !f.health.includes(row.healthStatus as never)) return false;
+  if (f.health.length && !f.health.includes(row.healthStatus)) return false;
   if (f.velocity.length && !f.velocity.includes(row.velocity)) return false;
 
   const tcv = comparableTCV(row);

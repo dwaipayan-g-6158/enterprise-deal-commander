@@ -21,7 +21,9 @@ export interface TimelineDeal {
   expectedCloseDate?: string | null;
   normalizedTCV?: number | null;
   calculatedTCV?: number | null;
-  healthStatus?: string | null;
+  // Required and non-null, mirroring the generated `Deal` — health is computed
+  // server-side and carries the enum, so it needs no widening here.
+  healthStatus: Health;
 }
 
 export interface TimelineBucket {
@@ -93,7 +95,7 @@ export function buildTimeline(deals: TimelineDeal[], now: Date): Timeline {
     if (terminalOutcome(d.salesStage) != null) continue;
 
     const tcv = d.normalizedTCV ?? d.calculatedTCV ?? 0;
-    const health = d.healthStatus as Health;
+    const health = d.healthStatus;
     if (health === "RED") redTcv += tcv;
 
     if (!d.expectedCloseDate) {

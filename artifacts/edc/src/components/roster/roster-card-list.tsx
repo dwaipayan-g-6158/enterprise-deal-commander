@@ -16,7 +16,7 @@ export function RosterCardList({ rows }: { rows: RosterRow[] }) {
           href={`/deals/${deal.id}`}
           className={cn(
             "block rounded-lg border p-4 transition-colors hover:border-primary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-            deal.riskLevel ? RISK_BORDER[deal.riskLevel] : HEALTH_BORDER[deal.healthStatus as Health],
+            deal.riskLevel ? RISK_BORDER[deal.riskLevel] : HEALTH_BORDER[deal.healthStatus],
           )}
         >
           <div className="flex items-start justify-between gap-2">

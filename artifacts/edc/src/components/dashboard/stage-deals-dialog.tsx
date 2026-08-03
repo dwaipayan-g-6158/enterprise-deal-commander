@@ -107,11 +107,8 @@ export function StageDealsDialog({
                           className="flex w-full items-center gap-3 px-2 -mx-2 py-2.5 text-left rounded-md transition-colors hover:bg-muted/40 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                         >
                           <span
-                            className={`h-2.5 w-2.5 shrink-0 rounded-full ${
-                              HEALTH_DOT[(deal.healthStatus as Health) ?? "GREEN"] ??
-                              "bg-muted-foreground"
-                            }`}
-                            title={HEALTH_LABEL[deal.healthStatus as Health] ?? deal.healthStatus}
+                            className={`h-2.5 w-2.5 shrink-0 rounded-full ${HEALTH_DOT[deal.healthStatus]}`}
+                            title={HEALTH_LABEL[deal.healthStatus]}
                           />
                           <div className="min-w-0 flex-1">
                             <p className="truncate text-sm font-medium">

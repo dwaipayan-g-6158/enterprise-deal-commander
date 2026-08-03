@@ -17,7 +17,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { Gauge, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { HEALTH_DOT, rowMotion, type Health } from "./widgets/_shared";
+import { HEALTH_DOT, rowMotion } from "./widgets/_shared";
 import { terminalOutcome } from "@/components/roster/model/board";
 
 interface Enrichment {
@@ -185,7 +185,7 @@ export function AvgScoreDialog({ open, onOpenChange, avgScore }: AvgScoreDialogP
                     >
                       <span
                         className={`h-2.5 w-2.5 shrink-0 rounded-full ${
-                          HEALTH_DOT[(deal.healthStatus as Health) ?? "GREEN"] ?? "bg-muted-foreground"
+                          HEALTH_DOT[deal.healthStatus]
                         }`}
                       />
                       <div className="min-w-0 flex-1">

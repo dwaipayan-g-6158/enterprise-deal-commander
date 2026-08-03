@@ -3,7 +3,7 @@ import { useParams } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { AlertTriangle, ShieldAlert, Activity, CheckCircle } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { HEALTH_BADGE_CLASS, HEALTH_CLASS, HEALTH_LABEL, type Health } from "@/lib/semantic-colors";
+import { HEALTH_BADGE_CLASS, HEALTH_CLASS, HEALTH_LABEL } from "@/lib/semantic-colors";
 
 /** Alert severity uses the health scale — RED/YELLOW are the same two states. */
 const sevClass = (severity: string) =>
@@ -47,7 +47,7 @@ export default function Share() {
               <p className="text-muted-foreground">{card.accountName}</p>
             </div>
             <Badge variant={card.healthStatus === 'RED' ? 'destructive' : card.healthStatus === 'YELLOW' ? 'default' : 'secondary'} className={`text-sm px-3 py-1 ${card.healthStatus === 'YELLOW' ? HEALTH_BADGE_CLASS.YELLOW : card.healthStatus === 'GREEN' ? HEALTH_BADGE_CLASS.GREEN : ''}`}>
-              {HEALTH_LABEL[card.healthStatus as Health] ?? card.healthStatus}
+              {HEALTH_LABEL[card.healthStatus]}
             </Badge>
           </div>
         </CardHeader>

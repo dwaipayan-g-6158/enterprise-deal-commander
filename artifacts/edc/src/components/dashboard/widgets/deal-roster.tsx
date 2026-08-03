@@ -5,7 +5,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { ArrowRight } from "lucide-react";
 import { terminalOutcome } from "@/components/roster/model/board";
 import { formatDate } from "@/lib/format";
-import { compactCurrency, daysUntil, HEALTH_DOT, type Health } from "./_shared";
+import { compactCurrency, daysUntil, HEALTH_DOT } from "./_shared";
 import { HEALTH_LABEL } from "@/lib/semantic-colors";
 
 interface Enrichment {
@@ -85,7 +85,7 @@ export function DealRoster({ reportingCurrency }: { reportingCurrency: string })
               <tbody>
                 {deals.map((d) => {
                   const e = enrichById.get(d.id);
-                  const health = d.healthStatus as Health;
+                  const health = d.healthStatus;
                   const tcv = d.normalizedTCV ?? d.calculatedTCV ?? 0;
                   const close = formatDate(d.expectedCloseDate);
                   const overdue = (daysUntil(d.expectedCloseDate) ?? 1) < 0;

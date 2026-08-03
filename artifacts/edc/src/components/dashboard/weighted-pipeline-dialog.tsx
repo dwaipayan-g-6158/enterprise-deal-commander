@@ -96,7 +96,7 @@ export function WeightedPipelineDialog({
 
   const byHealth: Record<Health, number> = { GREEN: 0, YELLOW: 0, RED: 0 };
   for (const r of rows) {
-    const h = (r.deal.healthStatus as Health) ?? "GREEN";
+    const h = r.deal.healthStatus;
     if (h in byHealth) byHealth[h] += r.contribution;
   }
   const aggregateWeighted = byHealth.GREEN + byHealth.YELLOW + byHealth.RED || weightedPipeline || 1;
@@ -194,7 +194,7 @@ export function WeightedPipelineDialog({
                     >
                       <span
                         className={`h-2.5 w-2.5 shrink-0 rounded-full ${
-                          HEALTH_DOT[(deal.healthStatus as Health) ?? "GREEN"] ?? "bg-muted-foreground"
+                          HEALTH_DOT[deal.healthStatus]
                         }`}
                       />
                       <div className="min-w-0 flex-1">

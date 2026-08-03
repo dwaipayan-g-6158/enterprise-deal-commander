@@ -4,7 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { formatCurrency } from "@/components/cockpit/use-invalidate";
 import { HEALTH_BADGE_CLASS, HEALTH_LABEL, HEALTH_SHORT_LABEL, type Health } from "@/lib/semantic-colors";
 
-const healthColor: Record<string, string> = {
+const healthColor: Record<Health, string> = {
   RED: "bg-destructive text-white",
   YELLOW: HEALTH_BADGE_CLASS.YELLOW,
   GREEN: HEALTH_BADGE_CLASS.GREEN,
@@ -39,8 +39,8 @@ export default function MobileHome() {
         >
           <div className="flex items-center justify-between">
             <span className="font-semibold">{d.accountName}</span>
-            <Badge className={healthColor[d.healthStatus] ?? ""}>
-              {HEALTH_LABEL[d.healthStatus as Health] ?? d.healthStatus}
+            <Badge className={healthColor[d.healthStatus]}>
+              {HEALTH_LABEL[d.healthStatus]}
             </Badge>
           </div>
           <p className="text-sm text-muted-foreground">{d.dealName}</p>
