@@ -1,5 +1,3 @@
-import { useState } from "react";
-import { Link } from "wouter";
 import {
   useGetPipelineSimulation,
   useGetWinLossAnalytics,
@@ -9,16 +7,14 @@ import { useFlowFunnel, useFlowHealthScore } from "@/components/cockpit/flow/use
 import type { FunnelRow } from "@workspace/engine";
 import { compactCurrency, humanizeCode } from "@/lib/format";
 import { Progress } from "@/components/ui/progress";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 import { OUTCOME_CLASS } from "@/lib/semantic-colors";
 import { MobileHeader } from "@/mobile/shell/mobile-header";
 import { MobileCard, CardHeader } from "@/mobile/components/mobile-card";
 import { ListRow } from "@/mobile/components/list-row";
-import { SegmentChips, type Segment } from "@/mobile/components/segment-chips";
 import { Shimmer } from "@/mobile/components/shimmer";
 import { PullToRefresh } from "@/mobile/components/pull-to-refresh";
-
-type TabId = "forecast" | "flow";
 
 interface SimulationData {
   percentiles: Record<string, number>;
@@ -46,11 +42,6 @@ interface HealthScoreData {
   subScores: Record<string, number | null>;
 }
 
-const TABS: Segment<TabId>[] = [
-  { id: "forecast", label: "Forecast" },
-  { id: "flow", label: "Flow" },
-];
-
 /**
  * Analytics, re-cut for one column.
  *
@@ -61,10 +52,14 @@ const TABS: Segment<TabId>[] = [
  * of proportional bars. The Sankey and the matrix are not ported — a
  * two-dimensional flow diagram at thumb scale is decoration, and the funnel
  * carries the same story.
+ *
+ * This is the one control in the shell that is genuinely a tablist — it swaps
+ * one panel of cards for another — so it is the one that uses `Tabs`. The
+ * filter chips everywhere else are a `ToggleGroup`, because they filter a
+ * list in place. Keeping the distinction is the point: a tablist with no
+ * tabpanel lies to a screen reader.
  */
 export function AnalyticsScreen() {
-  const [tab, setTab] = useState<TabId>("forecast");
-
   const simQuery = useGetPipelineSimulation();
   const winLossQuery = useGetWinLossAnalytics();
   const velocityQuery = useGetVelocityAnalytics();
@@ -81,33 +76,38 @@ export function AnalyticsScreen() {
     ]);
 
   return (
-    <>
+    <Tabs defaultValue="forecast">
       <MobileHeader title="Analytics">
-        <SegmentChips segments={TABS} value={tab} onChange={(id) => setTab(id)} label="Analytics view" />
+        <div className="px-4 pb-3">
+          <TabsList className="grid h-12 w-full grid-cols-2 rounded-full p-1">
+            <TabsTrigger value="forecast" className="m-label h-full rounded-full">
+              Forecast
+            </TabsTrigger>
+            <TabsTrigger value="flow" className="m-label h-full rounded-full">
+              Flow
+            </TabsTrigger>
+          </TabsList>
+        </div>
       </MobileHeader>
 
       <PullToRefresh onRefresh={refresh}>
-        <div className="space-y-3 p-4">
-          {tab === "forecast" ? (
-            <>
-              <ForecastCard data={simQuery.data?.data as SimulationData | undefined} />
-              <WinLossCard data={winLossQuery.data?.data as WinLossData | undefined} />
-              <VelocityCard
-                deals={
-                  (velocityQuery.data?.data as { deals?: VelocityDeal[] } | undefined)?.deals ?? []
-                }
-                loading={velocityQuery.isLoading}
-              />
-            </>
-          ) : (
-            <>
-              <PipelineHealthCard data={healthQuery.data?.data as HealthScoreData | undefined} />
-              <FunnelCard rows={(funnelQuery.data?.data as FunnelRow[] | undefined) ?? []} loading={funnelQuery.isLoading} />
-            </>
-          )}
-        </div>
+        <TabsContent value="forecast" className="mt-0 space-y-3 p-4">
+          <ForecastCard data={simQuery.data?.data as SimulationData | undefined} />
+          <WinLossCard data={winLossQuery.data?.data as WinLossData | undefined} />
+          <VelocityCard
+            deals={(velocityQuery.data?.data as { deals?: VelocityDeal[] } | undefined)?.deals ?? []}
+            loading={velocityQuery.isLoading}
+          />
+        </TabsContent>
+        <TabsContent value="flow" className="mt-0 space-y-3 p-4">
+          <PipelineHealthCard data={healthQuery.data?.data as HealthScoreData | undefined} />
+          <FunnelCard
+            rows={(funnelQuery.data?.data as FunnelRow[] | undefined) ?? []}
+            loading={funnelQuery.isLoading}
+          />
+        </TabsContent>
       </PullToRefresh>
-    </>
+    </Tabs>
   );
 }
 
