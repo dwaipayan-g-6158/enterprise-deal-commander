@@ -100,13 +100,13 @@ export function HomeScreen() {
       <PullToRefresh onRefresh={refresh}>
         {/* Hero: the one number worth waking up to. */}
         <section className="px-4 pb-1 pt-4">
-          <p className="m-eyebrow">Weighted pipeline</p>
+          <p className="m-label">Weighted pipeline</p>
           {vitals ? (
             <div className="m-appear">
-              <p className="m-kpi-hero mt-1">
+              <p className="m-display mt-1">
                 <CountUp value={vitals.weightedPipeline} format={money} once="home-pipeline" />
               </p>
-              <p className="m-data mt-1">
+              <p className="m-caption mt-1">
                 <span className="m-muted">of {money(vitals.totalTCV)} total · </span>
                 <DeltaLine
                   delta={vitals.baseline ? vitals.totalTCV - vitals.baseline.totalTCV : null}
@@ -129,17 +129,17 @@ export function HomeScreen() {
               <CardHeader label="Pipeline health" />
               {health ? (
                 <>
-                  <p className="m-h2">
-                    {healthyPct}% <span className="m-muted text-base font-medium">healthy</span>
+                  <p className="m-title">
+                    {healthyPct}% <span className="m-caption m-muted">healthy</span>
                   </p>
-                  <p className="m-data m-muted mt-1">
+                  <p className="m-caption m-muted mt-1">
                     {money(summary!.tcvAtRiskRed)} at risk
                   </p>
                   <div className="mt-3 flex gap-3">
                     {(["GREEN", "YELLOW", "RED"] as Health[]).map((key) => (
                       <div key={key} className="flex items-center gap-1.5">
                         <HealthDot health={key} />
-                        <span className="m-data">
+                        <span className="m-caption">
                           {health[key]}
                           <span className="m-muted ml-1">{HEALTH_SHORT_LABEL[key]}</span>
                         </span>
@@ -202,7 +202,7 @@ export function HomeScreen() {
             <CardHeader
               label={`Critical alerts${summary ? ` (${summary.criticalAlertsTotal})` : ""}`}
               action={
-                <Link href="/deals" className="m-data text-primary">
+                <Link href="/deals" className="m-caption text-primary">
                   All deals
                 </Link>
               }
@@ -210,7 +210,7 @@ export function HomeScreen() {
             {!summary ? (
               <Shimmer className="h-20" />
             ) : summary.criticalAlerts.length === 0 ? (
-              <p className="m-body m-muted text-sm">
+              <p className="m-body m-muted">
                 Nothing critical right now. The next check is on its way.
               </p>
             ) : (
@@ -233,8 +233,8 @@ export function HomeScreen() {
                       href={`/deals/${deal.dealId}`}
                       className="m-press flex items-baseline justify-between gap-3 py-1.5"
                     >
-                      <span className="min-w-0 flex-1 truncate text-sm">{deal.dealName}</span>
-                      <span className="m-data m-muted shrink-0">{deal.daysInStage}d in stage</span>
+                      <span className="m-body min-w-0 flex-1 truncate">{deal.dealName}</span>
+                      <span className="m-caption m-muted shrink-0">{deal.daysInStage}d in stage</span>
                     </Link>
                   </li>
                 ))}
@@ -256,14 +256,14 @@ export function HomeScreen() {
                       className="m-press block py-0.5"
                     >
                       <div className="flex items-baseline justify-between gap-3">
-                        <span className="min-w-0 flex-1 truncate text-sm">
+                        <span className="m-body min-w-0 flex-1 truncate">
                           {activityTitle(event)}
                         </span>
-                        <span className="m-data m-muted shrink-0">
+                        <span className="m-caption m-muted shrink-0">
                           {relativeTime(event.occurredAt)}
                         </span>
                       </div>
-                      <p className="m-data m-muted mt-0.5 truncate">
+                      <p className="m-caption m-muted mt-0.5 truncate">
                         {event.dealName ?? "Deal"} · {event.actor}
                       </p>
                     </Link>
@@ -289,13 +289,13 @@ function AlertRow({
     <li>
       <Link href={`/deals/${entry.dealId}`} className="m-press block">
         <div className="flex items-baseline justify-between gap-3">
-          <span className="min-w-0 flex-1 truncate text-sm font-semibold">{entry.dealName}</span>
-          <span className="m-data shrink-0">{money(entry.tcv)}</span>
+          <span className="m-headline min-w-0 flex-1 truncate">{entry.dealName}</span>
+          <span className="m-caption shrink-0">{money(entry.tcv)}</span>
         </div>
-        <p className={cn("m-data mt-0.5", HEALTH_CLASS.RED.text)}>
+        <p className={cn("m-label mt-0.5", HEALTH_CLASS.RED.text)}>
           {humanizeCode(entry.alert.code)}
         </p>
-        <p className="m-body m-muted mt-0.5 line-clamp-2 text-sm">{entry.alert.message}</p>
+        <p className="m-body m-muted mt-0.5 line-clamp-2">{entry.alert.message}</p>
       </Link>
     </li>
   );

@@ -10,7 +10,7 @@ export function EconomicsSection({ intel }: { intel: Intelligence }) {
   const f = intel.financials;
 
   const verdict = (
-    <p className="m-data m-muted">
+    <p className="m-caption m-muted">
       {humanizeCode(f.pricingModel)} · {f.termYears}
       {f.termYears === 1 ? " year" : " years"} · {intel.team.accountManager}
     </p>
@@ -38,8 +38,8 @@ export function EconomicsSection({ intel }: { intel: Intelligence }) {
 function Row({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex items-baseline justify-between gap-3">
-      <dt className="m-body m-muted text-sm">{label}</dt>
-      <dd className="m-data shrink-0 text-right">{value}</dd>
+      <dt className="m-body m-muted">{label}</dt>
+      <dd className="m-caption shrink-0 text-right">{value}</dd>
     </div>
   );
 }

@@ -58,7 +58,7 @@ function MobileProtectedRoute({
 function Placeholder({ name }: { name: string }) {
   return (
     <div className="flex flex-col items-center justify-center gap-2 px-8 py-24 text-center">
-      <p className="m-h3">{name}</p>
+      <p className="m-headline">{name}</p>
       <p className="m-body m-muted">Mobile screen coming up next.</p>
     </div>
   );

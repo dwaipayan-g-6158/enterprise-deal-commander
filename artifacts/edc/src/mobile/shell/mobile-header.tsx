@@ -67,8 +67,8 @@ export function MobileHeader({
           <span className="flex shrink-0 items-center">{leading}</span>
         ) : null}
         <div className="min-w-0 flex-1">
-          <h1 className="m-h2 truncate">{title}</h1>
-          {subtitle ? <p className="m-data m-muted mt-0.5 truncate">{subtitle}</p> : null}
+          <h1 className="m-title truncate">{title}</h1>
+          {subtitle ? <p className="m-caption m-muted mt-0.5 truncate">{subtitle}</p> : null}
         </div>
         {right ? <div className="shrink-0">{right}</div> : null}
       </div>

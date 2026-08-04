@@ -146,7 +146,7 @@ export function CommanderSheet() {
       {conditions.length > 0 ? (
         <Group label={`Interpreted: ${describeNlcConditions(conditions)} (${nlcMatches.length})`}>
           {nlcMatches.length === 0 ? (
-            <p className="m-body m-muted px-1 py-2 text-sm">No deals match that.</p>
+            <p className="m-body m-muted px-1 py-2">No deals match that.</p>
           ) : (
             nlcMatches.map((deal) => (
               <Row
@@ -243,7 +243,7 @@ export function CommanderSheet() {
       ) : null}
 
       {trimmed.length >= 2 && nameMatches.length === 0 && conditions.length === 0 ? (
-        <p className="m-body m-muted px-1 py-6 text-center text-sm">
+        <p className="m-body m-muted px-1 py-6 text-center">
           Nothing matches that. Try an account name, or ask for red deals above $1M.
         </p>
       ) : null}
@@ -254,7 +254,7 @@ export function CommanderSheet() {
 function Group({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <section className="mt-5 first:mt-4">
-      <p className="m-eyebrow mb-1.5">{label}</p>
+      <p className="m-label mb-1.5">{label}</p>
       <ul>{children}</ul>
     </section>
   );
@@ -282,10 +282,10 @@ function Row({
       >
         <span className="flex w-4 shrink-0 justify-center">{icon}</span>
         <span className="min-w-0 flex-1">
-          <span className="block truncate text-[0.9375rem]">{label}</span>
-          {sub ? <span className="m-data m-muted block truncate">{sub}</span> : null}
+          <span className="m-body block truncate">{label}</span>
+          {sub ? <span className="m-caption m-muted block truncate">{sub}</span> : null}
         </span>
-        {detail ? <span className="m-data m-muted shrink-0">{detail}</span> : null}
+        {detail ? <span className="m-caption m-muted shrink-0">{detail}</span> : null}
       </button>
     </li>
   );

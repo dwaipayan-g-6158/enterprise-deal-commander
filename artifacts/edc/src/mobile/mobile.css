@@ -195,58 +195,83 @@
 }
 
 /* --- Typography -------------------------------------------------------------
- * Hierarchy is carried by weight, tracking and case — not size alone — so the
- * scale stays legible when two levels sit at similar sizes.
+ * Six styles. Measured against the running app, the previous set had sprawled
+ * into eighteen on the deal screen alone, and the most-used style on every
+ * screen was Geist Mono 13/500 — stage names, dates, counts, alert bodies,
+ * footnotes, all of it. It read as a log viewer.
+ *
+ * There is no monospace here now. The shell already sets
+ * `font-variant-numeric: tabular-nums` below, so figures still align in a
+ * column; mono was buying the terminal look and one real defect, because a
+ * monospace period occupies a full character cell and rendered the most
+ * important number in the app as `$3 . 82M`. That goes away by deletion.
+ *
+ * Labels are sentence case. The strings were always written that way — the
+ * old `.m-eyebrow` uppercased them in CSS, and uppercase plus 0.06em tracking
+ * is the single most dated signal in a mobile interface.
+ *
+ * Declared inside `@layer components` so a Tailwind colour utility still wins
+ * against them. That is load-bearing: `.m-label` sets a muted colour, and a
+ * pill that carries both `.m-label` and its own `semantic-colors.ts` class
+ * must come out in the semantic colour. Unlayered rules beat every layer.
  */
 
-.m-kpi-hero {
-  font-family: var(--font-mono);
-  font-size: 2.125rem;
-  line-height: 2.5rem;
-  font-weight: 650;
-  letter-spacing: -0.04em;
-}
-.m-h1 {
-  font-size: 1.75rem;
-  line-height: 2.125rem;
-  font-weight: 700;
-  letter-spacing: -0.04em;
-}
-.m-h2 {
-  font-size: 1.375rem;
-  line-height: 1.75rem;
-  font-weight: 650;
-  letter-spacing: -0.03em;
-}
-.m-h3 {
-  font-size: 1.0625rem;
-  line-height: 1.375rem;
-  font-weight: 600;
-  letter-spacing: -0.02em;
-}
-.m-body {
-  font-size: 1rem;
-  line-height: 1.5rem;
-  font-weight: 450;
-  letter-spacing: -0.011em;
-}
-.m-data {
-  font-family: var(--font-mono);
-  font-size: 0.8125rem;
-  line-height: 1rem;
-  font-weight: 500;
-}
-.m-eyebrow {
-  font-size: 0.75rem;
-  line-height: 1rem;
-  font-weight: 550;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: hsl(var(--muted-foreground));
-}
+@layer components {
+  /* One per screen — the figure the screen is about. */
+  .m-display {
+    font-size: 2.125rem;
+    line-height: 2.375rem;
+    font-weight: 640;
+    letter-spacing: -0.03em;
+  }
+  /* Screen title, deal name, and a card's lead figure. */
+  .m-title {
+    font-size: 1.375rem;
+    line-height: 1.75rem;
+    font-weight: 640;
+    letter-spacing: -0.02em;
+  }
+  /* A row's or a card's lead line. iOS `.headline`, near enough. */
+  .m-headline {
+    font-size: 1.0625rem;
+    line-height: 1.375rem;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+  /* Prose: narratives, alert messages, empty-state copy.
+     Held at 16px rather than the 15 the plan proposed. Body size was never
+     what the inventory faulted, and 16 is the documented floor for mobile
+     body text — stepping under it to buy a tighter scale would be a
+     regression dressed as a refinement. */
+  .m-body {
+    font-size: 1rem;
+    line-height: 1.5rem;
+    font-weight: 400;
+    letter-spacing: -0.006em;
+  }
+  /* A card's label, and the weight pills are set in. Sentence case. */
+  .m-label {
+    font-size: 0.8125rem;
+    line-height: 1.125rem;
+    font-weight: 550;
+    letter-spacing: -0.003em;
+    color: hsl(var(--muted-foreground));
+  }
+  /* Metadata: dates, counts, deltas, footnotes. Uncoloured on purpose —
+     most callers pair it with `.m-muted`, but the ones that carry a figure
+     worth reading (a deal's value on an alert row, the value column in
+     Economics) need to stay at full contrast, and that is a per-site
+     decision rather than something the size should presume. */
+  .m-caption {
+    font-size: 0.8125rem;
+    line-height: 1.125rem;
+    font-weight: 450;
+    letter-spacing: -0.003em;
+  }
 
-.m-muted {
-  color: hsl(var(--muted-foreground));
+  .m-muted {
+    color: hsl(var(--muted-foreground));
+  }
 }
 
 /* --- Elevation --------------------------------------------------------------

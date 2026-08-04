@@ -73,14 +73,14 @@ export function HeroSection({
 
   return (
     <header className="px-4 pb-2 pt-4" style={shared("card")}>
-      <p className="m-eyebrow truncate" style={shared("eyebrow")}>
+      <p className="m-label truncate" style={shared("eyebrow")}>
         {intel.accountName}
       </p>
-      <h1 className="m-h1 mt-1" style={shared("title")}>
+      <h1 className="m-title mt-1" style={shared("title")}>
         {intel.dealName}
       </h1>
 
-      <p className="m-kpi-hero mt-3" style={shared("value")}>
+      <p className="m-display mt-3" style={shared("value")}>
         {arrivedByMorph || everScrubbed ? (
           compactCurrency(tcv, financials.dealCurrency)
         ) : (
@@ -90,7 +90,7 @@ export function HeroSection({
           />
         )}
       </p>
-      <p className="m-data m-muted mt-1">
+      <p className="m-caption m-muted mt-1">
         {at ? (
           <>
             {at.stage ?? intel.salesStage} · as of {formatDate(at.at, "—")}
@@ -135,14 +135,14 @@ export function HeroPreview({ dealId, seed }: { dealId: string; seed: SharedCard
 
   return (
     <header className="px-4 pb-2 pt-4" style={shared("card")}>
-      <p className="m-eyebrow truncate" style={shared("eyebrow")}>
+      <p className="m-label truncate" style={shared("eyebrow")}>
         {seed.eyebrow}
       </p>
-      <h1 className="m-h1 mt-1" style={shared("title")}>
+      <h1 className="m-title mt-1" style={shared("title")}>
         {seed.title}
       </h1>
 
-      <p className="m-kpi-hero mt-3" style={shared("value")}>
+      <p className="m-display mt-3" style={shared("value")}>
         {seed.value}
       </p>
       <Shimmer className="mt-2 h-3.5 w-40" />

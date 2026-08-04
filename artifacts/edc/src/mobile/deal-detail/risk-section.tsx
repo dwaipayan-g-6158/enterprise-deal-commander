@@ -23,11 +23,11 @@ export function RiskSection({ intel }: { intel: Intelligence }) {
 
   const verdict = (
     <>
-      <p className={cn("m-h3", RISK_LEVEL_CLASS[risk.riskLevel].text)}>
+      <p className={cn("m-title", RISK_LEVEL_CLASS[risk.riskLevel].text)}>
         {RISK_LEVEL_LABEL[risk.riskLevel]}
-        <span className="m-muted ml-2 font-mono text-sm font-medium">{risk.compositeScore}</span>
+        <span className="m-caption m-muted ml-2">{risk.compositeScore}</span>
       </p>
-      <p className="m-data m-muted mt-1">
+      <p className="m-caption m-muted mt-1">
         {live.length === 0
           ? managed.length > 0
             ? `No open alerts · ${managed.length} managed`
@@ -49,10 +49,10 @@ export function RiskSection({ intel }: { intel: Intelligence }) {
           {managed.length > 0 ? <AlertList title="Managed" alerts={managed} muted /> : null}
           {risk.topDrivers.length > 0 ? (
             <div>
-              <p className="m-eyebrow mb-2">Top drivers</p>
+              <p className="m-label mb-2">Top drivers</p>
               <ul className="space-y-1.5">
                 {risk.topDrivers.slice(0, 4).map((driver, i) => (
-                  <li key={i} className="m-data flex items-baseline justify-between gap-3">
+                  <li key={i} className="m-caption flex items-baseline justify-between gap-3">
                     <span className="min-w-0 flex-1">{humanizeCode(driver.factor)}</span>
                     <span className="m-muted shrink-0">{Math.round(driver.impact)}</span>
                   </li>
@@ -77,16 +77,16 @@ function AlertList({
 }) {
   return (
     <div>
-      <p className="m-eyebrow mb-2">{title}</p>
+      <p className="m-label mb-2">{title}</p>
       <ul className="space-y-3">
         {alerts.map((alert) => (
           <li key={`${alert.code}-${alert.severity}`} className={cn(muted && "opacity-75")}>
-            <p className={cn("text-sm font-semibold", SEVERITY_TONE[alert.severity] ?? "")}>
+            <p className={cn("m-headline", SEVERITY_TONE[alert.severity] ?? "")}>
               {humanizeCode(alert.code)}
             </p>
-            <p className="m-body m-muted mt-0.5 text-sm">{alert.message}</p>
+            <p className="m-body m-muted mt-0.5">{alert.message}</p>
             {alert.disposition ? (
-              <p className="m-data m-muted mt-1">
+              <p className="m-caption m-muted mt-1">
                 {humanizeCode(alert.disposition.state)}
                 {alert.disposition.createdBy ? ` by ${alert.disposition.createdBy}` : ""}
                 {alert.disposition.rationale ? ` — ${alert.disposition.rationale}` : ""}

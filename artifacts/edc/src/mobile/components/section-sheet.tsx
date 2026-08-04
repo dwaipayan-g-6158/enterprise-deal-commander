@@ -53,9 +53,9 @@ export function SectionSheet({
         )}
       >
         <div className="px-4 pb-2 pt-3">
-          <DrawerTitle className="m-h3">{title}</DrawerTitle>
+          <DrawerTitle className="m-headline">{title}</DrawerTitle>
           {description ? (
-            <DrawerDescription className="m-data m-muted mt-1">
+            <DrawerDescription className="m-caption m-muted mt-1">
               {description}
             </DrawerDescription>
           ) : null}

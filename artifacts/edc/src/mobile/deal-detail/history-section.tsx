@@ -15,7 +15,7 @@ export function HistorySection({ events }: { events: ActivityEvent[] }) {
   const latest = events[0];
 
   const verdict = (
-    <p className="m-data m-muted">
+    <p className="m-caption m-muted">
       {latest
         ? `${activityTitle(latest)} · ${relativeTime(latest.occurredAt)}`
         : "Nothing recorded yet"}
@@ -29,10 +29,10 @@ export function HistorySection({ events }: { events: ActivityEvent[] }) {
           {events.slice(0, VISIBLE_ENTRIES).map((event) => (
             <li key={event.id}>
               <div className="flex items-baseline justify-between gap-3">
-                <p className="min-w-0 flex-1 text-sm">{activityTitle(event)}</p>
-                <span className="m-data m-muted shrink-0">{relativeTime(event.occurredAt)}</span>
+                <p className="m-body min-w-0 flex-1">{activityTitle(event)}</p>
+                <span className="m-caption m-muted shrink-0">{relativeTime(event.occurredAt)}</span>
               </div>
-              <p className="m-data m-muted mt-0.5">by {event.actor}</p>
+              <p className="m-caption m-muted mt-0.5">by {event.actor}</p>
             </li>
           ))}
         </ol>

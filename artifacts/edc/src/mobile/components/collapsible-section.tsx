@@ -44,7 +44,7 @@ export function CollapsibleSection({
         )}
       >
         <div className="min-w-0 flex-1">
-          <p className="m-eyebrow">{label}</p>
+          <p className="m-label">{label}</p>
           <div className="mt-1.5">{verdict}</div>
         </div>
         {expandable ? (

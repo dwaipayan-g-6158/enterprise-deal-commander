@@ -38,13 +38,11 @@ export function MeddpiccSection({ assessment }: { assessment: MeddpiccAssessment
 
   const verdict = (
     <>
-      <p className={cn("m-h3", HEALTH_CLASS[health].text)}>
-        <span className="font-mono text-2xl font-semibold tracking-[-0.03em]">
-          {Math.round(score.overallPct)}%
-        </span>
-        <span className="m-muted ml-2 text-sm font-medium">qualified</span>
+      <p className={cn("m-title", HEALTH_CLASS[health].text)}>
+        {Math.round(score.overallPct)}%
+        <span className="m-caption m-muted ml-2">qualified</span>
       </p>
-      <p className="m-data m-muted mt-1">
+      <p className="m-caption m-muted mt-1">
         {score.unknownCount > 0 ? `${score.unknownCount} unanswered` : "All questions answered"}
         {score.strongNoCount > 0 ? ` · ${score.strongNoCount} strong no` : ""}
       </p>
@@ -60,19 +58,14 @@ export function MeddpiccSection({ assessment }: { assessment: MeddpiccAssessment
           return (
             <li key={q.questionOrder}>
               <div className="flex items-baseline justify-between gap-3">
-                <p className="m-eyebrow">{q.pillar}</p>
-                <span
-                  className={cn(
-                    "shrink-0 text-xs font-semibold",
-                    value == null ? "m-muted" : ANSWER_TONE[value],
-                  )}
-                >
+                <p className="m-label">{q.pillar}</p>
+                <span className={cn("m-label shrink-0", value != null && ANSWER_TONE[value])}>
                   {value == null ? "Unanswered" : ANSWER_LABEL[value]}
                 </span>
               </div>
-              <p className="m-body mt-0.5 text-sm">{q.questionText}</p>
+              <p className="m-body mt-0.5">{q.questionText}</p>
               {answer?.source === "computed" && answer.reason ? (
-                <p className="m-data m-muted mt-0.5">Computed — {answer.reason}</p>
+                <p className="m-caption m-muted mt-0.5">Computed — {answer.reason}</p>
               ) : null}
             </li>
           );

@@ -73,10 +73,7 @@ export function MemoryDetailScreen({ id }: { id: string }) {
           <header className="px-4 pb-2 pt-4" style={shared("card")}>
             <span
               style={shared("value")}
-              className={cn(
-                "inline-flex rounded-full px-3 py-1 text-xs font-semibold",
-                seed.valueClassName,
-              )}
+              className={cn("m-label inline-flex rounded-full px-3 py-1", seed.valueClassName)}
             >
               {seed.value}
             </span>
@@ -109,19 +106,19 @@ export function MemoryDetailScreen({ id }: { id: string }) {
         <span
           style={shared("value")}
           className={cn(
-            "inline-flex rounded-full px-3 py-1 text-xs font-semibold",
+            "m-label inline-flex rounded-full px-3 py-1",
             OUTCOME_CLASS[outcome].bg,
             OUTCOME_CLASS[outcome].text,
           )}
         >
           {outcome === "won" ? "Closed-Won" : "Closed-Lost"}
         </span>
-        <p className="m-kpi-hero mt-2">
+        <p className="m-display mt-2">
           {memory.finalTcv != null && Number.isFinite(Number(memory.finalTcv))
             ? compactCurrency(Number(memory.finalTcv))
             : "—"}
         </p>
-        <p className="m-data m-muted mt-1">Archived {formatDate(memory.archivedAt, "—")}</p>
+        <p className="m-caption m-muted mt-1">Archived {formatDate(memory.archivedAt, "—")}</p>
       </header>
 
       <div className="space-y-3 p-4">
@@ -138,7 +135,7 @@ export function MemoryDetailScreen({ id }: { id: string }) {
         {memory.winLossNarrative ? (
           <MobileCard>
             <CardHeader label={outcome === "won" ? "Why it was won" : "Why it was lost"} />
-            <p className="m-body text-sm">{memory.winLossNarrative}</p>
+            <p className="m-body">{memory.winLossNarrative}</p>
           </MobileCard>
         ) : null}
 
@@ -147,8 +144,8 @@ export function MemoryDetailScreen({ id }: { id: string }) {
             <CardHeader label="Lessons" />
             <ul className="space-y-2">
               {memory.keyLessons.map((lesson, i) => (
-                <li key={i} className="m-body flex gap-2 text-sm">
-                  <span className="m-muted shrink-0 font-mono">{i + 1}</span>
+                <li key={i} className="m-body flex gap-2">
+                  <span className="m-muted shrink-0 tabular-nums">{i + 1}</span>
                   <span>{lesson}</span>
                 </li>
               ))}
@@ -163,7 +160,7 @@ export function MemoryDetailScreen({ id }: { id: string }) {
               {memory.competitorsFaced.map((name) => (
                 <span
                   key={name}
-                  className="rounded-full border border-border px-3 py-1 text-xs"
+                  className="m-caption rounded-full border border-border px-3 py-1"
                 >
                   {name}
                 </span>
@@ -183,12 +180,12 @@ export function MemoryDetailScreen({ id }: { id: string }) {
                     className="m-press flex items-baseline justify-between gap-3 py-1"
                   >
                     <span className="min-w-0 flex-1">
-                      <span className="block truncate text-sm">{deal.dealName}</span>
-                      <span className="m-data m-muted truncate">{deal.accountName}</span>
+                      <span className="m-body block truncate">{deal.dealName}</span>
+                      <span className="m-caption m-muted truncate">{deal.accountName}</span>
                     </span>
                     <span
                       className={cn(
-                        "m-data shrink-0",
+                        "m-caption shrink-0",
                         OUTCOME_CLASS[normalizeOutcome(deal.outcome)].text,
                       )}
                     >
@@ -210,10 +207,8 @@ export function MemoryDetailScreen({ id }: { id: string }) {
 function Tile({ label, value }: { label: string; value: number | string | null | undefined }) {
   return (
     <div className="m-card m-reveal p-4">
-      <p className="m-eyebrow">{label}</p>
-      <p className="mt-1.5 font-mono text-xl font-semibold tracking-[-0.03em]">
-        {value ?? "—"}
-      </p>
+      <p className="m-label">{label}</p>
+      <p className="m-title mt-1.5">{value ?? "—"}</p>
     </div>
   );
 }
@@ -225,7 +220,7 @@ function TagList({ memory }: { memory: DealMemory }) {
       {memory.tags.map((tag) => (
         <span
           key={tag}
-          className="m-data rounded-md bg-secondary px-2 py-1 text-secondary-foreground"
+          className="m-caption rounded-md bg-secondary px-2 py-1 text-secondary-foreground"
         >
           {tag}
         </span>

@@ -1,3 +1,4 @@
+import { Check } from "lucide-react";
 import type { Intelligence } from "@workspace/api-client-react";
 import { cn } from "@/lib/utils";
 import { CollapsibleSection } from "@/mobile/components/collapsible-section";
@@ -13,9 +14,9 @@ export function GatesSection({ intel }: { intel: Intelligence }) {
 
   const verdict = (
     <>
-      <p className="m-h3">
-        <span className="font-mono text-2xl font-semibold tracking-[-0.03em]">{pct}%</span>
-        <span className="m-muted ml-2 text-sm font-medium">
+      <p className="m-title">
+        {pct}%
+        <span className="m-caption m-muted ml-2">
           {track.stepsCompleted} of {track.totalSteps} cleared
         </span>
       </p>
@@ -25,7 +26,7 @@ export function GatesSection({ intel }: { intel: Intelligence }) {
           style={{ width: `${pct}%` }}
         />
       </div>
-      <p className="m-data m-muted mt-2">Next: {track.currentMilestone}</p>
+      <p className="m-caption m-muted mt-2">Next: {track.currentMilestone}</p>
     </>
   );
 
@@ -38,23 +39,26 @@ export function GatesSection({ intel }: { intel: Intelligence }) {
             <li key={gate.gateCode} className="flex items-start gap-2.5">
               <span
                 className={cn(
-                  "mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border text-[10px] font-bold",
+                  "mt-1 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border",
                   gate.isCompleted
                     ? "border-emerald-500 bg-emerald-500 text-white"
                     : "border-border",
                 )}
                 aria-hidden="true"
               >
-                {gate.isCompleted ? "✓" : ""}
+                {/* A drawn check rather than the ✓ character: the glyph is a
+                    different weight and optical size in every face, and it
+                    never centres in a 16px circle. */}
+                {gate.isCompleted ? <Check className="h-2.5 w-2.5" strokeWidth={3.5} /> : null}
               </span>
               <div className="min-w-0 flex-1">
-                <p className={cn("text-sm", !gate.isCompleted && "m-muted")}>
+                <p className={cn("m-body", !gate.isCompleted && "m-muted")}>
                   {gate.label}
                   <span className="sr-only">
                     {gate.isCompleted ? " — cleared" : " — not cleared"}
                   </span>
                 </p>
-                <p className="m-data m-muted mt-0.5">Gate {gate.gateGroup}</p>
+                <p className="m-caption m-muted mt-0.5">Gate {gate.gateGroup}</p>
               </div>
             </li>
           ))}

@@ -16,13 +16,13 @@ export function DesktopOnlyScreen({ name, reason }: { name: string; reason: stri
         <span className="m-card flex h-14 w-14 items-center justify-center rounded-full">
           <Monitor className="h-6 w-6 m-muted" aria-hidden="true" />
         </span>
-        <h2 className="m-h3">{name} is a desktop view</h2>
+        <h2 className="m-title">{name} is a desktop view</h2>
         <p className="m-body m-muted max-w-xs">
           {reason} Open Deal Commander on a larger display to work with it.
         </p>
         <Link
           href="/"
-          className="m-tap m-press m-h3 mt-2 inline-flex items-center rounded-full bg-secondary px-5 text-secondary-foreground"
+          className="m-tap m-press m-headline mt-2 inline-flex items-center rounded-full bg-secondary px-5 text-secondary-foreground"
         >
           Back to Command Center
         </Link>

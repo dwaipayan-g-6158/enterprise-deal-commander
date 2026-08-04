@@ -6,9 +6,13 @@ import { cn } from "@/lib/utils";
  * A single KPI in the bento grid: label, figure, and one line of context.
  *
  * Rendered as a button when `onPress` is supplied, so drill-down tiles are
- * keyboard-reachable and announce themselves as interactive. Figures use the
- * mono face — a column of numbers that doesn't align is a column you have to
- * read twice.
+ * keyboard-reachable and announce themselves as interactive.
+ *
+ * Tiles are laid out as a column with the footnote pinned to the bottom, so
+ * a pair sitting side by side with footnotes of different line counts still
+ * agree on where the figure sits. They did not before, and two tiles that
+ * never line up is the kind of thing a reader notices without being able to
+ * say why.
  */
 export function StatTile({
   label,
@@ -27,29 +31,23 @@ export function StatTile({
 }) {
   const body = (
     <>
-      <p className="m-eyebrow">{label}</p>
-      <p
-        className={cn(
-          "mt-1.5 font-mono text-2xl font-semibold tracking-[-0.03em]",
-          tone === "critical" && "text-destructive",
-        )}
-      >
-        {value}
-      </p>
-      {footnote ? <div className="m-data m-muted mt-1">{footnote}</div> : null}
+      <p className="m-label">{label}</p>
+      <p className={cn("m-title mt-1.5", tone === "critical" && "text-destructive")}>{value}</p>
+      {/* mt-auto is what aligns a pair of tiles: the footnote sits on the
+          floor of the card rather than directly under a figure, so one tile
+          wrapping to two lines doesn't push its neighbour out of step. */}
+      {footnote ? <div className="m-caption m-muted mt-auto pt-1">{footnote}</div> : null}
     </>
   );
 
+  const shape = "m-card m-reveal flex flex-col p-4";
+
   if (!onPress) {
-    return <div className={cn("m-card m-reveal p-4", className)}>{body}</div>;
+    return <div className={cn(shape, className)}>{body}</div>;
   }
 
   return (
-    <button
-      type="button"
-      onClick={onPress}
-      className={cn("m-card m-press m-reveal p-4 text-left", className)}
-    >
+    <button type="button" onClick={onPress} className={cn(shape, "m-press text-left", className)}>
       {body}
     </button>
   );

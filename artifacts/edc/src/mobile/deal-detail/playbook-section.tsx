@@ -31,10 +31,10 @@ export function PlaybookSection({ journey }: { journey: JourneyEntry[] }) {
 
   const verdict = (
     <>
-      <p className="m-h3">
+      <p className="m-title">
         {current ? current.playbookName : started.length ? "In progress" : "Not started"}
       </p>
-      <p className="m-data m-muted mt-1">
+      <p className="m-caption m-muted mt-1">
         {totalSteps > 0
           ? `${doneSteps} of ${totalSteps} steps · ${started.length} of ${journey.length} playbooks started`
           : "No playbook steps yet"}
@@ -49,13 +49,13 @@ export function PlaybookSection({ journey }: { journey: JourneyEntry[] }) {
           {journey.map((entry) => (
             <li key={entry.playbookId}>
               <div className="flex items-baseline justify-between gap-3">
-                <p className={cn("text-sm", entry.isCurrentStage ? "font-semibold" : "m-muted")}>
+                <p className={cn(entry.isCurrentStage ? "m-headline" : "m-body m-muted")}>
                   {entry.playbookName}
                   {entry.isCurrentStage ? (
                     <span className="ml-1.5 text-primary">· current stage</span>
                   ) : null}
                 </p>
-                <span className="m-data m-muted shrink-0">
+                <span className="m-caption m-muted shrink-0">
                   {entry.completedCount}/{entry.totalSteps}
                 </span>
               </div>

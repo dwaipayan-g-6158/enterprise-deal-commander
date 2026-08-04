@@ -25,7 +25,7 @@ function StateBlock({
       <span className="m-muted mb-1" aria-hidden="true">
         {icon}
       </span>
-      <p className="m-h3">{title}</p>
+      <p className="m-headline">{title}</p>
       <p className="m-body m-muted max-w-[15rem]">{body}</p>
       {action}
     </div>

@@ -97,7 +97,7 @@ export function CommanderButton() {
       <Command className="h-5 w-5 shrink-0" aria-hidden="true" />
       <span
         className={cn(
-          "overflow-hidden whitespace-nowrap font-mono text-sm transition-opacity duration-150",
+          "m-label overflow-hidden whitespace-nowrap text-white transition-opacity duration-150",
           collapsed ? "w-0 opacity-0" : "opacity-90",
         )}
         aria-hidden={collapsed}

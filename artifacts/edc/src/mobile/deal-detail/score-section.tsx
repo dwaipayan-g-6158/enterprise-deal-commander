@@ -33,11 +33,11 @@ export function ScoreSection({ score }: { score: DealScore }) {
 
   const verdict = (
     <>
-      <p className="m-h3">
-        <span className="font-mono text-2xl font-semibold tracking-[-0.03em]">{score.score}</span>
-        <span className="m-muted ml-1 text-sm font-medium">/ 100</span>
+      <p className="m-title">
+        {score.score}
+        <span className="m-caption m-muted ml-1">/ 100</span>
       </p>
-      <p className="m-data m-muted mt-1">{humanizeCode(score.confidence)} confidence</p>
+      <p className="m-caption m-muted mt-1">{humanizeCode(score.confidence)} confidence</p>
     </>
   );
 
@@ -45,7 +45,7 @@ export function ScoreSection({ score }: { score: DealScore }) {
     <CollapsibleSection anchorId="score" label="Predictive score" verdict={verdict}>
       {rows.length > 0 ? (
         <>
-          <p className="m-eyebrow mb-3">What moves it</p>
+          <p className="m-label mb-3">What moves it</p>
           <ul className="space-y-2.5">
             {/* Keyed by position, not label: readBreakdown falls back to
                 "Other" for any factor the server sends without a string
@@ -53,7 +53,7 @@ export function ScoreSection({ score }: { score: DealScore }) {
                 sort of the same payload, so the index is stable. */}
             {rows.map((row, i) => (
               <li key={i}>
-                <div className="m-data flex items-baseline justify-between gap-3">
+                <div className="m-caption flex items-baseline justify-between gap-3">
                   <span className="min-w-0 flex-1 truncate">{row.label}</span>
                   <span className="m-muted shrink-0">{row.contribution.toFixed(1)}</span>
                 </div>

@@ -34,11 +34,7 @@ export function HealthPill({ health }: { health: Health }) {
   const c = HEALTH_CLASS[health];
   return (
     <span
-      className={cn(
-        "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold",
-        c.bg,
-        c.text,
-      )}
+      className={cn("m-label inline-flex items-center gap-1.5 rounded-full px-2.5 py-1", c.bg, c.text)}
     >
       <span className={cn("h-1.5 w-1.5 rounded-full", c.dot)} aria-hidden="true" />
       {HEALTH_LABEL[health]}
@@ -51,14 +47,14 @@ export function RiskPill({ level, score }: { level: RiskLevel; score?: number | 
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold",
+        "m-label inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1",
         c.bg,
         c.text,
         c.border,
       )}
     >
       {RISK_LEVEL_SHORT_LABEL[level]}
-      {score != null ? <span className="font-mono opacity-80">{score}</span> : null}
+      {score != null ? <span className="opacity-80">{score}</span> : null}
     </span>
   );
 }
@@ -67,10 +63,7 @@ export function RiskPill({ level, score }: { level: RiskLevel; score?: number | 
 export function MetaChip({ children, className }: { children: React.ReactNode; className?: string }) {
   return (
     <span
-      className={cn(
-        "inline-flex items-center rounded-md border border-border px-1.5 py-0.5 text-xs",
-        className,
-      )}
+      className={cn("m-caption inline-flex items-center rounded-md border border-border px-1.5 py-0.5", className)}
     >
       {children}
     </span>
@@ -96,7 +89,7 @@ export function VelocityMark({ bucket, deltaDays }: { bucket: VelocityBucket; de
     <span className={cn("inline-flex items-center gap-1", tone)}>
       {VELOCITY_LABEL[bucket]}
       {deltaDays != null ? (
-        <span className="font-mono opacity-80">
+        <span className="opacity-80">
           {deltaDays > 0 ? "+" : ""}
           {deltaDays}d
         </span>

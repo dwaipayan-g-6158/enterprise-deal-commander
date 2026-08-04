@@ -218,19 +218,19 @@ export function TrajectoryScrubber({
       <div className="mt-1.5 flex items-baseline justify-between gap-3">
         {active ? (
           <>
-            <span className="m-data truncate">
+            <span className="m-caption truncate">
               {formatDate(active.at, "—")}
               {active.stage ? <span className="m-muted"> · {active.stage}</span> : null}
             </span>
-            <span className="m-data m-muted shrink-0">
+            <span className="m-caption m-muted shrink-0">
               {active.score != null ? `Score ${Math.round(active.score)}` : "No score"}
               {active.gatePct != null ? ` · Gates ${Math.round(active.gatePct)}%` : ""}
             </span>
           </>
         ) : (
           <>
-            <span className="m-eyebrow">Trajectory</span>
-            <span className="m-data m-muted shrink-0">Drag to rewind</span>
+            <span className="m-label">Trajectory</span>
+            <span className="m-caption m-muted shrink-0">Drag to rewind</span>
           </>
         )}
       </div>

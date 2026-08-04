@@ -45,17 +45,15 @@ export function SegmentChips<T extends string>({
             className={cn(
               // h-12 is the 48dp floor every target in the shell holds to; the
               // gap-2 between chips clears the 8dp separation minimum.
-              "m-press flex h-12 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border px-4 text-sm font-medium",
+              "m-label m-press flex h-12 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border px-4",
               selected
                 ? "border-transparent bg-secondary text-secondary-foreground"
-                : "border-border m-muted",
+                : "border-border",
             )}
           >
             {segment.label}
             {segment.count != null ? (
-              <span className={cn("font-mono text-xs", !selected && "opacity-70")}>
-                {segment.count}
-              </span>
+              <span className={cn(!selected && "opacity-70")}>{segment.count}</span>
             ) : null}
           </button>
         );

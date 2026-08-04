@@ -142,8 +142,8 @@ function MemoryCard({ memory }: { memory: DealMemory }) {
     >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
-          <p className="m-eyebrow truncate">{memory.accountName}</p>
-          <h2 className="m-h3 mt-1 truncate">{memory.dealName}</h2>
+          <p className="m-label truncate">{memory.accountName}</p>
+          <h2 className="m-title mt-0.5 truncate">{memory.dealName}</h2>
         </div>
         {/* Only the outcome badge travels. The account line and deal name go
             into the detail screen's nav bar rather than its hero, and that
@@ -151,13 +151,13 @@ function MemoryCard({ memory }: { memory: DealMemory }) {
             morph into just animates out on its own and reads as a glitch. */}
         <span
           data-shared-part="value"
-          className={cn("shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold", badgeClass)}
+          className={cn("m-label shrink-0 rounded-full px-2.5 py-1", badgeClass)}
         >
           {OUTCOME_LABEL[outcome]}
         </span>
       </div>
 
-      <div className="m-data m-muted mt-2.5 flex flex-wrap items-center gap-x-3 gap-y-1">
+      <div className="m-caption m-muted mt-2.5 flex flex-wrap items-center gap-x-3 gap-y-1">
         {tcv != null && Number.isFinite(tcv) ? (
           <span className="text-foreground">{compactCurrency(tcv)}</span>
         ) : null}
@@ -166,7 +166,7 @@ function MemoryCard({ memory }: { memory: DealMemory }) {
       </div>
 
       {memory.snippet ? (
-        <p className="m-body m-muted mt-2 line-clamp-2 text-sm">{memory.snippet}</p>
+        <p className="m-body m-muted mt-2 line-clamp-2">{memory.snippet}</p>
       ) : null}
     </Link>
   );

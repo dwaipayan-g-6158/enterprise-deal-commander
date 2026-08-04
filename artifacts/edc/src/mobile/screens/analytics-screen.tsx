@@ -123,7 +123,7 @@ function ForecastCard({ data }: { data: SimulationData | undefined }) {
             <Percentile label="Median" sub="P50" value={data.percentiles.p50} emphasis />
             <Percentile label="Bull" sub="P90" value={data.percentiles.p90} />
           </div>
-          <p className="m-data m-muted mt-3">
+          <p className="m-caption m-muted mt-3">
             Traditional weighted: {compactCurrency(data.traditionalWeightedPipeline)}
           </p>
         </>
@@ -145,16 +145,11 @@ function Percentile({
 }) {
   return (
     <div>
-      <p className="m-eyebrow">{label}</p>
-      <p
-        className={cn(
-          "mt-1 font-mono tracking-[-0.03em]",
-          emphasis ? "text-xl font-semibold" : "text-base font-medium",
-        )}
-      >
+      <p className="m-label">{label}</p>
+      <p className={cn("mt-1", emphasis ? "m-title" : "m-headline m-muted")}>
         {value != null ? compactCurrency(value) : "—"}
       </p>
-      <p className="m-data m-muted">{sub}</p>
+      <p className="m-caption m-muted">{sub}</p>
     </div>
   );
 }
@@ -175,11 +170,11 @@ function WinLossCard({ data }: { data: WinLossData | undefined }) {
   return (
     <MobileCard>
       <CardHeader label="Win / loss" />
-      <p className="m-h2">
+      <p className="m-title">
         {data.winRatePct != null ? `${Math.round(data.winRatePct)}%` : "—"}
-        <span className="m-muted ml-2 text-base font-medium">win rate</span>
+        <span className="m-caption m-muted ml-2">win rate</span>
       </p>
-      <p className="m-data m-muted mt-1">
+      <p className="m-caption m-muted mt-1">
         {data.won} won · {data.lost} lost
       </p>
       {decided > 0 ? (
@@ -192,7 +187,7 @@ function WinLossCard({ data }: { data: WinLossData | undefined }) {
       {data.byTcvRange.length > 0 ? (
         <ul className="mt-4 space-y-2">
           {data.byTcvRange.map((band) => (
-            <li key={band.range} className="m-data flex items-baseline justify-between gap-3">
+            <li key={band.range} className="m-caption flex items-baseline justify-between gap-3">
               <span className="min-w-0 flex-1 truncate">{band.range}</span>
               <span className="m-muted shrink-0">
                 {band.winRatePct != null ? `${Math.round(band.winRatePct)}%` : "—"} of {band.total}
@@ -218,7 +213,7 @@ function VelocityCard({ deals, loading }: { deals: VelocityDeal[]; loading: bool
       {loading ? (
         <Shimmer className="h-20" />
       ) : overdue.length === 0 ? (
-        <p className="m-body m-muted text-sm">Every deal is at or ahead of its stage benchmark.</p>
+        <p className="m-body m-muted">Every deal is at or ahead of its stage benchmark.</p>
       ) : (
         <ul className="space-y-2">
           {overdue.map((deal) => (
@@ -228,10 +223,10 @@ function VelocityCard({ deals, loading }: { deals: VelocityDeal[]; loading: bool
                 className="m-press flex items-baseline justify-between gap-3 py-1"
               >
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate text-sm">{deal.dealName}</span>
-                  <span className="m-data m-muted">{deal.stage}</span>
+                  <span className="m-body block truncate">{deal.dealName}</span>
+                  <span className="m-caption m-muted">{deal.stage}</span>
                 </span>
-                <span className="m-data shrink-0 text-orange-600 dark:text-orange-400">
+                <span className="m-caption shrink-0 text-orange-600 dark:text-orange-400">
                   +{deal.deltaDays}d
                 </span>
               </Link>
@@ -251,14 +246,14 @@ function PipelineHealthCard({ data }: { data: HealthScoreData | undefined }) {
         <Shimmer className="h-24" />
       ) : (
         <>
-          <p className="m-h2">
-            <span className="font-mono">{Math.round(data.score)}</span>
-            <span className="m-muted ml-2 text-base font-medium">/ 100</span>
+          <p className="m-title">
+            {Math.round(data.score)}
+            <span className="m-caption m-muted ml-2">/ 100</span>
           </p>
           <ul className="mt-3 space-y-2">
             {Object.entries(data.subScores).map(([key, value]) => (
               <li key={key}>
-                <div className="m-data flex items-baseline justify-between gap-3">
+                <div className="m-caption flex items-baseline justify-between gap-3">
                   <span>{humanizeCode(key)}</span>
                   <span className="m-muted">{value != null ? Math.round(value) : "—"}</span>
                 </div>
@@ -287,12 +282,12 @@ function FunnelCard({ rows, loading }: { rows: FunnelRow[]; loading: boolean }) 
       {loading ? (
         <Shimmer className="h-32" />
       ) : rows.length === 0 ? (
-        <p className="m-body m-muted text-sm">No stage movement recorded yet.</p>
+        <p className="m-body m-muted">No stage movement recorded yet.</p>
       ) : (
         <ul className="space-y-3">
           {rows.map((row) => (
             <li key={row.stageId}>
-              <div className="m-data flex items-baseline justify-between gap-3">
+              <div className="m-caption flex items-baseline justify-between gap-3">
                 <span className="min-w-0 flex-1 truncate">{row.stageName}</span>
                 <span className="m-muted shrink-0">
                   {row.dealCount} · {compactCurrency(row.totalValue)}
@@ -305,7 +300,7 @@ function FunnelCard({ rows, loading }: { rows: FunnelRow[]; loading: boolean }) 
                 />
               </div>
               {row.convToNextPct != null ? (
-                <p className="m-data m-muted mt-1">{Math.round(row.convToNextPct)}% convert onward</p>
+                <p className="m-caption m-muted mt-1">{Math.round(row.convToNextPct)}% convert onward</p>
               ) : null}
             </li>
           ))}
