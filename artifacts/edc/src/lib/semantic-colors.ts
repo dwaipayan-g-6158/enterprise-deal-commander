@@ -26,6 +26,17 @@
 //     second green-adjacent hue would only be confusable with this one. Do
 //     NOT blanket find-and-replace "emerald": only touch a colour if it is
 //     selected by a risk level, health status, or terminal deal outcome.
+//  6. Light-mode text is -700, heatmap cell text is -800, and the `bg` tints
+//     are /8. Not taste — every one of those numbers is the shallowest step
+//     that clears WCAG AA (4.5:1) on all three surfaces the text lands on:
+//     the canvas, a card, and the level's own tint. Measured across all nine
+//     levels in both themes; the tightest survivor is MODERATE on its own
+//     tint at 4.54. Darkening amber further would clear it by more, and was
+//     rejected: amber-800's luminance (0.098) drops below both orange-700
+//     (0.151) and red-700 (0.114), which would make MODERATE the visually
+//     heaviest level on a ramp where HIGH has to be. Lightening the tint
+//     buys the same margin and costs nothing. See the AA test at the bottom
+//     of semantic-colors.test.ts before changing any shade here.
 //
 // No new CSS tokens: Tailwind v4's `@theme` block (index.css) has no
 // --color-success/-warning/-danger, and the briefing export (html-to-image)
@@ -78,70 +89,78 @@ interface LevelClass {
 }
 
 /** Theme-aware Tailwind utility classes per risk level (named utilities + dark
- *  variants; no raw hex). */
+ *  variants; no raw hex).
+ *
+ *  Light-mode shades follow rule 6 in the header: `text` at -700, `cell` text
+ *  at -800, tints at /8. The ramp used to run -600 and every level of it
+ *  failed AA on white — sky 3.66, amber 2.91, orange 3.27, red 4.34, and worse
+ *  again on their own tints. Only MODERATE and YELLOW had ever been caught,
+ *  because they were the only levels the seed data put on screen. */
 export const RISK_LEVEL_CLASS: Record<RiskLevel, LevelClass> = {
   LOW: {
-    text: "text-sky-600 dark:text-sky-400",
-    bg: "bg-sky-500/12",
+    text: "text-sky-700 dark:text-sky-400",
+    bg: "bg-sky-500/8",
     border: "border-sky-500/40",
     fill: "bg-sky-500",
     dot: "bg-sky-500",
     borderL: "border-l-sky-500",
-    cell: "bg-sky-500/15 border-sky-500/30 text-sky-700 dark:text-sky-300 hover:bg-sky-500/25",
+    cell: "bg-sky-500/15 border-sky-500/30 text-sky-800 dark:text-sky-300 hover:bg-sky-500/25",
   },
   MODERATE: {
-    text: "text-amber-600 dark:text-amber-400",
-    bg: "bg-amber-500/12",
+    text: "text-amber-700 dark:text-amber-400",
+    bg: "bg-amber-500/8",
     border: "border-amber-500/40",
     fill: "bg-amber-500",
     dot: "bg-amber-500",
     borderL: "border-l-amber-500",
-    cell: "bg-amber-500/15 border-amber-500/30 text-amber-700 dark:text-amber-300 hover:bg-amber-500/25",
+    cell: "bg-amber-500/15 border-amber-500/30 text-amber-800 dark:text-amber-300 hover:bg-amber-500/25",
   },
   ELEVATED: {
-    text: "text-orange-600 dark:text-orange-400",
-    bg: "bg-orange-500/12",
+    text: "text-orange-700 dark:text-orange-400",
+    bg: "bg-orange-500/8",
     border: "border-orange-500/40",
     fill: "bg-orange-500",
     dot: "bg-orange-500",
     borderL: "border-l-orange-500",
-    cell: "bg-orange-500/15 border-orange-500/30 text-orange-700 dark:text-orange-300 hover:bg-orange-500/25",
+    cell: "bg-orange-500/15 border-orange-500/30 text-orange-800 dark:text-orange-300 hover:bg-orange-500/25",
   },
   HIGH: {
-    text: "text-red-600 dark:text-red-400",
-    bg: "bg-red-500/12",
+    text: "text-red-700 dark:text-red-400",
+    bg: "bg-red-500/8",
     border: "border-red-500/40",
     fill: "bg-red-500",
     dot: "bg-red-500",
     borderL: "border-l-red-500",
-    cell: "bg-red-500/15 border-red-500/30 text-red-700 dark:text-red-300 hover:bg-red-500/25",
+    cell: "bg-red-500/15 border-red-500/30 text-red-800 dark:text-red-300 hover:bg-red-500/25",
   },
 };
 
 /** Health's own 3-state traffic light. GREEN/YELLOW are authored — they no
  *  longer derive from the risk ramp (header rule 1) — while RED keeps aliasing
- *  HIGH, because there both scales genuinely mean the same red. Light-mode
- *  `text` sits at -700 rather than the risk ramp's -600: emerald-600 and
- *  yellow-600 are each under 4.5:1 on white, and yellow is the worst case in
- *  the whole palette. */
+ *  HIGH, because there both scales genuinely mean the same red.
+ *
+ *  YELLOW is the exception to rule 6's -700 and sits at -800. Yellow is the
+ *  worst hue in the palette for this: at -700 it measured 4.30 on the heatmap
+ *  cell and 4.38 on its own tint, both short. Nothing else needs the extra
+ *  step. */
 export const HEALTH_CLASS: Record<Health, LevelClass> = {
   GREEN: {
     text: "text-emerald-700 dark:text-emerald-400",
-    bg: "bg-emerald-500/12",
+    bg: "bg-emerald-500/8",
     border: "border-emerald-500/40",
     fill: "bg-emerald-500",
     dot: "bg-emerald-500",
     borderL: "border-l-emerald-500",
-    cell: "bg-emerald-500/15 border-emerald-500/30 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/25",
+    cell: "bg-emerald-500/15 border-emerald-500/30 text-emerald-800 dark:text-emerald-300 hover:bg-emerald-500/25",
   },
   YELLOW: {
-    text: "text-yellow-700 dark:text-yellow-400",
-    bg: "bg-yellow-500/12",
+    text: "text-yellow-800 dark:text-yellow-400",
+    bg: "bg-yellow-500/8",
     border: "border-yellow-500/40",
     fill: "bg-yellow-500",
     dot: "bg-yellow-500",
     borderL: "border-l-yellow-500",
-    cell: "bg-yellow-500/15 border-yellow-500/30 text-yellow-700 dark:text-yellow-300 hover:bg-yellow-500/25",
+    cell: "bg-yellow-500/15 border-yellow-500/30 text-yellow-800 dark:text-yellow-300 hover:bg-yellow-500/25",
   },
   RED: RISK_LEVEL_CLASS.HIGH,
 };
@@ -151,7 +170,12 @@ export const HEALTH_CLASS: Record<Health, LevelClass> = {
  *  dark text rather than white: no shade of yellow light enough to still read
  *  as yellow can carry white text legibly. */
 export const HEALTH_BADGE_CLASS: Record<Health, string> = {
-  GREEN: "bg-emerald-600 hover:bg-emerald-700 text-white",
+  // -700, not -600: white on emerald-600 measures 3.65:1, and this is the
+  // "Healthy" chip on every roster card. It survived the first sweep of rule 6
+  // because a solid badge carries its own fill and so lives in this map rather
+  // than in HEALTH_CLASS's text/bg pair — a good reminder that "audit the
+  // palette" means every map in the file, not every map you remembered.
+  GREEN: "bg-emerald-700 hover:bg-emerald-800 text-white",
   YELLOW: "bg-yellow-400 hover:bg-yellow-500 text-yellow-950",
   RED: "", // callers use variant="destructive" instead of a class override
 };
