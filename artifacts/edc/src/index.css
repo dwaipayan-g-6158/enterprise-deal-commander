@@ -243,10 +243,13 @@
 @utility pb-safe {
   padding-bottom: env(safe-area-inset-bottom);
 }
-/* Scroll-container clearance so the last row of content can rest above the
-   fixed mobile tab bar (h-16 = 4rem) instead of under it. */
+/* Scroll-container clearance for the mobile shell's fixed bottom furniture.
+   Covers all of it, not just the tab bar: the 4rem tab bar, plus whatever
+   floats above it — the Commander capsule on most screens, the docked search
+   input on Memory — both of which top out around 8.25rem. Clearing only the
+   tab bar left the last card sitting under the capsule. */
 @utility pb-tabbar {
-  padding-bottom: calc(4rem + env(safe-area-inset-bottom));
+  padding-bottom: calc(8.75rem + env(safe-area-inset-bottom));
 }
 
 /* Executive Briefing export — branded light-paper report.

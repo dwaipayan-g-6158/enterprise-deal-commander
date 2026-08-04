@@ -63,9 +63,9 @@ export function MemoryScreen() {
         />
       </MobileHeader>
 
-      {/* Extra bottom padding clears the docked search bar, which sits above
-          the tab bar the shell already accounts for. */}
-      <div className="space-y-3 p-4 pb-20">
+      {/* The shell's pb-tabbar already clears the docked search bar as well as
+          the tab bar, so no extra padding here. */}
+      <div className="space-y-3 p-4">
         {isError ? (
           <ErrorState
             title="Couldn't search memory"
