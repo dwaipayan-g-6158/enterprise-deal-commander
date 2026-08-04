@@ -1,4 +1,5 @@
 import { Skeleton } from "@/components/ui/skeleton";
+import { EdcLogoMark } from "@/components/edc-logo-mark";
 
 /**
  * Mobile first-paint chrome. Mirrors mobile-shell.tsx's geometry (safe-area
@@ -6,7 +7,11 @@ import { Skeleton } from "@/components/ui/skeleton";
  * layout pop.
  *
  * Kept eager and outside mobile-app.tsx so App.tsx can render it as the
- * Suspense fallback while the lazy mobile chunk loads.
+ * Suspense fallback while the lazy mobile chunk loads. That eagerness is why
+ * the mark here is static: this component renders before the mobile chunk has
+ * downloaded, and a 3.2s draw-in that gets torn down after 200ms reads as a
+ * glitch rather than a flourish. The launch animation lives in BootSplash,
+ * which outlives its own sequence.
  */
 export function MobileShellSkeleton() {
   return (
@@ -14,8 +19,10 @@ export function MobileShellSkeleton() {
       <span role="status" className="sr-only">Loading Deal Commander…</span>
 
       <header className="pt-safe shrink-0 border-b border-border bg-card">
-        <div className="flex h-14 items-center gap-3 px-4">
-          <Skeleton className="h-6 w-6 rounded-md" />
+        <div className="flex h-14 items-center gap-2 px-4">
+          {/* The real mark, at the size MobileHeader's leading slot renders it,
+              so the handover to the live shell moves nothing. */}
+          <EdcLogoMark size={24} animated={false} />
           <Skeleton className="h-4 w-36" />
         </div>
       </header>

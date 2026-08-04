@@ -37,9 +37,22 @@
   --m-radius-card: 16px;
   --m-tap: 48px;
 
+  /* Overridden per time band below. Transparent by default so the canvas is
+     exactly --m-surface-0 until AmbientBackground has stamped a band. */
+  --m-ambient: transparent;
+
   background-color: var(--m-surface-0);
+  /* The ambient wash. A background-image rather than a ::before, because a
+     positioned pseudo-element would paint above every non-positioned card in
+     the scroll container and tint the cards as well as the canvas. Painted on
+     the shell itself, which is a fixed 100dvh frame, so the light stays where
+     the sky would be while the content scrolls under it. */
+  background-image: radial-gradient(125% 62% at 50% -8%, var(--m-ambient), transparent 68%);
   color: var(--m-on-surface);
   font-variant-numeric: tabular-nums;
+  /* Matches the 2s body transition in index.css, so crossing a band boundary
+     mid-session is a drift rather than a cut. */
+  transition: background-color 2s ease;
 }
 
 .dark .m-shell {
@@ -64,6 +77,51 @@
 
   --m-shadow-card: 0 1px 2px rgba(0, 0, 0, 0.4);
   --m-shadow-sheet: 0 -8px 32px rgba(0, 0, 0, 0.5);
+}
+
+/* --- Ambient time-of-day ----------------------------------------------------
+ * AmbientBackground stamps data-time-band on <html> and index.css uses it to
+ * tint the desktop canvas. The mobile shell used to throw that away: .m-shell
+ * sets its own opaque --m-surface-0, which occluded the tint completely, so
+ * the app knew it was night and showed the same flat grey it shows at noon.
+ *
+ * Both halves shift here — the flat canvas by a hair, and the radial wash
+ * declared above by rather more, because a wash that fades to nothing carries
+ * far less perceptual weight than a solid fill at the same alpha. Boundaries
+ * come from lib/greetings/time-bands.ts; there is no second banding scheme.
+ *
+ * .dark rules follow the :root rules, matching the ordering index.css already
+ * uses, so dark mode wins when both match.
+ */
+:root[data-time-band="morning"] .m-shell {
+  --m-surface-0: #f6f9fd;
+  --m-ambient: rgba(255, 190, 120, 0.15);
+}
+:root[data-time-band="afternoon"] .m-shell {
+  --m-ambient: rgba(120, 170, 255, 0.1);
+}
+:root[data-time-band="evening"] .m-shell {
+  --m-surface-0: #fbf9f6;
+  --m-ambient: rgba(255, 140, 90, 0.15);
+}
+:root[data-time-band="night"] .m-shell {
+  --m-surface-0: #f6f7fc;
+  --m-ambient: rgba(90, 110, 220, 0.14);
+}
+.dark[data-time-band="morning"] .m-shell {
+  --m-surface-0: #0c1015;
+  --m-ambient: rgba(255, 176, 96, 0.11);
+}
+.dark[data-time-band="afternoon"] .m-shell {
+  --m-ambient: rgba(96, 152, 255, 0.09);
+}
+.dark[data-time-band="evening"] .m-shell {
+  --m-surface-0: #12100d;
+  --m-ambient: rgba(255, 118, 72, 0.12);
+}
+.dark[data-time-band="night"] .m-shell {
+  --m-surface-0: #0b0d15;
+  --m-ambient: rgba(78, 100, 220, 0.16);
 }
 
 /* --- Typography -------------------------------------------------------------
@@ -143,9 +201,13 @@
   -webkit-backdrop-filter: blur(20px) saturate(180%);
 }
 
-/* L3 — bottom sheet */
+/* L3 — bottom sheet.
+   background-image is reset because SectionSheet re-applies .m-shell to the
+   portalled drawer (vaul renders outside the shell's subtree), which would
+   otherwise paint the ambient sky wash across the top of every sheet. */
 .m-sheet {
   background-color: var(--m-surface-2);
+  background-image: none;
   box-shadow: var(--m-shadow-sheet);
 }
 

@@ -9,6 +9,7 @@ import { compactCurrency, humanizeCode, relativeTime } from "@/lib/format";
 import { activityTitle } from "@/lib/activity-title";
 import { HEALTH_CLASS, HEALTH_SHORT_LABEL, type Health } from "@/lib/semantic-colors";
 import { cn } from "@/lib/utils";
+import { EdcLogoMark } from "@/components/edc-logo-mark";
 import { MobileHeader } from "@/mobile/shell/mobile-header";
 import { MobileCard, CardHeader } from "@/mobile/components/mobile-card";
 import { StatTile, DeltaLine } from "@/mobile/components/stat-tile";
@@ -33,6 +34,13 @@ const ACTIVITY_LIMIT = 6;
 const ALERTS_SHOWN = 3;
 
 /**
+ * The brand mark in the nav bar. Static: the draw-in sequence belongs to the
+ * launch moment (BootSplash), and replaying it every time someone taps Home
+ * would turn a signature into a tic.
+ */
+const BRAND_MARK = <EdcLogoMark size={24} animated={false} />;
+
+/**
  * The morning glance. Portfolio value first, then what is on fire, then what
  * moved — the order a commander actually asks for it.
  *
@@ -55,7 +63,7 @@ export function HomeScreen() {
   if (summaryQuery.isError) {
     return (
       <>
-        <MobileHeader title="Command Center" />
+        <MobileHeader title="Command Center" leading={BRAND_MARK} />
         <ErrorState
           title="Couldn't load the portfolio"
           body="The pipeline summary didn't come back. Pull down to try again."
@@ -74,6 +82,7 @@ export function HomeScreen() {
     <>
       <MobileHeader
         title="Command Center"
+        leading={BRAND_MARK}
         subtitle={summary ? `${summary.totalDealsMonitored} deals monitored` : undefined}
       />
 

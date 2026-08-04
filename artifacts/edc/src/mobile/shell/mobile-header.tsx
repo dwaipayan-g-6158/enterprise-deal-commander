@@ -10,6 +10,13 @@ interface MobileHeaderProps {
   /** Href for a back chevron. Omit on top-level tab screens. */
   backHref?: string;
   backLabel?: string;
+  /**
+   * Leading slot ahead of the title — the brand mark on the Command Center.
+   * Ignored when `backHref` is set: the chevron owns that position, and two
+   * things competing for the top-left corner is how a nav bar starts to read
+   * as a toolbar.
+   */
+  leading?: ReactNode;
   /** Trailing slot, e.g. a status chip. */
   right?: ReactNode;
   /** Rendered full-width below the title row — filter chips, a segmented control. */
@@ -30,6 +37,7 @@ export function MobileHeader({
   subtitle,
   backHref,
   backLabel = "Back",
+  leading,
   right,
   children,
   className,
@@ -50,6 +58,8 @@ export function MobileHeader({
           >
             <ChevronLeft className="h-6 w-6" aria-hidden="true" />
           </Link>
+        ) : leading ? (
+          <span className="flex shrink-0 items-center">{leading}</span>
         ) : null}
         <div className="min-w-0 flex-1">
           <h1 className="m-h2 truncate">{title}</h1>

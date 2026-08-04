@@ -1,0 +1,36 @@
+/* Mobile motion system.
+ *
+ * One place for every duration and curve the mobile shell uses, so no
+ * component hand-rolls its own timing and the whole app moves at one tempo.
+ *
+ * Declared on :root rather than .m-shell, unlike mobile.css's colour tokens.
+ * Two reasons: the ::view-transition-* pseudo-elements are children of the
+ * document root and cannot see anything scoped to .m-shell, and this
+ * stylesheet only ever loads inside the lazy mobile chunk (it is imported by
+ * mobile-shell.tsx), so a laptop never downloads it in the first place.
+ *
+ * Reduced motion is handled at three levels: index.css already clamps every
+ * transition and animation globally, the scroll-driven rules below are wrapped
+ * in `@media not (prefers-reduced-motion: reduce)`, and framer-motion call
+ * sites read useReducedMotion(). Anything added here must pick one of the
+ * three — never none.
+ */
+
+:root {
+  /* Durations. tap → the press itself; quick → a state flip; move → something
+     travelling across the screen; sheet → a full-height surface arriving. */
+  --m-dur-tap: 120ms;
+  --m-dur-quick: 180ms;
+  --m-dur-move: 260ms;
+  --m-dur-sheet: 420ms;
+
+  /* Apple's sheet curve: a hard start that decelerates almost to a stop before
+     it arrives. This is what makes an iOS surface feel weighted. */
+  --m-ease-ios: cubic-bezier(0.32, 0.72, 0, 1);
+  /* Overshoots and settles. For anything that should feel physical. */
+  --m-ease-spring: cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  /* Asymmetric pair — things leave faster than they arrive, which is what
+     stops a UI from feeling sticky. */
+  --m-ease-enter: cubic-bezier(0, 0, 0.2, 1);
+  --m-ease-exit: cubic-bezier(0.4, 0, 1, 1);
+}

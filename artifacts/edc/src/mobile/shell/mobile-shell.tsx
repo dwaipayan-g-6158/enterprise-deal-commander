@@ -11,6 +11,7 @@ import { CommanderProvider } from "@/mobile/commander/commander-context";
 import { CommanderButton } from "@/mobile/commander/commander-button";
 import { CommanderSheet } from "@/mobile/commander/commander-sheet";
 import "@/mobile/mobile.css";
+import "@/mobile/motion.css";
 
 const ScrollContainerContext = createContext<RefObject<HTMLElement | null> | null>(null);
 
