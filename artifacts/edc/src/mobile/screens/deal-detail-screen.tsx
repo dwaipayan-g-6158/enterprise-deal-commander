@@ -120,6 +120,10 @@ export function DealDetailScreen({ id }: { id: string }) {
           subtitle={seed?.eyebrow}
           backHref="/deals"
           backLabel="Back to deals"
+          // Only when the seeded hero below is about to say the same thing.
+          // Without a seed the shimmer says nothing, so the bar is the only
+          // place the reader learns which deal they opened.
+          collapseTitle={seed != null}
         />
         {seed ? (
           <HeroPreview dealId={id} seed={seed} />
@@ -152,6 +156,10 @@ export function DealDetailScreen({ id }: { id: string }) {
         subtitle={intel.accountName}
         backHref="/deals"
         backLabel="Back to deals"
+        // The hero repeats both of these verbatim 8px lower. The bar holds
+        // them back until the hero has scrolled away and it becomes the only
+        // thing left saying which deal this is.
+        collapseTitle
       />
 
       <PullToRefresh onRefresh={refresh}>

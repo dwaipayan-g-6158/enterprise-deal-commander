@@ -22,6 +22,15 @@ interface MobileHeaderProps {
   right?: ReactNode;
   /** Rendered full-width below the title row — filter chips, a segmented control. */
   children?: ReactNode;
+  /**
+   * Hold the title back until the screen has scrolled, for the one screen
+   * whose hero says the same words immediately below the bar.
+   *
+   * Opt-in per render rather than derived from `backHref`, because a detail
+   * screen's error and unseeded loading states use the same chevron and have
+   * no hero to defer to — there the title is the only one there is.
+   */
+  collapseTitle?: boolean;
   className?: string;
 }
 
@@ -41,6 +50,7 @@ export function MobileHeader({
   leading,
   right,
   children,
+  collapseTitle = false,
   className,
 }: MobileHeaderProps) {
   return (
@@ -67,7 +77,11 @@ export function MobileHeader({
         ) : leading ? (
           <span className="flex shrink-0 items-center">{leading}</span>
         ) : null}
-        <div className="min-w-0 flex-1">
+        {/* Only the text fades. The chevron and any trailing control stay put,
+            because a back button that appears on scroll is a back button you
+            cannot find. The <h1> is never removed from the tree either — it is
+            invisible, not absent, so a screen reader still gets the title. */}
+        <div className={cn("min-w-0 flex-1", collapseTitle && "m-nav-title")}>
           <h1 className="m-title truncate">{title}</h1>
           {subtitle ? <p className="m-caption m-muted mt-0.5 truncate">{subtitle}</p> : null}
         </div>

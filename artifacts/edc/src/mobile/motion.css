@@ -205,6 +205,21 @@
   }
 }
 
+/* The nav title arriving as the hero that says the same words leaves. iOS's
+   large-title collapse, over the same 72px the shadow uses, so the bar gains
+   its title and its lift as one movement. `translate` rather than `transform`
+   so it composes with anything else on the element. */
+@keyframes m-nav-title-in {
+  from {
+    opacity: 0;
+    translate: 0 6px;
+  }
+  to {
+    opacity: 1;
+    translate: none;
+  }
+}
+
 @media not (prefers-reduced-motion: reduce) {
   @supports (animation-timeline: view()) {
     .m-reveal {
@@ -222,6 +237,22 @@
       animation: m-header-lift linear both;
       animation-timeline: scroll(nearest);
       animation-range: 0 72px;
+    }
+
+    /* Polarity is the whole risk here, and it is set by what `.m-nav-title`
+       does *without* this rule: nothing. The title's resting state is plain
+       visible, and only this block hides it at the top of the scroll. So on a
+       screen too short to scroll — where the timeline is inactive and the
+       animation does not apply at all — under reduced motion, and on an
+       engine with no `animation-timeline`, the title simply shows. Written
+       the other way round, hidden-by-default with a rule to reveal it, every
+       one of those three cases would lose the title permanently. */
+    .m-nav-title {
+      animation: m-nav-title-in linear both;
+      animation-timeline: scroll(nearest);
+      /* Starts a few pixels in, so a rubber-band overscroll at the top does
+         not flash the title on and off. */
+      animation-range: 8px 72px;
     }
   }
 }

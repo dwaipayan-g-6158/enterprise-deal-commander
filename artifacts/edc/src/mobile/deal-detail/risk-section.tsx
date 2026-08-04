@@ -43,7 +43,11 @@ export function RiskSection({ intel }: { intel: Intelligence }) {
   const hasBody = live.length > 0 || managed.length > 0 || risk.topDrivers.length > 0;
 
   return (
-    <CollapsibleSection anchorId="risk" label="Risk" verdict={verdict}>
+    // Open on arrival. Seven shut doors is what a deal screen used to be, and
+    // risk is the one anybody opened it for — it sits first in war-room order
+    // for the same reason. The rest still start closed, so the screen stays
+    // scannable.
+    <CollapsibleSection anchorId="risk" label="Risk" verdict={verdict} defaultOpen>
       {hasBody ? (
         <div className="space-y-4">
           {live.length > 0 ? <AlertList title="Open" alerts={live} /> : null}
