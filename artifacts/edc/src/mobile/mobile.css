@@ -30,6 +30,14 @@
   --m-skeleton: rgba(22, 24, 29, 0.06);
   --m-shimmer-sweep: rgba(22, 24, 29, 0.08);
 
+  /* Glass. The tint sits over the blurred backdrop and is what stops chrome
+     from reading as a plain translucent panel; the specular is the bright
+     hairline along the light-facing edge that makes it read as a material
+     with thickness. */
+  --m-glass-tint: rgba(255, 255, 255, 0.1);
+  --m-glass-specular: rgba(255, 255, 255, 0.9);
+  --m-glass-shadow: rgba(16, 19, 24, 0.3);
+
   --m-shadow-card: 0 1px 2px rgba(0, 0, 0, 0.06);
   --m-shadow-sheet: 0 -8px 32px rgba(0, 0, 0, 0.16);
 
@@ -59,7 +67,10 @@
   --m-surface-0: #0d0f13;
   --m-surface-1: #14171c;
   --m-surface-2: #1a1e24;
-  --m-surface-3: rgba(13, 15, 19, 0.68);
+  /* Lower than the light-mode base because the tint below adds most of the
+     opacity back, and it adds it as pure black — which is what gives dark
+     glass its depth rather than just its dimness. */
+  --m-surface-3: rgba(13, 15, 19, 0.56);
 
   --m-on-surface: #f4f6f9;
   --m-on-surface-muted: #9aa3b2;
@@ -74,6 +85,10 @@
 
   --m-skeleton: rgba(244, 246, 249, 0.07);
   --m-shimmer-sweep: rgba(244, 246, 249, 0.08);
+
+  --m-glass-tint: rgba(0, 0, 0, 0.24);
+  --m-glass-specular: rgba(255, 255, 255, 0.12);
+  --m-glass-shadow: rgba(0, 0, 0, 0.55);
 
   --m-shadow-card: 0 1px 2px rgba(0, 0, 0, 0.4);
   --m-shadow-sheet: 0 -8px 32px rgba(0, 0, 0, 0.5);
@@ -194,20 +209,51 @@
   box-shadow: var(--m-shadow-card);
 }
 
-/* L2 / L4 — sticky chrome and the tab bar */
+/* L2 / L4 — sticky chrome and the tab bar.
+ *
+ * Four layers make the difference between a translucent panel and a material:
+ * a blurred, saturation-boosted backdrop; a flat tint over it; a bright
+ * specular hairline along the light-facing edge; and the keyline each caller
+ * already carries as its border. The saturation boost is what keeps colour
+ * from going muddy behind heavy blur.
+ *
+ * Built from background layers rather than a ::before, because .m-glass lands
+ * on sticky, absolute and fixed elements and a pseudo-element would need each
+ * of them to establish a containing block. Background layers paint above
+ * background-color and below content, which is exactly where a tint belongs.
+ *
+ * No SVG refraction filter. Every Liquid Glass tutorial reaches for
+ * feTurbulence/feDisplacementMap as a backdrop-filter, and Safari — the only
+ * engine this shell is really aimed at — does not support it. It would render
+ * as nothing on the target device and cost a filter pass everywhere else.
+ */
 .m-glass {
   background-color: var(--m-surface-3);
+  background-image:
+    linear-gradient(to bottom, var(--m-glass-specular) 0, transparent 1.5px),
+    linear-gradient(var(--m-glass-tint), var(--m-glass-tint));
   backdrop-filter: blur(20px) saturate(180%);
   -webkit-backdrop-filter: blur(20px) saturate(180%);
 }
 
+/* Which way the chrome casts. Split rather than parameterised because a
+   box-shadow offset cannot be negated by a custom property. */
+.m-glass-top {
+  box-shadow: 0 6px 20px -14px var(--m-glass-shadow);
+}
+.m-glass-bottom {
+  box-shadow: 0 -6px 20px -14px var(--m-glass-shadow);
+}
+
 /* L3 — bottom sheet.
-   background-image is reset because SectionSheet re-applies .m-shell to the
+   background-image carries the same specular edge as the glass chrome, so a
+   sheet reads as the same material rising rather than an opaque card. It also
+   overrides the ambient sky wash: SectionSheet re-applies .m-shell to the
    portalled drawer (vaul renders outside the shell's subtree), which would
-   otherwise paint the ambient sky wash across the top of every sheet. */
+   otherwise paint the wash across the top of every sheet. */
 .m-sheet {
   background-color: var(--m-surface-2);
-  background-image: none;
+  background-image: linear-gradient(to bottom, var(--m-glass-specular) 0, transparent 1.5px);
   box-shadow: var(--m-shadow-sheet);
 }
 

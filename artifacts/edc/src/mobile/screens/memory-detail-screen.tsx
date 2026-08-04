@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Link } from "wouter";
 import {
   useGetDealMemory,
@@ -9,7 +10,7 @@ import { compactCurrency, formatDate, humanizeCode } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { OUTCOME_CLASS } from "@/lib/semantic-colors";
 import { normalizeOutcome, OUTCOME_LABEL } from "@/mobile/lib/outcome";
-import { useSharedCardStyle } from "@/mobile/lib/shared-card";
+import { sharedCardSeed, useSharedCardStyle } from "@/mobile/lib/shared-card";
 import { MobileHeader } from "@/mobile/shell/mobile-header";
 import { MobileCard, CardHeader } from "@/mobile/components/mobile-card";
 import { Shimmer } from "@/mobile/components/shimmer";
@@ -34,6 +35,7 @@ export function MemoryDetailScreen({ id }: { id: string }) {
   const memory = memoryQuery.data?.data;
   // Only set when this screen was opened by tapping its card in the archive.
   const shared = useSharedCardStyle(id);
+  const [seed] = useState(() => sharedCardSeed(id));
   // Held until the memory resolves, since the similar-deals lookup is keyed by
   // the underlying deal id rather than the memory id.
   const similarQuery = useGetSimilarDeals(memory?.dealId ?? "", {
@@ -58,7 +60,30 @@ export function MemoryDetailScreen({ id }: { id: string }) {
   if (!memory) {
     return (
       <>
-        <MobileHeader title="Memory" backHref="/memory" backLabel="Back to memory" />
+        <MobileHeader
+          title={seed?.title ?? "Memory"}
+          subtitle={seed?.eyebrow}
+          backHref="/memory"
+          backLabel="Back to memory"
+        />
+        {/* Drawn from what the archive card knew, so the card has something
+            to morph into and the record's own name is on screen immediately
+            rather than after the fetch. */}
+        {seed ? (
+          <header className="px-4 pb-2 pt-4" style={shared("card")}>
+            <span
+              style={shared("value")}
+              className={cn(
+                "inline-flex rounded-full px-3 py-1 text-xs font-semibold",
+                seed.valueClassName,
+              )}
+            >
+              {seed.value}
+            </span>
+            <Shimmer className="mt-2 h-10 w-40" />
+            <Shimmer className="mt-2 h-3.5 w-32" />
+          </header>
+        ) : null}
         <div className="space-y-3 p-4">
           <Shimmer className="h-28 rounded-[var(--m-radius-card)]" />
           <Shimmer className="h-40 rounded-[var(--m-radius-card)]" />
@@ -184,7 +209,7 @@ export function MemoryDetailScreen({ id }: { id: string }) {
 
 function Tile({ label, value }: { label: string; value: number | string | null | undefined }) {
   return (
-    <div className="m-card p-4">
+    <div className="m-card m-reveal p-4">
       <p className="m-eyebrow">{label}</p>
       <p className="mt-1.5 font-mono text-xl font-semibold tracking-[-0.03em]">
         {value ?? "—"}

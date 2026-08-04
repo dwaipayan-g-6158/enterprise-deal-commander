@@ -19,7 +19,8 @@ import { cn } from "@/lib/utils";
  *
  * Snap points are 55% and 92% — a peek that leaves the underlying screen
  * visible, and a full read. Dragging between them, and the fling-to-dismiss,
- * are vaul's own physics.
+ * are vaul's own physics, and its snap curve is already the Apple sheet
+ * easing this shell uses elsewhere as --m-ease-ios.
  */
 export function SectionSheet({
   open,
@@ -42,6 +43,12 @@ export function SectionSheet({
       <DrawerContent
         className={cn(
           "m-shell m-sheet max-h-[92dvh] rounded-t-[var(--m-radius-card)] border-[var(--m-keyline)]",
+          // DrawerContent's first child is vaul's grabber, and the shared
+          // component's version is a 100x8 bar in a desktop token. Restyled
+          // here rather than there so no desktop drawer changes: iOS sizes it
+          // at roughly 36x5 and tints it from the shell's own keyline.
+          "[&>div:first-child]:mt-2.5 [&>div:first-child]:h-1.5 [&>div:first-child]:w-9",
+          "[&>div:first-child]:bg-[var(--m-on-surface-muted)] [&>div:first-child]:opacity-40",
           className,
         )}
       >

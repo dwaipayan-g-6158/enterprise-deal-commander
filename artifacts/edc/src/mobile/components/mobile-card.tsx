@@ -6,6 +6,11 @@ import { cn } from "@/lib/utils";
  * A bento module. Every card carries a keyline as well as a shadow — on a
  * near-black canvas a shadow alone is invisible, and cards that dissolve into
  * the background are what makes a dense screen unreadable.
+ *
+ * `m-reveal` rises the card into place as it crosses into the scrollport,
+ * driven entirely by the scroll position rather than a listener. Cards
+ * already on screen at load are past the end of their range and render
+ * normally, and so does everything on a screen too short to scroll.
  */
 export function MobileCard({
   children,
@@ -14,7 +19,7 @@ export function MobileCard({
   children: ReactNode;
   className?: string;
 }) {
-  return <section className={cn("m-card p-4", className)}>{children}</section>;
+  return <section className={cn("m-card m-reveal p-4", className)}>{children}</section>;
 }
 
 /**
@@ -38,7 +43,7 @@ export function MobileCardLink({
     <Link
       href={href}
       aria-label={ariaLabel}
-      className={cn("m-card m-press block p-4 text-left", className)}
+      className={cn("m-card m-press m-reveal block p-4 text-left", className)}
       onContextMenu={
         onLongPress
           ? (e) => {

@@ -47,8 +47,12 @@ export function ScoreSection({ score }: { score: DealScore }) {
         <>
           <p className="m-eyebrow mb-3">What moves it</p>
           <ul className="space-y-2.5">
-            {rows.map((row) => (
-              <li key={row.label}>
+            {/* Keyed by position, not label: readBreakdown falls back to
+                "Other" for any factor the server sends without a string
+                label, and two of those collide. The order is a deterministic
+                sort of the same payload, so the index is stable. */}
+            {rows.map((row, i) => (
+              <li key={i}>
                 <div className="m-data flex items-baseline justify-between gap-3">
                   <span className="min-w-0 flex-1 truncate">{row.label}</span>
                   <span className="m-muted shrink-0">{row.contribution.toFixed(1)}</span>

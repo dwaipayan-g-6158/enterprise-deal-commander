@@ -165,3 +165,135 @@
     animation: none !important;
   }
 }
+
+/* --- Scroll-driven ----------------------------------------------------------
+ * Cards rise into place as they cross into the scrollport, and the nav bar
+ * picks up a shadow once anything has scrolled under it. Both run entirely on
+ * the compositor with no scroll listener, which is why they cost nothing on a
+ * slow phone — where a JS-driven equivalent costs the most.
+ *
+ * Shipped in Safari 26 and Chromium 115, and behind @supports either way.
+ * Older engines simply show the cards and a flat bar.
+ *
+ * IMPORTANT: animation-timeline must be declared AFTER the animation
+ * shorthand. The shorthand resets it to `auto`, and a rule with them the
+ * other way round fails silently — everything looks right in review and the
+ * animation just never runs.
+ */
+/* Moves with `translate`, not `transform`, and that is load-bearing. A filled
+   animation beats a normal declaration, so a finished reveal holding
+   `transform: none` would silently cancel .m-press's scale-on-tap for the
+   rest of the session. `translate` is an independent property and composes
+   with the transform instead of replacing it. */
+@keyframes m-reveal-in {
+  from {
+    opacity: 0;
+    translate: 0 10px;
+  }
+  to {
+    opacity: 1;
+    translate: none;
+  }
+}
+
+@keyframes m-header-lift {
+  from {
+    box-shadow: 0 6px 20px -14px transparent;
+  }
+  to {
+    box-shadow: 0 10px 24px -12px var(--m-glass-shadow);
+  }
+}
+
+@media not (prefers-reduced-motion: reduce) {
+  @supports (animation-timeline: view()) {
+    .m-reveal {
+      animation: m-reveal-in linear both;
+      animation-timeline: view();
+      /* Finished by the time the card is a quarter of the way up the
+         scrollport, so it is fully legible well before it reaches the middle
+         of the screen. */
+      animation-range: entry 0% cover 26%;
+    }
+  }
+
+  @supports (animation-timeline: scroll()) {
+    .m-header-lift {
+      animation: m-header-lift linear both;
+      animation-timeline: scroll(nearest);
+      animation-range: 0 72px;
+    }
+  }
+}
+
+/* --- State changes ---------------------------------------------------------- */
+
+/* Content replacing its own skeleton. Short enough to read as the shimmer
+   dissolving rather than as a second load. The global reduced-motion rule
+   clamps this to 0.01ms and `both` lands it on the end state, so no separate
+   guard is needed. */
+@keyframes m-appear {
+  from {
+    opacity: 0;
+    translate: 0 3px;
+  }
+  to {
+    opacity: 1;
+    translate: none;
+  }
+}
+.m-appear {
+  animation: m-appear 160ms var(--m-ease-enter) both;
+}
+
+/* Height animation without measuring anything: a grid row travelling between
+   0fr and 1fr resolves to the content's own height at both ends. The child
+   must clip, or the content spills out of the collapsed row. */
+.m-collapse {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows var(--m-dur-move) var(--m-ease-ios);
+}
+.m-collapse[data-open="true"] {
+  grid-template-rows: 1fr;
+}
+.m-collapse > * {
+  overflow: hidden;
+}
+
+/* The selected tab's icon. Applied only when the navigation actually changed
+   tab (see tab-bar.tsx), so drilling into a deal doesn't bounce the bar. */
+@keyframes m-tab-pop {
+  0% {
+    transform: scale(1);
+  }
+  45% {
+    transform: scale(1.14);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+.m-tab-pop {
+  animation: m-tab-pop 340ms var(--m-ease-spring);
+}
+
+/* Pull-to-refresh, on success. The ring completes and gives one beat of
+   confirmation before the content settles back. */
+@keyframes m-ptr-pulse {
+  0% {
+    transform: scale(0.9);
+    opacity: 0.6;
+  }
+  40% {
+    transform: scale(1.12);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+.m-ptr-pulse {
+  animation: m-ptr-pulse 320ms var(--m-ease-spring) both;
+}

@@ -82,8 +82,12 @@ export function CommanderButton() {
         // screen changes behind it.
         "m-press m-vt-commander absolute bottom-[calc(4rem+env(safe-area-inset-bottom)+0.75rem)] left-1/2 z-40",
         "flex h-14 -translate-x-1/2 items-center justify-center gap-2 rounded-full",
-        "bg-[var(--m-obsidian)] text-white shadow-[0_8px_24px_rgba(0,0,0,0.28)]",
-        "ring-1 ring-[var(--m-obsidian-ring)] backdrop-blur-xl",
+        // The inset highlight along the top edge is the same specular the
+        // glass chrome carries, so the capsule reads as the same material
+        // rather than a solid pill sitting on top of it.
+        "bg-[var(--m-obsidian)] text-white",
+        "shadow-[inset_0_1px_0_0_rgba(255,255,255,0.16),0_8px_24px_rgba(0,0,0,0.28)]",
+        "ring-1 ring-[var(--m-obsidian-ring)] backdrop-blur-xl backdrop-saturate-150",
         // Width is the morph. Transitioning width (not transform) keeps the
         // label crisp; a scaled capsule renders blurry text mid-animation.
         "transition-[width,padding] duration-200 ease-[cubic-bezier(0.175,0.885,0.32,1.275)]",

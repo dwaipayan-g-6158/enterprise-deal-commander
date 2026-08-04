@@ -31,7 +31,7 @@ export function CollapsibleSection({
   const expandable = Boolean(children);
 
   return (
-    <section id={anchorId} className="m-card scroll-mt-20 overflow-hidden">
+    <section id={anchorId} className="m-card m-reveal scroll-mt-20 overflow-hidden">
       <button
         type="button"
         onClick={expandable ? () => setOpen((v) => !v) : undefined}
@@ -58,9 +58,18 @@ export function CollapsibleSection({
         ) : null}
       </button>
 
-      {expandable && open ? (
-        <div id={bodyId} className="border-t border-[var(--m-keyline)] p-4">
-          {children}
+      {/* The body stays mounted so its height can animate: a 0fr→1fr grid row
+          resolves to the content's own height at both ends, with nothing
+          measured in JS. `inert` is what keeps a collapsed body out of the
+          tab order and off a screen reader, which mounting it would otherwise
+          undo. */}
+      {expandable ? (
+        <div className="m-collapse" data-open={open} inert={!open}>
+          <div>
+            <div id={bodyId} className="border-t border-[var(--m-keyline)] p-4">
+              {children}
+            </div>
+          </div>
         </div>
       ) : null}
     </section>

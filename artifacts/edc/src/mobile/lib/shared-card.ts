@@ -30,7 +30,25 @@ function nameFor(part: SharedCardPart): string {
   return `m-shared-${part}`;
 }
 
+/**
+ * What the tapped card already knew.
+ *
+ * The detail screen it opens starts with an empty query, so without this it
+ * would render a shimmer — and a morph needs something to morph into. Handing
+ * the three lines forward means the destination can draw its own headline
+ * immediately, which is both what makes the morph land and, on its own, a far
+ * better loading state than a grey box where the deal name goes.
+ */
+export interface SharedCardSeed {
+  eyebrow: string;
+  title: string;
+  value: string;
+  /** Classes for the value, when it is a tinted badge rather than a figure. */
+  valueClassName?: string;
+}
+
 let armedId: string | null = null;
+let armedSeed: SharedCardSeed | null = null;
 const listeners = new Set<() => void>();
 
 function emit() {
@@ -43,14 +61,15 @@ function subscribe(listener: () => void): () => void {
 }
 
 /**
- * Claim the morph for `id` and stamp the leaving element.
+ * Claim the morph for `id`, stamp the leaving element, and hand its content
+ * forward to the screen it opens.
  *
  * `root` is the card itself; every descendant carrying `data-shared-part`
  * gets its own name. Call this from the press handler, before navigating —
  * wouter runs a Link's own onClick before it navigates, so this lands ahead
  * of the snapshot.
  */
-export function armSharedCard(id: string, root: HTMLElement | null): void {
+export function armSharedCard(id: string, seed: SharedCardSeed, root: HTMLElement | null): void {
   // Without view transitions these names do nothing, and nothing would ever
   // clear them — leave the DOM alone.
   if (!supportsViewTransitions()) return;
@@ -66,6 +85,7 @@ export function armSharedCard(id: string, root: HTMLElement | null): void {
   }
 
   armedId = id;
+  armedSeed = seed;
   emit();
 }
 
@@ -73,11 +93,31 @@ export function armSharedCard(id: string, root: HTMLElement | null): void {
  * Release the morph. Called from aroundNav once the transition settles, which
  * re-renders the arriving screen without the names — otherwise a later
  * navigation would find two elements claiming one name and abort.
+ *
+ * The seed deliberately outlives the disarm: the screen that received it is
+ * still drawing from it while its own query is in flight.
  */
 export function disarmSharedCard(): void {
   if (armedId === null) return;
   armedId = null;
   emit();
+}
+
+/**
+ * Whether `id` is armed right now. A one-shot read, not a subscription —
+ * callers use it to decide how a screen arrived, which must not change under
+ * them when the morph is released.
+ */
+export function isSharedCardArmed(id: string | null | undefined): boolean {
+  return armedId != null && armedId === id;
+}
+
+/**
+ * What the card that opened `id` was showing, if this screen was opened that
+ * way. Read once at mount — see disarmSharedCard on why it is still here.
+ */
+export function sharedCardSeed(id: string): SharedCardSeed | null {
+  return armedId === id ? armedSeed : null;
 }
 
 /**

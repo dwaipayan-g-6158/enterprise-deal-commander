@@ -41,14 +41,14 @@ export function StatTile({
   );
 
   if (!onPress) {
-    return <div className={cn("m-card p-4", className)}>{body}</div>;
+    return <div className={cn("m-card m-reveal p-4", className)}>{body}</div>;
   }
 
   return (
     <button
       type="button"
       onClick={onPress}
-      className={cn("m-card m-press p-4 text-left", className)}
+      className={cn("m-card m-press m-reveal p-4 text-left", className)}
     >
       {body}
     </button>

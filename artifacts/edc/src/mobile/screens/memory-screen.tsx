@@ -92,7 +92,7 @@ export function MemoryScreen() {
 
       {/* Docked search. Sits directly above the tab bar so the keyboard opens
           under the thumb rather than pushing the whole screen up. */}
-      <div className="m-glass fixed inset-x-0 bottom-[calc(4rem+env(safe-area-inset-bottom))] z-30 border-t border-[var(--m-keyline)] px-4 py-2.5">
+      <div className="m-glass m-glass-bottom fixed inset-x-0 bottom-[calc(4rem+env(safe-area-inset-bottom))] z-30 border-t border-[var(--m-keyline)] px-4 py-2.5">
         <label className="sr-only" htmlFor="memory-search">
           Search archived deals
         </label>
@@ -117,13 +117,27 @@ function MemoryCard({ memory }: { memory: DealMemory }) {
   const outcome = normalizeOutcome(memory.outcome);
   const tcv = memory.finalTcv != null ? Number(memory.finalTcv) : null;
   const cardRef = useRef<HTMLAnchorElement>(null);
+  const badgeClass = cn(OUTCOME_CLASS[outcome].bg, OUTCOME_CLASS[outcome].text);
 
   return (
     <Link
       ref={cardRef}
       href={`/memory/${memory.id}`}
-      onClick={() => armSharedCard(memory.id, cardRef.current)}
-      className="m-card m-press block p-4"
+      onClick={() =>
+        armSharedCard(
+          memory.id,
+          {
+            eyebrow: memory.accountName,
+            title: memory.dealName,
+            // The detail screen spells the outcome out in full; the badges
+            // cross-fade between the two while the box morphs.
+            value: OUTCOME_LABEL[outcome],
+            valueClassName: badgeClass,
+          },
+          cardRef.current,
+        )
+      }
+      className="m-card m-press m-reveal block p-4"
       aria-label={`${memory.dealName}, ${memory.accountName}`}
     >
       <div className="flex items-start justify-between gap-3">
@@ -137,11 +151,7 @@ function MemoryCard({ memory }: { memory: DealMemory }) {
             morph into just animates out on its own and reads as a glitch. */}
         <span
           data-shared-part="value"
-          className={cn(
-            "shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold",
-            OUTCOME_CLASS[outcome].bg,
-            OUTCOME_CLASS[outcome].text,
-          )}
+          className={cn("shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold", badgeClass)}
         >
           {OUTCOME_LABEL[outcome]}
         </span>

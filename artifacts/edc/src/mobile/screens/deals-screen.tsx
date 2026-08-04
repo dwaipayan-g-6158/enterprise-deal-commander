@@ -153,15 +153,24 @@ export function DealsScreen() {
 function DealCard({ deal }: { deal: RosterRow }) {
   const closeIn = calendarDaysUntil(deal.expectedCloseDate);
   const cardRef = useRef<HTMLAnchorElement>(null);
+  const tcv = compactCurrency(deal.calculatedTCV ?? 0, deal.dealCurrency ?? "USD");
 
   return (
     <Link
       ref={cardRef}
       href={`/deals/${deal.id}`}
       // wouter runs a Link's own onClick before it navigates, so the names
-      // are on the DOM before the transition takes its snapshot.
-      onClick={() => armSharedCard(deal.id, cardRef.current)}
-      className="m-card m-press block p-4"
+      // are on the DOM before the transition takes its snapshot. The seed
+      // goes with them: the detail screen draws its headline from this while
+      // its own query is still in flight, which is what the card morphs into.
+      onClick={() =>
+        armSharedCard(
+          deal.id,
+          { eyebrow: deal.accountName, title: deal.dealName, value: tcv },
+          cardRef.current,
+        )
+      }
+      className="m-card m-press m-reveal block p-4"
       aria-label={`${deal.dealName}, ${deal.accountName}`}
     >
       <div className="flex items-start justify-between gap-3">
@@ -180,7 +189,7 @@ function DealCard({ deal }: { deal: RosterRow }) {
           className="shrink-0 font-mono text-lg font-semibold tracking-[-0.03em]"
           data-shared-part="value"
         >
-          {compactCurrency(deal.calculatedTCV ?? 0, deal.dealCurrency ?? "USD")}
+          {tcv}
         </span>
       </div>
 

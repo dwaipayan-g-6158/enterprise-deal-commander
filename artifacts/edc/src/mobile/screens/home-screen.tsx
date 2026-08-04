@@ -13,6 +13,7 @@ import { EdcLogoMark } from "@/components/edc-logo-mark";
 import { MobileHeader } from "@/mobile/shell/mobile-header";
 import { MobileCard, CardHeader } from "@/mobile/components/mobile-card";
 import { StatTile, DeltaLine } from "@/mobile/components/stat-tile";
+import { CountUp } from "@/mobile/components/count-up";
 import { Shimmer } from "@/mobile/components/shimmer";
 import { ErrorState } from "@/mobile/components/states";
 import { PullToRefresh } from "@/mobile/components/pull-to-refresh";
@@ -91,8 +92,10 @@ export function HomeScreen() {
         <section className="px-4 pb-1 pt-4">
           <p className="m-eyebrow">Weighted pipeline</p>
           {vitals ? (
-            <>
-              <p className="m-kpi-hero mt-1">{money(vitals.weightedPipeline)}</p>
+            <div className="m-appear">
+              <p className="m-kpi-hero mt-1">
+                <CountUp value={vitals.weightedPipeline} format={money} once="home-pipeline" />
+              </p>
               <p className="m-data mt-1">
                 <span className="m-muted">of {money(vitals.totalTCV)} total · </span>
                 <DeltaLine
@@ -100,7 +103,7 @@ export function HomeScreen() {
                   format={money}
                 />
               </p>
-            </>
+            </div>
           ) : (
             <>
               <Shimmer className="mt-1 h-10 w-48" />
@@ -164,9 +167,22 @@ export function HomeScreen() {
                 ) : undefined
               }
             />
+            {/* Red alerts stays a plain figure. It is the one number on this
+                screen that means act now, and animating it reads as decoration
+                on top of an alarm. */}
             <StatTile
               label="Avg score"
-              value={vitals?.avgScore != null ? Math.round(vitals.avgScore) : "—"}
+              value={
+                vitals?.avgScore != null ? (
+                  <CountUp
+                    value={vitals.avgScore}
+                    format={(n) => String(Math.round(n))}
+                    once="home-avg-score"
+                  />
+                ) : (
+                  "—"
+                )
+              }
               footnote={<span className="m-muted">Close probability</span>}
             />
           </div>

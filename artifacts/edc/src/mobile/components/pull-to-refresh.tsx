@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { cn } from "@/lib/utils";
 import { useShellScrollRef } from "@/mobile/shell/mobile-shell";
 
 /** Pull distance, after resistance, that arms the refresh. */
@@ -7,6 +8,8 @@ const TRIGGER_PX = 64;
 const RESISTANCE = 0.5;
 /** Hard stop, so a long drag doesn't tear the content off the screen. */
 const MAX_PULL_PX = 96;
+/** One beat of "that worked" before the content settles back. */
+const CONFIRM_MS = 340;
 
 /**
  * Pull down at the top of a list to refetch.
@@ -31,6 +34,8 @@ export function PullToRefresh({
   const scrollRef = useShellScrollRef();
   const [pull, setPull] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
+  /** Held between the refetch resolving and the content springing back. */
+  const [confirming, setConfirming] = useState(false);
 
   // Mirrors of the reactive state, so the native listeners can stay attached
   // for the life of the component instead of re-binding on every frame of the
@@ -90,10 +95,17 @@ export function PullToRefresh({
       setRefreshing(true);
       setPull(TRIGGER_PX);
       void Promise.resolve(onRefreshRef.current()).finally(() => {
-        refreshingRef.current = false;
+        // The ring completes and pulses before the content springs back —
+        // without the beat, a fast refetch reads as the gesture having been
+        // ignored.
         setRefreshing(false);
-        pullRef.current = 0;
-        setPull(0);
+        setConfirming(true);
+        setTimeout(() => {
+          refreshingRef.current = false;
+          setConfirming(false);
+          pullRef.current = 0;
+          setPull(0);
+        }, CONFIRM_MS);
       });
     };
 
@@ -118,14 +130,19 @@ export function PullToRefresh({
         style={{ height: pull, opacity: progress }}
         aria-hidden={!refreshing}
       >
-        <RefreshRing progress={progress} spinning={refreshing} />
+        <RefreshRing progress={progress} spinning={refreshing} confirming={confirming} />
       </div>
       <div
         style={{
           transform: `translateY(${pull}px)`,
           // Untransitioned while the finger is down so the content tracks it
-          // exactly; eased on release so it settles rather than snapping.
-          transition: pull === 0 || refreshing ? "transform 260ms cubic-bezier(0.32,0.72,0,1)" : "none",
+          // exactly. On release it springs: a plain ease lands flat, and the
+          // slight overshoot is what makes the gesture feel elastic rather
+          // than mechanical.
+          transition:
+            pull === 0 || refreshing || confirming
+              ? "transform 320ms var(--m-ease-spring)"
+              : "none",
         }}
       >
         {children}
@@ -137,16 +154,28 @@ export function PullToRefresh({
   );
 }
 
-/** Draws its stroke as you pull, then spins while the refetch is in flight. */
-function RefreshRing({ progress, spinning }: { progress: number; spinning: boolean }) {
+/**
+ * Draws its stroke as you pull, spins while the refetch is in flight, then
+ * closes to a full ring and pulses once on success.
+ */
+function RefreshRing({
+  progress,
+  spinning,
+  confirming,
+}: {
+  progress: number;
+  spinning: boolean;
+  confirming: boolean;
+}) {
   const radius = 9;
   const circumference = 2 * Math.PI * radius;
+  const arc = confirming ? 1 : spinning ? 0.25 : progress;
   return (
     <svg
       width="24"
       height="24"
       viewBox="0 0 24 24"
-      className={spinning ? "mt-5 animate-spin" : "mt-5"}
+      className={cn("mt-5", spinning && "animate-spin", confirming && "m-ptr-pulse")}
       style={{ transform: spinning ? undefined : `rotate(${progress * 360 - 90}deg)` }}
     >
       <circle
@@ -166,7 +195,7 @@ function RefreshRing({ progress, spinning }: { progress: number; spinning: boole
         strokeWidth="2.5"
         strokeLinecap="round"
         strokeDasharray={circumference}
-        strokeDashoffset={circumference * (1 - (spinning ? 0.25 : progress))}
+        strokeDashoffset={circumference * (1 - arc)}
         transform="rotate(-90 12 12)"
       />
     </svg>

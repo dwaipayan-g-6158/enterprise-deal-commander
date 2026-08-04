@@ -7,13 +7,14 @@ import {
   useListDealActivity,
   type ActivityEvent,
 } from "@workspace/api-client-react";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useJumpTargets } from "@/mobile/commander/use-jump-targets";
+import { sharedCardSeed } from "@/mobile/lib/shared-card";
 import { MobileHeader } from "@/mobile/shell/mobile-header";
 import { Shimmer } from "@/mobile/components/shimmer";
 import { ErrorState } from "@/mobile/components/states";
 import { PullToRefresh } from "@/mobile/components/pull-to-refresh";
-import { HeroSection } from "@/mobile/deal-detail/hero-section";
+import { HeroPreview, HeroSection } from "@/mobile/deal-detail/hero-section";
 import { RiskSection } from "@/mobile/deal-detail/risk-section";
 import { ScoreSection } from "@/mobile/deal-detail/score-section";
 import { MeddpiccSection } from "@/mobile/deal-detail/meddpicc-section";
@@ -39,6 +40,10 @@ const ACTIVITY_LIMIT = 20;
  * actions are all rendered as state.
  */
 export function DealDetailScreen({ id }: { id: string }) {
+  // What the roster card knew, if this screen was opened by tapping one.
+  // Read once at mount: the morph is released as soon as the transition
+  // settles, and the loading hero below outlives that.
+  const [seed] = useState(() => sharedCardSeed(id));
   const intelQuery = useGetDealIntelligence(id);
   const scoreQuery = useGetDealScore(id);
   const meddpiccQuery = useGetMeddpiccAssessment(id);
@@ -111,9 +116,18 @@ export function DealDetailScreen({ id }: { id: string }) {
   if (!intel) {
     return (
       <>
-        <MobileHeader title="Deal" backHref="/deals" backLabel="Back to deals" />
+        <MobileHeader
+          title={seed?.title ?? "Deal"}
+          subtitle={seed?.eyebrow}
+          backHref="/deals"
+          backLabel="Back to deals"
+        />
+        {seed ? (
+          <HeroPreview dealId={id} seed={seed} />
+        ) : (
+          <Shimmer className="mx-4 mt-4 h-24 rounded-[var(--m-radius-card)]" />
+        )}
         <div className="space-y-3 p-4">
-          <Shimmer className="h-24 rounded-[var(--m-radius-card)]" />
           {Array.from({ length: 5 }).map((_, i) => (
             <Shimmer key={i} className="h-20 rounded-[var(--m-radius-card)]" />
           ))}
@@ -144,7 +158,10 @@ export function DealDetailScreen({ id }: { id: string }) {
           scoreHistory={trajectory.map((p) => p.score)}
         />
 
-        <div className="space-y-3 p-4">
+        {/* Only the sections crossfade. The hero was already on screen from
+            the preview above, and fading it in a second time reads as a
+            flash. */}
+        <div className="m-appear space-y-3 p-4">
           <RiskSection intel={intel} />
           {scoreData ? <ScoreSection score={scoreData} /> : null}
           {meddpiccData ? <MeddpiccSection assessment={meddpiccData} /> : null}
