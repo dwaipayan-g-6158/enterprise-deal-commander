@@ -138,7 +138,11 @@ export function DealDetailScreen({ id }: { id: string }) {
       />
 
       <PullToRefresh onRefresh={refresh}>
-        <HeroSection intel={intel} scoreHistory={trajectory.map((p) => p.score)} />
+        <HeroSection
+          intel={intel}
+          dealId={id}
+          scoreHistory={trajectory.map((p) => p.score)}
+        />
 
         <div className="space-y-3 p-4">
           <RiskSection intel={intel} />

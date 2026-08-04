@@ -1,6 +1,7 @@
 import type { ComponentType } from "react";
-import { Switch, Route, Redirect } from "wouter";
+import { Switch, Route, Redirect, Router } from "wouter";
 import { RoleProvider } from "@/lib/auth/role-context";
+import { aroundNav } from "@/mobile/lib/view-transitions";
 import { useAuthGuard } from "@/lib/auth/use-auth-guard";
 import { MobileShell } from "@/mobile/shell/mobile-shell";
 import { MobileShellSkeleton } from "@/mobile/shell/mobile-shell-skeleton";
@@ -71,7 +72,11 @@ function Placeholder({ name }: { name: string }) {
  */
 export default function MobileApp() {
   return (
-    <>
+    // A nested Router purely to install aroundNav, which wraps every
+    // navigation below it in a view transition. It declares no base of its
+    // own, so it inherits App.tsx's, and the desktop shell — outside this
+    // subtree — is untouched.
+    <Router aroundNav={aroundNav}>
       {/* Outside the Switch so it survives the auth guard's own loading
           chrome and the first navigation. It renders nothing at all in a
           browser tab, after its one play, or under reduced motion. */}
@@ -146,9 +151,11 @@ export default function MobileApp() {
           />
         </Route>
 
-        <Route path="/m"><Redirect to="/" /></Route>
+        {/* transition={false}: <Redirect> navigates from a layout effect,
+            where aroundNav's flushSync is not safe to call. */}
+        <Route path="/m"><Redirect to="/" transition={false} /></Route>
         <Route component={NotFound} />
       </Switch>
-    </>
+    </Router>
   );
 }

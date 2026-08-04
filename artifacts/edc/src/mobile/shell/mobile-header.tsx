@@ -45,7 +45,10 @@ export function MobileHeader({
   return (
     <header
       className={cn(
-        "m-glass sticky top-0 z-30 border-b border-[var(--m-keyline)] pt-safe",
+        // m-vt-header lifts the bar out of the route transition's root
+        // snapshot, so it cross-fades in place while the content slides
+        // underneath it — an iOS nav bar does not travel with its screen.
+        "m-glass m-vt-header sticky top-0 z-30 border-b border-[var(--m-keyline)] pt-safe",
         className,
       )}
     >

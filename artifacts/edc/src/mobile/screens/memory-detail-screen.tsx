@@ -9,6 +9,7 @@ import { compactCurrency, formatDate, humanizeCode } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { OUTCOME_CLASS } from "@/lib/semantic-colors";
 import { normalizeOutcome, OUTCOME_LABEL } from "@/mobile/lib/outcome";
+import { useSharedCardStyle } from "@/mobile/lib/shared-card";
 import { MobileHeader } from "@/mobile/shell/mobile-header";
 import { MobileCard, CardHeader } from "@/mobile/components/mobile-card";
 import { Shimmer } from "@/mobile/components/shimmer";
@@ -31,6 +32,8 @@ interface SimilarDeal {
 export function MemoryDetailScreen({ id }: { id: string }) {
   const memoryQuery = useGetDealMemory(id);
   const memory = memoryQuery.data?.data;
+  // Only set when this screen was opened by tapping its card in the archive.
+  const shared = useSharedCardStyle(id);
   // Held until the memory resolves, since the similar-deals lookup is keyed by
   // the underlying deal id rather than the memory id.
   const similarQuery = useGetSimilarDeals(memory?.dealId ?? "", {
@@ -77,8 +80,9 @@ export function MemoryDetailScreen({ id }: { id: string }) {
         backLabel="Back to memory"
       />
 
-      <header className="px-4 pb-2 pt-4">
+      <header className="px-4 pb-2 pt-4" style={shared("card")}>
         <span
+          style={shared("value")}
           className={cn(
             "inline-flex rounded-full px-3 py-1 text-xs font-semibold",
             OUTCOME_CLASS[outcome].bg,

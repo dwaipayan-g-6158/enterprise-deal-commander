@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { Link } from "wouter";
 import { Search } from "lucide-react";
 import { useSearchDealMemory, type DealMemory } from "@workspace/api-client-react";
@@ -6,6 +6,7 @@ import { compactCurrency, formatDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { OUTCOME_CLASS } from "@/lib/semantic-colors";
 import { normalizeOutcome, OUTCOME_LABEL } from "@/mobile/lib/outcome";
+import { armSharedCard } from "@/mobile/lib/shared-card";
 import { useDebouncedValue } from "@/mobile/hooks/use-debounced-value";
 import { MobileHeader } from "@/mobile/shell/mobile-header";
 import { SegmentChips, type Segment } from "@/mobile/components/segment-chips";
@@ -115,10 +116,13 @@ export function MemoryScreen() {
 function MemoryCard({ memory }: { memory: DealMemory }) {
   const outcome = normalizeOutcome(memory.outcome);
   const tcv = memory.finalTcv != null ? Number(memory.finalTcv) : null;
+  const cardRef = useRef<HTMLAnchorElement>(null);
 
   return (
     <Link
+      ref={cardRef}
       href={`/memory/${memory.id}`}
+      onClick={() => armSharedCard(memory.id, cardRef.current)}
       className="m-card m-press block p-4"
       aria-label={`${memory.dealName}, ${memory.accountName}`}
     >
@@ -127,7 +131,12 @@ function MemoryCard({ memory }: { memory: DealMemory }) {
           <p className="m-eyebrow truncate">{memory.accountName}</p>
           <h2 className="m-h3 mt-1 truncate">{memory.dealName}</h2>
         </div>
+        {/* Only the outcome badge travels. The account line and deal name go
+            into the detail screen's nav bar rather than its hero, and that
+            already has a transition name of its own — a part with nothing to
+            morph into just animates out on its own and reads as a glitch. */}
         <span
+          data-shared-part="value"
           className={cn(
             "shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold",
             OUTCOME_CLASS[outcome].bg,

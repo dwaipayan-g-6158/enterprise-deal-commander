@@ -78,7 +78,9 @@ export function CommanderButton() {
       onClick={() => setOpen(true)}
       aria-label={label}
       className={cn(
-        "m-press absolute bottom-[calc(4rem+env(safe-area-inset-bottom)+0.75rem)] left-1/2 z-40",
+        // m-vt-commander: like the tab bar, the capsule holds still while the
+        // screen changes behind it.
+        "m-press m-vt-commander absolute bottom-[calc(4rem+env(safe-area-inset-bottom)+0.75rem)] left-1/2 z-40",
         "flex h-14 -translate-x-1/2 items-center justify-center gap-2 rounded-full",
         "bg-[var(--m-obsidian)] text-white shadow-[0_8px_24px_rgba(0,0,0,0.28)]",
         "ring-1 ring-[var(--m-obsidian-ring)] backdrop-blur-xl",

@@ -16,7 +16,9 @@ export function TabBar() {
 
   return (
     <nav
-      className="m-glass absolute inset-x-0 bottom-0 z-40 border-t border-[var(--m-keyline)] pb-safe"
+      // m-vt-tabbar keeps the bar out of the route transition's root
+      // snapshot, so it stays put while the screen slides behind it.
+      className="m-glass m-vt-tabbar absolute inset-x-0 bottom-0 z-40 border-t border-[var(--m-keyline)] pb-safe"
       aria-label="Primary"
     >
       <ul className="flex items-stretch">

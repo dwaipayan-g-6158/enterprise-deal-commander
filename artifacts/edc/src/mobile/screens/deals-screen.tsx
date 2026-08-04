@@ -1,10 +1,11 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { Link } from "wouter";
 import { compactCurrency, calendarDaysUntil } from "@/lib/format";
 import { HEALTH_SHORT_LABEL } from "@/lib/semantic-colors";
 import { useRosterData } from "@/components/roster/hooks/use-roster-data";
 import { terminalOutcome } from "@/components/roster/model/board";
 import type { RosterRow } from "@/components/roster/model/roster-types";
+import { armSharedCard } from "@/mobile/lib/shared-card";
 import { MobileHeader } from "@/mobile/shell/mobile-header";
 import { SegmentChips, type Segment } from "@/mobile/components/segment-chips";
 import { HealthDot, MetaChip, VelocityMark } from "@/mobile/components/badges";
@@ -143,25 +144,42 @@ export function DealsScreen() {
  * One deal, at a glance. Six data points and no more — depth belongs in the
  * detail screen, and a card that tries to be a table row is unreadable at
  * arm's length.
+ *
+ * The data-shared-part attributes are what the card morphs into the detail
+ * hero on: the account line, the deal name and the value each travel to their
+ * counterpart independently rather than the whole card cross-fading as one
+ * flat image. See lib/shared-card.ts.
  */
 function DealCard({ deal }: { deal: RosterRow }) {
   const closeIn = calendarDaysUntil(deal.expectedCloseDate);
+  const cardRef = useRef<HTMLAnchorElement>(null);
 
   return (
     <Link
+      ref={cardRef}
       href={`/deals/${deal.id}`}
+      // wouter runs a Link's own onClick before it navigates, so the names
+      // are on the DOM before the transition takes its snapshot.
+      onClick={() => armSharedCard(deal.id, cardRef.current)}
       className="m-card m-press block p-4"
       aria-label={`${deal.dealName}, ${deal.accountName}`}
     >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
-          <p className="m-eyebrow truncate">{deal.accountName}</p>
+          <p className="m-eyebrow truncate" data-shared-part="eyebrow">
+            {deal.accountName}
+          </p>
           <h2 className="m-h3 mt-1 flex items-center gap-2">
             <HealthDot health={deal.healthStatus} />
-            <span className="truncate">{deal.dealName}</span>
+            <span className="truncate" data-shared-part="title">
+              {deal.dealName}
+            </span>
           </h2>
         </div>
-        <span className="shrink-0 font-mono text-lg font-semibold tracking-[-0.03em]">
+        <span
+          className="shrink-0 font-mono text-lg font-semibold tracking-[-0.03em]"
+          data-shared-part="value"
+        >
           {compactCurrency(deal.calculatedTCV ?? 0, deal.dealCurrency ?? "USD")}
         </span>
       </div>
