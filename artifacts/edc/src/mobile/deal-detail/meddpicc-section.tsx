@@ -58,8 +58,8 @@ export function MeddpiccSection({ assessment }: { assessment: MeddpiccAssessment
           return (
             <li key={q.questionOrder}>
               <div className="flex items-baseline justify-between gap-3">
-                <p className="m-label">{q.pillar}</p>
-                <span className={cn("m-label shrink-0", value != null && ANSWER_TONE[value])}>
+                <p className="m-label m-muted">{q.pillar}</p>
+                <span className={cn("m-label shrink-0", value == null ? "m-muted" : ANSWER_TONE[value])}>
                   {value == null ? "Unanswered" : ANSWER_LABEL[value]}
                 </span>
               </div>

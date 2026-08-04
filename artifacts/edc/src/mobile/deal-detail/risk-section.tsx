@@ -2,6 +2,7 @@ import type { Alert, Intelligence } from "@workspace/api-client-react";
 import { humanizeCode } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { RISK_LEVEL_CLASS, RISK_LEVEL_LABEL } from "@/lib/semantic-colors";
+import { alertBody } from "@/mobile/lib/alert-text";
 import { CollapsibleSection } from "@/mobile/components/collapsible-section";
 
 const SEVERITY_TONE: Record<string, string> = {
@@ -49,7 +50,7 @@ export function RiskSection({ intel }: { intel: Intelligence }) {
           {managed.length > 0 ? <AlertList title="Managed" alerts={managed} muted /> : null}
           {risk.topDrivers.length > 0 ? (
             <div>
-              <p className="m-label mb-2">Top drivers</p>
+              <p className="m-label m-muted mb-2">Top drivers</p>
               <ul className="space-y-1.5">
                 {risk.topDrivers.slice(0, 4).map((driver, i) => (
                   <li key={i} className="m-caption flex items-baseline justify-between gap-3">
@@ -77,14 +78,17 @@ function AlertList({
 }) {
   return (
     <div>
-      <p className="m-label mb-2">{title}</p>
+      <p className="m-label m-muted mb-2">{title}</p>
       <ul className="space-y-3">
         {alerts.map((alert) => (
           <li key={`${alert.code}-${alert.severity}`} className={cn(muted && "opacity-75")}>
             <p className={cn("m-headline", SEVERITY_TONE[alert.severity] ?? "")}>
               {humanizeCode(alert.code)}
             </p>
-            <p className="m-body m-muted mt-0.5">{alert.message}</p>
+            {/* alertBody, not alert.message: the engine prefixes the message
+                with the same pattern name printed on the line above, in block
+                caps. */}
+            <p className="m-body m-muted mt-0.5">{alertBody(alert)}</p>
             {alert.disposition ? (
               <p className="m-caption m-muted mt-1">
                 {humanizeCode(alert.disposition.state)}

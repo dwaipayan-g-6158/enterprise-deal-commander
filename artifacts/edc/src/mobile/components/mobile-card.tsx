@@ -62,7 +62,7 @@ export function MobileCardLink({
 /** The label above a module's content. Sentence case — a card should say what
  *  it holds, not announce itself. */
 export function CardLabel({ children, className }: { children: ReactNode; className?: string }) {
-  return <p className={cn("m-label", className)}>{children}</p>;
+  return <p className={cn("m-label m-muted", className)}>{children}</p>;
 }
 
 /**

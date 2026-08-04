@@ -1,3 +1,4 @@
+import { Progress } from "@/components/ui/progress";
 import { cn } from "@/lib/utils";
 import { CollapsibleSection } from "@/mobile/components/collapsible-section";
 
@@ -59,15 +60,17 @@ export function PlaybookSection({ journey }: { journey: JourneyEntry[] }) {
                   {entry.completedCount}/{entry.totalSteps}
                 </span>
               </div>
-              <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-muted">
-                <div
-                  className={cn(
-                    "h-full rounded-full",
-                    entry.assignmentId ? "bg-primary" : "bg-border",
-                  )}
-                  style={{ width: `${Math.round(entry.progressPct)}%` }}
-                />
-              </div>
+              <Progress
+                value={Math.round(entry.progressPct)}
+                aria-label={`${entry.playbookName}: ${entry.completedCount} of ${entry.totalSteps} steps`}
+                className={cn(
+                  "mt-1.5 h-1.5 bg-muted",
+                  // A playbook nobody has started shows its fill in grey, so
+                  // "assigned but untouched" and "not assigned" don't read the
+                  // same at a glance.
+                  !entry.assignmentId && "[&>div]:bg-muted-foreground/40",
+                )}
+              />
             </li>
           ))}
         </ul>

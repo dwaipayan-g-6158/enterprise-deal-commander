@@ -1,5 +1,7 @@
 import { humanizeCode } from "@/lib/format";
 import type { DealScore } from "@workspace/api-client-react";
+import { Progress } from "@/components/ui/progress";
+import { cn } from "@/lib/utils";
 import { CollapsibleSection } from "@/mobile/components/collapsible-section";
 
 /**
@@ -45,7 +47,7 @@ export function ScoreSection({ score }: { score: DealScore }) {
     <CollapsibleSection anchorId="score" label="Predictive score" verdict={verdict}>
       {rows.length > 0 ? (
         <>
-          <p className="m-label mb-3">What moves it</p>
+          <p className="m-label m-muted mb-3">What moves it</p>
           <ul className="space-y-2.5">
             {/* Keyed by position, not label: readBreakdown falls back to
                 "Other" for any factor the server sends without a string
@@ -57,16 +59,19 @@ export function ScoreSection({ score }: { score: DealScore }) {
                   <span className="min-w-0 flex-1 truncate">{row.label}</span>
                   <span className="m-muted shrink-0">{row.contribution.toFixed(1)}</span>
                 </div>
-                <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-muted">
-                  <div
-                    className={
-                      row.contribution >= 0
-                        ? "h-full rounded-full bg-emerald-500"
-                        : "h-full rounded-full bg-orange-500"
-                    }
-                    style={{ width: `${(Math.abs(row.contribution) / peak) * 100}%` }}
-                  />
-                </div>
+                {/* Magnitude relative to the strongest factor, not a
+                    percentage of anything — the direction is carried by
+                    colour and by the signed figure above. */}
+                <Progress
+                  value={(Math.abs(row.contribution) / peak) * 100}
+                  aria-label={`${row.label}: ${row.contribution.toFixed(1)}`}
+                  className={cn(
+                    "mt-1 h-1.5 bg-muted",
+                    row.contribution >= 0
+                      ? "[&>div]:bg-emerald-500"
+                      : "[&>div]:bg-orange-500",
+                  )}
+                />
               </li>
             ))}
           </ul>

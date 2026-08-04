@@ -73,7 +73,7 @@ export function HeroSection({
 
   return (
     <header className="px-4 pb-2 pt-4" style={shared("card")}>
-      <p className="m-label truncate" style={shared("eyebrow")}>
+      <p className="m-label m-muted truncate" style={shared("eyebrow")}>
         {intel.accountName}
       </p>
       <h1 className="m-title mt-1" style={shared("title")}>
@@ -135,7 +135,7 @@ export function HeroPreview({ dealId, seed }: { dealId: string; seed: SharedCard
 
   return (
     <header className="px-4 pb-2 pt-4" style={shared("card")}>
-      <p className="m-label truncate" style={shared("eyebrow")}>
+      <p className="m-label m-muted truncate" style={shared("eyebrow")}>
         {seed.eyebrow}
       </p>
       <h1 className="m-title mt-1" style={shared("title")}>

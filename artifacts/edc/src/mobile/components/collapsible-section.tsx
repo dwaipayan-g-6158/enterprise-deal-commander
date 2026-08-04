@@ -44,7 +44,7 @@ export function CollapsibleSection({
         )}
       >
         <div className="min-w-0 flex-1">
-          <p className="m-label">{label}</p>
+          <p className="m-label m-muted">{label}</p>
           <div className="mt-1.5">{verdict}</div>
         </div>
         {expandable ? (

@@ -7,12 +7,15 @@ import {
   type DealMemory,
 } from "@workspace/api-client-react";
 import { compactCurrency, formatDate, humanizeCode } from "@/lib/format";
+import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { OUTCOME_CLASS } from "@/lib/semantic-colors";
 import { normalizeOutcome, OUTCOME_LABEL } from "@/mobile/lib/outcome";
 import { sharedCardSeed, useSharedCardStyle } from "@/mobile/lib/shared-card";
 import { MobileHeader } from "@/mobile/shell/mobile-header";
 import { MobileCard, CardHeader } from "@/mobile/components/mobile-card";
+import { MetaChip, OutcomePill } from "@/mobile/components/badges";
+import { ListRow } from "@/mobile/components/list-row";
 import { Shimmer } from "@/mobile/components/shimmer";
 import { ErrorState } from "@/mobile/components/states";
 
@@ -71,12 +74,9 @@ export function MemoryDetailScreen({ id }: { id: string }) {
             rather than after the fetch. */}
         {seed ? (
           <header className="px-4 pb-2 pt-4" style={shared("card")}>
-            <span
-              style={shared("value")}
-              className={cn("m-label inline-flex rounded-full px-3 py-1", seed.valueClassName)}
-            >
+            <OutcomePill style={shared("value")} className={seed.valueClassName}>
               {seed.value}
-            </span>
+            </OutcomePill>
             <Shimmer className="mt-2 h-10 w-40" />
             <Shimmer className="mt-2 h-3.5 w-32" />
           </header>
@@ -103,16 +103,12 @@ export function MemoryDetailScreen({ id }: { id: string }) {
       />
 
       <header className="px-4 pb-2 pt-4" style={shared("card")}>
-        <span
+        <OutcomePill
           style={shared("value")}
-          className={cn(
-            "m-label inline-flex rounded-full px-3 py-1",
-            OUTCOME_CLASS[outcome].bg,
-            OUTCOME_CLASS[outcome].text,
-          )}
+          className={cn(OUTCOME_CLASS[outcome].bg, OUTCOME_CLASS[outcome].text)}
         >
           {outcome === "won" ? "Closed-Won" : "Closed-Lost"}
-        </span>
+        </OutcomePill>
         <p className="m-display mt-2">
           {memory.finalTcv != null && Number.isFinite(Number(memory.finalTcv))
             ? compactCurrency(Number(memory.finalTcv))
@@ -158,12 +154,9 @@ export function MemoryDetailScreen({ id }: { id: string }) {
             <CardHeader label="Competitors faced" />
             <div className="flex flex-wrap gap-2">
               {memory.competitorsFaced.map((name) => (
-                <span
-                  key={name}
-                  className="m-caption rounded-full border border-border px-3 py-1"
-                >
+                <MetaChip key={name} className="rounded-full px-3 py-1">
                   {name}
-                </span>
+                </MetaChip>
               ))}
             </div>
           </MobileCard>
@@ -172,26 +165,19 @@ export function MemoryDetailScreen({ id }: { id: string }) {
         {similar.length > 0 ? (
           <MobileCard>
             <CardHeader label="Similar deals" />
-            <ul className="space-y-2">
+            <ul>
               {similar.slice(0, 5).map((deal) => (
                 <li key={deal.id}>
-                  <Link
+                  <ListRow
                     href={`/deals/${deal.id}`}
-                    className="m-press flex items-baseline justify-between gap-3 py-1"
-                  >
-                    <span className="min-w-0 flex-1">
-                      <span className="m-body block truncate">{deal.dealName}</span>
-                      <span className="m-caption m-muted truncate">{deal.accountName}</span>
-                    </span>
-                    <span
-                      className={cn(
-                        "m-caption shrink-0",
-                        OUTCOME_CLASS[normalizeOutcome(deal.outcome)].text,
-                      )}
-                    >
-                      {OUTCOME_LABEL[normalizeOutcome(deal.outcome)]}
-                    </span>
-                  </Link>
+                    title={deal.dealName}
+                    sub={deal.accountName}
+                    trailing={
+                      <span className={OUTCOME_CLASS[normalizeOutcome(deal.outcome)].text}>
+                        {OUTCOME_LABEL[normalizeOutcome(deal.outcome)]}
+                      </span>
+                    }
+                  />
                 </li>
               ))}
             </ul>
@@ -207,7 +193,7 @@ export function MemoryDetailScreen({ id }: { id: string }) {
 function Tile({ label, value }: { label: string; value: number | string | null | undefined }) {
   return (
     <div className="m-card m-reveal p-4">
-      <p className="m-label">{label}</p>
+      <p className="m-label m-muted">{label}</p>
       <p className="m-title mt-1.5">{value ?? "—"}</p>
     </div>
   );
@@ -218,12 +204,9 @@ function TagList({ memory }: { memory: DealMemory }) {
   return (
     <div className="flex flex-wrap gap-2">
       {memory.tags.map((tag) => (
-        <span
-          key={tag}
-          className="m-caption rounded-md bg-secondary px-2 py-1 text-secondary-foreground"
-        >
+        <Badge key={tag} variant="secondary" className="m-caption font-normal">
           {tag}
-        </span>
+        </Badge>
       ))}
     </div>
   );

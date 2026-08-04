@@ -31,7 +31,7 @@ export function StatTile({
 }) {
   const body = (
     <>
-      <p className="m-label">{label}</p>
+      <p className="m-label m-muted">{label}</p>
       <p className={cn("m-title mt-1.5", tone === "critical" && "text-destructive")}>{value}</p>
       {/* mt-auto is what aligns a pair of tiles: the footnote sits on the
           floor of the card rather than directly under a figure, so one tile

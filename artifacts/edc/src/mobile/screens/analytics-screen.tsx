@@ -8,10 +8,12 @@ import {
 import { useFlowFunnel, useFlowHealthScore } from "@/components/cockpit/flow/use-flow";
 import type { FunnelRow } from "@workspace/engine";
 import { compactCurrency, humanizeCode } from "@/lib/format";
+import { Progress } from "@/components/ui/progress";
 import { cn } from "@/lib/utils";
 import { OUTCOME_CLASS } from "@/lib/semantic-colors";
 import { MobileHeader } from "@/mobile/shell/mobile-header";
 import { MobileCard, CardHeader } from "@/mobile/components/mobile-card";
+import { ListRow } from "@/mobile/components/list-row";
 import { SegmentChips, type Segment } from "@/mobile/components/segment-chips";
 import { Shimmer } from "@/mobile/components/shimmer";
 import { PullToRefresh } from "@/mobile/components/pull-to-refresh";
@@ -145,7 +147,7 @@ function Percentile({
 }) {
   return (
     <div>
-      <p className="m-label">{label}</p>
+      <p className="m-label m-muted">{label}</p>
       <p className={cn("mt-1", emphasis ? "m-title" : "m-headline m-muted")}>
         {value != null ? compactCurrency(value) : "—"}
       </p>
@@ -215,21 +217,17 @@ function VelocityCard({ deals, loading }: { deals: VelocityDeal[]; loading: bool
       ) : overdue.length === 0 ? (
         <p className="m-body m-muted">Every deal is at or ahead of its stage benchmark.</p>
       ) : (
-        <ul className="space-y-2">
+        <ul>
           {overdue.map((deal) => (
             <li key={deal.id}>
-              <Link
+              <ListRow
                 href={`/deals/${deal.id}`}
-                className="m-press flex items-baseline justify-between gap-3 py-1"
-              >
-                <span className="min-w-0 flex-1">
-                  <span className="m-body block truncate">{deal.dealName}</span>
-                  <span className="m-caption m-muted">{deal.stage}</span>
-                </span>
-                <span className="m-caption shrink-0 text-orange-600 dark:text-orange-400">
-                  +{deal.deltaDays}d
-                </span>
-              </Link>
+                title={deal.dealName}
+                sub={deal.stage}
+                trailing={
+                  <span className="text-orange-600 dark:text-orange-400">+{deal.deltaDays}d</span>
+                }
+              />
             </li>
           ))}
         </ul>
@@ -257,12 +255,11 @@ function PipelineHealthCard({ data }: { data: HealthScoreData | undefined }) {
                   <span>{humanizeCode(key)}</span>
                   <span className="m-muted">{value != null ? Math.round(value) : "—"}</span>
                 </div>
-                <div className="mt-1 h-1 overflow-hidden rounded-full bg-muted">
-                  <div
-                    className="h-full rounded-full bg-primary"
-                    style={{ width: `${value ?? 0}%` }}
-                  />
-                </div>
+                <Progress
+                  value={value ?? 0}
+                  aria-label={humanizeCode(key)}
+                  className="mt-1 h-1 bg-muted"
+                />
               </li>
             ))}
           </ul>
@@ -293,12 +290,13 @@ function FunnelCard({ rows, loading }: { rows: FunnelRow[]; loading: boolean }) 
                   {row.dealCount} · {compactCurrency(row.totalValue)}
                 </span>
               </div>
-              <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-muted">
-                <div
-                  className="h-full rounded-full bg-primary"
-                  style={{ width: `${(row.totalValue / peak) * 100}%` }}
-                />
-              </div>
+              {/* Share of the biggest stage, so the funnel's shape reads at a
+                  glance; the absolute figure is on the line above. */}
+              <Progress
+                value={(row.totalValue / peak) * 100}
+                aria-label={`${row.stageName}: ${compactCurrency(row.totalValue)}`}
+                className="mt-1.5 h-2 bg-muted"
+              />
               {row.convToNextPct != null ? (
                 <p className="m-caption m-muted mt-1">{Math.round(row.convToNextPct)}% convert onward</p>
               ) : null}

@@ -189,7 +189,7 @@ function DealCard({ deal }: { deal: RosterRow }) {
     >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
-          <p className="m-label truncate" data-shared-part="eyebrow">
+          <p className="m-label m-muted truncate" data-shared-part="eyebrow">
             {deal.accountName}
           </p>
           <h2 className="m-title mt-0.5 flex items-center gap-2">

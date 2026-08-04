@@ -9,6 +9,7 @@ import { normalizeOutcome, OUTCOME_LABEL } from "@/mobile/lib/outcome";
 import { armSharedCard } from "@/mobile/lib/shared-card";
 import { useDebouncedValue } from "@/mobile/hooks/use-debounced-value";
 import { MobileHeader } from "@/mobile/shell/mobile-header";
+import { OutcomePill } from "@/mobile/components/badges";
 import { SegmentChips, type Segment } from "@/mobile/components/segment-chips";
 import { Shimmer } from "@/mobile/components/shimmer";
 import { EmptyState, ErrorState } from "@/mobile/components/states";
@@ -142,19 +143,16 @@ function MemoryCard({ memory }: { memory: DealMemory }) {
     >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
-          <p className="m-label truncate">{memory.accountName}</p>
+          <p className="m-label m-muted truncate">{memory.accountName}</p>
           <h2 className="m-title mt-0.5 truncate">{memory.dealName}</h2>
         </div>
         {/* Only the outcome badge travels. The account line and deal name go
             into the detail screen's nav bar rather than its hero, and that
             already has a transition name of its own — a part with nothing to
             morph into just animates out on its own and reads as a glitch. */}
-        <span
-          data-shared-part="value"
-          className={cn("m-label shrink-0 rounded-full px-2.5 py-1", badgeClass)}
-        >
+        <OutcomePill sharedPart="value" className={cn("shrink-0", badgeClass)}>
           {OUTCOME_LABEL[outcome]}
-        </span>
+        </OutcomePill>
       </div>
 
       <div className="m-caption m-muted mt-2.5 flex flex-wrap items-center gap-x-3 gap-y-1">

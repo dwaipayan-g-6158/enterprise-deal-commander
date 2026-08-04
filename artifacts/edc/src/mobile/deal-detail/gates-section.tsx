@@ -1,5 +1,6 @@
 import { Check } from "lucide-react";
 import type { Intelligence } from "@workspace/api-client-react";
+import { Progress } from "@/components/ui/progress";
 import { cn } from "@/lib/utils";
 import { CollapsibleSection } from "@/mobile/components/collapsible-section";
 
@@ -20,12 +21,11 @@ export function GatesSection({ intel }: { intel: Intelligence }) {
           {track.stepsCompleted} of {track.totalSteps} cleared
         </span>
       </p>
-      <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-muted">
-        <div
-          className="h-full rounded-full bg-primary"
-          style={{ width: `${pct}%` }}
-        />
-      </div>
+      <Progress
+        value={pct}
+        aria-label={`${track.stepsCompleted} of ${track.totalSteps} gates cleared`}
+        className="mt-2 h-1.5 bg-muted"
+      />
       <p className="m-caption m-muted mt-2">Next: {track.currentMilestone}</p>
     </>
   );

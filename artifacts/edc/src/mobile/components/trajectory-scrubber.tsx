@@ -229,7 +229,7 @@ export function TrajectoryScrubber({
           </>
         ) : (
           <>
-            <span className="m-label">Trajectory</span>
+            <span className="m-label m-muted">Trajectory</span>
             <span className="m-caption m-muted shrink-0">Drag to rewind</span>
           </>
         )}

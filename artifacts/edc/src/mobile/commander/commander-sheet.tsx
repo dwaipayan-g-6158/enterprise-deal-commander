@@ -22,6 +22,7 @@ import { compactCurrency } from "@/lib/format";
 import { MOBILE_TABS } from "@/mobile/lib/mobile-nav";
 import { useCommander } from "@/mobile/commander/commander-context";
 import { SectionSheet } from "@/mobile/components/section-sheet";
+import { ListRow } from "@/mobile/components/list-row";
 import { HealthDot } from "@/mobile/components/badges";
 
 /** Name matches shown before the list gets longer than it is useful. */
@@ -254,7 +255,7 @@ export function CommanderSheet() {
 function Group({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <section className="mt-5 first:mt-4">
-      <p className="m-label mb-1.5">{label}</p>
+      <p className="m-label m-muted mb-1.5">{label}</p>
       <ul>{children}</ul>
     </section>
   );
@@ -275,18 +276,7 @@ function Row({
 }) {
   return (
     <li>
-      <button
-        type="button"
-        onClick={onPress}
-        className="m-tap m-press flex w-full items-center gap-3 rounded-md px-1 text-left"
-      >
-        <span className="flex w-4 shrink-0 justify-center">{icon}</span>
-        <span className="min-w-0 flex-1">
-          <span className="m-body block truncate">{label}</span>
-          {sub ? <span className="m-caption m-muted block truncate">{sub}</span> : null}
-        </span>
-        {detail ? <span className="m-caption m-muted shrink-0">{detail}</span> : null}
-      </button>
+      <ListRow onPress={onPress} media={icon} title={label} sub={sub} trailing={detail} />
     </li>
   );
 }

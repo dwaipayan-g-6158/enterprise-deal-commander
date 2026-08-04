@@ -48,7 +48,7 @@ export function SegmentChips<T extends string>({
               "m-label m-press flex h-12 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border px-4",
               selected
                 ? "border-transparent bg-secondary text-secondary-foreground"
-                : "border-border",
+                : "border-border m-muted",
             )}
           >
             {segment.label}

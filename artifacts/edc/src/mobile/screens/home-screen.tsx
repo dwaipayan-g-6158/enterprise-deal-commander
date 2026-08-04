@@ -9,11 +9,12 @@ import {
 import { compactCurrency, humanizeCode, relativeTime } from "@/lib/format";
 import { activityTitle } from "@/lib/activity-title";
 import { HEALTH_CLASS, HEALTH_SHORT_LABEL, type Health } from "@/lib/semantic-colors";
-import { cn } from "@/lib/utils";
 import { EdcLogoMark } from "@/components/edc-logo-mark";
+import { alertBody } from "@/mobile/lib/alert-text";
 import { syncBadge } from "@/mobile/lib/app-badge";
 import { MobileHeader } from "@/mobile/shell/mobile-header";
 import { MobileCard, CardHeader } from "@/mobile/components/mobile-card";
+import { ListRow } from "@/mobile/components/list-row";
 import { StatTile, DeltaLine } from "@/mobile/components/stat-tile";
 import { CountUp } from "@/mobile/components/count-up";
 import { Shimmer } from "@/mobile/components/shimmer";
@@ -100,7 +101,7 @@ export function HomeScreen() {
       <PullToRefresh onRefresh={refresh}>
         {/* Hero: the one number worth waking up to. */}
         <section className="px-4 pb-1 pt-4">
-          <p className="m-label">Weighted pipeline</p>
+          <p className="m-label m-muted">Weighted pipeline</p>
           {vitals ? (
             <div className="m-appear">
               <p className="m-display mt-1">
@@ -214,7 +215,7 @@ export function HomeScreen() {
                 Nothing critical right now. The next check is on its way.
               </p>
             ) : (
-              <ul className="space-y-3">
+              <ul className="space-y-1">
                 {summary.criticalAlerts.slice(0, ALERTS_SHOWN).map((entry) => (
                   <AlertRow key={`${entry.dealId}-${entry.alert.code}`} entry={entry} money={money} />
                 ))}
@@ -226,16 +227,14 @@ export function HomeScreen() {
           {summary && summary.staleDeals.length > 0 ? (
             <MobileCard>
               <CardHeader label={`Stalled (${summary.staleDealsTotal})`} />
-              <ul className="space-y-2">
+              <ul>
                 {summary.staleDeals.slice(0, 4).map((deal) => (
                   <li key={deal.dealId}>
-                    <Link
+                    <ListRow
                       href={`/deals/${deal.dealId}`}
-                      className="m-press flex items-baseline justify-between gap-3 py-1.5"
-                    >
-                      <span className="m-body min-w-0 flex-1 truncate">{deal.dealName}</span>
-                      <span className="m-caption m-muted shrink-0">{deal.daysInStage}d in stage</span>
-                    </Link>
+                      title={deal.dealName}
+                      trailing={`${deal.daysInStage}d in stage`}
+                    />
                   </li>
                 ))}
               </ul>
@@ -248,25 +247,15 @@ export function HomeScreen() {
             {activity.length === 0 ? (
               <Shimmer className="h-16" />
             ) : (
-              <ul className="space-y-2.5">
+              <ul>
                 {activity.map((event) => (
                   <li key={event.id}>
-                    <Link
+                    <ListRow
                       href={`/deals/${event.dealId}`}
-                      className="m-press block py-0.5"
-                    >
-                      <div className="flex items-baseline justify-between gap-3">
-                        <span className="m-body min-w-0 flex-1 truncate">
-                          {activityTitle(event)}
-                        </span>
-                        <span className="m-caption m-muted shrink-0">
-                          {relativeTime(event.occurredAt)}
-                        </span>
-                      </div>
-                      <p className="m-caption m-muted mt-0.5 truncate">
-                        {event.dealName ?? "Deal"} · {event.actor}
-                      </p>
-                    </Link>
+                      title={activityTitle(event)}
+                      sub={`${event.dealName ?? "Deal"} · ${event.actor}`}
+                      trailing={relativeTime(event.occurredAt)}
+                    />
                   </li>
                 ))}
               </ul>
@@ -287,16 +276,18 @@ function AlertRow({
 }) {
   return (
     <li>
-      <Link href={`/deals/${entry.dealId}`} className="m-press block">
-        <div className="flex items-baseline justify-between gap-3">
-          <span className="m-headline min-w-0 flex-1 truncate">{entry.dealName}</span>
-          <span className="m-caption shrink-0">{money(entry.tcv)}</span>
-        </div>
-        <p className={cn("m-label mt-0.5", HEALTH_CLASS.RED.text)}>
-          {humanizeCode(entry.alert.code)}
-        </p>
-        <p className="m-body m-muted mt-0.5 line-clamp-2">{entry.alert.message}</p>
-      </Link>
+      <ListRow
+        href={`/deals/${entry.dealId}`}
+        title={entry.dealName}
+        sub={
+          <span className={HEALTH_CLASS.RED.text}>{humanizeCode(entry.alert.code)}</span>
+        }
+        // The engine's own message repeats the pattern name in block caps
+        // right above, so the row would have said it twice. alertBody drops
+        // the prefix when it is demonstrably the code.
+        body={alertBody(entry.alert)}
+        trailing={<span className="text-foreground">{money(entry.tcv)}</span>}
+      />
     </li>
   );
 }
