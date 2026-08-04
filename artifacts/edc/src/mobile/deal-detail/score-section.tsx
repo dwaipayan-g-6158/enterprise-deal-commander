@@ -1,0 +1,73 @@
+import { humanizeCode } from "@/lib/format";
+import type { DealScore } from "@workspace/api-client-react";
+import { CollapsibleSection } from "@/mobile/components/collapsible-section";
+
+/**
+ * The predictive close score and the factors behind it.
+ *
+ * `breakdown` is typed as an open record in the API contract, so each row is
+ * read defensively — a factor the server adds later renders as an unlabelled
+ * contribution rather than crashing the screen.
+ */
+interface BreakdownRow {
+  label: string;
+  contribution: number;
+}
+
+function readBreakdown(items: Record<string, unknown>[]): BreakdownRow[] {
+  return items
+    .map((item) => {
+      const rawLabel = item.factor ?? item.name ?? item.label;
+      const rawValue = item.contribution ?? item.weightedScore ?? item.value;
+      return {
+        label: typeof rawLabel === "string" ? humanizeCode(rawLabel) : "Other",
+        contribution: typeof rawValue === "number" ? rawValue : 0,
+      };
+    })
+    .sort((a, b) => Math.abs(b.contribution) - Math.abs(a.contribution));
+}
+
+export function ScoreSection({ score }: { score: DealScore }) {
+  const rows = readBreakdown(score.breakdown as Record<string, unknown>[]).slice(0, 5);
+  const peak = Math.max(...rows.map((r) => Math.abs(r.contribution)), 1);
+
+  const verdict = (
+    <>
+      <p className="m-h3">
+        <span className="font-mono text-2xl font-semibold tracking-[-0.03em]">{score.score}</span>
+        <span className="m-muted ml-1 text-sm font-medium">/ 100</span>
+      </p>
+      <p className="m-data m-muted mt-1">{humanizeCode(score.confidence)} confidence</p>
+    </>
+  );
+
+  return (
+    <CollapsibleSection anchorId="score" label="Predictive score" verdict={verdict}>
+      {rows.length > 0 ? (
+        <>
+          <p className="m-eyebrow mb-3">What moves it</p>
+          <ul className="space-y-2.5">
+            {rows.map((row) => (
+              <li key={row.label}>
+                <div className="m-data flex items-baseline justify-between gap-3">
+                  <span className="min-w-0 flex-1 truncate">{row.label}</span>
+                  <span className="m-muted shrink-0">{row.contribution.toFixed(1)}</span>
+                </div>
+                <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-[var(--m-skeleton)]">
+                  <div
+                    className={
+                      row.contribution >= 0
+                        ? "h-full rounded-full bg-emerald-500"
+                        : "h-full rounded-full bg-orange-500"
+                    }
+                    style={{ width: `${(Math.abs(row.contribution) / peak) * 100}%` }}
+                  />
+                </div>
+              </li>
+            ))}
+          </ul>
+        </>
+      ) : undefined}
+    </CollapsibleSection>
+  );
+}

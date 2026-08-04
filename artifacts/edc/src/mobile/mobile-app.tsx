@@ -6,6 +6,7 @@ import { MobileShell } from "@/mobile/shell/mobile-shell";
 import { MobileShellSkeleton } from "@/mobile/shell/mobile-shell-skeleton";
 import { DesktopOnlyScreen } from "@/mobile/screens/desktop-only-screen";
 import { DealsScreen } from "@/mobile/screens/deals-screen";
+import { DealDetailScreen } from "@/mobile/screens/deal-detail-screen";
 import NotFound from "@/pages/not-found";
 import Login from "@/pages/login";
 import Share from "@/pages/share";
@@ -72,8 +73,12 @@ export default function MobileApp() {
       </Route>
       <Route path="/deals/:id">
         {(params) => (
+          // Keyed so switching deals remounts the screen: section open/closed
+          // state belongs to the deal you opened it on, not the next one.
           <MobileProtectedRoute
-            component={() => <Placeholder name={`Deal ${params.id}`} />}
+            key={params.id}
+            component={DealDetailScreen}
+            params={{ id: params.id }}
           />
         )}
       </Route>
