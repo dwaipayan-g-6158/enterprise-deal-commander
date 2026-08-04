@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { ArrowDown, ArrowUp } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { TONE_AHEAD } from "@/mobile/lib/tones";
 
 /**
  * A single KPI in the bento grid: label, figure, and one line of context.
@@ -58,6 +59,11 @@ export function StatTile({
  * so the signal survives both a monochrome render and a colorblind reader.
  * A zero delta shows an em dash rather than "0", which reads as a measurement
  * rather than a change.
+ *
+ * The trailing label is muted and nothing more. It used to carry `opacity-70`
+ * on top of the muted colour, which measured 4.08:1 against the card — under
+ * AA. Stacking opacity on a token that is already de-emphasised is how a
+ * palette that passes on paper fails in the browser.
  */
 export function DeltaLine({
   delta,
@@ -70,18 +76,16 @@ export function DeltaLine({
 }) {
   if (delta == null || delta === 0) {
     return (
-      <span className="m-muted">
-        — <span className="opacity-70">{label}</span>
-      </span>
+      <span className="m-muted">— {label}</span>
     );
   }
   const up = delta > 0;
   const Icon = up ? ArrowUp : ArrowDown;
   return (
-    <span className={cn("inline-flex items-center gap-1", up ? "text-emerald-600 dark:text-emerald-400" : "text-destructive")}>
+    <span className={cn("inline-flex items-center gap-1", up ? TONE_AHEAD : "text-destructive")}>
       <Icon className="h-3 w-3" aria-hidden="true" />
       {format(Math.abs(delta))}
-      <span className="m-muted opacity-70">{label}</span>
+      <span className="m-muted">{label}</span>
     </span>
   );
 }

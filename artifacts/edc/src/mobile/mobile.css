@@ -225,24 +225,28 @@
  *   labels pair with `.m-muted`, pills pair with their semantic class.
  */
 
+/* Every size runs through --m-type-scale, which lib/dynamic-type.ts sets from
+   the reader's iOS text-size setting (1 everywhere else). Line heights are
+   unitless so they follow the scaled size instead of being left behind by it. */
+
 /* One per screen — the figure the screen is about. */
 .m-display {
-  font-size: 2.125rem;
-  line-height: 2.375rem;
+  font-size: calc(2.125rem * var(--m-type-scale, 1));
+  line-height: 1.12;
   font-weight: 640;
   letter-spacing: -0.03em;
 }
 /* Screen title, deal name, and a card's lead figure. */
 .m-title {
-  font-size: 1.375rem;
-  line-height: 1.75rem;
+  font-size: calc(1.375rem * var(--m-type-scale, 1));
+  line-height: 1.27;
   font-weight: 640;
   letter-spacing: -0.02em;
 }
 /* A row's or a card's lead line. iOS `.headline`, near enough. */
 .m-headline {
-  font-size: 1.0625rem;
-  line-height: 1.375rem;
+  font-size: calc(1.0625rem * var(--m-type-scale, 1));
+  line-height: 1.29;
   font-weight: 600;
   letter-spacing: -0.01em;
 }
@@ -252,22 +256,22 @@
    text — stepping under it to buy a tighter scale would be a regression
    dressed as a refinement. */
 .m-body {
-  font-size: 1rem;
-  line-height: 1.5rem;
+  font-size: calc(1rem * var(--m-type-scale, 1));
+  line-height: 1.5;
   font-weight: 400;
   letter-spacing: -0.006em;
 }
 /* A card's label, and the weight every pill is set in. */
 .m-label {
-  font-size: 0.8125rem;
-  line-height: 1.125rem;
+  font-size: calc(0.8125rem * var(--m-type-scale, 1));
+  line-height: 1.385;
   font-weight: 550;
   letter-spacing: -0.003em;
 }
 /* Metadata: dates, counts, deltas, footnotes. */
 .m-caption {
-  font-size: 0.8125rem;
-  line-height: 1.125rem;
+  font-size: calc(0.8125rem * var(--m-type-scale, 1));
+  line-height: 1.385;
   font-weight: 450;
   letter-spacing: -0.003em;
 }

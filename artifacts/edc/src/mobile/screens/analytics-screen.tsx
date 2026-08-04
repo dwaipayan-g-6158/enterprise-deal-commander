@@ -10,6 +10,7 @@ import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 import { OUTCOME_CLASS } from "@/lib/semantic-colors";
+import { TONE_SLIPPING } from "@/mobile/lib/tones";
 import { MobileHeader } from "@/mobile/shell/mobile-header";
 import { MobileCard, CardHeader } from "@/mobile/components/mobile-card";
 import { ListRow } from "@/mobile/components/list-row";
@@ -225,7 +226,7 @@ function VelocityCard({ deals, loading }: { deals: VelocityDeal[]; loading: bool
                 title={deal.dealName}
                 sub={deal.stage}
                 trailing={
-                  <span className="text-orange-600 dark:text-orange-400">+{deal.deltaDays}d</span>
+                  <span className={TONE_SLIPPING}>+{deal.deltaDays}d</span>
                 }
               />
             </li>

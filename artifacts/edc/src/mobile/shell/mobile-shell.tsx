@@ -1,11 +1,13 @@
 import {
   createContext,
   useContext,
+  useEffect,
   useRef,
   type ReactNode,
   type RefObject,
 } from "react";
 import { TabBar } from "@/mobile/shell/tab-bar";
+import { applyTypeScale } from "@/mobile/lib/dynamic-type";
 import { useAppResumeRefetch } from "@/mobile/hooks/use-app-resume-refetch";
 import { CommanderProvider } from "@/mobile/commander/commander-context";
 import { CommanderButton } from "@/mobile/commander/commander-button";
@@ -35,6 +37,16 @@ export function useShellScrollRef(): RefObject<HTMLElement | null> {
 export function MobileShell({ children }: { children: ReactNode }) {
   const scrollRef = useRef<HTMLElement | null>(null);
   useAppResumeRefetch();
+
+  // Dynamic Type. Re-measured on pageshow as well as at mount: iOS text size
+  // is changed in Settings, which means leaving the app and coming back, and
+  // a bfcache restore fires pageshow without re-running effects.
+  useEffect(() => {
+    applyTypeScale();
+    const remeasure = () => applyTypeScale();
+    window.addEventListener("pageshow", remeasure);
+    return () => window.removeEventListener("pageshow", remeasure);
+  }, []);
 
   return (
     <ScrollContainerContext.Provider value={scrollRef}>

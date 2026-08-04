@@ -11,6 +11,7 @@ import {
 import type { RiskLevel } from "@/components/cockpit/risk/risk-model";
 import { VELOCITY_LABEL } from "@/components/roster/model/velocity";
 import type { VelocityBucket } from "@/components/roster/model/roster-types";
+import { TONE_AHEAD, TONE_SLIPPING, TONE_STALLED } from "@/mobile/lib/tones";
 
 /**
  * Compact status marks for the mobile shell.
@@ -137,11 +138,11 @@ export function VelocityMark({ bucket, deltaDays }: { bucket: VelocityBucket; de
   if (bucket === "NO_DATE") return null;
   const tone =
     bucket === "STALLED"
-      ? "text-red-600 dark:text-red-400"
+      ? TONE_STALLED
       : bucket === "SLOW"
-        ? "text-orange-600 dark:text-orange-400"
+        ? TONE_SLIPPING
         : bucket === "FAST"
-          ? "text-emerald-600 dark:text-emerald-400"
+          ? TONE_AHEAD
           : "m-muted";
   return (
     <span className={cn("inline-flex items-center gap-1", tone)}>
