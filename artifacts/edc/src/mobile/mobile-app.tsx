@@ -8,6 +8,9 @@ import { DesktopOnlyScreen } from "@/mobile/screens/desktop-only-screen";
 import { HomeScreen } from "@/mobile/screens/home-screen";
 import { DealsScreen } from "@/mobile/screens/deals-screen";
 import { DealDetailScreen } from "@/mobile/screens/deal-detail-screen";
+import { AnalyticsScreen } from "@/mobile/screens/analytics-screen";
+import { MemoryScreen } from "@/mobile/screens/memory-screen";
+import { MemoryDetailScreen } from "@/mobile/screens/memory-detail-screen";
 import NotFound from "@/pages/not-found";
 import Login from "@/pages/login";
 import Share from "@/pages/share";
@@ -84,15 +87,17 @@ export default function MobileApp() {
         )}
       </Route>
       <Route path="/analytics">
-        <MobileProtectedRoute component={() => <Placeholder name="Analytics" />} />
+        <MobileProtectedRoute component={AnalyticsScreen} />
       </Route>
       <Route path="/memory">
-        <MobileProtectedRoute component={() => <Placeholder name="Memory" />} />
+        <MobileProtectedRoute component={MemoryScreen} />
       </Route>
       <Route path="/memory/:id">
         {(params) => (
           <MobileProtectedRoute
-            component={() => <Placeholder name={`Memory ${params.id}`} />}
+            key={params.id}
+            component={MemoryDetailScreen}
+            params={{ id: params.id }}
           />
         )}
       </Route>
