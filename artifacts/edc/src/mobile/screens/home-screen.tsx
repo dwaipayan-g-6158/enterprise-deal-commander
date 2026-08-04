@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { Link } from "wouter";
 import {
   useGetIntelligenceSummary,
@@ -10,6 +11,7 @@ import { activityTitle } from "@/lib/activity-title";
 import { HEALTH_CLASS, HEALTH_SHORT_LABEL, type Health } from "@/lib/semantic-colors";
 import { cn } from "@/lib/utils";
 import { EdcLogoMark } from "@/components/edc-logo-mark";
+import { syncBadge } from "@/mobile/lib/app-badge";
 import { MobileHeader } from "@/mobile/shell/mobile-header";
 import { MobileCard, CardHeader } from "@/mobile/components/mobile-card";
 import { StatTile, DeltaLine } from "@/mobile/components/stat-tile";
@@ -60,6 +62,14 @@ export function HomeScreen() {
 
   const refresh = () =>
     Promise.all([summaryQuery.refetch(), vitalsQuery.refetch(), activityQuery.refetch()]);
+
+  // The home-screen icon badge, for anyone who opted in from the Commander
+  // sheet. Rides on the summary this screen already loads rather than adding
+  // a request of its own, and no-ops entirely when the opt-in is off.
+  const redAlerts = summary?.criticalAlertsTotal;
+  useEffect(() => {
+    if (redAlerts != null) void syncBadge(redAlerts);
+  }, [redAlerts]);
 
   if (summaryQuery.isError) {
     return (

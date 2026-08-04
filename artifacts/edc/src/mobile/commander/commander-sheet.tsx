@@ -1,9 +1,18 @@
 import { useMemo, useState } from "react";
 import { useLocation } from "wouter";
-import { Search, Sparkles, ArrowDownToLine, Moon, Sun, LogOut } from "lucide-react";
+import { Search, Sparkles, ArrowDownToLine, Moon, Sun, LogOut, BellDot } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useListDeals } from "@workspace/api-client-react";
 import { useSignOut } from "@/lib/auth/use-sign-out";
+import { toast } from "@/hooks/use-toast";
+import {
+  badgeEnabled,
+  badgeSupported,
+  clearBadge,
+  disableBadge,
+  enableBadge,
+} from "@/mobile/lib/app-badge";
+import { haptic } from "@/mobile/lib/haptics";
 import {
   parseNlcConditions,
   matchNlcDeals,
@@ -32,6 +41,7 @@ export function CommanderSheet() {
   const [, navigate] = useLocation();
   const { resolvedTheme, setTheme } = useTheme();
   const signOut = useSignOut();
+  const [badgeOn, setBadgeOn] = useState(badgeEnabled);
 
   // Archived deals stay findable by name, matching the desktop palette.
   const { data } = useListDeals({ state: "all", limit: 50 });
@@ -66,6 +76,36 @@ export function CommanderSheet() {
     navigate(path);
   };
 
+  /**
+   * The badge opt-in. The row says what the permission is for before it asks,
+   * because iOS only ever asks once — a decline here is permanent until the
+   * user goes into Settings, which is what the message below tells them.
+   */
+  const toggleBadge = async () => {
+    if (badgeOn) {
+      await disableBadge();
+      setBadgeOn(false);
+      return;
+    }
+    const result = await enableBadge();
+    if (result === "enabled") {
+      setBadgeOn(true);
+      toast({
+        title: "Alert count is on",
+        description: "The app icon will show how many deals are in the red.",
+      });
+      return;
+    }
+    toast({
+      title: "Notifications are off for this app",
+      description:
+        result === "denied"
+          ? "iOS only asks once. Turn notifications on in Settings to show the count."
+          : "This device can't show a count on the app icon.",
+      variant: "destructive",
+    });
+  };
+
   const jumpTo = (anchorId: string) => {
     close();
     // Deferred a tick: the sheet's closing animation and the scroll would
@@ -78,7 +118,11 @@ export function CommanderSheet() {
   return (
     <SectionSheet
       open={open}
-      onOpenChange={(next) => (next ? setOpen(true) : close())}
+      onOpenChange={(next) => {
+        haptic();
+        if (next) setOpen(true);
+        else close();
+      }}
       title="Commander"
       description="Search deals, ask a question, or jump to a section."
     >
@@ -171,11 +215,26 @@ export function CommanderSheet() {
               label={resolvedTheme === "dark" ? "Switch to light" : "Switch to dark"}
               onPress={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")}
             />
+            {/* Absent entirely where the platform can't badge an icon, rather
+                than present and inert. */}
+            {badgeSupported() ? (
+              <Row
+                icon={<BellDot className="m-muted h-4 w-4" />}
+                label={
+                  badgeOn ? "Hide alert count on app icon" : "Show alert count on app icon"
+                }
+                sub={badgeOn ? undefined : "Needs notification permission"}
+                onPress={() => void toggleBadge()}
+              />
+            ) : null}
             <Row
               icon={<LogOut className="m-muted h-4 w-4" />}
               label="Sign out"
               onPress={() => {
                 close();
+                // A count left on the icon after sign-out reports someone
+                // else's pipeline on a shared device.
+                void clearBadge();
                 signOut();
               }}
             />

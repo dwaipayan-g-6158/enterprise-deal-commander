@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from "react";
-import { Link } from "wouter";
+import { Link, useSearch } from "wouter";
 import { compactCurrency, calendarDaysUntil } from "@/lib/format";
 import { HEALTH_SHORT_LABEL } from "@/lib/semantic-colors";
 import { useRosterData } from "@/components/roster/hooks/use-roster-data";
@@ -13,10 +13,23 @@ import { Shimmer } from "@/mobile/components/shimmer";
 import { EmptyState, ErrorState } from "@/mobile/components/states";
 import { PullToRefresh } from "@/mobile/components/pull-to-refresh";
 
-type SegmentId = "all" | "critical" | "closing" | "stalled";
+const SEGMENT_IDS = ["all", "critical", "closing", "stalled"] as const;
+type SegmentId = (typeof SEGMENT_IDS)[number];
 
 /** Days ahead that still counts as "closing soon". Overdue deals qualify too. */
 const CLOSING_WINDOW_DAYS = 30;
+
+/**
+ * The filter a deep link asked for. Read once, as the initial value only —
+ * after that the chips own it, and rewriting the URL on every tap would put
+ * a filter change in the back stack.
+ *
+ * The installed app's "Red alerts" home-screen shortcut lands here.
+ */
+function segmentFromSearch(search: string): SegmentId {
+  const asked = new URLSearchParams(search).get("filter");
+  return SEGMENT_IDS.find((id) => id === asked) ?? "all";
+}
 
 /**
  * Cross-currency-comparable value, matching the desktop roster's
@@ -52,7 +65,8 @@ function matchesSegment(row: RosterRow, segment: SegmentId): boolean {
  * bar, which keeps it in the thumb arc.
  */
 export function DealsScreen() {
-  const [segment, setSegment] = useState<SegmentId>("all");
+  const search = useSearch();
+  const [segment, setSegment] = useState<SegmentId>(() => segmentFromSearch(search));
   const { rows, isLoading, isError, refetch } = useRosterData({ state: "active", search: "" });
 
   // The live pipeline only. `state: "active"` excludes archived and deleted

@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useRef, type PointerEvent as ReactPointerEvent } from "react";
 import { formatDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { haptic } from "@/mobile/lib/haptics";
 
 /**
  * One merged sample from /analytics/deals/:id/trajectory. The payload is an
@@ -120,6 +121,7 @@ export function TrajectoryScrubber({
   const release = () => {
     if (!draggingRef.current) return;
     draggingRef.current = false;
+    haptic();
     onScrub(null);
   };
 

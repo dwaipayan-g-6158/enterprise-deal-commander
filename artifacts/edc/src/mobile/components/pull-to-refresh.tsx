@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
+import { haptic } from "@/mobile/lib/haptics";
 import { useShellScrollRef } from "@/mobile/shell/mobile-shell";
 
 /** Pull distance, after resistance, that arms the refresh. */
@@ -92,6 +93,7 @@ export function PullToRefresh({
       // Hold the indicator at the trigger point for the duration of the
       // refetch, so a fast response still reads as "something happened."
       refreshingRef.current = true;
+      haptic();
       setRefreshing(true);
       setPull(TRIGGER_PX);
       void Promise.resolve(onRefreshRef.current()).finally(() => {

@@ -56,6 +56,27 @@ export default defineConfig({
         display: "standalone",
         start_url: ".",
         scope: ".",
+        // Long-press the installed icon. Relative, like start_url, so they
+        // resolve against the manifest rather than assuming the app is
+        // served from the domain root. `filter` is read by the mobile Deals
+        // screen; adding a shortcut to a filter the screen cannot restore
+        // would land the user on an unfiltered list.
+        shortcuts: [
+          {
+            name: "Red alerts",
+            short_name: "Red alerts",
+            description: "Deals that need attention right now",
+            url: "deals?filter=critical",
+            icons: [{ src: "icon-192.png", sizes: "192x192", type: "image/png" }],
+          },
+          {
+            name: "All deals",
+            short_name: "Deals",
+            description: "The live pipeline",
+            url: "deals",
+            icons: [{ src: "icon-192.png", sizes: "192x192", type: "image/png" }],
+          },
+        ],
         icons: [
           {
             src: "icon-192.png",

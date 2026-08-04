@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link, useLocation } from "wouter";
 import { cn } from "@/lib/utils";
 import { MOBILE_TABS, activeTabId } from "@/mobile/lib/mobile-nav";
+import { haptic } from "@/mobile/lib/haptics";
 
 /**
  * Which tab the bar was showing last time it rendered.
@@ -52,6 +53,9 @@ export function TabBar() {
             <li key={tab.id} className="flex-1">
               <Link
                 href={tab.href}
+                // Only when it actually changes tab; re-tapping the tab you
+                // are already on should feel like nothing, because it is.
+                onClick={isActive ? undefined : haptic}
                 aria-current={isActive ? "page" : undefined}
                 className={cn(
                   "m-tap m-press flex h-16 w-full flex-col items-center justify-center gap-1",
