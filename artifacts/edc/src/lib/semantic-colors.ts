@@ -27,16 +27,16 @@
 //     NOT blanket find-and-replace "emerald": only touch a colour if it is
 //     selected by a risk level, health status, or terminal deal outcome.
 //  6. Light-mode text is -700, heatmap cell text is -800, and the `bg` tints
-//     are /8. Not taste — every one of those numbers is the shallowest step
-//     that clears WCAG AA (4.5:1) on all three surfaces the text lands on:
-//     the canvas, a card, and the level's own tint. Measured across all nine
-//     levels in both themes; the tightest survivor is MODERATE on its own
-//     tint at 4.54. Darkening amber further would clear it by more, and was
-//     rejected: amber-800's luminance (0.098) drops below both orange-700
-//     (0.151) and red-700 (0.114), which would make MODERATE the visually
-//     heaviest level on a ramp where HIGH has to be. Lightening the tint
-//     buys the same margin and costs nothing. See the AA test at the bottom
-//     of semantic-colors.test.ts before changing any shade here.
+//     are /8 — amber /6, yellow's text -800. Not taste: every one of those
+//     numbers is the shallowest step that clears WCAG AA (4.5:1) on every
+//     surface the text lands on — the desktop canvas, a card, the mobile
+//     shell's own slightly-tinted canvas, and the level's own tint. Measured
+//     across all nine levels in both themes, plus the solid badges.
+//     Darkening amber instead of lightening its tint was rejected:
+//     amber-800's luminance (0.098) drops below both orange-700 (0.151) and
+//     red-700 (0.114), which would make MODERATE the visually heaviest level
+//     on a ramp where HIGH has to be. See the AA test at the bottom of
+//     semantic-colors.test.ts before changing any shade here.
 //
 // No new CSS tokens: Tailwind v4's `@theme` block (index.css) has no
 // --color-success/-warning/-danger, and the briefing export (html-to-image)
@@ -108,7 +108,11 @@ export const RISK_LEVEL_CLASS: Record<RiskLevel, LevelClass> = {
   },
   MODERATE: {
     text: "text-amber-700 dark:text-amber-400",
-    bg: "bg-amber-500/8",
+    // /6 where the rest of the ramp is /8. Amber is the tightest pairing in
+    // the palette: at /8 it cleared on a white card (4.54) but not on the
+    // mobile shell's canvas, which is a hair off white (4.47). Two points of
+    // alpha nobody can see, versus a shade step that would invert the ramp.
+    bg: "bg-amber-500/6",
     border: "border-amber-500/40",
     fill: "bg-amber-500",
     dot: "bg-amber-500",
