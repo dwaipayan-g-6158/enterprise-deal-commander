@@ -162,7 +162,11 @@ export default function MobileApp() {
         {/* transition={false}: <Redirect> navigates from a layout effect,
             where aroundNav's flushSync is not safe to call. */}
         <Route path="/m"><Redirect to="/" transition={false} /></Route>
-        <Route component={NotFound} />
+        <Route>
+          <MobileTokens>
+            <NotFound />
+          </MobileTokens>
+        </Route>
       </Switch>
     </Router>
   );

@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { Link } from "wouter";
 import { ChevronLeft } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { OfflineStrip } from "@/mobile/shell/offline-strip";
 
 interface MobileHeaderProps {
   title: ReactNode;
@@ -73,6 +74,9 @@ export function MobileHeader({
         {right ? <div className="shrink-0">{right}</div> : null}
       </div>
       {children}
+      {/* Last, so it sits on the header's bottom edge with the content
+          starting directly beneath it. Renders nothing while online. */}
+      <OfflineStrip />
     </header>
   );
 }
