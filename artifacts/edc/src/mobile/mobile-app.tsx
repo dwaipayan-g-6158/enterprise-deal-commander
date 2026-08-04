@@ -4,6 +4,7 @@ import { RoleProvider } from "@/lib/auth/role-context";
 import { useAuthGuard } from "@/lib/auth/use-auth-guard";
 import { MobileShell } from "@/mobile/shell/mobile-shell";
 import { MobileShellSkeleton } from "@/mobile/shell/mobile-shell-skeleton";
+import { BootSplash } from "@/mobile/shell/boot-splash";
 import { DesktopOnlyScreen } from "@/mobile/screens/desktop-only-screen";
 import { HomeScreen } from "@/mobile/screens/home-screen";
 import { DealsScreen } from "@/mobile/screens/deals-screen";
@@ -14,6 +15,11 @@ import { MemoryDetailScreen } from "@/mobile/screens/memory-detail-screen";
 import NotFound from "@/pages/not-found";
 import Login from "@/pages/login";
 import Share from "@/pages/share";
+// The mobile chunk's stylesheets, imported at its entry rather than inside
+// MobileShell: BootSplash below borrows .m-shell's tokens and renders before
+// any MobileShell has mounted.
+import "@/mobile/mobile.css";
+import "@/mobile/motion.css";
 
 /**
  * Session guard for the mobile shell. Same semantics as the desktop guard —
@@ -65,78 +71,84 @@ function Placeholder({ name }: { name: string }) {
  */
 export default function MobileApp() {
   return (
-    <Switch>
-      <Route path="/login" component={Login} />
-      <Route path="/share/:token" component={Share} />
+    <>
+      {/* Outside the Switch so it survives the auth guard's own loading
+          chrome and the first navigation. It renders nothing at all in a
+          browser tab, after its one play, or under reduced motion. */}
+      <BootSplash />
+      <Switch>
+        <Route path="/login" component={Login} />
+        <Route path="/share/:token" component={Share} />
 
-      <Route path="/">
-        <MobileProtectedRoute component={HomeScreen} />
-      </Route>
-      <Route path="/deals">
-        <MobileProtectedRoute component={DealsScreen} />
-      </Route>
-      <Route path="/deals/:id">
-        {(params) => (
-          // Keyed so switching deals remounts the screen: section open/closed
-          // state belongs to the deal you opened it on, not the next one.
+        <Route path="/">
+          <MobileProtectedRoute component={HomeScreen} />
+        </Route>
+        <Route path="/deals">
+          <MobileProtectedRoute component={DealsScreen} />
+        </Route>
+        <Route path="/deals/:id">
+          {(params) => (
+            // Keyed so switching deals remounts the screen: section open/closed
+            // state belongs to the deal you opened it on, not the next one.
+            <MobileProtectedRoute
+              key={params.id}
+              component={DealDetailScreen}
+              params={{ id: params.id }}
+            />
+          )}
+        </Route>
+        <Route path="/analytics">
+          <MobileProtectedRoute component={AnalyticsScreen} />
+        </Route>
+        <Route path="/memory">
+          <MobileProtectedRoute component={MemoryScreen} />
+        </Route>
+        <Route path="/memory/:id">
+          {(params) => (
+            <MobileProtectedRoute
+              key={params.id}
+              component={MemoryDetailScreen}
+              params={{ id: params.id }}
+            />
+          )}
+        </Route>
+
+        {/* Desktop-only surfaces still resolve rather than 404, so a link
+            shared from a laptop doesn't dead-end on a phone. */}
+        <Route path="/portfolio">
           <MobileProtectedRoute
-            key={params.id}
-            component={DealDetailScreen}
-            params={{ id: params.id }}
+            component={() => (
+              <DesktopOnlyScreen
+                name="Portfolio"
+                reason="Portfolio risk reads as a heatmap across account managers, technical leads and products — a grid that needs width to compare."
+              />
+            )}
           />
-        )}
-      </Route>
-      <Route path="/analytics">
-        <MobileProtectedRoute component={AnalyticsScreen} />
-      </Route>
-      <Route path="/memory">
-        <MobileProtectedRoute component={MemoryScreen} />
-      </Route>
-      <Route path="/memory/:id">
-        {(params) => (
+        </Route>
+        <Route path="/autopsy">
           <MobileProtectedRoute
-            key={params.id}
-            component={MemoryDetailScreen}
-            params={{ id: params.id }}
+            component={() => (
+              <DesktopOnlyScreen
+                name="Autopsy"
+                reason="Loss analysis puts archetypes, competitors and product gaps side by side, which takes more columns than a phone has."
+              />
+            )}
           />
-        )}
-      </Route>
+        </Route>
+        <Route path="/settings">
+          <MobileProtectedRoute
+            component={() => (
+              <DesktopOnlyScreen
+                name="Settings"
+                reason="Settings is where the engine gets configured, and this app is read-only."
+              />
+            )}
+          />
+        </Route>
 
-      {/* Desktop-only surfaces still resolve rather than 404, so a link shared
-          from a laptop doesn't dead-end on a phone. */}
-      <Route path="/portfolio">
-        <MobileProtectedRoute
-          component={() => (
-            <DesktopOnlyScreen
-              name="Portfolio"
-              reason="Portfolio risk reads as a heatmap across account managers, technical leads and products — a grid that needs width to compare."
-            />
-          )}
-        />
-      </Route>
-      <Route path="/autopsy">
-        <MobileProtectedRoute
-          component={() => (
-            <DesktopOnlyScreen
-              name="Autopsy"
-              reason="Loss analysis puts archetypes, competitors and product gaps side by side, which takes more columns than a phone has."
-            />
-          )}
-        />
-      </Route>
-      <Route path="/settings">
-        <MobileProtectedRoute
-          component={() => (
-            <DesktopOnlyScreen
-              name="Settings"
-              reason="Settings is where the engine gets configured, and this app is read-only."
-            />
-          )}
-        />
-      </Route>
-
-      <Route path="/m"><Redirect to="/" /></Route>
-      <Route component={NotFound} />
-    </Switch>
+        <Route path="/m"><Redirect to="/" /></Route>
+        <Route component={NotFound} />
+      </Switch>
+    </>
   );
 }

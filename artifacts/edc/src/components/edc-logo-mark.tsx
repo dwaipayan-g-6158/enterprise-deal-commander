@@ -3,6 +3,16 @@ import { useEffect, useLayoutEffect, useRef, useId } from "react";
 interface EdcLogoMarkProps {
   size?: number;
   animated?: boolean;
+  /**
+   * Speeds the reveal up by this factor. 1 (the default) is the original
+   * 3.22-second sequence every existing call site renders; the mobile launch
+   * overlay passes ~2.2 so all four petals draw and fill inside its floor.
+   *
+   * Only the one-shot entrance scales. The resting breathe stays at 8s
+   * whatever this is set to, because it is a resting state rather than part
+   * of the arrival.
+   */
+  timeScale?: number;
   className?: string;
 }
 
@@ -16,6 +26,10 @@ export const PETAL_PATHS = [
 const DELAYS = [0.25, 0.72, 1.25, 1.62];
 const DRAW_DUR = 1.1;
 const FILL_LAG = 0.72;
+const FILL_DUR = 0.7;
+const STROKE_FADE_DUR = 0.55;
+/** Gradient shimmer holds off until the mark has finished arriving. */
+const SHIMMER_BEGIN = 4;
 // After the petals draw + fill once, the mark settles into a gentle, infinite
 // breathe — no replay of the draw-in (that loop read as distracting).
 const BREATHE_START = (DELAYS[3] + DRAW_DUR + 0.5) * 1000; // 3220ms
@@ -27,6 +41,7 @@ export const VIEW_BOX = "-10.1 -11.6 158 158";
 export function EdcLogoMark({
   size = 40,
   animated = true,
+  timeScale = 1,
   className,
 }: EdcLogoMarkProps) {
   const uid = useId().replace(/:/g, "");
@@ -100,17 +115,19 @@ export function EdcLogoMark({
 
       // Phase 1 — stroke draws in
       const t1 = setTimeout(() => {
-        petal.style.transition = `stroke-dashoffset ${DRAW_DUR}s cubic-bezier(0.35, 0, 0.2, 1)`;
+        petal.style.transition = `stroke-dashoffset ${DRAW_DUR / timeScale}s cubic-bezier(0.35, 0, 0.2, 1)`;
         petal.style.strokeDashoffset = "0";
-      }, delay * 1000);
+      }, (delay / timeScale) * 1000);
 
       // Phase 2 — fill floods in, stroke dissolves
-      const t2 = setTimeout(() => {
-        petal.style.transition =
-          "fill-opacity 0.7s ease, stroke-opacity 0.55s ease";
-        petal.style.fillOpacity = "1";
-        petal.style.strokeOpacity = "0";
-      }, (delay + FILL_LAG) * 1000);
+      const t2 = setTimeout(
+        () => {
+          petal.style.transition = `fill-opacity ${FILL_DUR / timeScale}s ease, stroke-opacity ${STROKE_FADE_DUR / timeScale}s ease`;
+          petal.style.fillOpacity = "1";
+          petal.style.strokeOpacity = "0";
+        },
+        ((delay + FILL_LAG) / timeScale) * 1000,
+      );
 
       timeoutsRef.current.push(t1, t2);
     });
@@ -118,14 +135,14 @@ export function EdcLogoMark({
     // Phase 3 — settle into a gentle breathe once all petals are revealed
     const t3 = setTimeout(() => {
       groupRef.current?.classList.add(breatheClassName);
-    }, BREATHE_START);
+    }, BREATHE_START / timeScale);
     timeoutsRef.current.push(t3);
 
     return () => {
       timeoutsRef.current.forEach(clearTimeout);
       timeoutsRef.current = [];
     };
-  }, [animated, breatheClassName]);
+  }, [animated, breatheClassName, timeScale]);
 
   const cssText = `
     .${groupClassName} { transform-box: fill-box; transform-origin: center; }
@@ -161,7 +178,7 @@ export function EdcLogoMark({
                 attributeName="stop-opacity"
                 values="1;0.8;1"
                 dur="5s"
-                begin="4s"
+                begin={`${SHIMMER_BEGIN / timeScale}s`}
                 repeatCount="indefinite"
               />
             )}
@@ -176,7 +193,7 @@ export function EdcLogoMark({
                 attributeName="stop-opacity"
                 values="0.75;1;0.75"
                 dur="5s"
-                begin="4s"
+                begin={`${SHIMMER_BEGIN / timeScale}s`}
                 repeatCount="indefinite"
               />
             )}
@@ -191,7 +208,7 @@ export function EdcLogoMark({
                 attributeName="stop-opacity"
                 values="0.55;0.7;0.55"
                 dur="5s"
-                begin="4s"
+                begin={`${SHIMMER_BEGIN / timeScale}s`}
                 repeatCount="indefinite"
               />
             )}
