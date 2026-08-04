@@ -124,11 +124,11 @@ export function DealDetailScreen({ id }: { id: string }) {
         {seed ? (
           <HeroPreview dealId={id} seed={seed} />
         ) : (
-          <Shimmer className="mx-4 mt-4 h-24 rounded-[var(--m-radius-card)]" />
+          <Shimmer className="mx-4 mt-4 h-24 rounded-xl" />
         )}
         <div className="space-y-3 p-4">
           {Array.from({ length: 5 }).map((_, i) => (
-            <Shimmer key={i} className="h-20 rounded-[var(--m-radius-card)]" />
+            <Shimmer key={i} className="h-20 rounded-xl" />
           ))}
         </div>
       </>

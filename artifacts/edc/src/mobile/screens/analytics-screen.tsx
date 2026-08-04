@@ -262,9 +262,9 @@ function PipelineHealthCard({ data }: { data: HealthScoreData | undefined }) {
                   <span>{humanizeCode(key)}</span>
                   <span className="m-muted">{value != null ? Math.round(value) : "—"}</span>
                 </div>
-                <div className="mt-1 h-1 overflow-hidden rounded-full bg-[var(--m-skeleton)]">
+                <div className="mt-1 h-1 overflow-hidden rounded-full bg-muted">
                   <div
-                    className="h-full rounded-full bg-[var(--m-primary)]"
+                    className="h-full rounded-full bg-primary"
                     style={{ width: `${value ?? 0}%` }}
                   />
                 </div>
@@ -298,9 +298,9 @@ function FunnelCard({ rows, loading }: { rows: FunnelRow[]; loading: boolean }) 
                   {row.dealCount} · {compactCurrency(row.totalValue)}
                 </span>
               </div>
-              <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-[var(--m-skeleton)]">
+              <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-muted">
                 <div
-                  className="h-full rounded-full bg-[var(--m-primary)]"
+                  className="h-full rounded-full bg-primary"
                   style={{ width: `${(row.totalValue / peak) * 100}%` }}
                 />
               </div>

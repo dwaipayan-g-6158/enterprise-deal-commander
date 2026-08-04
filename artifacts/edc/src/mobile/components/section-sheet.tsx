@@ -42,13 +42,13 @@ export function SectionSheet({
     <Drawer open={open} onOpenChange={onOpenChange}>
       <DrawerContent
         className={cn(
-          "m-shell m-sheet max-h-[92dvh] rounded-t-[var(--m-radius-card)] border-[var(--m-keyline)]",
+          "m-shell m-sheet max-h-[92dvh] rounded-t-xl border-border",
           // DrawerContent's first child is vaul's grabber, and the shared
           // component's version is a 100x8 bar in a desktop token. Restyled
           // here rather than there so no desktop drawer changes: iOS sizes it
           // at roughly 36x5 and tints it from the shell's own keyline.
           "[&>div:first-child]:mt-2.5 [&>div:first-child]:h-1.5 [&>div:first-child]:w-9",
-          "[&>div:first-child]:bg-[var(--m-on-surface-muted)] [&>div:first-child]:opacity-40",
+          "[&>div:first-child]:bg-muted-foreground [&>div:first-child]:opacity-40",
           className,
         )}
       >

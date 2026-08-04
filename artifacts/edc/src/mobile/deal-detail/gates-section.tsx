@@ -19,9 +19,9 @@ export function GatesSection({ intel }: { intel: Intelligence }) {
           {track.stepsCompleted} of {track.totalSteps} cleared
         </span>
       </p>
-      <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-[var(--m-skeleton)]">
+      <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-muted">
         <div
-          className="h-full rounded-full bg-[var(--m-primary)]"
+          className="h-full rounded-full bg-primary"
           style={{ width: `${pct}%` }}
         />
       </div>
@@ -41,7 +41,7 @@ export function GatesSection({ intel }: { intel: Intelligence }) {
                   "mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border text-[10px] font-bold",
                   gate.isCompleted
                     ? "border-emerald-500 bg-emerald-500 text-white"
-                    : "border-[var(--m-keyline)]",
+                    : "border-border",
                 )}
                 aria-hidden="true"
               >

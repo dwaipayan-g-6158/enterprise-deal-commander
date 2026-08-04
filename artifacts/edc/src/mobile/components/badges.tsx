@@ -68,7 +68,7 @@ export function MetaChip({ children, className }: { children: React.ReactNode; c
   return (
     <span
       className={cn(
-        "inline-flex items-center rounded-md border border-[var(--m-keyline)] px-1.5 py-0.5 text-xs",
+        "inline-flex items-center rounded-md border border-border px-1.5 py-0.5 text-xs",
         className,
       )}
     >

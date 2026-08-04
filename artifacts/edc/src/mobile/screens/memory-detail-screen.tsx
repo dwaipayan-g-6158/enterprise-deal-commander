@@ -85,8 +85,8 @@ export function MemoryDetailScreen({ id }: { id: string }) {
           </header>
         ) : null}
         <div className="space-y-3 p-4">
-          <Shimmer className="h-28 rounded-[var(--m-radius-card)]" />
-          <Shimmer className="h-40 rounded-[var(--m-radius-card)]" />
+          <Shimmer className="h-28 rounded-xl" />
+          <Shimmer className="h-40 rounded-xl" />
         </div>
       </>
     );
@@ -163,7 +163,7 @@ export function MemoryDetailScreen({ id }: { id: string }) {
               {memory.competitorsFaced.map((name) => (
                 <span
                   key={name}
-                  className="rounded-full border border-[var(--m-keyline)] px-3 py-1 text-xs"
+                  className="rounded-full border border-border px-3 py-1 text-xs"
                 >
                   {name}
                 </span>
@@ -225,7 +225,7 @@ function TagList({ memory }: { memory: DealMemory }) {
       {memory.tags.map((tag) => (
         <span
           key={tag}
-          className="m-data rounded-md bg-[var(--m-primary-container)] px-2 py-1 text-[var(--m-on-primary-container)]"
+          className="m-data rounded-md bg-secondary px-2 py-1 text-secondary-foreground"
         >
           {tag}
         </span>

@@ -1,62 +1,102 @@
 /* Mobile shell design tokens.
  *
- * Scoped to `.m-shell` rather than :root so the desktop token set in
- * index.css is untouched — the two shells never render at the same time, but
- * scoping keeps that a fact rather than a coincidence.
+ * The shell used to define a private `--m-*` palette. It looked tidy and it
+ * was a trap: no shadcn primitive can see those names, so every list row,
+ * chip, pill and empty state on a phone had to be hand-rolled, and 58
+ * installed components sat unused. The shell now *re-points the shadcn
+ * semantic tokens* for its own subtree instead. `index.css` consumes them as
+ * `hsl(var(--card))` through Tailwind v4's `@theme inline`, which keeps the
+ * `var()` live at the use site — so an override here reaches every utility and
+ * every primitive rendered below it, and `<Item>` inside `.m-shell` is simply
+ * correct.
  *
- * Health / risk / outcome colors are deliberately absent: semantic-colors.ts
- * is the tested single source of truth for those and is consumed directly.
- * Adding a parallel set here would be a second place to drift.
+ * Values must therefore be **HSL triplets**, not hex: `hsl(#14171c)` is not a
+ * colour. They are the same colours the `--m-*` set carried, converted.
+ *
+ * Scoped to `.m-shell` rather than :root so the desktop token set is
+ * untouched — the two shells never render at the same time, but scoping keeps
+ * that a fact rather than a coincidence.
+ *
+ * What survives as `--m-*` is only what has no shadcn equivalent and a real
+ * job: the glass material, the ambient sky, the obsidian capsule, the shimmer.
+ *
+ * Health / risk / outcome colours are still deliberately absent:
+ * semantic-colors.ts is the tested single source of truth for those and is
+ * consumed directly. Adding a parallel set here would be a second place to
+ * drift.
  */
 
 .m-shell {
-  --m-surface-0: #f7f9fb;
-  --m-surface-1: #ffffff;
-  --m-surface-2: #ffffff;
-  --m-surface-3: rgba(255, 255, 255, 0.72);
+  --background: 210 33% 98%;
+  --card: 0 0% 100%;
+  --popover: 0 0% 100%;
 
-  --m-on-surface: #16181d;
-  --m-on-surface-muted: #4a5160;
+  --foreground: 223 14% 10%;
+  --card-foreground: 223 14% 10%;
+  --popover-foreground: 223 14% 10%;
 
-  --m-primary: #3d5fd9;
-  --m-primary-container: #e8edff;
-  --m-on-primary-container: #17224a;
+  --muted: 214 24% 94%;
+  --muted-foreground: 221 13% 33%;
 
-  --m-keyline: rgba(22, 24, 29, 0.1);
-  --m-error: #dc2626;
-  --m-obsidian: rgba(16, 19, 24, 0.82);
-  --m-obsidian-ring: rgba(61, 95, 217, 0.35);
+  --border: 212 7% 89%;
+  --input: 212 7% 89%;
+  --card-border: 212 7% 89%;
+  --popover-border: 212 7% 89%;
+
+  --primary: 227 67% 55%;
+  --primary-foreground: 0 0% 100%;
+  --ring: 227 67% 55%;
+
+  --secondary: 227 100% 95%;
+  --secondary-foreground: 227 53% 19%;
+  --accent: 227 100% 95%;
+  --accent-foreground: 227 53% 19%;
+
+  --destructive: 0 72% 51%;
+  --destructive-foreground: 0 0% 100%;
+
+  /* 14px. The single highest-leverage line in this file: desktop runs
+     0.25rem, and re-pointing it reshapes every primitive's corners at once
+     onto iOS proportions — 10 / 12 / 14 / 18 across the sm→xl ladder. */
+  --radius: 0.875rem;
 
   --m-skeleton: rgba(22, 24, 29, 0.06);
   --m-shimmer-sweep: rgba(22, 24, 29, 0.08);
 
-  /* Glass. The tint sits over the blurred backdrop and is what stops chrome
-     from reading as a plain translucent panel; the specular is the bright
-     hairline along the light-facing edge that makes it read as a material
-     with thickness. */
+  /* Glass. The base is the only surface in the shell that is deliberately
+     translucent, which is why it stays an `--m-*` token: a shadcn colour slot
+     has no alpha channel. The tint sits over the blurred backdrop and is what
+     stops chrome from reading as a plain translucent panel; the specular is
+     the bright hairline along the light-facing edge that makes it read as a
+     material with thickness. */
+  --m-glass-base: rgba(255, 255, 255, 0.72);
   --m-glass-tint: rgba(255, 255, 255, 0.1);
   --m-glass-specular: rgba(255, 255, 255, 0.9);
   --m-glass-shadow: rgba(16, 19, 24, 0.3);
 
+  /* The Commander capsule. Near-black in both themes by design — it is the
+     one control that must read as an object sitting above the app rather than
+     part of its surface, so it does not follow the theme. */
+  --m-obsidian: rgba(16, 19, 24, 0.82);
+  --m-obsidian-ring: rgba(61, 95, 217, 0.35);
+
   --m-shadow-card: 0 1px 2px rgba(0, 0, 0, 0.06);
   --m-shadow-sheet: 0 -8px 32px rgba(0, 0, 0, 0.16);
 
-  --m-radius-module: 12px;
-  --m-radius-card: 16px;
   --m-tap: 48px;
 
   /* Overridden per time band below. Transparent by default so the canvas is
-     exactly --m-surface-0 until AmbientBackground has stamped a band. */
+     exactly --background until AmbientBackground has stamped a band. */
   --m-ambient: transparent;
 
-  background-color: var(--m-surface-0);
+  background-color: hsl(var(--background));
   /* The ambient wash. A background-image rather than a ::before, because a
      positioned pseudo-element would paint above every non-positioned card in
      the scroll container and tint the cards as well as the canvas. Painted on
      the shell itself, which is a fixed 100dvh frame, so the light stays where
      the sky would be while the content scrolls under it. */
   background-image: radial-gradient(125% 62% at 50% -8%, var(--m-ambient), transparent 68%);
-  color: var(--m-on-surface);
+  color: hsl(var(--foreground));
   font-variant-numeric: tabular-nums;
   /* Matches the 2s body transition in index.css, so crossing a band boundary
      mid-session is a drift rather than a cut. */
@@ -64,31 +104,46 @@
 }
 
 .dark .m-shell {
-  --m-surface-0: #0d0f13;
-  --m-surface-1: #14171c;
-  --m-surface-2: #1a1e24;
-  /* Lower than the light-mode base because the tint below adds most of the
-     opacity back, and it adds it as pure black — which is what gives dark
-     glass its depth rather than just its dimness. */
-  --m-surface-3: rgba(13, 15, 19, 0.56);
+  --background: 220 19% 6%;
+  --card: 218 17% 9%;
+  --popover: 216 16% 12%;
 
-  --m-on-surface: #f4f6f9;
-  --m-on-surface-muted: #9aa3b2;
+  --foreground: 216 29% 97%;
+  --card-foreground: 216 29% 97%;
+  --popover-foreground: 216 29% 97%;
 
-  --m-primary: #7fa3ff;
-  --m-primary-container: #1e2740;
-  --m-on-primary-container: #dbe4ff;
+  --muted: 218 15% 17%;
+  --muted-foreground: 218 14% 65%;
 
-  --m-keyline: rgba(244, 246, 249, 0.09);
-  --m-error: #f87171;
-  --m-obsidian-ring: rgba(127, 163, 255, 0.35);
+  --border: 220 8% 15%;
+  --input: 220 8% 15%;
+  --card-border: 220 8% 15%;
+  --popover-border: 220 8% 15%;
+
+  --primary: 223 100% 75%;
+  --primary-foreground: 220 19% 6%;
+  --ring: 223 100% 75%;
+
+  --secondary: 224 36% 18%;
+  --secondary-foreground: 225 100% 93%;
+  --accent: 224 36% 18%;
+  --accent-foreground: 225 100% 93%;
+
+  --destructive: 0 91% 71%;
+  --destructive-foreground: 220 19% 6%;
 
   --m-skeleton: rgba(244, 246, 249, 0.07);
   --m-shimmer-sweep: rgba(244, 246, 249, 0.08);
 
+  /* Lower than the light-mode base because the tint below adds most of the
+     opacity back, and it adds it as pure black — which is what gives dark
+     glass its depth rather than just its dimness. */
+  --m-glass-base: rgba(13, 15, 19, 0.56);
   --m-glass-tint: rgba(0, 0, 0, 0.24);
   --m-glass-specular: rgba(255, 255, 255, 0.12);
   --m-glass-shadow: rgba(0, 0, 0, 0.55);
+
+  --m-obsidian-ring: rgba(127, 163, 255, 0.35);
 
   --m-shadow-card: 0 1px 2px rgba(0, 0, 0, 0.4);
   --m-shadow-sheet: 0 -8px 32px rgba(0, 0, 0, 0.5);
@@ -97,7 +152,7 @@
 /* --- Ambient time-of-day ----------------------------------------------------
  * AmbientBackground stamps data-time-band on <html> and index.css uses it to
  * tint the desktop canvas. The mobile shell used to throw that away: .m-shell
- * sets its own opaque --m-surface-0, which occluded the tint completely, so
+ * sets its own opaque --background, which occluded the tint completely, so
  * the app knew it was night and showed the same flat grey it shows at noon.
  *
  * Both halves shift here — the flat canvas by a hair, and the radial wash
@@ -109,33 +164,33 @@
  * uses, so dark mode wins when both match.
  */
 :root[data-time-band="morning"] .m-shell {
-  --m-surface-0: #f6f9fd;
+  --background: 214 64% 98%;
   --m-ambient: rgba(255, 190, 120, 0.15);
 }
 :root[data-time-band="afternoon"] .m-shell {
   --m-ambient: rgba(120, 170, 255, 0.1);
 }
 :root[data-time-band="evening"] .m-shell {
-  --m-surface-0: #fbf9f6;
+  --background: 36 38% 97%;
   --m-ambient: rgba(255, 140, 90, 0.15);
 }
 :root[data-time-band="night"] .m-shell {
-  --m-surface-0: #f6f7fc;
+  --background: 230 50% 98%;
   --m-ambient: rgba(90, 110, 220, 0.14);
 }
 .dark[data-time-band="morning"] .m-shell {
-  --m-surface-0: #0c1015;
+  --background: 213 27% 6%;
   --m-ambient: rgba(255, 176, 96, 0.11);
 }
 .dark[data-time-band="afternoon"] .m-shell {
   --m-ambient: rgba(96, 152, 255, 0.09);
 }
 .dark[data-time-band="evening"] .m-shell {
-  --m-surface-0: #12100d;
+  --background: 36 16% 6%;
   --m-ambient: rgba(255, 118, 72, 0.12);
 }
 .dark[data-time-band="night"] .m-shell {
-  --m-surface-0: #0b0d15;
+  --background: 228 31% 6%;
   --m-ambient: rgba(78, 100, 220, 0.16);
 }
 
@@ -187,11 +242,11 @@
   font-weight: 550;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: var(--m-on-surface-muted);
+  color: hsl(var(--muted-foreground));
 }
 
 .m-muted {
-  color: var(--m-on-surface-muted);
+  color: hsl(var(--muted-foreground));
 }
 
 /* --- Elevation --------------------------------------------------------------
@@ -203,9 +258,12 @@
 
 /* L1 — bento module */
 .m-card {
-  background-color: var(--m-surface-1);
-  border: 1px solid var(--m-keyline);
-  border-radius: var(--m-radius-card);
+  background-color: hsl(var(--card));
+  border: 1px solid hsl(var(--border));
+  /* Spelled out rather than `var(--radius-xl)`: @theme inline substitutes
+     theme values into utilities, and relying on it also emitting the variable
+     for hand-written CSS is a dependency on an implementation detail. */
+  border-radius: calc(var(--radius) + 4px);
   box-shadow: var(--m-shadow-card);
 }
 
@@ -228,7 +286,7 @@
  * as nothing on the target device and cost a filter pass everywhere else.
  */
 .m-glass {
-  background-color: var(--m-surface-3);
+  background-color: var(--m-glass-base);
   background-image:
     linear-gradient(to bottom, var(--m-glass-specular) 0, transparent 1.5px),
     linear-gradient(var(--m-glass-tint), var(--m-glass-tint));
@@ -252,7 +310,7 @@
    portalled drawer (vaul renders outside the shell's subtree), which would
    otherwise paint the wash across the top of every sheet. */
 .m-sheet {
-  background-color: var(--m-surface-2);
+  background-color: hsl(var(--popover));
   background-image: linear-gradient(to bottom, var(--m-glass-specular) 0, transparent 1.5px);
   box-shadow: var(--m-shadow-sheet);
 }

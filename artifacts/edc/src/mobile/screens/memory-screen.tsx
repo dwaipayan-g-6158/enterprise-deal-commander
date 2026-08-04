@@ -74,7 +74,7 @@ export function MemoryScreen() {
           />
         ) : isLoading ? (
           Array.from({ length: 4 }).map((_, i) => (
-            <Shimmer key={i} className="h-24 rounded-[var(--m-radius-card)]" />
+            <Shimmer key={i} className="h-24 rounded-xl" />
           ))
         ) : results.length === 0 ? (
           <EmptyState
@@ -92,11 +92,11 @@ export function MemoryScreen() {
 
       {/* Docked search. Sits directly above the tab bar so the keyboard opens
           under the thumb rather than pushing the whole screen up. */}
-      <div className="m-glass m-glass-bottom fixed inset-x-0 bottom-[calc(4rem+env(safe-area-inset-bottom))] z-30 border-t border-[var(--m-keyline)] px-4 py-2.5">
+      <div className="m-glass m-glass-bottom fixed inset-x-0 bottom-[calc(4rem+env(safe-area-inset-bottom))] z-30 border-t border-border px-4 py-2.5">
         <label className="sr-only" htmlFor="memory-search">
           Search archived deals
         </label>
-        <div className="flex items-center gap-2 rounded-full border border-[var(--m-keyline)] bg-[var(--m-surface-1)] px-4">
+        <div className="flex items-center gap-2 rounded-full border border-border bg-card px-4">
           <Search className="m-muted h-4 w-4 shrink-0" aria-hidden="true" />
           <input
             id="memory-search"
@@ -105,7 +105,7 @@ export function MemoryScreen() {
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search accounts, lessons, competitors"
             // 16px minimum, or iOS zooms the viewport on focus.
-            className="m-tap h-12 w-full bg-transparent text-base outline-none placeholder:text-[var(--m-on-surface-muted)]"
+            className="m-tap h-12 w-full bg-transparent text-base outline-none placeholder:text-muted-foreground"
           />
         </div>
       </div>
@@ -159,7 +159,7 @@ function MemoryCard({ memory }: { memory: DealMemory }) {
 
       <div className="m-data m-muted mt-2.5 flex flex-wrap items-center gap-x-3 gap-y-1">
         {tcv != null && Number.isFinite(tcv) ? (
-          <span className="text-[var(--m-on-surface)]">{compactCurrency(tcv)}</span>
+          <span className="text-foreground">{compactCurrency(tcv)}</span>
         ) : null}
         {memory.totalDaysActive != null ? <span>{memory.totalDaysActive}d active</span> : null}
         <span>{formatDate(memory.archivedAt, "—")}</span>

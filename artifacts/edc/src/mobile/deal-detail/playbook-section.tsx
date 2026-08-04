@@ -52,18 +52,18 @@ export function PlaybookSection({ journey }: { journey: JourneyEntry[] }) {
                 <p className={cn("text-sm", entry.isCurrentStage ? "font-semibold" : "m-muted")}>
                   {entry.playbookName}
                   {entry.isCurrentStage ? (
-                    <span className="ml-1.5 text-[var(--m-primary)]">· current stage</span>
+                    <span className="ml-1.5 text-primary">· current stage</span>
                   ) : null}
                 </p>
                 <span className="m-data m-muted shrink-0">
                   {entry.completedCount}/{entry.totalSteps}
                 </span>
               </div>
-              <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-[var(--m-skeleton)]">
+              <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-muted">
                 <div
                   className={cn(
                     "h-full rounded-full",
-                    entry.assignmentId ? "bg-[var(--m-primary)]" : "bg-[var(--m-keyline)]",
+                    entry.assignmentId ? "bg-primary" : "bg-border",
                   )}
                   style={{ width: `${Math.round(entry.progressPct)}%` }}
                 />

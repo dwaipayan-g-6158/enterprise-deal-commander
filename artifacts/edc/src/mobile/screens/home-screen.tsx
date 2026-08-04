@@ -202,7 +202,7 @@ export function HomeScreen() {
             <CardHeader
               label={`Critical alerts${summary ? ` (${summary.criticalAlertsTotal})` : ""}`}
               action={
-                <Link href="/deals" className="m-data text-[var(--m-primary)]">
+                <Link href="/deals" className="m-data text-primary">
                   All deals
                 </Link>
               }

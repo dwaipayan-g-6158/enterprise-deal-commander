@@ -160,8 +160,8 @@ export function TrajectoryScrubber({
         onPointerCancel={release}
         onKeyDown={onKeyDown}
         className={cn(
-          "relative h-14 w-full cursor-ew-resize touch-none rounded-[var(--m-radius-module)]",
-          "outline-none focus-visible:ring-2 focus-visible:ring-[var(--m-primary)]",
+          "relative h-14 w-full cursor-ew-resize touch-none rounded-md",
+          "outline-none focus-visible:ring-2 focus-visible:ring-ring",
         )}
       >
         {/* preserveAspectRatio none stretches the normalised x-space to
@@ -193,7 +193,7 @@ export function TrajectoryScrubber({
           <span
             key={i}
             aria-hidden="true"
-            className="absolute bottom-0 top-0 w-px bg-[var(--m-on-surface)] opacity-15"
+            className="absolute bottom-0 top-0 w-px bg-foreground opacity-15"
             style={{ left: `${pct}%` }}
           />
         ))}
@@ -203,7 +203,7 @@ export function TrajectoryScrubber({
         <span
           aria-hidden="true"
           className={cn(
-            "pointer-events-none absolute bottom-0 top-0 w-px bg-[var(--m-primary)]",
+            "pointer-events-none absolute bottom-0 top-0 w-px bg-primary",
             index == null ? "opacity-0" : "opacity-90",
           )}
           style={{
@@ -211,7 +211,7 @@ export function TrajectoryScrubber({
             transition: index == null ? "left 320ms var(--m-ease-spring), opacity 180ms" : "none",
           }}
         >
-          <span className="absolute -left-[3px] top-1/2 h-[7px] w-[7px] -translate-y-1/2 rounded-full bg-[var(--m-primary)]" />
+          <span className="absolute -left-[3px] top-1/2 h-[7px] w-[7px] -translate-y-1/2 rounded-full bg-primary" />
         </span>
       </div>
 

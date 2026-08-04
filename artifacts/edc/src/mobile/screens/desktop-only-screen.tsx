@@ -22,7 +22,7 @@ export function DesktopOnlyScreen({ name, reason }: { name: string; reason: stri
         </p>
         <Link
           href="/"
-          className="m-tap m-press m-h3 mt-2 inline-flex items-center rounded-full bg-[var(--m-primary-container)] px-5 text-[var(--m-on-primary-container)]"
+          className="m-tap m-press m-h3 mt-2 inline-flex items-center rounded-full bg-secondary px-5 text-secondary-foreground"
         >
           Back to Command Center
         </Link>

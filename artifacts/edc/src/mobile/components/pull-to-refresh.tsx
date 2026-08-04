@@ -185,7 +185,7 @@ function RefreshRing({
         cy="12"
         r={radius}
         fill="none"
-        stroke="var(--m-keyline)"
+        stroke="hsl(var(--border))"
         strokeWidth="2.5"
       />
       <circle
@@ -193,7 +193,7 @@ function RefreshRing({
         cy="12"
         r={radius}
         fill="none"
-        stroke="var(--m-primary)"
+        stroke="hsl(var(--primary))"
         strokeWidth="2.5"
         strokeLinecap="round"
         strokeDasharray={circumference}

@@ -31,7 +31,7 @@ export function StatTile({
       <p
         className={cn(
           "mt-1.5 font-mono text-2xl font-semibold tracking-[-0.03em]",
-          tone === "critical" && "text-[var(--m-error)]",
+          tone === "critical" && "text-destructive",
         )}
       >
         {value}
@@ -80,7 +80,7 @@ export function DeltaLine({
   const up = delta > 0;
   const Icon = up ? ArrowUp : ArrowDown;
   return (
-    <span className={cn("inline-flex items-center gap-1", up ? "text-emerald-600 dark:text-emerald-400" : "text-[var(--m-error)]")}>
+    <span className={cn("inline-flex items-center gap-1", up ? "text-emerald-600 dark:text-emerald-400" : "text-destructive")}>
       <Icon className="h-3 w-3" aria-hidden="true" />
       {format(Math.abs(delta))}
       <span className="m-muted opacity-70">{label}</span>

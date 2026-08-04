@@ -126,7 +126,7 @@ export function CommanderSheet() {
       title="Commander"
       description="Search deals, ask a question, or jump to a section."
     >
-      <div className="flex items-center gap-2 rounded-full border border-[var(--m-keyline)] bg-[var(--m-surface-1)] px-4">
+      <div className="flex items-center gap-2 rounded-full border border-border bg-card px-4">
         <Search className="m-muted h-4 w-4 shrink-0" aria-hidden="true" />
         <label className="sr-only" htmlFor="commander-search">
           Search deals or ask a question
@@ -139,7 +139,7 @@ export function CommanderSheet() {
           placeholder="A deal, or: red deals above $1M"
           autoComplete="off"
           // 16px minimum, or iOS zooms the viewport on focus.
-          className="m-tap h-12 w-full bg-transparent text-base outline-none placeholder:text-[var(--m-on-surface-muted)]"
+          className="m-tap h-12 w-full bg-transparent text-base outline-none placeholder:text-muted-foreground"
         />
       </div>
 
@@ -151,7 +151,7 @@ export function CommanderSheet() {
             nlcMatches.map((deal) => (
               <Row
                 key={`nlc-${deal.id}`}
-                icon={<Sparkles className="h-4 w-4 text-[var(--m-primary)]" />}
+                icon={<Sparkles className="h-4 w-4 text-primary" />}
                 label={deal.dealName}
                 detail={compactCurrency(deal.calculatedTCV ?? 0, deal.dealCurrency ?? "USD")}
                 onPress={() => go(`/deals/${deal.id}`)}
@@ -278,7 +278,7 @@ function Row({
       <button
         type="button"
         onClick={onPress}
-        className="m-tap m-press flex w-full items-center gap-3 rounded-[var(--m-radius-module)] px-1 text-left"
+        className="m-tap m-press flex w-full items-center gap-3 rounded-md px-1 text-left"
       >
         <span className="flex w-4 shrink-0 justify-center">{icon}</span>
         <span className="min-w-0 flex-1">

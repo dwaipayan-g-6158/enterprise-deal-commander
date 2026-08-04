@@ -42,7 +42,7 @@ export function TabBar() {
     <nav
       // m-vt-tabbar keeps the bar out of the route transition's root
       // snapshot, so it stays put while the screen slides behind it.
-      className="m-glass m-glass-bottom m-vt-tabbar absolute inset-x-0 bottom-0 z-40 border-t border-[var(--m-keyline)] pb-safe"
+      className="m-glass m-glass-bottom m-vt-tabbar absolute inset-x-0 bottom-0 z-40 border-t border-border pb-safe"
       aria-label="Primary"
     >
       <ul className="flex items-stretch">
@@ -59,13 +59,13 @@ export function TabBar() {
                 aria-current={isActive ? "page" : undefined}
                 className={cn(
                   "m-tap m-press flex h-16 w-full flex-col items-center justify-center gap-1",
-                  isActive ? "text-[var(--m-primary)]" : "m-muted",
+                  isActive ? "text-primary" : "m-muted",
                 )}
               >
                 <span
                   className={cn(
                     "flex h-7 w-12 items-center justify-center rounded-full transition-colors duration-200",
-                    isActive && "bg-[var(--m-primary-container)]",
+                    isActive && "bg-secondary",
                     isActive && switched && "m-tab-pop",
                   )}
                 >

@@ -10,7 +10,7 @@ import { cn } from "@/lib/utils";
  * it into a strobe.
  */
 export function Shimmer({ className }: { className?: string }) {
-  return <div className={cn("m-shimmer rounded-[var(--m-radius-module)]", className)} aria-hidden="true" />;
+  return <div className={cn("m-shimmer rounded-md", className)} aria-hidden="true" />;
 }
 
 /** A block of shimmer lines, for text-shaped placeholders. */

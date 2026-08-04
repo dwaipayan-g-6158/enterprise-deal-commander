@@ -50,7 +50,7 @@ export function MobileHeader({
         // underneath it — an iOS nav bar does not travel with its screen.
         // m-header-lift deepens the shadow over the first 72px of scroll, so
         // the bar reads as lifting off content that has gone under it.
-        "m-glass m-glass-top m-header-lift m-vt-header sticky top-0 z-30 border-b border-[var(--m-keyline)] pt-safe",
+        "m-glass m-glass-top m-header-lift m-vt-header sticky top-0 z-30 border-b border-border pt-safe",
         className,
       )}
     >

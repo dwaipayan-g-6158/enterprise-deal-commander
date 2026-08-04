@@ -134,7 +134,7 @@ export function DealsScreen() {
             />
           ) : isLoading ? (
             Array.from({ length: 5 }).map((_, i) => (
-              <Shimmer key={i} className="h-[104px] rounded-[var(--m-radius-card)]" />
+              <Shimmer key={i} className="h-[104px] rounded-xl" />
             ))
           ) : visible.length === 0 ? (
             <EmptyState
@@ -211,7 +211,7 @@ function DealCard({ deal }: { deal: RosterRow }) {
         <MetaChip>{deal.salesStage}</MetaChip>
         {deal.score != null ? (
           <span>
-            Score <span className="text-[var(--m-on-surface)]">{deal.score}</span>
+            Score <span className="text-foreground">{deal.score}</span>
           </span>
         ) : null}
         <VelocityMark bucket={deal.velocity} deltaDays={deal.deltaDays} />

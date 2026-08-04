@@ -47,8 +47,8 @@ export function SegmentChips<T extends string>({
               // gap-2 between chips clears the 8dp separation minimum.
               "m-press flex h-12 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border px-4 text-sm font-medium",
               selected
-                ? "border-transparent bg-[var(--m-primary-container)] text-[var(--m-on-primary-container)]"
-                : "border-[var(--m-keyline)] m-muted",
+                ? "border-transparent bg-secondary text-secondary-foreground"
+                : "border-border m-muted",
             )}
           >
             {segment.label}

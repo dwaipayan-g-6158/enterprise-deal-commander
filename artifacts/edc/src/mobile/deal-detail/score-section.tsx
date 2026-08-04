@@ -57,7 +57,7 @@ export function ScoreSection({ score }: { score: DealScore }) {
                   <span className="min-w-0 flex-1 truncate">{row.label}</span>
                   <span className="m-muted shrink-0">{row.contribution.toFixed(1)}</span>
                 </div>
-                <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-[var(--m-skeleton)]">
+                <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-muted">
                   <div
                     className={
                       row.contribution >= 0

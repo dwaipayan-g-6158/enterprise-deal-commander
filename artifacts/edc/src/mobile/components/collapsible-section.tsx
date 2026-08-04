@@ -66,7 +66,7 @@ export function CollapsibleSection({
       {expandable ? (
         <div className="m-collapse" data-open={open} inert={!open}>
           <div>
-            <div id={bodyId} className="border-t border-[var(--m-keyline)] p-4">
+            <div id={bodyId} className="border-t border-border p-4">
               {children}
             </div>
           </div>
