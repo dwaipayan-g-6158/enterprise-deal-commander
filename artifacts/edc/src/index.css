@@ -233,6 +233,22 @@
   }
 }
 
+/* Safe-area utilities. Needed because the installed iOS PWA declares
+   apple-mobile-web-app-status-bar-style=black-translucent, which draws page
+   content under the notch and the home indicator. index.html already sets
+   viewport-fit=cover, without which env(safe-area-inset-*) resolves to 0. */
+@utility pt-safe {
+  padding-top: env(safe-area-inset-top);
+}
+@utility pb-safe {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+/* Scroll-container clearance so the last row of content can rest above the
+   fixed mobile tab bar (h-16 = 4rem) instead of under it. */
+@utility pb-tabbar {
+  padding-bottom: calc(4rem + env(safe-area-inset-bottom));
+}
+
 /* Executive Briefing export — branded light-paper report.
    `.edc-report` (briefing-mode.tsx) wraps <BriefingReport>; it is captured
    verbatim by both html-to-image (PNG, via contentRef) and window.print()
