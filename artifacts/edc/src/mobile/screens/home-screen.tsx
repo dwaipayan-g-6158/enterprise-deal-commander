@@ -165,6 +165,12 @@ export function HomeScreen() {
               )}
             </MobileCard>
 
+            {/* Not a link. `/deals?filter=critical` is the obvious
+                destination and it is the wrong one: this counts alerts, that
+                filter matches deals whose health is RED, and the two diverge
+                — 1 and 0 on the seed data, landing the reader on "Nothing in
+                this filter". The Critical alerts card below names the alert
+                instead. */}
             <StatTile
               label="Red alerts"
               value={summary ? summary.criticalAlertsTotal : "—"}

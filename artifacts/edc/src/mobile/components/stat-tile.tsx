@@ -5,9 +5,19 @@ import { TONE_AHEAD } from "@/mobile/lib/tones";
 
 /**
  * A single KPI in the bento grid: label, figure, and one line of context.
+ * It reports; it does not navigate.
  *
- * Rendered as a button when `onPress` is supplied, so drill-down tiles are
- * keyboard-reachable and announce themselves as interactive.
+ * It used to carry an `onPress` prop with a whole `<button>` branch behind it
+ * and no caller anywhere. The obvious fix was to wire the drill-down that had
+ * clearly been imagined for it — "Red alerts: 1" to the Deals screen's
+ * Critical filter — and driving that showed why it was never wired: the tile
+ * counts *alerts* and the filter matches *deals whose health is RED*. On the
+ * seed data that is 1 and 0, so the link lands on "Nothing in this filter".
+ * They are different units and no amount of plumbing reconciles them.
+ *
+ * So the prop is gone rather than connected. The alert this figure counts is
+ * already listed, by name, in the Critical alerts card two hundred pixels
+ * below — which is the drill-down, and it was there all along.
  *
  * Tiles are laid out as a column with the footnote pinned to the bottom, so
  * a pair sitting side by side with footnotes of different line counts still
@@ -20,37 +30,23 @@ export function StatTile({
   value,
   footnote,
   tone = "default",
-  onPress,
   className,
 }: {
   label: ReactNode;
   value: ReactNode;
   footnote?: ReactNode;
   tone?: "default" | "critical";
-  onPress?: () => void;
   className?: string;
 }) {
-  const body = (
-    <>
+  return (
+    <div className={cn("m-card m-reveal flex flex-col p-4", className)}>
       <p className="m-label m-muted">{label}</p>
       <p className={cn("m-title mt-1.5", tone === "critical" && "text-destructive")}>{value}</p>
       {/* mt-auto is what aligns a pair of tiles: the footnote sits on the
           floor of the card rather than directly under a figure, so one tile
           wrapping to two lines doesn't push its neighbour out of step. */}
       {footnote ? <div className="m-caption m-muted mt-auto pt-1">{footnote}</div> : null}
-    </>
-  );
-
-  const shape = "m-card m-reveal flex flex-col p-4";
-
-  if (!onPress) {
-    return <div className={cn(shape, className)}>{body}</div>;
-  }
-
-  return (
-    <button type="button" onClick={onPress} className={cn(shape, "m-press text-left", className)}>
-      {body}
-    </button>
+    </div>
   );
 }
 

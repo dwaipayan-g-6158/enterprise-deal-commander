@@ -13,6 +13,7 @@ import { OutcomePill } from "@/mobile/components/badges";
 import { SegmentChips, type Segment } from "@/mobile/components/segment-chips";
 import { Shimmer } from "@/mobile/components/shimmer";
 import { EmptyState, ErrorState } from "@/mobile/components/states";
+import { PullToRefresh } from "@/mobile/components/pull-to-refresh";
 
 type OutcomeFilter = "all" | "won" | "lost";
 
@@ -48,7 +49,7 @@ export function MemoryScreen() {
     [debounced, outcome],
   );
 
-  const { data, isLoading, isError } = useSearchDealMemory(params);
+  const { data, isLoading, isError, refetch } = useSearchDealMemory(params);
   const results = data?.data ?? [];
 
   return (
@@ -65,31 +66,37 @@ export function MemoryScreen() {
         />
       </MobileHeader>
 
-      {/* The shell's pb-tabbar already clears the docked search bar as well as
+      {/* Pull-to-refresh here as on the other three tabs. Memory was the one
+          screen without it, and a gesture that works everywhere except one
+          place is worse than one that works nowhere.
+
+          The shell's pb-tabbar already clears the docked search bar as well as
           the tab bar, so no extra padding here. */}
-      <div className="space-y-3 p-4">
-        {isError ? (
-          <ErrorState
-            title="Couldn't search memory"
-            body="The archive didn't respond. Try again in a moment."
-          />
-        ) : isLoading ? (
-          Array.from({ length: 4 }).map((_, i) => (
-            <Shimmer key={i} className="h-24 rounded-xl" />
-          ))
-        ) : results.length === 0 ? (
-          <EmptyState
-            title={debounced ? "No matches" : "Nothing archived yet"}
-            body={
-              debounced
-                ? "Try a shorter phrase, an account name, or a competitor."
-                : "Closed deals land here with their narrative and lessons attached."
-            }
-          />
-        ) : (
-          results.map((memory) => <MemoryCard key={memory.id} memory={memory} />)
-        )}
-      </div>
+      <PullToRefresh onRefresh={refetch}>
+        <div className="space-y-3 p-4">
+          {isError ? (
+            <ErrorState
+              title="Couldn't search memory"
+              body="The archive didn't respond. Pull down to try again."
+            />
+          ) : isLoading ? (
+            Array.from({ length: 4 }).map((_, i) => (
+              <Shimmer key={i} className="h-24 rounded-xl" />
+            ))
+          ) : results.length === 0 ? (
+            <EmptyState
+              title={debounced ? "No matches" : "Nothing archived yet"}
+              body={
+                debounced
+                  ? "Try a shorter phrase, an account name, or a competitor."
+                  : "Closed deals land here with their narrative and lessons attached."
+              }
+            />
+          ) : (
+            results.map((memory) => <MemoryCard key={memory.id} memory={memory} />)
+          )}
+        </div>
+      </PullToRefresh>
 
       {/* Docked search. Sits directly above the tab bar so the keyboard opens
           under the thumb rather than pushing the whole screen up. */}
