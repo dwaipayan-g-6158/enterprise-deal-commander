@@ -5,6 +5,7 @@ import { useAuthGuard } from "@/lib/auth/use-auth-guard";
 import { MobileShell } from "@/mobile/shell/mobile-shell";
 import { MobileShellSkeleton } from "@/mobile/shell/mobile-shell-skeleton";
 import { DesktopOnlyScreen } from "@/mobile/screens/desktop-only-screen";
+import { HomeScreen } from "@/mobile/screens/home-screen";
 import { DealsScreen } from "@/mobile/screens/deals-screen";
 import { DealDetailScreen } from "@/mobile/screens/deal-detail-screen";
 import NotFound from "@/pages/not-found";
@@ -66,7 +67,7 @@ export default function MobileApp() {
       <Route path="/share/:token" component={Share} />
 
       <Route path="/">
-        <MobileProtectedRoute component={() => <Placeholder name="Command Center" />} />
+        <MobileProtectedRoute component={HomeScreen} />
       </Route>
       <Route path="/deals">
         <MobileProtectedRoute component={DealsScreen} />
