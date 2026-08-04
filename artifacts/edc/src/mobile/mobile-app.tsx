@@ -1,4 +1,4 @@
-import type { ComponentType } from "react";
+import type { ComponentType, ReactNode } from "react";
 import { Switch, Route, Redirect, Router } from "wouter";
 import { RoleProvider } from "@/lib/auth/role-context";
 import { aroundNav } from "@/mobile/lib/view-transitions";
@@ -54,14 +54,18 @@ function MobileProtectedRoute({
   );
 }
 
-/** Placeholder until each screen lands. */
-function Placeholder({ name }: { name: string }) {
-  return (
-    <div className="flex flex-col items-center justify-center gap-2 px-8 py-24 text-center">
-      <p className="m-headline">{name}</p>
-      <p className="m-body m-muted">Mobile screen coming up next.</p>
-    </div>
-  );
+/**
+ * Tokens without chrome, for the two screens that render outside `MobileShell`
+ * — sign-in and the 404. Both are shared components that also serve desktop,
+ * so they can't take `.m-shell` themselves; wrapping the route gives them the
+ * mobile palette and radius scale on a phone and leaves the desktop tree
+ * alone. Same mechanism `SectionSheet` uses for vaul's portalled drawer.
+ *
+ * No layout classes: the shell's own frame is `h-[100dvh] overflow-hidden`,
+ * and these two pages manage their own height.
+ */
+function MobileTokens({ children }: { children: ReactNode }) {
+  return <div className="m-shell">{children}</div>;
 }
 
 /**
@@ -82,7 +86,11 @@ export default function MobileApp() {
           browser tab, after its one play, or under reduced motion. */}
       <BootSplash />
       <Switch>
-        <Route path="/login" component={Login} />
+        <Route path="/login">
+          <MobileTokens>
+            <Login />
+          </MobileTokens>
+        </Route>
         <Route path="/share/:token" component={Share} />
 
         <Route path="/">
