@@ -35,8 +35,13 @@ export function useSignOut() {
     if (typeof caches !== "undefined") {
       try {
         const keys = await caches.keys();
+        // Prefix, not the exact "edc-api-reads" name: the service worker now
+        // splits API responses across buckets (reads, lookups — see the
+        // runtimeCaching list in vite.config.ts), and matching one name by
+        // hand would leave the others holding the previous session's data on
+        // a shared device. Any future edc-api-* bucket is covered too.
         await Promise.all(
-          keys.filter((k) => k.includes("edc-api-reads")).map((k) => caches.delete(k)),
+          keys.filter((k) => k.includes("edc-api-")).map((k) => caches.delete(k)),
         );
       } catch (e) {
         console.error(e);

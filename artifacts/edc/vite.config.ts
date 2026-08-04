@@ -41,12 +41,18 @@ export default defineConfig({
         "icon-512-maskable.png",
       ],
       manifest: {
+        // Stable app identity, so a later start_url change doesn't register as
+        // a different app and orphan existing installs.
+        id: "/",
         name: "Enterprise Deal Commander",
         short_name: "Deal Commander",
         description:
           "Enterprise Deal Commander — a cockpit for managing enterprise software deals, risk, and governance.",
-        theme_color: "#15171a",
-        background_color: "#15171a",
+        // Matches the app's default light theme. These were #15171a, which
+        // flashed a near-black splash and window chrome into a light app.
+        // (No orientation lock: the same manifest serves desktop installs.)
+        theme_color: "#f8f9fb",
+        background_color: "#f8f9fb",
         display: "standalone",
         start_url: ".",
         scope: ".",
@@ -73,15 +79,57 @@ export default defineConfig({
         navigateFallback: "index.html",
         navigateFallbackDenylist: [/^\/api\//],
         runtimeCaching: [
+          // Lookup tables (stages, catalogs, competitors, gate definitions)
+          // barely change and are read by nearly every screen. Their own
+          // bucket with a week-long life keeps them from competing for space
+          // with per-deal reads. NOTE: useSignOut() purges every cache whose
+          // key starts "edc-api-", so a new bucket named that way is cleared
+          // on sign-out without further wiring.
+          {
+            urlPattern: ({ url, request }: { url: URL; request: Request }) =>
+              request.method === "GET" && /\/api\/v1\/lookups\//.test(url.pathname),
+            handler: "StaleWhileRevalidate" as const,
+            options: {
+              cacheName: "edc-api-lookups",
+              expiration: { maxEntries: 40, maxAgeSeconds: 604800 },
+              cacheableResponse: { statuses: [0, 200] },
+            },
+          },
           {
             urlPattern: ({ url, request }: { url: URL; request: Request }) =>
               request.method === "GET" &&
               /\/api\/v[12]\//.test(url.pathname) &&
-              !/\/api\/v1\/auth\//.test(url.pathname),
+              // Auth must always hit the network — the offline session
+              // fallback in role-context.tsx depends on it never being served
+              // from cache.
+              !/\/api\/v1\/auth\//.test(url.pathname) &&
+              !/\/api\/v1\/lookups\//.test(url.pathname),
             handler: "StaleWhileRevalidate" as const,
             options: {
               cacheName: "edc-api-reads",
-              expiration: { maxEntries: 60, maxAgeSeconds: 86400 },
+              // Raised from 60: one mobile deal-detail visit alone touches
+              // half a dozen endpoints, so browsing a portfolio used to evict
+              // the earlier deals before the user got back to them.
+              expiration: { maxEntries: 200, maxAgeSeconds: 86400 },
+              cacheableResponse: { statuses: [0, 200] },
+            },
+          },
+          // Webfonts, so an offline cold launch renders in Geist instead of
+          // falling back to a system face mid-session.
+          {
+            urlPattern: ({ url }: { url: URL }) => url.origin === "https://fonts.googleapis.com",
+            handler: "StaleWhileRevalidate" as const,
+            options: {
+              cacheName: "google-fonts-stylesheets",
+              cacheableResponse: { statuses: [0, 200] },
+            },
+          },
+          {
+            urlPattern: ({ url }: { url: URL }) => url.origin === "https://fonts.gstatic.com",
+            handler: "CacheFirst" as const,
+            options: {
+              cacheName: "google-fonts-webfonts",
+              expiration: { maxEntries: 30, maxAgeSeconds: 31536000 },
               cacheableResponse: { statuses: [0, 200] },
             },
           },

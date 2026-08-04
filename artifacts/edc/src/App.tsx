@@ -9,6 +9,7 @@ import { PwaUpdatePrompt } from "@/components/pwa-update-prompt";
 import { OfflineBanner } from "@/components/offline-banner";
 import { OfflineSaveNotice } from "@/components/offline-save-notice";
 import { ThemeProvider } from "@/components/theme-provider";
+import { ThemeColorSync } from "@/components/theme-color-sync";
 import { FocusModeProvider } from "@/lib/presence/focus-mode-context";
 import { AppShellSkeleton } from "@/components/app-shell-skeleton";
 import { MobileShellSkeleton } from "@/mobile/shell/mobile-shell-skeleton";
@@ -89,6 +90,7 @@ function App() {
               <ShellGate />
             </WouterRouter>
             <Toaster />
+            <ThemeColorSync />
             <AmbientBackground />
             <PwaUpdatePrompt />
             <OfflineBanner />

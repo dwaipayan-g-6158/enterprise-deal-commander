@@ -35,7 +35,9 @@ export function CommandPalette() {
   const { open, setOpen } = useCommandPalette();
   const [query, setQuery] = useState("");
   const [, setLocation] = useLocation();
-  const { theme, setTheme } = useTheme();
+  // resolvedTheme, not theme: `theme` is "system" until the user picks a side
+  // (see theme-provider.tsx), which would make the first toggle a no-op.
+  const { resolvedTheme, setTheme } = useTheme();
   const signOut = useSignOut();
   const { data: deals } = useListDeals({ state: "all", limit: 50 });
 
@@ -139,11 +141,11 @@ export function CommandPalette() {
           <CommandItem
             value="toggle theme dark light mode"
             onSelect={() => {
-              setTheme(theme === "dark" ? "light" : "dark");
+              setTheme(resolvedTheme === "dark" ? "light" : "dark");
               setOpen(false);
             }}
           >
-            {theme === "dark" ? (
+            {resolvedTheme === "dark" ? (
               <Sun className="mr-2 h-4 w-4" />
             ) : (
               <Moon className="mr-2 h-4 w-4" />
