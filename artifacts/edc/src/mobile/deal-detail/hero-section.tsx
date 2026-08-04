@@ -1,6 +1,7 @@
-import { useState } from "react";
-import { compactCurrency } from "@/lib/format";
+import { useMemo, useState } from "react";
+import { compactCurrency, formatDate } from "@/lib/format";
 import type { Intelligence } from "@workspace/api-client-react";
+import type { Health } from "@/lib/semantic-colors";
 import {
   isSharedCardArmed,
   useSharedCardStyle,
@@ -9,7 +10,18 @@ import {
 import { HealthPill, RiskPill } from "@/mobile/components/badges";
 import { CountUp } from "@/mobile/components/count-up";
 import { Shimmer } from "@/mobile/components/shimmer";
-import { Sparkline } from "@/mobile/components/sparkline";
+import {
+  TrajectoryScrubber,
+  type TrajectoryPoint,
+  type TrajectoryStageChange,
+} from "@/mobile/components/trajectory-scrubber";
+
+const HEALTH_VALUES = new Set<string>(["GREEN", "YELLOW", "RED"]);
+
+/** The payload types health as a bare string; only three of them are real. */
+function asHealth(value: string | null | undefined, fallback: Health): Health {
+  return value != null && HEALTH_VALUES.has(value) ? (value as Health) : fallback;
+}
 
 /**
  * The deal's headline, on the canvas rather than in a card — it isn't one
@@ -19,16 +31,23 @@ import { Sparkline } from "@/mobile/components/sparkline";
  * name and the value each morph out of their counterpart on that card. The
  * names only apply to the deal that was actually tapped (lib/shared-card.ts),
  * so opening the same screen from a link elsewhere just fades in.
+ *
+ * The trajectory strip underneath is scrubbable, and the value and health
+ * above it rewind with it. Sections further down the screen keep showing
+ * today — they own their own queries, and threading a rewind through all
+ * seven of them would trade a legible screen for a novelty.
  */
 export function HeroSection({
   intel,
   dealId,
-  scoreHistory,
+  trajectory,
+  stageChanges,
 }: {
   intel: Intelligence;
   dealId: string;
-  /** Chronological predictive scores, for the trend line. */
-  scoreHistory: (number | null)[];
+  /** Chronological merged history. Points without a score are ignored. */
+  trajectory: TrajectoryPoint[];
+  stageChanges: TrajectoryStageChange[];
 }) {
   const { financials, risk, governance } = intel;
   const shared = useSharedCardStyle(dealId);
@@ -36,6 +55,21 @@ export function HeroSection({
   // number must not restart from zero — and the armed flag is released the
   // moment the transition ends, so this cannot be read reactively.
   const [arrivedByMorph] = useState(() => isSharedCardArmed(dealId));
+
+  const scored = useMemo(() => trajectory.filter((p) => p.score != null), [trajectory]);
+  const [scrubIndex, setScrubIndex] = useState<number | null>(null);
+  // Once someone has scrubbed, the figure stops counting for the rest of this
+  // mount: releasing the playhead would otherwise ramp it up from zero again.
+  const [everScrubbed, setEverScrubbed] = useState(false);
+
+  const at = scrubIndex != null ? scored[scrubIndex] : null;
+  const tcv = at?.tcv ?? financials.calculatedTCV;
+  const health = asHealth(at?.health, governance.healthStatus);
+
+  const handleScrub = (next: number | null) => {
+    if (next != null && !everScrubbed) setEverScrubbed(true);
+    setScrubIndex(next);
+  };
 
   return (
     <header className="px-4 pb-2 pt-4" style={shared("card")}>
@@ -46,33 +80,42 @@ export function HeroSection({
         {intel.dealName}
       </h1>
 
-      <div className="mt-3 flex items-end justify-between gap-3">
-        <div>
-          <p className="m-kpi-hero" style={shared("value")}>
-            {arrivedByMorph ? (
-              compactCurrency(financials.calculatedTCV, financials.dealCurrency)
-            ) : (
-              <CountUp
-                value={financials.calculatedTCV}
-                format={(n) => compactCurrency(n, financials.dealCurrency)}
-              />
-            )}
-          </p>
-          <p className="m-data m-muted mt-1">
+      <p className="m-kpi-hero mt-3" style={shared("value")}>
+        {arrivedByMorph || everScrubbed ? (
+          compactCurrency(tcv, financials.dealCurrency)
+        ) : (
+          <CountUp
+            value={tcv}
+            format={(n) => compactCurrency(n, financials.dealCurrency)}
+          />
+        )}
+      </p>
+      <p className="m-data m-muted mt-1">
+        {at ? (
+          <>
+            {at.stage ?? intel.salesStage} · as of {formatDate(at.at, "—")}
+          </>
+        ) : (
+          <>
             {intel.salesStage} · {intel.daysInStage}d in stage
-          </p>
-        </div>
-        <Sparkline
-          values={scoreHistory}
-          ariaLabel="Predictive score over the last 90 days"
-          className="mb-1 shrink-0"
-        />
-      </div>
+          </>
+        )}
+      </p>
 
       <div className="mt-3 flex flex-wrap items-center gap-2">
-        <HealthPill health={governance.healthStatus} />
+        <HealthPill health={health} />
         <RiskPill level={risk.riskLevel} score={risk.compositeScore} />
       </div>
+
+      {scored.length >= 2 ? (
+        <TrajectoryScrubber
+          className="mt-4"
+          points={scored}
+          stageChanges={stageChanges}
+          index={scrubIndex}
+          onScrub={handleScrub}
+        />
+      ) : null}
     </header>
   );
 }

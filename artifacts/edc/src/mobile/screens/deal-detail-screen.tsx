@@ -14,6 +14,10 @@ import { MobileHeader } from "@/mobile/shell/mobile-header";
 import { Shimmer } from "@/mobile/components/shimmer";
 import { ErrorState } from "@/mobile/components/states";
 import { PullToRefresh } from "@/mobile/components/pull-to-refresh";
+import type {
+  TrajectoryPoint,
+  TrajectoryStageChange,
+} from "@/mobile/components/trajectory-scrubber";
 import { HeroPreview, HeroSection } from "@/mobile/deal-detail/hero-section";
 import { RiskSection } from "@/mobile/deal-detail/risk-section";
 import { ScoreSection } from "@/mobile/deal-detail/score-section";
@@ -22,11 +26,6 @@ import { PlaybookSection, type JourneyEntry } from "@/mobile/deal-detail/playboo
 import { GatesSection } from "@/mobile/deal-detail/gates-section";
 import { EconomicsSection } from "@/mobile/deal-detail/economics-section";
 import { HistorySection } from "@/mobile/deal-detail/history-section";
-
-/** Trajectory is an open payload in the contract; read only what's plotted. */
-interface TrajectoryPoint {
-  score: number | null;
-}
 
 const ACTIVITY_LIMIT = 20;
 
@@ -138,8 +137,12 @@ export function DealDetailScreen({ id }: { id: string }) {
 
   const journey =
     (journeyQuery.data?.data as { journey?: JourneyEntry[] } | undefined)?.journey ?? [];
-  const trajectory =
-    (trajectoryQuery.data?.data as { points?: TrajectoryPoint[] } | undefined)?.points ?? [];
+  // Trajectory is an open payload in the contract, and every metric on it
+  // carries forward independently, so the scrubber reads each field
+  // defensively rather than assuming a point has all of them.
+  const trajectory = trajectoryQuery.data?.data as
+    | { points?: TrajectoryPoint[]; stageChanges?: TrajectoryStageChange[] }
+    | undefined;
   const activity: ActivityEvent[] = activityQuery.data?.data ?? [];
 
   return (
@@ -155,7 +158,8 @@ export function DealDetailScreen({ id }: { id: string }) {
         <HeroSection
           intel={intel}
           dealId={id}
-          scoreHistory={trajectory.map((p) => p.score)}
+          trajectory={trajectory?.points ?? []}
+          stageChanges={trajectory?.stageChanges ?? []}
         />
 
         {/* Only the sections crossfade. The hero was already on screen from
