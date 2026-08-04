@@ -7,6 +7,9 @@ import {
 } from "react";
 import { TabBar } from "@/mobile/shell/tab-bar";
 import { useAppResumeRefetch } from "@/mobile/hooks/use-app-resume-refetch";
+import { CommanderProvider } from "@/mobile/commander/commander-context";
+import { CommanderButton } from "@/mobile/commander/commander-button";
+import { CommanderSheet } from "@/mobile/commander/commander-sheet";
 import "@/mobile/mobile.css";
 
 const ScrollContainerContext = createContext<RefObject<HTMLElement | null> | null>(null);
@@ -36,18 +39,22 @@ export function MobileShell({ children }: { children: ReactNode }) {
 
   return (
     <ScrollContainerContext.Provider value={scrollRef}>
-      <div className="m-shell relative flex h-[100dvh] flex-col overflow-hidden">
-        <main
-          ref={scrollRef}
-          // overscroll-contain stops a rubber-band at the end of a list from
-          // scrolling the page behind it (and, in the installed PWA, from
-          // triggering the OS pull-to-dismiss).
-          className="flex-1 overflow-y-auto overscroll-y-contain pb-tabbar"
-        >
-          {children}
-        </main>
-        <TabBar />
-      </div>
+      <CommanderProvider>
+        <div className="m-shell relative flex h-[100dvh] flex-col overflow-hidden">
+          <main
+            ref={scrollRef}
+            // overscroll-contain stops a rubber-band at the end of a list from
+            // scrolling the page behind it (and, in the installed PWA, from
+            // triggering the OS pull-to-dismiss).
+            className="flex-1 overflow-y-auto overscroll-y-contain pb-tabbar"
+          >
+            {children}
+          </main>
+          <CommanderButton />
+          <TabBar />
+          <CommanderSheet />
+        </div>
+      </CommanderProvider>
     </ScrollContainerContext.Provider>
   );
 }

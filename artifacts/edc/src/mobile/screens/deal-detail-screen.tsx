@@ -7,6 +7,8 @@ import {
   useListDealActivity,
   type ActivityEvent,
 } from "@workspace/api-client-react";
+import { useMemo } from "react";
+import { useJumpTargets } from "@/mobile/commander/use-jump-targets";
 import { MobileHeader } from "@/mobile/shell/mobile-header";
 import { Shimmer } from "@/mobile/components/shimmer";
 import { ErrorState } from "@/mobile/components/states";
@@ -45,6 +47,44 @@ export function DealDetailScreen({ id }: { id: string }) {
   const activityQuery = useListDealActivity(id, { limit: ACTIVITY_LIMIT });
 
   const intel = intelQuery.data?.data;
+  const scoreData = scoreQuery.data?.data;
+  const meddpiccData = meddpiccQuery.data?.data;
+
+  // Published to the Commander capsule so it can offer section jumps. Built
+  // before the early returns below, because hooks can't be conditional; it is
+  // simply empty until the data arrives.
+  const jumpTargets = useMemo(
+    () =>
+      intel
+        ? [
+            {
+              anchorId: "risk",
+              label: "Risk",
+              detail: `${intel.governance.alerts.length} open`,
+            },
+            {
+              anchorId: "score",
+              label: "Predictive score",
+              detail: scoreData ? String(scoreData.score) : undefined,
+            },
+            {
+              anchorId: "meddpicc",
+              label: "MEDDPICC",
+              detail: meddpiccData ? `${Math.round(meddpiccData.score.overallPct)}%` : undefined,
+            },
+            { anchorId: "playbook", label: "Playbook" },
+            {
+              anchorId: "gates",
+              label: "Technical gates",
+              detail: `${Math.round(intel.technicalTrack.progressPercentage)}%`,
+            },
+            { anchorId: "economics", label: "Economics & team" },
+            { anchorId: "history", label: "History" },
+          ]
+        : [],
+    [intel, scoreData, meddpiccData],
+  );
+  useJumpTargets(jumpTargets);
 
   const refresh = () =>
     Promise.all([
@@ -82,8 +122,6 @@ export function DealDetailScreen({ id }: { id: string }) {
     );
   }
 
-  const score = scoreQuery.data?.data;
-  const meddpicc = meddpiccQuery.data?.data;
   const journey =
     (journeyQuery.data?.data as { journey?: JourneyEntry[] } | undefined)?.journey ?? [];
   const trajectory =
@@ -104,8 +142,8 @@ export function DealDetailScreen({ id }: { id: string }) {
 
         <div className="space-y-3 p-4">
           <RiskSection intel={intel} />
-          {score ? <ScoreSection score={score} /> : null}
-          {meddpicc ? <MeddpiccSection assessment={meddpicc} /> : null}
+          {scoreData ? <ScoreSection score={scoreData} /> : null}
+          {meddpiccData ? <MeddpiccSection assessment={meddpiccData} /> : null}
           <PlaybookSection journey={journey} />
           <GatesSection intel={intel} />
           <EconomicsSection intel={intel} />
