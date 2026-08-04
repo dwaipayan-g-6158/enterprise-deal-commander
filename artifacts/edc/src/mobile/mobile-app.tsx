@@ -1,7 +1,10 @@
+import type { ComponentType } from "react";
 import { Switch, Route, Redirect } from "wouter";
 import { RoleProvider } from "@/lib/auth/role-context";
 import { useAuthGuard } from "@/lib/auth/use-auth-guard";
+import { MobileShell } from "@/mobile/shell/mobile-shell";
 import { MobileShellSkeleton } from "@/mobile/shell/mobile-shell-skeleton";
+import { DesktopOnlyScreen } from "@/mobile/screens/desktop-only-screen";
 import NotFound from "@/pages/not-found";
 import Login from "@/pages/login";
 import Share from "@/pages/share";
@@ -18,24 +21,32 @@ import Share from "@/pages/share";
  * CommandPaletteProvider is deliberately absent — the Commander sheet owns its
  * own open state, so phones never mount cmdk's dialog.
  */
-function MobileProtectedRoute({ component: Component, ...rest }: any) {
+function MobileProtectedRoute({
+  component: Component,
+  params,
+}: {
+  component: ComponentType<any>;
+  params?: Record<string, string>;
+}) {
   const { user, offline, pending } = useAuthGuard();
 
   if (!offline && pending) return <MobileShellSkeleton />;
 
   return (
     <RoleProvider user={user}>
-      <Component {...rest} />
+      <MobileShell>
+        <Component {...(params ?? {})} />
+      </MobileShell>
     </RoleProvider>
   );
 }
 
-/** Placeholder until the real screens land. */
+/** Placeholder until each screen lands. */
 function Placeholder({ name }: { name: string }) {
   return (
-    <div className="flex h-[100dvh] flex-col items-center justify-center gap-2 p-8 text-center">
-      <p className="text-lg font-semibold">{name}</p>
-      <p className="text-sm text-muted-foreground">Mobile screen coming up next.</p>
+    <div className="flex flex-col items-center justify-center gap-2 px-8 py-24 text-center">
+      <p className="m-h3">{name}</p>
+      <p className="m-body m-muted">Mobile screen coming up next.</p>
     </div>
   );
 }
@@ -51,17 +62,67 @@ export default function MobileApp() {
     <Switch>
       <Route path="/login" component={Login} />
       <Route path="/share/:token" component={Share} />
-      <Route path="/" component={() => <MobileProtectedRoute component={() => <Placeholder name="Command Center" />} />} />
-      <Route path="/deals" component={() => <MobileProtectedRoute component={() => <Placeholder name="Deals" />} />} />
-      <Route path="/deals/:id" component={() => <MobileProtectedRoute component={() => <Placeholder name="Deal" />} />} />
-      <Route path="/analytics" component={() => <MobileProtectedRoute component={() => <Placeholder name="Analytics" />} />} />
-      <Route path="/memory" component={() => <MobileProtectedRoute component={() => <Placeholder name="Memory" />} />} />
-      <Route path="/memory/:id" component={() => <MobileProtectedRoute component={() => <Placeholder name="Memory detail" />} />} />
+
+      <Route path="/">
+        <MobileProtectedRoute component={() => <Placeholder name="Command Center" />} />
+      </Route>
+      <Route path="/deals">
+        <MobileProtectedRoute component={() => <Placeholder name="Deals" />} />
+      </Route>
+      <Route path="/deals/:id">
+        {(params) => (
+          <MobileProtectedRoute
+            component={() => <Placeholder name={`Deal ${params.id}`} />}
+          />
+        )}
+      </Route>
+      <Route path="/analytics">
+        <MobileProtectedRoute component={() => <Placeholder name="Analytics" />} />
+      </Route>
+      <Route path="/memory">
+        <MobileProtectedRoute component={() => <Placeholder name="Memory" />} />
+      </Route>
+      <Route path="/memory/:id">
+        {(params) => (
+          <MobileProtectedRoute
+            component={() => <Placeholder name={`Memory ${params.id}`} />}
+          />
+        )}
+      </Route>
+
       {/* Desktop-only surfaces still resolve rather than 404, so a link shared
           from a laptop doesn't dead-end on a phone. */}
-      <Route path="/portfolio" component={() => <MobileProtectedRoute component={() => <Placeholder name="Portfolio" />} />} />
-      <Route path="/autopsy" component={() => <MobileProtectedRoute component={() => <Placeholder name="Autopsy" />} />} />
-      <Route path="/settings" component={() => <MobileProtectedRoute component={() => <Placeholder name="Settings" />} />} />
+      <Route path="/portfolio">
+        <MobileProtectedRoute
+          component={() => (
+            <DesktopOnlyScreen
+              name="Portfolio"
+              reason="Portfolio risk reads as a heatmap across account managers, technical leads and products — a grid that needs width to compare."
+            />
+          )}
+        />
+      </Route>
+      <Route path="/autopsy">
+        <MobileProtectedRoute
+          component={() => (
+            <DesktopOnlyScreen
+              name="Autopsy"
+              reason="Loss analysis puts archetypes, competitors and product gaps side by side, which takes more columns than a phone has."
+            />
+          )}
+        />
+      </Route>
+      <Route path="/settings">
+        <MobileProtectedRoute
+          component={() => (
+            <DesktopOnlyScreen
+              name="Settings"
+              reason="Settings is where the engine gets configured, and this app is read-only."
+            />
+          )}
+        />
+      </Route>
+
       <Route path="/m"><Redirect to="/" /></Route>
       <Route component={NotFound} />
     </Switch>

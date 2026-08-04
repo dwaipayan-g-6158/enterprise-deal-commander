@@ -1,0 +1,214 @@
+/* Mobile shell design tokens.
+ *
+ * Scoped to `.m-shell` rather than :root so the desktop token set in
+ * index.css is untouched — the two shells never render at the same time, but
+ * scoping keeps that a fact rather than a coincidence.
+ *
+ * Health / risk / outcome colors are deliberately absent: semantic-colors.ts
+ * is the tested single source of truth for those and is consumed directly.
+ * Adding a parallel set here would be a second place to drift.
+ */
+
+.m-shell {
+  --m-surface-0: #f7f9fb;
+  --m-surface-1: #ffffff;
+  --m-surface-2: #ffffff;
+  --m-surface-3: rgba(255, 255, 255, 0.72);
+
+  --m-on-surface: #16181d;
+  --m-on-surface-muted: #4a5160;
+
+  --m-primary: #3d5fd9;
+  --m-primary-container: #e8edff;
+  --m-on-primary-container: #17224a;
+
+  --m-keyline: rgba(22, 24, 29, 0.1);
+  --m-error: #dc2626;
+  --m-obsidian: rgba(16, 19, 24, 0.82);
+  --m-obsidian-ring: rgba(61, 95, 217, 0.35);
+
+  --m-skeleton: rgba(22, 24, 29, 0.06);
+  --m-shimmer-sweep: rgba(22, 24, 29, 0.08);
+
+  --m-shadow-card: 0 1px 2px rgba(0, 0, 0, 0.06);
+  --m-shadow-sheet: 0 -8px 32px rgba(0, 0, 0, 0.16);
+
+  --m-radius-module: 12px;
+  --m-radius-card: 16px;
+  --m-tap: 48px;
+
+  background-color: var(--m-surface-0);
+  color: var(--m-on-surface);
+  font-variant-numeric: tabular-nums;
+}
+
+.dark .m-shell {
+  --m-surface-0: #0d0f13;
+  --m-surface-1: #14171c;
+  --m-surface-2: #1a1e24;
+  --m-surface-3: rgba(13, 15, 19, 0.68);
+
+  --m-on-surface: #f4f6f9;
+  --m-on-surface-muted: #9aa3b2;
+
+  --m-primary: #7fa3ff;
+  --m-primary-container: #1e2740;
+  --m-on-primary-container: #dbe4ff;
+
+  --m-keyline: rgba(244, 246, 249, 0.09);
+  --m-error: #f87171;
+  --m-obsidian-ring: rgba(127, 163, 255, 0.35);
+
+  --m-skeleton: rgba(244, 246, 249, 0.07);
+  --m-shimmer-sweep: rgba(244, 246, 249, 0.08);
+
+  --m-shadow-card: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --m-shadow-sheet: 0 -8px 32px rgba(0, 0, 0, 0.5);
+}
+
+/* --- Typography -------------------------------------------------------------
+ * Hierarchy is carried by weight, tracking and case — not size alone — so the
+ * scale stays legible when two levels sit at similar sizes.
+ */
+
+.m-kpi-hero {
+  font-family: var(--font-mono);
+  font-size: 2.125rem;
+  line-height: 2.5rem;
+  font-weight: 650;
+  letter-spacing: -0.04em;
+}
+.m-h1 {
+  font-size: 1.75rem;
+  line-height: 2.125rem;
+  font-weight: 700;
+  letter-spacing: -0.04em;
+}
+.m-h2 {
+  font-size: 1.375rem;
+  line-height: 1.75rem;
+  font-weight: 650;
+  letter-spacing: -0.03em;
+}
+.m-h3 {
+  font-size: 1.0625rem;
+  line-height: 1.375rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+.m-body {
+  font-size: 1rem;
+  line-height: 1.5rem;
+  font-weight: 450;
+  letter-spacing: -0.011em;
+}
+.m-data {
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+  line-height: 1rem;
+  font-weight: 500;
+}
+.m-eyebrow {
+  font-size: 0.75rem;
+  line-height: 1rem;
+  font-weight: 550;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--m-on-surface-muted);
+}
+
+.m-muted {
+  color: var(--m-on-surface-muted);
+}
+
+/* --- Elevation --------------------------------------------------------------
+ * Light mode separates planes with a keyline plus a shadow; dark mode steps
+ * the surface lightness as well, because shadows are nearly invisible against
+ * a near-black canvas. Every plane carries a border — no flat, borderless
+ * cards floating on the canvas.
+ */
+
+/* L1 — bento module */
+.m-card {
+  background-color: var(--m-surface-1);
+  border: 1px solid var(--m-keyline);
+  border-radius: var(--m-radius-card);
+  box-shadow: var(--m-shadow-card);
+}
+
+/* L2 / L4 — sticky chrome and the tab bar */
+.m-glass {
+  background-color: var(--m-surface-3);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+}
+
+/* L3 — bottom sheet */
+.m-sheet {
+  background-color: var(--m-surface-2);
+  box-shadow: var(--m-shadow-sheet);
+}
+
+/* --- Interaction ------------------------------------------------------------ */
+
+/* WCAG / iOS minimum touch target. Applied to every tappable row, chip and
+   control in the mobile shell. */
+.m-tap {
+  min-height: var(--m-tap);
+  min-width: var(--m-tap);
+}
+
+/* Tap compression. iOS PWAs have no haptics API, so the physical feedback is
+   entirely visual: the surface compresses and its shadow collapses. */
+.m-press {
+  transition:
+    transform 180ms cubic-bezier(0.175, 0.885, 0.32, 1.275),
+    box-shadow 180ms ease-out;
+}
+.m-press:active {
+  transform: scale(0.97);
+  box-shadow: none;
+  transition-duration: 120ms;
+  transition-timing-function: ease-out;
+}
+
+/* --- Loading ----------------------------------------------------------------
+ * Shimmer, not a spinner: skeletons occupy the exact geometry of the content
+ * they stand in for, so the load-to-content transition is additive.
+ */
+
+@keyframes m-shimmer-sweep {
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+.m-shimmer {
+  position: relative;
+  overflow: hidden;
+  background-color: var(--m-skeleton);
+}
+.m-shimmer::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(
+    90deg,
+    transparent,
+    var(--m-shimmer-sweep),
+    transparent
+  );
+  animation: m-shimmer-sweep 1.6s ease-in-out infinite;
+}
+
+/* The global reduced-motion rule clamps animation-duration to 0.01ms, which
+   would turn the sweep into a strobe. Remove it outright instead. */
+@media (prefers-reduced-motion: reduce) {
+  .m-shimmer::after {
+    display: none;
+  }
+  .m-press:active {
+    transform: none;
+  }
+}
