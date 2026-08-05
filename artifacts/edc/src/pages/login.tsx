@@ -8,13 +8,36 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { EdcLogoMark } from "@/components/edc-logo-mark";
-import { LogIn, Lock } from "lucide-react";
+
+/**
+ * The credential maps to `commanders.username`, matched case-insensitively —
+ * an address works because usernames look like one, not because the server
+ * checks a mail field. "Email" alone would be a promise the API doesn't keep.
+ */
+const CREDENTIAL_LABEL = "Email or username";
 
 const loginSchema = z.object({
-  email: z.string().min(1, "Identification is required"),
+  email: z.string().min(1, `${CREDENTIAL_LABEL} is required`),
   password: z.string().min(1, "Password is required"),
 });
 
+/**
+ * Sign-in — the first screen anyone sees, on a phone as much as a laptop.
+ *
+ * It kept its own dialect long after the rest of the app stopped speaking it:
+ * monospace inputs, `IDENTIFICATION` and `PASSCODE` in tracked capitals,
+ * "Initialize Session" on the button. A control should say exactly what
+ * happens when it is used, and this one now does.
+ *
+ * The mechanical work matters as much as the words. `100dvh` rather than
+ * `100vh` so iOS's collapsing toolbar doesn't push the card under the fold;
+ * safe-area insets because the installed app declares a translucent status bar
+ * and would otherwise draw the wordmark under the clock; 48px targets, the
+ * floor the mobile shell holds everything else to.
+ *
+ * The lockup above the card stays as-is. A wordmark is allowed to be
+ * uppercase — it's a logotype, not a label.
+ */
 export default function Login() {
   const [, setLocation] = useLocation();
   const [error, setError] = useState("");
@@ -31,43 +54,44 @@ export default function Login() {
       await login.mutateAsync({ data });
       setLocation("/");
     } catch (err: any) {
-      setError(err?.error?.message || "Authentication failed");
+      setError(err?.error?.message || "That didn't match an account. Check the spelling and try again.");
     }
   };
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-background p-4 relative overflow-hidden">
+    <div
+      className="relative flex min-h-[100dvh] flex-col items-center justify-center overflow-hidden bg-background p-4"
+      // Inline rather than a utility: the four insets differ and Tailwind has
+      // no arbitrary value for a shorthand of four env() calls.
+      style={{
+        paddingTop: "max(1rem, env(safe-area-inset-top))",
+        paddingBottom: "max(1rem, env(safe-area-inset-bottom))",
+        paddingLeft: "max(1rem, env(safe-area-inset-left))",
+        paddingRight: "max(1rem, env(safe-area-inset-right))",
+      }}
+    >
       {/* Ambient background glow */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute -top-[20%] left-1/2 -translate-x-1/2 w-[60%] h-[55%] rounded-full bg-primary/15 blur-[130px]" />
-        <div className="absolute top-[55%] -right-[10%] w-[40%] h-[40%] rounded-full bg-primary/10 blur-[120px]" />
+      <div className="pointer-events-none absolute inset-0 overflow-hidden">
+        <div className="absolute -top-[20%] left-1/2 h-[55%] w-[60%] -translate-x-1/2 rounded-full bg-primary/15 blur-[130px]" />
+        <div className="absolute -right-[10%] top-[55%] h-[40%] w-[40%] rounded-full bg-primary/10 blur-[120px]" />
       </div>
 
-      <div className="relative z-10 w-full max-w-md flex flex-col items-center">
-        {/* Brand above the card */}
-        <div className="flex flex-col items-center text-center mb-8">
+      <div className="relative z-10 flex w-full max-w-md flex-col items-center">
+        {/* The lockup. Uppercase here is a logotype, not a UI label. */}
+        <div className="mb-8 flex flex-col items-center text-center">
           <EdcLogoMark size={72} animated={false} />
-          <h2 className="mt-4 text-base sm:text-lg font-bold uppercase tracking-[0.15em] sm:tracking-[0.18em] text-foreground leading-snug">
+          <h2 className="mt-4 text-base font-bold uppercase leading-snug tracking-[0.15em] text-foreground sm:text-lg sm:tracking-[0.18em]">
             Enterprise Deal Commander
           </h2>
-          <p className="mt-1.5 text-[10px] font-medium uppercase tracking-[0.35em] text-muted-foreground">
+          <p className="mt-1.5 text-[11px] font-medium uppercase tracking-[0.2em] text-muted-foreground">
             Commander Console
           </p>
         </div>
 
-        {/* Auth card */}
-        <div className="w-full rounded-xl border border-border/60 bg-card/60 backdrop-blur-xl shadow-2xl overflow-hidden">
-          <div className="p-6 flex items-start justify-between gap-4">
-            <div>
-              <h1 className="text-xl font-bold tracking-tight text-foreground">Welcome back</h1>
-              <p className="text-sm text-muted-foreground mt-1">Sign in to your workspace to continue.</p>
-            </div>
-            <div
-              aria-hidden="true"
-              className="shrink-0 w-10 h-10 rounded-full bg-primary/10 text-primary flex items-center justify-center"
-            >
-              <LogIn className="h-5 w-5" />
-            </div>
+        <div className="w-full overflow-hidden rounded-xl border border-border/60 bg-card/60 shadow-2xl backdrop-blur-xl">
+          <div className="p-6">
+            <h1 className="text-xl font-bold tracking-tight text-foreground">Welcome back</h1>
+            <p className="mt-1 text-sm text-muted-foreground">Sign in to your workspace to continue.</p>
           </div>
 
           <div className="border-t border-border/60" />
@@ -76,7 +100,10 @@ export default function Login() {
             <Form {...form}>
               <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-5">
                 {error && (
-                  <div className="p-3 text-sm text-destructive bg-destructive/10 border border-destructive/20 rounded-md">
+                  <div
+                    role="alert"
+                    className="rounded-md border border-destructive/20 bg-destructive/10 p-3 text-sm text-destructive"
+                  >
                     {error}
                   </div>
                 )}
@@ -85,9 +112,14 @@ export default function Login() {
                   name="email"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel className="text-muted-foreground uppercase text-xs tracking-wider">Identification</FormLabel>
+                      <FormLabel>{CREDENTIAL_LABEL}</FormLabel>
                       <FormControl>
-                        <Input placeholder="commander@edc.local" autoComplete="username" {...field} className="bg-background/50 font-mono h-11" />
+                        <Input
+                          placeholder="commander@edc.local"
+                          autoComplete="username"
+                          {...field}
+                          className="h-12 bg-background/50"
+                        />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -98,35 +130,31 @@ export default function Login() {
                   name="password"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel className="text-muted-foreground uppercase text-xs tracking-wider">Passcode</FormLabel>
+                      <FormLabel>Password</FormLabel>
                       <FormControl>
-                        <Input type="password" autoComplete="current-password" {...field} className="bg-background/50 font-mono h-11" />
+                        <Input
+                          type="password"
+                          autoComplete="current-password"
+                          {...field}
+                          className="h-12 bg-background/50"
+                        />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
                   )}
                 />
-                <Button type="submit" className="w-full h-11 text-sm font-semibold" disabled={login.isPending}>
-                  {login.isPending ? "Authenticating..." : "Initialize Session"}
+                <Button type="submit" className="h-12 w-full text-sm font-semibold" disabled={login.isPending}>
+                  {login.isPending ? "Signing in…" : "Sign in"}
                 </Button>
               </form>
             </Form>
           </div>
-
-          {/* Confidential band */}
-          <div className="border-t border-border/60 px-6 py-3 flex items-center justify-between text-[10px] uppercase tracking-wider text-muted-foreground">
-            <span className="flex items-center gap-1.5">
-              <Lock className="h-3 w-3 text-primary" />
-              EDC · Confidential
-            </span>
-            <span>Internal Use Only</span>
-          </div>
         </div>
 
-        {/* Helper text below the card */}
-        <p className="mt-5 text-xs text-muted-foreground text-center">
-          Authorized commanders only · Sessions are audited.
-        </p>
+        {/* One plain fact, once. The "EDC · CONFIDENTIAL / INTERNAL USE ONLY"
+            band this replaces was 10px tracked capitals saying nothing a
+            reader could act on. */}
+        <p className="mt-5 text-center text-xs text-muted-foreground">Sessions are audited.</p>
       </div>
     </div>
   );

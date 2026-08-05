@@ -13,7 +13,11 @@ import {
 import { useCommandPalette } from "@/lib/command-palette-context";
 import { useSignOut } from "@/lib/auth/use-sign-out";
 import { useListDeals } from "@workspace/api-client-react";
-import { parseNLC } from "@workspace/engine";
+import {
+  parseNlcConditions,
+  matchNlcDeals,
+  describeNlcConditions,
+} from "@/lib/nlc-filter";
 import {
   LayoutDashboard,
   Briefcase,
@@ -31,7 +35,9 @@ export function CommandPalette() {
   const { open, setOpen } = useCommandPalette();
   const [query, setQuery] = useState("");
   const [, setLocation] = useLocation();
-  const { theme, setTheme } = useTheme();
+  // resolvedTheme, not theme: `theme` is "system" until the user picks a side
+  // (see theme-provider.tsx), which would make the first toggle a no-op.
+  const { resolvedTheme, setTheme } = useTheme();
   const signOut = useSignOut();
   const { data: deals } = useListDeals({ state: "all", limit: 50 });
 
@@ -51,31 +57,16 @@ export function CommandPalette() {
   ];
 
   // Natural-language command parsing (V2 F19) — deterministic, client-side.
-  const nlc = query.trim().length > 4 ? parseNLC(query) : null;
-  const nlcConditions = nlc && nlc.type === "LIST" ? nlc.conditions : nlc && nlc.type === "COUNT" ? nlc.conditions : [];
+  // The matcher lives in lib/nlc-filter.ts so the mobile Commander sheet
+  // answers the same question with the same set.
+  const nlcConditions = parseNlcConditions(query);
   // The underlying fetch is state: "all" (active + archived) so archived
   // deals stay findable by NAME in the plain "Deals" group below — but NLC
   // answers questions about the live pipeline ("red deals above $1M"), so it
   // gets its own not-archived slice rather than inheriting "all" wholesale.
   const openDeals = (deals?.data ?? []).filter((d) => !d.archivedAt);
-  const nlcMatches =
-    nlcConditions.length > 0
-      ? openDeals.filter((d) =>
-          nlcConditions.every((c) => {
-            if (c.field === "health") return d.healthStatus === c.value;
-            if (c.field === "tcv") {
-              const v = Number(c.value);
-              const tcv = d.calculatedTCV ?? 0;
-              return c.operator === "gt" ? tcv > v : c.operator === "lt" ? tcv < v : c.operator === "gte" ? tcv >= v : c.operator === "lte" ? tcv <= v : tcv === v;
-            }
-            if (c.field === "stage") return String(d.salesStage ?? "").toLowerCase() === String(c.value).toLowerCase();
-            return true;
-          }),
-        )
-      : [];
-  const nlcSummary = nlcConditions
-    .map((c) => `${c.field} ${c.operator} ${c.value}`)
-    .join(" AND ");
+  const nlcMatches = matchNlcDeals(openDeals, nlcConditions);
+  const nlcSummary = describeNlcConditions(nlcConditions);
 
   return (
     <CommandDialog open={open} onOpenChange={setOpen}>
@@ -150,11 +141,11 @@ export function CommandPalette() {
           <CommandItem
             value="toggle theme dark light mode"
             onSelect={() => {
-              setTheme(theme === "dark" ? "light" : "dark");
+              setTheme(resolvedTheme === "dark" ? "light" : "dark");
               setOpen(false);
             }}
           >
-            {theme === "dark" ? (
+            {resolvedTheme === "dark" ? (
               <Sun className="mr-2 h-4 w-4" />
             ) : (
               <Moon className="mr-2 h-4 w-4" />

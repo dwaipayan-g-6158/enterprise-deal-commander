@@ -1,0 +1,411 @@
+/* Mobile shell design tokens.
+ *
+ * The shell used to define a private `--m-*` palette. It looked tidy and it
+ * was a trap: no shadcn primitive can see those names, so every list row,
+ * chip, pill and empty state on a phone had to be hand-rolled, and 58
+ * installed components sat unused. The shell now *re-points the shadcn
+ * semantic tokens* for its own subtree instead. `index.css` consumes them as
+ * `hsl(var(--card))` through Tailwind v4's `@theme inline`, which keeps the
+ * `var()` live at the use site — so an override here reaches every utility and
+ * every primitive rendered below it, and `<Item>` inside `.m-shell` is simply
+ * correct.
+ *
+ * Values must therefore be **HSL triplets**, not hex: `hsl(#14171c)` is not a
+ * colour. They are the same colours the `--m-*` set carried, converted.
+ *
+ * Scoped to `.m-shell` rather than :root so the desktop token set is
+ * untouched — the two shells never render at the same time, but scoping keeps
+ * that a fact rather than a coincidence.
+ *
+ * What survives as `--m-*` is only what has no shadcn equivalent and a real
+ * job: the glass material, the ambient sky, the obsidian capsule, the shimmer.
+ *
+ * Health / risk / outcome colours are still deliberately absent:
+ * semantic-colors.ts is the tested single source of truth for those and is
+ * consumed directly. Adding a parallel set here would be a second place to
+ * drift.
+ */
+
+.m-shell {
+  --background: 210 33% 98%;
+  --card: 0 0% 100%;
+  --popover: 0 0% 100%;
+
+  --foreground: 223 14% 10%;
+  --card-foreground: 223 14% 10%;
+  --popover-foreground: 223 14% 10%;
+
+  --muted: 214 24% 94%;
+  --muted-foreground: 221 13% 33%;
+
+  --border: 212 7% 89%;
+  --input: 212 7% 89%;
+  --card-border: 212 7% 89%;
+  --popover-border: 212 7% 89%;
+
+  --primary: 227 67% 55%;
+  --primary-foreground: 0 0% 100%;
+  --ring: 227 67% 55%;
+
+  --secondary: 227 100% 95%;
+  --secondary-foreground: 227 53% 19%;
+  --accent: 227 100% 95%;
+  --accent-foreground: 227 53% 19%;
+
+  --destructive: 0 72% 51%;
+  --destructive-foreground: 0 0% 100%;
+
+  /* 14px. The single highest-leverage line in this file: desktop runs
+     0.25rem, and re-pointing it reshapes every primitive's corners at once
+     onto iOS proportions — 10 / 12 / 14 / 18 across the sm→xl ladder. */
+  --radius: 0.875rem;
+
+  --m-skeleton: rgba(22, 24, 29, 0.06);
+  --m-shimmer-sweep: rgba(22, 24, 29, 0.08);
+
+  /* Glass. The base is the only surface in the shell that is deliberately
+     translucent, which is why it stays an `--m-*` token: a shadcn colour slot
+     has no alpha channel. The tint sits over the blurred backdrop and is what
+     stops chrome from reading as a plain translucent panel; the specular is
+     the bright hairline along the light-facing edge that makes it read as a
+     material with thickness. */
+  --m-glass-base: rgba(255, 255, 255, 0.72);
+  --m-glass-tint: rgba(255, 255, 255, 0.1);
+  --m-glass-specular: rgba(255, 255, 255, 0.9);
+  --m-glass-shadow: rgba(16, 19, 24, 0.3);
+
+  /* The Commander capsule. Near-black in both themes by design — it is the
+     one control that must read as an object sitting above the app rather than
+     part of its surface, so it does not follow the theme. */
+  --m-obsidian: rgba(16, 19, 24, 0.82);
+  --m-obsidian-ring: rgba(61, 95, 217, 0.35);
+
+  --m-shadow-card: 0 1px 2px rgba(0, 0, 0, 0.06);
+  --m-shadow-sheet: 0 -8px 32px rgba(0, 0, 0, 0.16);
+
+  --m-tap: 48px;
+
+  /* Overridden per time band below. Transparent by default so the canvas is
+     exactly --background until AmbientBackground has stamped a band. */
+  --m-ambient: transparent;
+
+  background-color: hsl(var(--background));
+  /* The ambient wash. A background-image rather than a ::before, because a
+     positioned pseudo-element would paint above every non-positioned card in
+     the scroll container and tint the cards as well as the canvas. Painted on
+     the shell itself, which is a fixed 100dvh frame, so the light stays where
+     the sky would be while the content scrolls under it. */
+  background-image: radial-gradient(125% 62% at 50% -8%, var(--m-ambient), transparent 68%);
+  color: hsl(var(--foreground));
+  font-variant-numeric: tabular-nums;
+  /* Matches the 2s body transition in index.css, so crossing a band boundary
+     mid-session is a drift rather than a cut. */
+  transition: background-color 2s ease;
+}
+
+.dark .m-shell {
+  --background: 220 19% 6%;
+  --card: 218 17% 9%;
+  --popover: 216 16% 12%;
+
+  --foreground: 216 29% 97%;
+  --card-foreground: 216 29% 97%;
+  --popover-foreground: 216 29% 97%;
+
+  --muted: 218 15% 17%;
+  --muted-foreground: 218 14% 65%;
+
+  --border: 220 8% 15%;
+  --input: 220 8% 15%;
+  --card-border: 220 8% 15%;
+  --popover-border: 220 8% 15%;
+
+  --primary: 223 100% 75%;
+  --primary-foreground: 220 19% 6%;
+  --ring: 223 100% 75%;
+
+  --secondary: 224 36% 18%;
+  --secondary-foreground: 225 100% 93%;
+  --accent: 224 36% 18%;
+  --accent-foreground: 225 100% 93%;
+
+  --destructive: 0 91% 71%;
+  --destructive-foreground: 220 19% 6%;
+
+  --m-skeleton: rgba(244, 246, 249, 0.07);
+  --m-shimmer-sweep: rgba(244, 246, 249, 0.08);
+
+  /* Lower than the light-mode base because the tint below adds most of the
+     opacity back, and it adds it as pure black — which is what gives dark
+     glass its depth rather than just its dimness. */
+  --m-glass-base: rgba(13, 15, 19, 0.56);
+  --m-glass-tint: rgba(0, 0, 0, 0.24);
+  --m-glass-specular: rgba(255, 255, 255, 0.12);
+  --m-glass-shadow: rgba(0, 0, 0, 0.55);
+
+  --m-obsidian-ring: rgba(127, 163, 255, 0.35);
+
+  --m-shadow-card: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --m-shadow-sheet: 0 -8px 32px rgba(0, 0, 0, 0.5);
+}
+
+/* --- Ambient time-of-day ----------------------------------------------------
+ * AmbientBackground stamps data-time-band on <html> and index.css uses it to
+ * tint the desktop canvas. The mobile shell used to throw that away: .m-shell
+ * sets its own opaque --background, which occluded the tint completely, so
+ * the app knew it was night and showed the same flat grey it shows at noon.
+ *
+ * Both halves shift here — the flat canvas by a hair, and the radial wash
+ * declared above by rather more, because a wash that fades to nothing carries
+ * far less perceptual weight than a solid fill at the same alpha. Boundaries
+ * come from lib/greetings/time-bands.ts; there is no second banding scheme.
+ *
+ * .dark rules follow the :root rules, matching the ordering index.css already
+ * uses, so dark mode wins when both match.
+ */
+:root[data-time-band="morning"] .m-shell {
+  --background: 214 64% 98%;
+  --m-ambient: rgba(255, 190, 120, 0.15);
+}
+:root[data-time-band="afternoon"] .m-shell {
+  --m-ambient: rgba(120, 170, 255, 0.1);
+}
+:root[data-time-band="evening"] .m-shell {
+  --background: 36 38% 97%;
+  --m-ambient: rgba(255, 140, 90, 0.15);
+}
+:root[data-time-band="night"] .m-shell {
+  --background: 230 50% 98%;
+  --m-ambient: rgba(90, 110, 220, 0.14);
+}
+.dark[data-time-band="morning"] .m-shell {
+  --background: 213 27% 6%;
+  --m-ambient: rgba(255, 176, 96, 0.11);
+}
+.dark[data-time-band="afternoon"] .m-shell {
+  --m-ambient: rgba(96, 152, 255, 0.09);
+}
+.dark[data-time-band="evening"] .m-shell {
+  --background: 36 16% 6%;
+  --m-ambient: rgba(255, 118, 72, 0.12);
+}
+.dark[data-time-band="night"] .m-shell {
+  --background: 228 31% 6%;
+  --m-ambient: rgba(78, 100, 220, 0.16);
+}
+
+/* --- Typography -------------------------------------------------------------
+ * Six styles. Measured against the running app, the previous set had sprawled
+ * into eighteen on the deal screen alone, and the most-used style on every
+ * screen was Geist Mono 13/500 — stage names, dates, counts, alert bodies,
+ * footnotes, all of it. It read as a log viewer.
+ *
+ * There is no monospace here now. The shell already sets
+ * `font-variant-numeric: tabular-nums` below, so figures still align in a
+ * column; mono was buying the terminal look and one real defect, because a
+ * monospace period occupies a full character cell and rendered the most
+ * important number in the app as `$3 . 82M`. That goes away by deletion.
+ *
+ * Labels are sentence case. The strings were always written that way — the
+ * old `.m-eyebrow` uppercased them in CSS, and uppercase plus 0.06em tracking
+ * is the single most dated signal in a mobile interface.
+ *
+ * **None of the six carries a colour, and they are deliberately unlayered.**
+ * Both facts are load-bearing, and together they are what lets the shell sit
+ * on shadcn primitives at all:
+ *
+ * - Unlayered rules beat every `@layer`, so `.m-headline` on an `<ItemTitle>`
+ *   overrides the `text-sm font-medium` baked into that primitive, and
+ *   `.m-label` on a `<Badge>` overrides its `text-xs font-semibold`. Put
+ *   these in `@layer components` and every primitive silently keeps its own
+ *   desktop sizing.
+ * - Colour therefore has to stay out of them, or the same precedence would
+ *   grey out every health, risk and outcome pill by beating the
+ *   `semantic-colors.ts` utility next to it. Colour is a per-site decision:
+ *   labels pair with `.m-muted`, pills pair with their semantic class.
+ */
+
+/* Every size runs through --m-type-scale, which lib/dynamic-type.ts sets from
+   the reader's iOS text-size setting (1 everywhere else). Line heights are
+   unitless so they follow the scaled size instead of being left behind by it. */
+
+/* One per screen — the figure the screen is about. */
+.m-display {
+  font-size: calc(2.125rem * var(--m-type-scale, 1));
+  line-height: 1.12;
+  font-weight: 640;
+  letter-spacing: -0.03em;
+}
+/* Screen title, deal name, and a card's lead figure. */
+.m-title {
+  font-size: calc(1.375rem * var(--m-type-scale, 1));
+  line-height: 1.27;
+  font-weight: 640;
+  letter-spacing: -0.02em;
+}
+/* A row's or a card's lead line. iOS `.headline`, near enough. */
+.m-headline {
+  font-size: calc(1.0625rem * var(--m-type-scale, 1));
+  line-height: 1.29;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+/* Prose: narratives, alert messages, empty-state copy.
+   Held at 16px rather than the 15 the plan proposed. Body size was never
+   what the inventory faulted, and 16 is the documented floor for mobile body
+   text — stepping under it to buy a tighter scale would be a regression
+   dressed as a refinement. */
+.m-body {
+  font-size: calc(1rem * var(--m-type-scale, 1));
+  line-height: 1.5;
+  font-weight: 400;
+  letter-spacing: -0.006em;
+}
+/* A card's label, and the weight every pill is set in. */
+.m-label {
+  font-size: calc(0.8125rem * var(--m-type-scale, 1));
+  line-height: 1.385;
+  font-weight: 550;
+  letter-spacing: -0.003em;
+}
+/* Metadata: dates, counts, deltas, footnotes. */
+.m-caption {
+  font-size: calc(0.8125rem * var(--m-type-scale, 1));
+  line-height: 1.385;
+  font-weight: 450;
+  letter-spacing: -0.003em;
+}
+
+.m-muted {
+  color: hsl(var(--muted-foreground));
+}
+
+/* --- Elevation --------------------------------------------------------------
+ * Light mode separates planes with a keyline plus a shadow; dark mode steps
+ * the surface lightness as well, because shadows are nearly invisible against
+ * a near-black canvas. Every plane carries a border — no flat, borderless
+ * cards floating on the canvas.
+ */
+
+/* L1 — bento module */
+.m-card {
+  background-color: hsl(var(--card));
+  border: 1px solid hsl(var(--border));
+  /* Spelled out rather than `var(--radius-xl)`: @theme inline substitutes
+     theme values into utilities, and relying on it also emitting the variable
+     for hand-written CSS is a dependency on an implementation detail. */
+  border-radius: calc(var(--radius) + 4px);
+  box-shadow: var(--m-shadow-card);
+}
+
+/* L2 / L4 — sticky chrome and the tab bar.
+ *
+ * Four layers make the difference between a translucent panel and a material:
+ * a blurred, saturation-boosted backdrop; a flat tint over it; a bright
+ * specular hairline along the light-facing edge; and the keyline each caller
+ * already carries as its border. The saturation boost is what keeps colour
+ * from going muddy behind heavy blur.
+ *
+ * Built from background layers rather than a ::before, because .m-glass lands
+ * on sticky, absolute and fixed elements and a pseudo-element would need each
+ * of them to establish a containing block. Background layers paint above
+ * background-color and below content, which is exactly where a tint belongs.
+ *
+ * No SVG refraction filter. Every Liquid Glass tutorial reaches for
+ * feTurbulence/feDisplacementMap as a backdrop-filter, and Safari — the only
+ * engine this shell is really aimed at — does not support it. It would render
+ * as nothing on the target device and cost a filter pass everywhere else.
+ */
+.m-glass {
+  background-color: var(--m-glass-base);
+  background-image:
+    linear-gradient(to bottom, var(--m-glass-specular) 0, transparent 1.5px),
+    linear-gradient(var(--m-glass-tint), var(--m-glass-tint));
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+}
+
+/* Which way the chrome casts. Split rather than parameterised because a
+   box-shadow offset cannot be negated by a custom property. */
+.m-glass-top {
+  box-shadow: 0 6px 20px -14px var(--m-glass-shadow);
+}
+.m-glass-bottom {
+  box-shadow: 0 -6px 20px -14px var(--m-glass-shadow);
+}
+
+/* L3 — bottom sheet.
+   background-image carries the same specular edge as the glass chrome, so a
+   sheet reads as the same material rising rather than an opaque card. It also
+   overrides the ambient sky wash: SectionSheet re-applies .m-shell to the
+   portalled drawer (vaul renders outside the shell's subtree), which would
+   otherwise paint the wash across the top of every sheet. */
+.m-sheet {
+  background-color: hsl(var(--popover));
+  background-image: linear-gradient(to bottom, var(--m-glass-specular) 0, transparent 1.5px);
+  box-shadow: var(--m-shadow-sheet);
+}
+
+/* --- Interaction ------------------------------------------------------------ */
+
+/* WCAG / iOS minimum touch target. Applied to every tappable row, chip and
+   control in the mobile shell. */
+.m-tap {
+  min-height: var(--m-tap);
+  min-width: var(--m-tap);
+}
+
+/* Tap compression. iOS PWAs have no haptics API, so the physical feedback is
+   entirely visual: the surface compresses and its shadow collapses. */
+.m-press {
+  transition:
+    transform 180ms cubic-bezier(0.175, 0.885, 0.32, 1.275),
+    box-shadow 180ms ease-out;
+}
+.m-press:active {
+  transform: scale(0.97);
+  box-shadow: none;
+  transition-duration: 120ms;
+  transition-timing-function: ease-out;
+}
+
+/* --- Loading ----------------------------------------------------------------
+ * Shimmer, not a spinner: skeletons occupy the exact geometry of the content
+ * they stand in for, so the load-to-content transition is additive.
+ */
+
+@keyframes m-shimmer-sweep {
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+.m-shimmer {
+  position: relative;
+  overflow: hidden;
+  background-color: var(--m-skeleton);
+}
+.m-shimmer::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(
+    90deg,
+    transparent,
+    var(--m-shimmer-sweep),
+    transparent
+  );
+  animation: m-shimmer-sweep 1.6s ease-in-out infinite;
+}
+
+/* The global reduced-motion rule clamps animation-duration to 0.01ms, which
+   would turn the sweep into a strobe. Remove it outright instead. */
+@media (prefers-reduced-motion: reduce) {
+  .m-shimmer::after {
+    display: none;
+  }
+  .m-press:active {
+    transform: none;
+  }
+}

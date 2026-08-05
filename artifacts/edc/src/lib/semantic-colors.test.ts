@@ -5,6 +5,7 @@ import {
   RISK_LEVEL_CLASS,
   RISK_LEVEL_LABEL,
   RISK_LEVEL_SHORT_LABEL,
+  HEALTH_BADGE_CLASS,
   HEALTH_CLASS,
   HEALTH_LABEL,
   HEALTH_SHORT_LABEL,
@@ -232,5 +233,90 @@ describe("classifyRisk boundaries (pins scoreColor's threshold equivalence)", ()
     [100, "HIGH"],
   ] as const)("classifyRisk(%i) === %s", (score, expected) => {
     expect(classifyRisk(score)).toBe(expected);
+  });
+});
+// Contrast, pinned structurally.
+//
+// A unit test cannot compute a contrast ratio — a Tailwind class name carries
+// no colour until the compiler resolves it, and jsdom has no compiler. What it
+// can do is lock the shape that made the ratios pass, so nobody reaches for a
+// lighter shade without re-running the measurement first.
+//
+// Those measurements come from painting every level on every surface it is
+// used on, in both themes, in a real browser (rule 6 in semantic-colors.ts).
+// The whole risk ramp used to sit at -600 and every level of it failed AA on
+// white — sky 3.66, amber 2.91, orange 3.27, red 4.34. Only MODERATE and
+// YELLOW had ever been caught, because they were the only two the seed data
+// put on screen, which is the argument for pinning this rather than trusting
+// the next spot-check.
+describe("WCAG AA — light-mode shade floors", () => {
+  /** The light-mode half of a `text-x-700 dark:text-x-400` pair. */
+  const lightShade = (classes: string, prefix = "text") => {
+    const hit = classes
+      .split(/\s+/)
+      .filter((c) => !c.includes(":"))
+      .find((c) => c.startsWith(`${prefix}-`) && /-\d{2,3}$/.test(c));
+    return hit ? Number(hit.slice(hit.lastIndexOf("-") + 1)) : null;
+  };
+  /** Opacity modifiers on the light-mode half of a `bg` string. */
+  const lightAlphas = (classes: string) =>
+    classes
+      .split(/\s+/)
+      .filter((c) => !c.includes(":"))
+      .map((c) => c.match(/\/(\d+)$/)?.[1])
+      .filter((a): a is string => a != null)
+      .map(Number);
+
+  // Risk and health are the chromatic ramps, and chroma is what costs
+  // contrast: a saturated -600 is nowhere near dark enough against white.
+  const CHROMATIC: [string, { text: string; bg: string; cell: string }][] = [
+    ...RISK_LEVELS.map((l) => [`RISK.${l}`, RISK_LEVEL_CLASS[l]] as const),
+    ...HEALTHS.map((h) => [`HEALTH.${h}`, HEALTH_CLASS[h]] as const),
+  ];
+
+  it.each(CHROMATIC)("%s text is -700 or darker", (_name, cls) => {
+    expect(lightShade(cls.text)).toBeGreaterThanOrEqual(700);
+  });
+
+  it.each(CHROMATIC)("%s heatmap cell text is -800 or darker", (_name, cls) => {
+    // The cell paints its text on a 15% tint of its own hue, which costs
+    // roughly one shade step against the same text on a plain card.
+    expect(lightShade(cls.cell)).toBeGreaterThanOrEqual(800);
+  });
+
+  it.each(CHROMATIC)("%s tint stays at 8% or lighter", (_name, cls) => {
+    const alphas = lightAlphas(cls.bg);
+    expect(alphas.length).toBeGreaterThan(0);
+    // Lightening the tint from 12% is what bought MODERATE its last 0.07,
+    // rather than darkening amber past orange and inverting the ramp.
+    for (const a of alphas) expect(a).toBeLessThanOrEqual(8);
+  });
+
+  it("yellow carries an extra step — it is the worst hue in the palette", () => {
+    // At -700 it measured 4.30 on the cell and 4.38 on its own tint.
+    expect(lightShade(HEALTH_CLASS.YELLOW.text)).toBeGreaterThanOrEqual(800);
+  });
+
+  // Outcome is exempt from the -700 floor, and the exemption is measured
+  // rather than assumed: slate is a neutral, so slate-600 already reads at
+  // 7.26 on a card and 6.05 on its own 15% tint, and violet-700 reads at
+  // 5.77. Neither needs the extra step the chromatic ramps do.
+  it.each([
+    ["won", OUTCOME_CLASS.won, 700],
+    ["lost", OUTCOME_CLASS.lost, 600],
+  ] as const)("OUTCOME.%s text holds at its measured shade", (_name, cls, floor) => {
+    expect(lightShade(cls.text)).toBeGreaterThanOrEqual(floor);
+  });
+
+  // Solid badges carry their own fill, so they live in a different map from
+  // the tinted pairs above — and that is exactly how HEALTH_BADGE_CLASS.GREEN
+  // sat at white-on-emerald-600 (3.65:1) through a sweep that called itself
+  // exhaustive. A white-text badge needs -700 or darker to clear AA.
+  it.each(
+    Object.entries(HEALTH_BADGE_CLASS)
+      .filter(([, cls]) => cls.includes("text-white"))
+      .map(([level, cls]) => [level, cls] as const),
+  )("HEALTH_BADGE.%s carries white on -700 or darker", (_level, cls) => {
+    expect(lightShade(cls, "bg")).toBeGreaterThanOrEqual(700);
   });
 });

@@ -14,7 +14,10 @@ const ToastViewport = React.forwardRef<
   <ToastPrimitives.Viewport
     ref={ref}
     className={cn(
-      "fixed top-0 z-[100] flex max-h-screen w-full flex-col-reverse p-4 sm:bottom-0 sm:right-0 sm:top-auto sm:flex-col md:max-w-[420px]",
+      // Bottom-anchored from md: up, not sm:. Below 768px the mobile shell
+      // owns the bottom of the screen with its tab bar and the Commander
+      // capsule, and a bottom-anchored toast landed on top of both.
+      "fixed top-0 z-[100] flex max-h-screen w-full flex-col-reverse p-4 md:bottom-0 md:right-0 md:top-auto md:flex-col md:max-w-[420px]",
       className
     )}
     {...props}

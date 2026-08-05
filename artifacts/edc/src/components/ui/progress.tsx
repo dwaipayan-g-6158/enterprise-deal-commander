@@ -11,6 +11,13 @@ const Progress = React.forwardRef<
 >(({ className, value, ...props }, ref) => (
   <ProgressPrimitive.Root
     ref={ref}
+    // `value` has to reach the Root, not just the indicator's transform.
+    // Without it Radix sees an undefined value, reports
+    // `data-state="indeterminate"` and emits no `aria-valuenow` at all — so
+    // every bar in the app drew the right width and announced "busy" to a
+    // screen reader. Purely additive: nothing is styled off the state
+    // attribute, so no surface changes visually.
+    value={value}
     className={cn(
       "relative h-2 w-full overflow-hidden rounded-full bg-primary/20",
       className

@@ -1,0 +1,80 @@
+import { Progress } from "@/components/ui/progress";
+import { cn } from "@/lib/utils";
+import { CollapsibleSection } from "@/mobile/components/collapsible-section";
+
+/**
+ * The playbook journey endpoint is typed as an open payload in the contract
+ * (GenericDataResponse), so the fields this screen reads are declared locally
+ * — the same approach playbook-panel.tsx takes on desktop.
+ */
+export interface JourneyEntry {
+  playbookId: string;
+  playbookName: string;
+  applicableStage: string | null;
+  isCurrentStage: boolean;
+  assignmentId: string | null;
+  status: string;
+  totalSteps: number;
+  completedCount: number;
+  progressPct: number;
+}
+
+/**
+ * Where the deal stands against its playbooks. The desktop panel lets an
+ * admin mark steps done; here it reads as a progress rail, because "are we
+ * running the play" is the field question.
+ */
+export function PlaybookSection({ journey }: { journey: JourneyEntry[] }) {
+  const started = journey.filter((e) => e.assignmentId);
+  const totalSteps = journey.reduce((sum, e) => sum + e.totalSteps, 0);
+  const doneSteps = journey.reduce((sum, e) => sum + e.completedCount, 0);
+  const current = journey.find((e) => e.isCurrentStage);
+
+  const verdict = (
+    <>
+      <p className="m-title">
+        {current ? current.playbookName : started.length ? "In progress" : "Not started"}
+      </p>
+      <p className="m-caption m-muted mt-1">
+        {totalSteps > 0
+          ? `${doneSteps} of ${totalSteps} steps · ${started.length} of ${journey.length} playbooks started`
+          : "No playbook steps yet"}
+      </p>
+    </>
+  );
+
+  return (
+    <CollapsibleSection anchorId="playbook" label="Playbook" verdict={verdict}>
+      {journey.length > 0 ? (
+        <ul className="space-y-3">
+          {journey.map((entry) => (
+            <li key={entry.playbookId}>
+              <div className="flex items-baseline justify-between gap-3">
+                <p className={cn(entry.isCurrentStage ? "m-headline" : "m-body m-muted")}>
+                  {entry.playbookName}
+                  {entry.isCurrentStage ? (
+                    <span className="ml-1.5 text-primary">· current stage</span>
+                  ) : null}
+                </p>
+                <span className="m-caption m-muted shrink-0">
+                  {entry.completedCount}/{entry.totalSteps}
+                </span>
+              </div>
+              <Progress
+                value={Math.round(entry.progressPct)}
+                aria-label={`${entry.playbookName}: ${entry.completedCount} of ${entry.totalSteps} steps`}
+                className={cn(
+                  "mt-1.5 h-1.5 bg-muted",
+                  // A playbook nobody has started shows its fill in grey, so
+                  // "assigned but untouched" and "not assigned" don't read the
+                  // same at a glance.
+                  !entry.assignmentId && "[&>div]:bg-muted-foreground/40",
+                )}
+              />
+            </li>
+          ))}
+        </ul>
+      ) : undefined}
+    </CollapsibleSection>
+  );
+}
