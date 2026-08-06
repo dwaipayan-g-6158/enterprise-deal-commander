@@ -69,8 +69,9 @@ if (fs.existsSync(publicDir)) {
   // wildcards.
   //
   // Catalyst's own AppSail gateway reserves `/accounts/*` (the embedded
-  // sign-in/sign-out iframe's IAM endpoints) and `/__catalyst/*` (the SDK
-  // init script) and is supposed to intercept those requests before they
+  // sign-in/sign-out iframe's IAM endpoints), `/__catalyst/*` (the SDK
+  // init script), and `/baas/*` (the platform API the Web SDK calls) and is
+  // supposed to intercept those requests before they
   // ever reach this app. When the gateway misses (observed live), the
   // request used to fall through to this catch-all and get served our own
   // index.html instead of Zoho's real IAM page/logout handler — which the
@@ -80,11 +81,20 @@ if (fs.existsSync(publicDir)) {
   // since the real logout endpoint never actually runs. Excluding these
   // prefixes turns a gateway miss into a loud 404 instead of a silent,
   // hard-to-diagnose recursion of our own SPA inside the login iframe.
+  //
+  // `/baas` was originally left OUT of this list on the strength of a console
+  // log line showing `/baas/v1/project/.../project-user/current` 401ing,
+  // which was read as proof the gateway intercepts that prefix. It does not:
+  // fetching any `/baas/*` path from the deployed app returns 200 with our
+  // own index.html. (Measured against the live app; the service worker is not
+  // responsible, since `/api/*` — excluded here — correctly returns a JSON
+  // 404 for the identical kind of non-navigation fetch.)
   app.get("/{*splat}", (req, res, next) => {
     if (
       req.path.startsWith("/api") ||
       req.path.startsWith("/accounts") ||
-      req.path.startsWith("/__catalyst")
+      req.path.startsWith("/__catalyst") ||
+      req.path.startsWith("/baas")
     ) {
       next();
       return;
@@ -93,7 +103,7 @@ if (fs.existsSync(publicDir)) {
   });
 }
 
-app.use(["/accounts", "/__catalyst"], (req: Request, res: Response) => {
+app.use(["/accounts", "/__catalyst", "/baas"], (req: Request, res: Response) => {
   sendError(
     res,
     new HttpError(

@@ -158,12 +158,35 @@ since been granted full Select/Insert/Update/Delete for App User**, via
 `PUT /baas/v1/project/{projectId}/table/{tableId}/permission` with body
 `{"App User": ["SELECT","UPDATE","INSERT","DELETE"]}` (verified: persists across a hard
 reload, spot-checked on `enterprise_deals` and `v2_deal_memory` in the console UI). This is a
-uniform baseline chosen so Slice 3's write paths aren't blocked by spurious 403s — **Slice 4
-should revisit this** once the Catalyst-auth role model is designed: tables playing the same
-role as Periscope's roles/audit/settings tables (this schema's closest analogs are
-`commanders` and `v2_settings_change_log`) may warrant being pulled back to Select-only for
-App User, with writes routed through an admin-scoped SDK call instead (`initCatalystAdminApp`
-in `lib/db/src/catalyst/sdk.ts` already exists for this).
+uniform baseline chosen so Slice 3's write paths aren't blocked by spurious 403s — with the
+one exception below, which Slice 4 closed out.
+
+### `commanders` is Select-only for App User (Slice 4 closeout, done)
+
+`commanders` holds the admin/reader role for every account, so it is the one table where
+"any App User may write" is a genuine privilege-escalation shape: EDC's admin/reader split is
+an *application* role stored in this table, and to Catalyst both kinds of user are the same
+"App User" — table permissions cannot tell them apart. It is now
+**Select / no Update / no Insert / no Delete** for App User (App Administrator keeps full
+CRUD), verified persisted across a hard reload.
+
+Every write to the table therefore goes through `initCatalystAdminApp` (`lib/auth.ts`'s
+`resolveCommander`, all three handlers in `routes/users.ts`, and
+`routes/auth.ts`'s dashboard-visit). Reads stay user-scoped and still work.
+
+Two things worth knowing if this is ever revisited:
+
+- `routes/auth.ts`'s `touchDashboardVisit` was the last user-scoped **write** on this table,
+  and it is an UPDATE dressed up as a read-ish "record a visit" call. Under the old permissive
+  baseline it worked anyway, so nothing surfaced until the permission was actually tightened.
+  Grep for `initCatalystApp` against a restricted table's repo before assuming reads are all
+  that's left.
+- `v2_settings_change_log` was flagged alongside `commanders` in Slice 2 and is deliberately
+  **not** tightened. Its writes come from `logSettingsChange`, which takes an already-built
+  `catalystApp` (not a `req`) and is called with the user-scoped app from `routes/lookups.ts`,
+  `routes/settings-audit.ts`, `routes/v2/config.ts`, and `routes/v2/crud.ts`. Tightening it
+  means changing that helper's contract across all four, which is a larger change than the
+  risk warrants right now — the RBAC gate already restricts who can reach those routes.
 
 ## Known open items for later slices
 

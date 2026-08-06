@@ -1,5 +1,5 @@
 import { Router, type IRouter, type Request, type Response } from "express";
-import { initCatalystApp, createCommandersRepo } from "@workspace/db/catalyst";
+import { initCatalystAdminApp, createCommandersRepo } from "@workspace/db/catalyst";
 import { GetMeResponse, DashboardVisitResponse } from "@workspace/api-zod";
 import { getActor } from "../lib/auth";
 
@@ -30,7 +30,14 @@ authSessionRouter.get("/auth/me", (req: Request, res: Response) => {
 
 authSessionRouter.post("/auth/dashboard-visit", async (req: Request, res: Response) => {
   const actor = getActor(req);
-  const previousVisitAt = await createCommandersRepo(initCatalystApp(req)).touchDashboardVisit(actor.id);
+  // Admin-scoped, like every other write to `commanders` (see
+  // lib/auth.ts's resolveCommander docstring): the table is Select-only for
+  // the "App User" role, and `touchDashboardVisit` is an UPDATE, not a read.
+  // This was the one user-scoped write left on this table — with the old
+  // permissive table permissions it worked anyway, so nothing surfaced until
+  // the permission was actually tightened. `actor.id` comes from the
+  // authenticated session, so a caller can still only touch their own row.
+  const previousVisitAt = await createCommandersRepo(initCatalystAdminApp(req)).touchDashboardVisit(actor.id);
   res.json(DashboardVisitResponse.parse({ previousVisitAt: previousVisitAt ? previousVisitAt.toISOString() : null }));
 });
 
