@@ -232,9 +232,9 @@ export async function captureSnapshot(
  */
 export async function captureSnapshotCatalyst(
   catalystApp: CatalystApp,
-  opts: Omit<CaptureSnapshotOptions, "skipIfUnchanged">,
+  opts: CaptureSnapshotOptions,
 ): Promise<boolean> {
-  const { dealId, reason, triggerEvent, actor, force } = opts;
+  const { dealId, reason, triggerEvent, actor, force, skipIfUnchanged } = opts;
   const now = Date.now();
   if (!force) {
     const last = lastSnapshotAt.get(dealId);
@@ -277,7 +277,40 @@ export async function captureSnapshotCatalyst(
       : null,
   };
 
-  await createDealSnapshotsRepo(catalystApp).create({
+  const snapshotsRepo = createDealSnapshotsRepo(catalystApp);
+
+  // Same guard as the Drizzle path, and load-bearing for the same reason: the
+  // hourly job would otherwise write one row per active deal per hour whether
+  // or not anything moved, bloating the table and drowning the event-driven
+  // restore points in the History UI. Fingerprinting both sides through the
+  // shared `snapshotFingerprint` keeps the comparison symmetric — note the
+  // stored row's numeric columns come back as numbers here where Drizzle hands
+  // back strings, which is exactly why the fingerprint stringifies everything
+  // rather than comparing raw values.
+  if (skipIfUnchanged) {
+    const prev = await snapshotsRepo.latestAtOrBefore(dealId, new Date());
+    if (
+      prev &&
+      snapshotFingerprint({
+        healthStatus: prev.healthStatus,
+        salesStageId: prev.salesStageId,
+        calculatedTcv: prev.calculatedTcv,
+        normalizedTcv: prev.normalizedTcv,
+        payload: prev.payload,
+      }) ===
+        snapshotFingerprint({
+          healthStatus: deal.healthStatus,
+          salesStageId: deal.salesStageId,
+          calculatedTcv: deal.calculatedTCV ?? 0,
+          normalizedTcv: deal.normalizedTCV ?? 0,
+          payload,
+        })
+    ) {
+      return false;
+    }
+  }
+
+  await snapshotsRepo.create({
     dealId,
     reason,
     triggerEvent: triggerEvent ?? null,
@@ -290,6 +323,47 @@ export async function captureSnapshotCatalyst(
     createdBy: actor,
   });
   return true;
+}
+
+/**
+ * Periodic job, Catalyst-backed: snapshot every active deal, writing only where
+ * the deal's content actually changed since its last snapshot.
+ *
+ * Sequential, not concurrent, and deliberately so — each capture assembles full
+ * intelligence for one deal, and fanning that out would multiply exactly the
+ * Data Store load that the concurrency limiter already has to hold back (see
+ * lib/db/src/catalyst/sdk.ts). AppSail's 30-second request ceiling is the real
+ * bound: `budgetMs` stops the run cleanly and reports how far it got, so a
+ * portfolio too large for one invocation degrades into partial progress plus a
+ * visible `remaining` count rather than a timeout with nothing written.
+ */
+export async function snapshotAllActiveDealsCatalyst(
+  catalystApp: CatalystApp,
+  dealIds: string[],
+  budgetMs = 20_000,
+): Promise<{ written: number; considered: number; remaining: number }> {
+  const startedAt = Date.now();
+  let written = 0;
+  let considered = 0;
+  for (const dealId of dealIds) {
+    if (Date.now() - startedAt > budgetMs) break;
+    considered++;
+    try {
+      const ok = await captureSnapshotCatalyst(catalystApp, {
+        dealId,
+        reason: "periodic",
+        triggerEvent: null,
+        actor: "system",
+        force: true,
+        skipIfUnchanged: true,
+      });
+      if (ok) written++;
+    } catch (err) {
+      // One bad deal must not abort the run for the rest of the portfolio.
+      logger.error({ err, dealId }, "Periodic snapshot failed for deal");
+    }
+  }
+  return { written, considered, remaining: dealIds.length - considered };
 }
 
 /** Events that never warrant a new snapshot: the deal was removed, or shelved

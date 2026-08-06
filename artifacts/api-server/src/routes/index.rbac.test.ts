@@ -35,6 +35,12 @@ import v2Router from "./v2";
  * automatically: it is discovered by the walk below and must either 403 or be
  * explicitly (and reviewably) allowlisted, or this test fails.
  *
+ * ONE router is deliberately outside this walk: routes/jobs.ts, which is
+ * mounted ABOVE the gate because Catalyst Job Scheduling invokes it over plain
+ * HTTP with no user session. It is therefore NOT covered by the sweep and must
+ * be proven separately — see "scheduled-job endpoints" at the bottom of this
+ * file. Anything else added above the gate needs the same treatment.
+ *
  * Safe to run against the real dev DB: a 403 means requireWriteRole rejected
  * the request BEFORE any route handler ran, so none of these calls touch the
  * database regardless of the (empty) body sent. Only the small number of
@@ -333,5 +339,85 @@ describe("/auth/me reflects req.actor", () => {
     expect(res.status).toBe(200);
     const body = (await res.json()) as { role: string };
     expect(body.role).toBe("admin");
+  });
+});
+
+/**
+ * routes/jobs.ts is the only router mounted above the auth gate that accepts a
+ * mutation, so the exhaustive sweep above does not cover it. These stand in for
+ * that coverage.
+ *
+ * The distinct `JOB_UNAUTHORIZED` code is what makes them meaningful: a plain
+ * 401 would be indistinguishable from requireAuth rejecting the request, which
+ * would let a regression that accidentally moved this router below the gate
+ * pass silently.
+ */
+describe("scheduled-job endpoints — secret-gated, above the auth gate", () => {
+  const JOB_PATH = "/api/v1/jobs/snapshots";
+  const original = process.env["EDC_JOB_SECRET"];
+  afterAll(() => {
+    if (original === undefined) delete process.env["EDC_JOB_SECRET"];
+    else process.env["EDC_JOB_SECRET"] = original;
+  });
+
+  it("refuses every call when EDC_JOB_SECRET is unconfigured — fails CLOSED", async () => {
+    delete process.env["EDC_JOB_SECRET"];
+    const res = await fetch(`${base}${JOB_PATH}`, { method: "POST" });
+    expect(res.status).toBe(503);
+    const body = (await res.json()) as { error?: { code?: string } };
+    expect(body.error?.code).toBe("JOB_AUTH_UNCONFIGURED");
+  });
+
+  it("rejects a missing secret with JOB_UNAUTHORIZED, not the auth gate's 401", async () => {
+    process.env["EDC_JOB_SECRET"] = "test-secret-value";
+    const res = await fetch(`${base}${JOB_PATH}`, { method: "POST" });
+    expect(res.status).toBe(401);
+    const body = (await res.json()) as { error?: { code?: string } };
+    // Proves BOTH that the route is above the gate (requireAuth would have
+    // returned plain UNAUTHORIZED) and that it is closed without the secret.
+    expect(body.error?.code).toBe("JOB_UNAUTHORIZED");
+  });
+
+  it("rejects a wrong secret", async () => {
+    process.env["EDC_JOB_SECRET"] = "test-secret-value";
+    const res = await fetch(`${base}${JOB_PATH}`, {
+      method: "POST",
+      headers: { "x-edc-job-secret": "not-the-secret" },
+    });
+    expect(res.status).toBe(401);
+  });
+
+  it("rejects a secret that is a prefix of the real one", async () => {
+    process.env["EDC_JOB_SECRET"] = "test-secret-value";
+    const res = await fetch(`${base}${JOB_PATH}`, {
+      method: "POST",
+      headers: { "x-edc-job-secret": "test-secret" },
+    });
+    expect(res.status).toBe(401);
+  });
+
+  it("accepts the right secret and reaches the handler (404 for an unknown job)", async () => {
+    process.env["EDC_JOB_SECRET"] = "test-secret-value";
+    const res = await fetch(`${base}/api/v1/jobs/no-such-job`, {
+      method: "POST",
+      headers: { "x-edc-job-secret": "test-secret-value" },
+    });
+    // Past the secret check, into the handler's own job lookup — which is the
+    // furthest this can be driven without a real Catalyst session.
+    expect(res.status).toBe(404);
+    const body = (await res.json()) as { error?: { code?: string } };
+    expect(body.error?.code).toBe("NOT_FOUND");
+  });
+
+  it("a signed-in reader cannot run a job without the secret", async () => {
+    process.env["EDC_JOB_SECRET"] = "test-secret-value";
+    const res = await fetch(`${base}${JOB_PATH}`, { method: "POST", headers: readerHeaders });
+    expect(res.status).toBe(401);
+  });
+
+  it("a signed-in ADMIN cannot run a job without the secret either", async () => {
+    process.env["EDC_JOB_SECRET"] = "test-secret-value";
+    const res = await fetch(`${base}${JOB_PATH}`, { method: "POST", headers: adminHeaders });
+    expect(res.status).toBe(401);
   });
 });

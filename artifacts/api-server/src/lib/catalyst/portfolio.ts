@@ -34,7 +34,8 @@ export function cachedIntel(catalystApp: CatalystApp, dealId: string) {
   );
 }
 
-async function activeDealIds(catalystApp: CatalystApp): Promise<string[]> {
+/** Open (non-deleted, non-archived, non-closed) deal ids — also the periodic snapshot job's work list. */
+export async function activeDealIds(catalystApp: CatalystApp): Promise<string[]> {
   const [deals, stages] = await Promise.all([
     createEnterpriseDealsRepo(catalystApp).list(),
     createPipelineStagesRepo(catalystApp).listAll(),

@@ -15,6 +15,7 @@ import batSignalRouter from "./batsignal";
 import lookupsRouter from "./lookups";
 import settingsAuditRouter from "./settings-audit";
 import adminRouter from "./admin";
+import jobsRouter from "./jobs";
 import v2Router from "./v2";
 import { cacheInvalidationMiddleware } from "../lib/cache-middleware";
 import { requireAuth } from "../lib/auth";
@@ -30,6 +31,14 @@ const router: IRouter = Router();
 router.use(healthRouter); // GET /api/healthz
 router.use(cacheInvalidationMiddleware); // GET is a no-op; only hooks res "finish"
 router.use("/v1", sharedRouter); // GET /share/:token (Bat-Signal)
+// POST /v1/jobs/:jobName — Catalyst Job Scheduling invokes an AppSail target by
+// making a plain HTTP request, and a cron carries no user session, so this
+// cannot sit behind requireAuth. It is NOT unauthenticated: routes/jobs.ts
+// checks a shared secret (`EDC_JOB_SECRET`) in constant time on every request and
+// refuses outright when the secret is unconfigured. Read that file's header
+// before adding anything to it — a handler here runs with no actor and no
+// role check of any kind.
+router.use("/v1", jobsRouter);
 
 /* ============================== THE GATE =================================
  * Path-less `.use` matches every remaining path (router@2 Layer "/" fast-path
