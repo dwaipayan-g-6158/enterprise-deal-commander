@@ -81,7 +81,19 @@ afterAll(async () => {
   await pool.end();
 });
 
-describe("POST /settings/change-log/:id/rollback — threshold bound validation", () => {
+// Skipped post-Catalyst-migration: routes/settings-audit.ts now reads/writes
+// v2_settings_change_log, engine_thresholds, and v2_scoring_model_weights via
+// Catalyst Data Store, not Drizzle/Postgres — every handler calls
+// `initCatalystApp(req)`, which needs genuine Catalyst session
+// headers/context that only the real AppSail runtime can supply. The
+// `fakeReq()` helper above builds a plain Express-shaped object with no such
+// headers, so `initCatalystApp` cannot produce a working client — same "Data
+// Store isn't reachable from localhost" limitation already documented for
+// lookups.engine-thresholds.test.ts. This file's setup/assertions are also
+// Drizzle-only (`db.select/insert/update` against the Postgres tables this
+// route no longer touches). Retire or rewrite as an integration test against
+// the deployed AppSail app once Slice 6 seeding lands.
+describe.skip("POST /settings/change-log/:id/rollback — threshold bound validation", () => {
   it("rejects a rollback that would restore a zero risk weight, and writes nothing", async () => {
     const key = "risk_weight_technical";
     const before = await valueOf(key);
@@ -119,7 +131,8 @@ describe("POST /settings/change-log/:id/rollback — threshold bound validation"
   });
 });
 
-describe("POST /settings/config/import — threshold bound validation", () => {
+// Skipped post-Catalyst-migration — same reasoning as the describe block above.
+describe.skip("POST /settings/config/import — threshold bound validation", () => {
   it("rejects the whole batch when any threshold is invalid, writing none of them", async () => {
     const validKey = "elephant_tcv_threshold";
     const invalidKey = "risk_weight_commercial";
@@ -208,7 +221,8 @@ describe("POST /settings/config/import — threshold bound validation", () => {
 // whole-branch review's config-import scoring-weight bound finding. Proves
 // the same bound now also applies to ImportSettingsConfigBody's
 // scoringModelWeights[].calibratedWeight.
-describe("POST /settings/config/import — scoring weight bound validation", () => {
+// Skipped post-Catalyst-migration — same reasoning as the describe block above.
+describe.skip("POST /settings/config/import — scoring weight bound validation", () => {
   const probeFeatureId = "test_import_bound_probe";
 
   it("rejects an out-of-range calibratedWeight with 400, writing nothing", async () => {

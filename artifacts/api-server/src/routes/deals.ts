@@ -1,22 +1,24 @@
 import { Router, type IRouter, type Request, type Response } from "express";
-import { and, desc, eq, inArray, isNull, isNotNull, or, sql, type SQL } from "drizzle-orm";
 import {
-  db,
-  enterpriseDeals,
-  dealTechnicalGates,
-  dealProductInterests,
-  dealAd360Features,
-  dealComplianceDrivers,
-  gateDefinitions,
-  pipelineStages,
-  dealStageOverrides,
-  stakeholders,
-  dealDecisions,
-  dealBlockers,
-  dealTags,
-  tagDefinitions,
-  dealCompetitors,
-} from "@workspace/db";
+  initCatalystApp,
+  type CatalystApp,
+  createEnterpriseDealsRepo,
+  createDealTechnicalGatesRepo,
+  createDealProductInterestsRepo,
+  createDealAd360FeaturesRepo,
+  createDealComplianceDriversRepo,
+  createDealBlockersRepo,
+  createDealStageOverridesRepo,
+  createDealCompetitorsRepo,
+  createStakeholdersRepo,
+  createDealDecisionsRepo,
+  createDealTagsRepo,
+  createPipelineStagesRepo,
+  createGateDefinitionsRepo,
+  DuplicateDealError,
+  type EnterpriseDeal,
+  type UpdateEnterpriseDealInput,
+} from "@workspace/db/catalyst";
 import {
   ListDealsQueryParams,
   ListDealsResponse,
@@ -34,10 +36,10 @@ import {
 } from "@workspace/api-zod";
 import { getActor } from "../lib/auth";
 import { badRequest, notFound, conflict, stageGuardrail, archiveGuardrail } from "../lib/http";
-import { serializeDeal, assembleDealIntelligence, isBlockingRedAlert } from "../lib/intelligence";
-import { cachedIntel, mapWithConcurrency, INTEL_CONCURRENCY } from "../lib/portfolio";
-import { contextualAlertsFor } from "../lib/contextual-alerts";
-import { writeAudit } from "../lib/audit";
+import { serializeDeal, assembleDealIntelligence, isBlockingRedAlert } from "../lib/catalyst/intelligence";
+import { cachedIntel, mapWithConcurrency, INTEL_CONCURRENCY } from "../lib/catalyst/portfolio";
+import { contextualAlertsFor } from "../lib/catalyst/contextual-alerts";
+import { writeAudit } from "../lib/catalyst/audit";
 import { emitDealEvent } from "../lib/events";
 
 // Auth + write-role enforcement is applied ONCE, centrally, in
@@ -68,86 +70,83 @@ const SORTABLE_DEAL_KEYS = new Set([
   "updatedAt",
 ]);
 
+function contains(haystack: string | null | undefined, needle: string): boolean {
+  return !!haystack && haystack.toLowerCase().includes(needle);
+}
+
 router.get("/deals", async (req: Request, res: Response) => {
   const q = ListDealsQueryParams.parse(req.query);
   const state = q.state ?? "active";
+  const catalystApp = initCatalystApp(req);
 
-  const conditions = [];
-  if (state === "active") {
-    conditions.push(isNull(enterpriseDeals.deletedAt));
-    conditions.push(isNull(enterpriseDeals.archivedAt));
-  } else if (state === "archived") {
-    conditions.push(isNotNull(enterpriseDeals.archivedAt));
-    conditions.push(isNull(enterpriseDeals.deletedAt));
-  } else if (state === "deleted") {
-    conditions.push(isNotNull(enterpriseDeals.deletedAt));
-  } else if (state === "all") {
-    // Active + Archived, i.e. every real deal — excludes only the trash.
-    conditions.push(isNull(enterpriseDeals.deletedAt));
-  }
+  const [allDeals, stages] = await Promise.all([
+    createEnterpriseDealsRepo(catalystApp).list(),
+    createPipelineStagesRepo(catalystApp).listAll(),
+  ]);
+  const stageNameById = new Map(stages.map((s) => [s.id, s.stageName]));
+
+  let candidates = allDeals.filter((d) => {
+    if (state === "active") return d.deletedAt == null && d.archivedAt == null;
+    if (state === "archived") return d.archivedAt != null && d.deletedAt == null;
+    if (state === "deleted") return d.deletedAt != null;
+    if (state === "all") return d.deletedAt == null; // active + archived, excludes only the trash
+    return true;
+  });
+  // Mirrors the original innerJoin(pipelineStages): a dangling stage id drops the row.
+  candidates = candidates.filter((d) => stageNameById.has(d.salesStageId));
   if (q.stage) {
-    conditions.push(eq(pipelineStages.stageName, q.stage));
+    candidates = candidates.filter((d) => stageNameById.get(d.salesStageId) === q.stage);
   }
 
-  // Full-text-ish search now also spans strategic notes, stakeholders,
+  // Full-text-ish search spans deal name fields, strategic notes, stakeholders,
   // decisions and blockers — and reports WHERE each deal matched via `matchedIn`.
-  // We resolve matching ids in ONE SQL pass (ILIKE + EXISTS subqueries) so the
-  // serialize loop only runs for matched deals (also fixes the old search N+1).
   const searchTerm = q.search?.trim() ?? "";
   const doSearch = searchTerm.length >= 2;
+  const needle = searchTerm.toLowerCase();
 
   let matchedInById: Map<string, string[]> | null = null;
-  let rows: { id: string }[];
 
   if (doSearch) {
-    // Escape LIKE metacharacters so a literal % / _ / \ in the query stays literal.
-    const esc = searchTerm.replace(/[\\%_]/g, (c) => `\\${c}`);
-    const pat = `%${esc}%`;
-
-    const nameExpr = sql`(${enterpriseDeals.dealName} ILIKE ${pat} OR ${enterpriseDeals.accountName} ILIKE ${pat} OR ${enterpriseDeals.accountManager} ILIKE ${pat} OR ${enterpriseDeals.technicalLead} ILIKE ${pat})`;
-    const notesExpr = sql`(${enterpriseDeals.managerStrategicBlueprint} ILIKE ${pat} OR ${enterpriseDeals.speakerNotes} ILIKE ${pat})`;
-    const stakeExpr = sql`EXISTS (SELECT 1 FROM ${stakeholders} s WHERE s.deal_id = ${enterpriseDeals.id} AND (s.name ILIKE ${pat} OR s.notes ILIKE ${pat}))`;
-    const decisionExpr = sql`EXISTS (SELECT 1 FROM ${dealDecisions} dd WHERE dd.deal_id = ${enterpriseDeals.id} AND (dd.decision_text ILIKE ${pat} OR dd.rationale ILIKE ${pat}))`;
-    const blockerExpr = sql`EXISTS (SELECT 1 FROM ${dealBlockers} b WHERE b.deal_id = ${enterpriseDeals.id} AND b.description ILIKE ${pat})`;
-
-    const searchWhere = and(...conditions, or(nameExpr, notesExpr, stakeExpr, decisionExpr, blockerExpr));
-
-    const flagRows = await db
-      .select({
-        id: enterpriseDeals.id,
-        mName: sql<boolean>`${nameExpr}`,
-        mNotes: sql<boolean>`${notesExpr}`,
-        mStakeholder: sql<boolean>`${stakeExpr}`,
-        mDecision: sql<boolean>`${decisionExpr}`,
-        mBlocker: sql<boolean>`${blockerExpr}`,
-      })
-      .from(enterpriseDeals)
-      .innerJoin(pipelineStages, eq(enterpriseDeals.salesStageId, pipelineStages.id))
-      .where(searchWhere)
-      .orderBy(desc(enterpriseDeals.updatedAt));
+    const [allStakeholders, allDecisions, allBlockers] = await Promise.all([
+      createStakeholdersRepo(catalystApp).listAll(),
+      createDealDecisionsRepo(catalystApp).listAll(),
+      createDealBlockersRepo(catalystApp).listAll(),
+    ]);
+    const stakeholderMatchDeals = new Set(
+      allStakeholders
+        .filter((s) => contains(s.name, needle) || contains(s.notes, needle))
+        .map((s) => s.dealId),
+    );
+    const decisionMatchDeals = new Set(
+      allDecisions
+        .filter((d) => contains(d.decisionText, needle) || contains(d.rationale, needle))
+        .map((d) => d.dealId),
+    );
+    const blockerMatchDeals = new Set(
+      allBlockers.filter((b) => contains(b.description, needle)).map((b) => b.dealId),
+    );
 
     matchedInById = new Map();
-    rows = [];
-    for (const r of flagRows) {
+    candidates = candidates.filter((d) => {
       const sources: string[] = [];
-      if (r.mName) sources.push("name");
-      if (r.mNotes) sources.push("notes");
-      if (r.mStakeholder) sources.push("stakeholder");
-      if (r.mDecision) sources.push("decision");
-      if (r.mBlocker) sources.push("blocker");
-      if (sources.length) {
-        rows.push({ id: r.id });
-        matchedInById.set(r.id, sources);
+      if (
+        contains(d.dealName, needle) ||
+        contains(d.accountName, needle) ||
+        contains(d.accountManager, needle) ||
+        contains(d.technicalLead, needle)
+      ) {
+        sources.push("name");
       }
-    }
-  } else {
-    const whereClause: SQL | undefined = conditions.length ? and(...conditions) : undefined;
-    rows = await db
-      .select({ id: enterpriseDeals.id })
-      .from(enterpriseDeals)
-      .innerJoin(pipelineStages, eq(enterpriseDeals.salesStageId, pipelineStages.id))
-      .where(whereClause)
-      .orderBy(desc(enterpriseDeals.updatedAt));
+      if (contains(d.managerStrategicBlueprint, needle) || contains(d.speakerNotes, needle)) {
+        sources.push("notes");
+      }
+      if (stakeholderMatchDeals.has(d.id)) sources.push("stakeholder");
+      if (decisionMatchDeals.has(d.id)) sources.push("decision");
+      if (blockerMatchDeals.has(d.id)) sources.push("blocker");
+      if (sources.length === 0) return false;
+      matchedInById!.set(d.id, sources);
+      return true;
+    });
   }
 
   // `cachedIntel`, not the raw assembler: this is a read path, and the engine run
@@ -160,7 +159,9 @@ router.get("/deals", async (req: Request, res: Response) => {
   // `Promise.all` over an unbounded page (limit can reach 500) opened one engine
   // run plus several queries per deal simultaneously and starved the pool.
   let items = (
-    await mapWithConcurrency(rows, INTEL_CONCURRENCY, (r) => serializeDeal(r.id, cachedIntel))
+    await mapWithConcurrency(candidates, INTEL_CONCURRENCY, (d) =>
+      serializeDeal(catalystApp, d.id, cachedIntel),
+    )
   ).filter((d): d is NonNullable<typeof d> => d !== null);
 
   // Attach the per-deal match provenance for the search dropdown.
@@ -171,22 +172,7 @@ router.get("/deals", async (req: Request, res: Response) => {
   // Attach applied tags so the roster can filter/display by tag (one batched
   // query over the result set — no per-deal N+1).
   if (items.length) {
-    const tagRows = await db
-      .select({
-        dealId: dealTags.dealId,
-        id: tagDefinitions.id,
-        tagName: tagDefinitions.tagName,
-        color: tagDefinitions.color,
-      })
-      .from(dealTags)
-      .innerJoin(tagDefinitions, eq(dealTags.tagId, tagDefinitions.id))
-      .where(inArray(dealTags.dealId, items.map((d) => d.id)));
-    const tagsByDeal = new Map<string, { id: string; tagName: string; color: string }[]>();
-    for (const t of tagRows) {
-      const list = tagsByDeal.get(t.dealId) ?? [];
-      list.push({ id: t.id, tagName: t.tagName, color: t.color });
-      tagsByDeal.set(t.dealId, list);
-    }
+    const tagsByDeal = await createDealTagsRepo(catalystApp).listForDeals(items.map((d) => d.id));
     items = items.map((d) => ({ ...d, tags: tagsByDeal.get(d.id) ?? [] }));
   }
 
@@ -239,70 +225,38 @@ router.get("/deals", async (req: Request, res: Response) => {
 
 // Replace the deal's "products of interest" (anchor) set, mirroring the
 // cross-sell replace-set semantics in routes/crosssells.ts.
-async function replaceProductInterests(dealId: string, productIds: string[]) {
-  await db
-    .delete(dealProductInterests)
-    .where(eq(dealProductInterests.dealId, dealId));
-  if (productIds.length > 0) {
-    await db
-      .insert(dealProductInterests)
-      .values(productIds.map((productId) => ({ dealId, productId })))
-      .onConflictDoNothing();
-  }
+async function replaceProductInterests(catalystApp: CatalystApp, dealId: string, productIds: string[]) {
+  await createDealProductInterestsRepo(catalystApp).replaceSet(dealId, productIds);
 }
 
 // Replace the deal's selected AD360 Enterprise platform-customization features,
 // mirroring the product-interest / cross-sell replace-set semantics.
-async function replaceAd360Features(dealId: string, featureIds: number[]) {
-  await db
-    .delete(dealAd360Features)
-    .where(eq(dealAd360Features.dealId, dealId));
-  if (featureIds.length > 0) {
-    await db
-      .insert(dealAd360Features)
-      .values(featureIds.map((featureId) => ({ dealId, featureId })))
-      .onConflictDoNothing();
-  }
+async function replaceAd360Features(catalystApp: CatalystApp, dealId: string, featureIds: number[]) {
+  await createDealAd360FeaturesRepo(catalystApp).replaceSet(dealId, featureIds);
 }
 
 // Replace the deal's additional compliance drivers (beyond the primary driver).
-async function replaceComplianceDrivers(dealId: string, driverIds: number[]) {
-  await db
-    .delete(dealComplianceDrivers)
-    .where(eq(dealComplianceDrivers.dealId, dealId));
-  if (driverIds.length > 0) {
-    await db
-      .insert(dealComplianceDrivers)
-      .values(driverIds.map((complianceDriverId) => ({ dealId, complianceDriverId })))
-      .onConflictDoNothing();
-  }
+async function replaceComplianceDrivers(catalystApp: CatalystApp, dealId: string, driverIds: number[]) {
+  await createDealComplianceDriversRepo(catalystApp).replaceSet(dealId, driverIds);
 }
 
 // Mirror the deal's single "incumbent" FK into the Competitive Landscape
-// (edc_v2.deal_competitors) so it doesn't have to be re-added by hand. Additive
+// (v2_deal_competitors) so it doesn't have to be re-added by hand. Additive
 // only — never removes a landscape row, including when the incumbent changes.
-// Idempotent via the deal_competitor_uq (deal_id, competitor_id) constraint.
+// Idempotent via the deal_competitor_uq (deal_id, competitor_id) natural key.
 async function seedIncumbentCompetitor(
+  catalystApp: CatalystApp,
   dealId: string,
   competitorId: number | null | undefined,
 ) {
   if (!competitorId) return;
-  await db
-    .insert(dealCompetitors)
-    .values({ dealId, competitorId, status: "Active" })
-    .onConflictDoNothing();
+  await createDealCompetitorsRepo(catalystApp).createIfMissing(dealId, competitorId, "Active");
 }
 
-async function seedGatesForDeal(dealId: string) {
-  const defs = await db
-    .select({ gateCode: gateDefinitions.gateCode })
-    .from(gateDefinitions)
-    .where(eq(gateDefinitions.isActive, true));
+async function seedGatesForDeal(catalystApp: CatalystApp, dealId: string) {
+  const defs = await createGateDefinitionsRepo(catalystApp).listActive();
   if (defs.length === 0) return;
-  await db
-    .insert(dealTechnicalGates)
-    .values(defs.map((d) => ({ dealId, gateCode: d.gateCode })))
-    .onConflictDoNothing();
+  await createDealTechnicalGatesRepo(catalystApp).seedForDeal(dealId, defs.map((d) => d.gateCode));
 }
 
 router.post("/deals", async (req: Request, res: Response) => {
@@ -310,6 +264,7 @@ router.post("/deals", async (req: Request, res: Response) => {
   if (!parsed.success) {
     throw badRequest("Invalid deal payload", parsed.error.issues);
   }
+  const catalystApp = initCatalystApp(req);
   const actor = getActor(req);
   const body = parsed.data;
 
@@ -321,61 +276,53 @@ router.post("/deals", async (req: Request, res: Response) => {
       ? body.compliance_driver_ids[0]
       : (body.compliance_driver_id ?? null);
 
-  let created;
+  let created: EnterpriseDeal;
   try {
-    const inserted = await db
-      .insert(enterpriseDeals)
-      .values({
-        dealName: body.deal_name,
-        accountName: body.account_name,
-        crmRecordUrl: body.crm_record_url ?? null,
-        accountManager: body.account_manager,
-        technicalLead: body.technical_lead,
-        salesStageId: body.sales_stage_id,
-        productRevenue: String(body.product_revenue),
-        pricingModelId: body.pricing_model_id,
-        contractTermYears: body.contract_term_years,
-        dealCurrency: body.deal_currency ?? "USD",
-        expectedCloseDate: body.expected_close_date ?? null,
-        landedAt: body.landed_at ?? new Date().toISOString().slice(0, 10),
-        winProbabilityPct: body.win_probability_pct ?? null,
-        committed: body.committed ?? false,
-        servicesRevenue: String(body.services_revenue),
-        servicesTierId: body.services_tier_id,
-        managerStrategicBlueprint: body.manager_strategic_blueprint ?? null,
-        speakerNotes: body.speaker_notes ?? null,
-        lossArchetypeId: body.loss_archetype_id ?? null,
-        competitorId: body.competitor_id ?? null,
-        complianceDriverId: derivedComplianceDriverId,
-        estimatedLogSources: body.estimated_log_sources ?? null,
-        ad360SeatCount: body.ad360_seat_count ?? null,
-        ad360FeatureNotes: body.ad360_feature_notes ?? null,
-      })
-      .returning({ id: enterpriseDeals.id });
-    created = inserted[0];
+    created = await createEnterpriseDealsRepo(catalystApp).create({
+      dealName: body.deal_name,
+      accountName: body.account_name,
+      crmRecordUrl: body.crm_record_url ?? null,
+      accountManager: body.account_manager,
+      technicalLead: body.technical_lead,
+      salesStageId: body.sales_stage_id,
+      productRevenue: String(body.product_revenue),
+      pricingModelId: body.pricing_model_id,
+      contractTermYears: body.contract_term_years,
+      dealCurrency: body.deal_currency ?? "USD",
+      expectedCloseDate: body.expected_close_date ?? null,
+      landedAt: body.landed_at ?? new Date().toISOString().slice(0, 10),
+      winProbabilityPct: body.win_probability_pct ?? null,
+      committed: body.committed ?? false,
+      servicesRevenue: String(body.services_revenue),
+      servicesTierId: body.services_tier_id,
+      managerStrategicBlueprint: body.manager_strategic_blueprint ?? null,
+      speakerNotes: body.speaker_notes ?? null,
+      lossArchetypeId: body.loss_archetype_id ?? null,
+      competitorId: body.competitor_id ?? null,
+      complianceDriverId: derivedComplianceDriverId,
+      estimatedLogSources: body.estimated_log_sources ?? null,
+      ad360SeatCount: body.ad360_seat_count ?? null,
+      ad360FeatureNotes: body.ad360_feature_notes ?? null,
+    });
   } catch (err) {
-    if (
-      err instanceof Error &&
-      "code" in err &&
-      (err as { code?: string }).code === "23505"
-    ) {
+    if (err instanceof DuplicateDealError) {
       throw conflict("A deal with this account and name already exists");
     }
     throw err;
   }
 
-  await seedGatesForDeal(created.id);
+  await seedGatesForDeal(catalystApp, created.id);
   if (body.product_interest_ids && body.product_interest_ids.length > 0) {
-    await replaceProductInterests(created.id, body.product_interest_ids);
+    await replaceProductInterests(catalystApp, created.id, body.product_interest_ids);
   }
   if (body.compliance_driver_ids && body.compliance_driver_ids.length > 0) {
-    await replaceComplianceDrivers(created.id, body.compliance_driver_ids);
+    await replaceComplianceDrivers(catalystApp, created.id, body.compliance_driver_ids);
   }
   if (body.ad360_feature_ids && body.ad360_feature_ids.length > 0) {
-    await replaceAd360Features(created.id, body.ad360_feature_ids);
+    await replaceAd360Features(catalystApp, created.id, body.ad360_feature_ids);
   }
-  await seedIncumbentCompetitor(created.id, body.competitor_id);
-  await writeAudit({
+  await seedIncumbentCompetitor(catalystApp, created.id, body.competitor_id);
+  await writeAudit(catalystApp, {
     dealId: created.id,
     entityType: "deal",
     fieldChanged: "created",
@@ -386,15 +333,17 @@ router.post("/deals", async (req: Request, res: Response) => {
     dealId: created.id,
     actor: actor.displayName,
     dealName: body.deal_name,
+    catalystApp,
   });
 
-  const data = await serializeDeal(created.id);
+  const data = await serializeDeal(catalystApp, created.id);
   res.status(201).json(GetDealResponse.parse({ data }));
 });
 
 router.get("/deals/:id", async (req: Request, res: Response) => {
   const { id } = GetDealParams.parse(req.params);
-  const data = await serializeDeal(id);
+  const catalystApp = initCatalystApp(req);
+  const data = await serializeDeal(catalystApp, id);
   if (!data) throw notFound("Deal not found");
   res.json(GetDealResponse.parse({ data }));
 });
@@ -405,19 +354,24 @@ const updateDealHandler = async (req: Request, res: Response) => {
   if (!parsed.success) {
     throw badRequest("Invalid deal update payload", parsed.error.issues);
   }
+  const catalystApp = initCatalystApp(req);
   const actor = getActor(req);
   const body = parsed.data;
 
-  const existingRows = await db
-    .select()
-    .from(enterpriseDeals)
-    .where(eq(enterpriseDeals.id, id))
-    .limit(1);
-  const existing = existingRows[0];
+  const dealsRepo = createEnterpriseDealsRepo(catalystApp);
+  const existing = await dealsRepo.getById(id);
   if (!existing) throw notFound("Deal not found");
 
-  const updates: Partial<typeof enterpriseDeals.$inferInsert> = {};
-  const audits: Parameters<typeof writeAudit>[0] = [];
+  const updates: UpdateEnterpriseDealInput = {};
+  const auditEntries: {
+    dealId: string;
+    entityType: string;
+    entityId?: string | null;
+    fieldChanged: string;
+    oldValue?: string | null;
+    newValue?: string | null;
+    changedBy: string;
+  }[] = [];
 
   // Every scalar field of UpdateDealBody must call track() — an assignment into
   // `updates` without one changes the deal but leaves no row in deal_audit_log,
@@ -433,7 +387,7 @@ const updateDealHandler = async (req: Request, res: Response) => {
     newValue: unknown,
   ) => {
     if (String(oldValue ?? "") !== String(newValue ?? "")) {
-      audits.push({
+      auditEntries.push({
         dealId: id,
         entityType: "deal",
         fieldChanged: field,
@@ -603,9 +557,7 @@ const updateDealHandler = async (req: Request, res: Response) => {
     body.sales_stage_id !== undefined &&
     body.sales_stage_id !== existing.salesStageId
   ) {
-    const stageRows = await db
-      .select({ id: pipelineStages.id, sortOrder: pipelineStages.sortOrder, stageName: pipelineStages.stageName })
-      .from(pipelineStages);
+    const stageRows = await createPipelineStagesRepo(catalystApp).listAll();
     const fromStage = stageRows.find((s) => s.id === existing.salesStageId);
     const toStage = stageRows.find((s) => s.id === body.sales_stage_id);
 
@@ -627,10 +579,10 @@ const updateDealHandler = async (req: Request, res: Response) => {
     const isAdvancing =
       !!fromStage && !!toStage && toStage.sortOrder > fromStage.sortOrder;
     if (isAdvancing) {
-      const intel = await assembleDealIntelligence(id);
+      const intel = await assembleDealIntelligence(catalystApp, id);
       // Blocking RED alerts come from three sources, all funneled through the
-      // shared isBlockingRedAlert predicate (lib/intelligence.ts) so this
-      // can't silently diverge from the read-path intelligence route again:
+      // shared isBlockingRedAlert predicate (lib/catalyst/intelligence.ts) so
+      // this can't silently diverge from the read-path intelligence route again:
       //   - intel.governance.alerts: unmanaged (no disposition at all).
       //   - intel.governance.managedAlerts: has a disposition, but only
       //     `accept` (its own mandatory rationale) legitimately clears a RED
@@ -639,7 +591,7 @@ const updateDealHandler = async (req: Request, res: Response) => {
       //     HOSTILE_STAKEHOLDER) that never flow through
       //     assembleDealIntelligence — previously only ever surfaced on the
       //     GET .../intelligence read route, never enforced here.
-      const contextual = await contextualAlertsFor(id);
+      const contextual = await contextualAlertsFor(catalystApp, id);
       const candidateAlerts = [
         ...(intel?.governance.alerts ?? []),
         ...(intel?.governance.managedAlerts ?? []),
@@ -669,23 +621,20 @@ const updateDealHandler = async (req: Request, res: Response) => {
 
   if (Object.keys(updates).length > 0) {
     try {
-      await db
-        .update(enterpriseDeals)
-        .set(updates)
-        .where(eq(enterpriseDeals.id, id));
+      await dealsRepo.update(
+        id,
+        { dealName: existing.dealName, accountName: existing.accountName },
+        updates,
+      );
     } catch (err) {
-      if (
-        err instanceof Error &&
-        "code" in err &&
-        (err as { code?: string }).code === "23505"
-      ) {
+      if (err instanceof DuplicateDealError) {
         throw conflict("A deal with this account and name already exists");
       }
       throw err;
     }
   }
   if (stageOverride) {
-    await db.insert(dealStageOverrides).values({
+    await createDealStageOverridesRepo(catalystApp).create({
       dealId: id,
       fromStage: stageOverride.fromStage,
       toStage: stageOverride.toStage,
@@ -693,7 +642,7 @@ const updateDealHandler = async (req: Request, res: Response) => {
       overrideReason: body.override_reason!.trim(),
       createdBy: actor.displayName,
     });
-    audits.push({
+    auditEntries.push({
       dealId: id,
       entityType: "deal",
       fieldChanged: "stage_override",
@@ -702,14 +651,14 @@ const updateDealHandler = async (req: Request, res: Response) => {
     });
   }
   if (body.product_interest_ids !== undefined) {
-    await replaceProductInterests(id, body.product_interest_ids);
+    await replaceProductInterests(catalystApp, id, body.product_interest_ids);
   }
   if (body.compliance_driver_ids !== undefined) {
-    await replaceComplianceDrivers(id, body.compliance_driver_ids);
+    await replaceComplianceDrivers(catalystApp, id, body.compliance_driver_ids);
   }
   if (body.ad360_feature_ids !== undefined) {
-    await replaceAd360Features(id, body.ad360_feature_ids);
-    audits.push({
+    await replaceAd360Features(catalystApp, id, body.ad360_feature_ids);
+    auditEntries.push({
       dealId: id,
       entityType: "ad360_feature",
       fieldChanged: "selected_features",
@@ -718,9 +667,9 @@ const updateDealHandler = async (req: Request, res: Response) => {
     });
   }
   if (body.competitor_id !== undefined) {
-    await seedIncumbentCompetitor(id, body.competitor_id);
+    await seedIncumbentCompetitor(catalystApp, id, body.competitor_id);
   }
-  if (audits.length > 0) await writeAudit(audits);
+  if (auditEntries.length > 0) await writeAudit(catalystApp, auditEntries);
 
   const changedFields = Object.keys(updates);
   if (changedFields.length > 0) {
@@ -728,6 +677,7 @@ const updateDealHandler = async (req: Request, res: Response) => {
       dealId: id,
       actor: actor.displayName,
       changedFields,
+      catalystApp,
     });
   }
   if (
@@ -740,10 +690,11 @@ const updateDealHandler = async (req: Request, res: Response) => {
       fromStageId: existing.salesStageId,
       toStageId: body.sales_stage_id,
       overridden: stageOverride !== null,
+      catalystApp,
     });
   }
 
-  const data = await serializeDeal(id);
+  const data = await serializeDeal(catalystApp, id);
   res.json(UpdateDealResponse.parse({ data }));
 };
 
@@ -752,33 +703,34 @@ router.patch("/deals/:id", updateDealHandler);
 
 router.delete("/deals/:id", async (req: Request, res: Response) => {
   const { id } = DeleteDealParams.parse(req.params);
+  const catalystApp = initCatalystApp(req);
   const actor = getActor(req);
-  const result = await db
-    .update(enterpriseDeals)
-    .set({ deletedAt: new Date() })
-    .where(and(eq(enterpriseDeals.id, id), isNull(enterpriseDeals.deletedAt)))
-    .returning({ id: enterpriseDeals.id });
-  if (result.length === 0) throw notFound("Deal not found");
-  await writeAudit({
+  const dealsRepo = createEnterpriseDealsRepo(catalystApp);
+  const existing = await dealsRepo.getById(id);
+  if (!existing || existing.deletedAt) throw notFound("Deal not found");
+  await dealsRepo.update(
+    id,
+    { dealName: existing.dealName, accountName: existing.accountName },
+    { deletedAt: new Date() },
+  );
+  await writeAudit(catalystApp, {
     dealId: id,
     entityType: "deal",
     fieldChanged: "deleted_at",
     newValue: "deleted",
     changedBy: actor.displayName,
   });
-  emitDealEvent("deal.deleted", { dealId: id, actor: actor.displayName });
+  emitDealEvent("deal.deleted", { dealId: id, actor: actor.displayName, catalystApp });
   res.status(204).end();
 });
 
 router.post("/deals/:id/restore", async (req: Request, res: Response) => {
   const { id } = RestoreDealParams.parse(req.params);
+  const catalystApp = initCatalystApp(req);
   const actor = getActor(req);
+  const dealsRepo = createEnterpriseDealsRepo(catalystApp);
 
-  const existingRows = await db
-    .select({ deletedAt: enterpriseDeals.deletedAt, archivedAt: enterpriseDeals.archivedAt })
-    .from(enterpriseDeals)
-    .where(eq(enterpriseDeals.id, id));
-  const existing = existingRows[0];
+  const existing = await dealsRepo.getById(id);
   if (!existing) throw notFound("Deal not found");
   if (!existing.deletedAt && !existing.archivedAt) {
     throw conflict("Deal is already active");
@@ -789,12 +741,13 @@ router.post("/deals/:id/restore", async (req: Request, res: Response) => {
   // returns to Active. This is what makes the round-trip lossless — see
   // docs/superpowers/plans/2026-07-27-archive-lifecycle-and-semantics.md.
   const clearingDeleted = existing.deletedAt !== null;
-  await db
-    .update(enterpriseDeals)
-    .set(clearingDeleted ? { deletedAt: null } : { archivedAt: null })
-    .where(eq(enterpriseDeals.id, id));
+  await dealsRepo.update(
+    id,
+    { dealName: existing.dealName, accountName: existing.accountName },
+    clearingDeleted ? { deletedAt: null } : { archivedAt: null },
+  );
 
-  await writeAudit({
+  await writeAudit(catalystApp, {
     dealId: id,
     entityType: "deal",
     fieldChanged: clearingDeleted ? "deleted_at" : "archived_at",
@@ -810,47 +763,44 @@ router.post("/deals/:id/restore", async (req: Request, res: Response) => {
   // again and a fresh snapshot/health-check is wanted there.
   const stillArchived = clearingDeleted && existing.archivedAt !== null;
   if (!stillArchived) {
-    emitDealEvent("deal.restored", { dealId: id, actor: actor.displayName });
+    emitDealEvent("deal.restored", { dealId: id, actor: actor.displayName, catalystApp });
   }
-  const data = await serializeDeal(id);
+  const data = await serializeDeal(catalystApp, id);
   res.json(RestoreDealResponse.parse({ data }));
 });
 
 router.post("/deals/:id/archive", async (req: Request, res: Response) => {
   const { id } = ArchiveDealParams.parse(req.params);
+  const catalystApp = initCatalystApp(req);
   const actor = getActor(req);
+  const dealsRepo = createEnterpriseDealsRepo(catalystApp);
 
-  const existingRows = await db
-    .select({
-      deletedAt: enterpriseDeals.deletedAt,
-      archivedAt: enterpriseDeals.archivedAt,
-      stageName: pipelineStages.stageName,
-    })
-    .from(enterpriseDeals)
-    .innerJoin(pipelineStages, eq(enterpriseDeals.salesStageId, pipelineStages.id))
-    .where(eq(enterpriseDeals.id, id));
-  const existing = existingRows[0];
+  const existing = await dealsRepo.getById(id);
   if (!existing || existing.deletedAt) throw notFound("Deal not found");
   if (existing.archivedAt) throw conflict("Deal is already archived");
-  if (existing.stageName !== "Closed-Won" && existing.stageName !== "Closed-Lost") {
+
+  const stages = await createPipelineStagesRepo(catalystApp).listAll();
+  const stageName = stages.find((s) => s.id === existing.salesStageId)?.stageName;
+  if (stageName !== "Closed-Won" && stageName !== "Closed-Lost") {
     throw archiveGuardrail(
       "Only Closed-Won or Closed-Lost deals can be archived. Move the deal to a closed stage first.",
     );
   }
 
-  await db
-    .update(enterpriseDeals)
-    .set({ archivedAt: new Date() })
-    .where(eq(enterpriseDeals.id, id));
-  await writeAudit({
+  await dealsRepo.update(
+    id,
+    { dealName: existing.dealName, accountName: existing.accountName },
+    { archivedAt: new Date() },
+  );
+  await writeAudit(catalystApp, {
     dealId: id,
     entityType: "deal",
     fieldChanged: "archived_at",
     newValue: "archived",
     changedBy: actor.displayName,
   });
-  emitDealEvent("deal.archived", { dealId: id, actor: actor.displayName });
-  const data = await serializeDeal(id);
+  emitDealEvent("deal.archived", { dealId: id, actor: actor.displayName, catalystApp });
+  const data = await serializeDeal(catalystApp, id);
   res.json(ArchiveDealResponse.parse({ data }));
 });
 

@@ -1,25 +1,25 @@
 import { Router, type IRouter, type Request, type Response } from "express";
-import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 import crypto from "node:crypto";
 import {
-  db,
-  enterpriseDeals,
-  competitors,
-  dealCompetitors,
-  stakeholders,
-  dealDecisions,
-  meetingSessions,
-  webhooks,
-  webhookDeliveryLog,
-  notificationRules,
-  notificationLog,
-  customFieldDefinitions,
-  customFieldValues,
-  tagDefinitions,
-  dealTags,
-  dealMemory,
-  pricingModels,
-} from "@workspace/db";
+  initCatalystApp,
+  createEnterpriseDealsRepo,
+  createPricingModelsRepo,
+  createDealCompetitorsRepo,
+  createCompetitorsRepo,
+  createStakeholdersRepo,
+  createDealDecisionsRepo,
+  createMeetingSessionsRepo,
+  createWebhooksRepo,
+  createWebhookDeliveryLogRepo,
+  createNotificationRulesRepo,
+  createNotificationLogRepo,
+  createCustomFieldDefinitionsRepo,
+  createCustomFieldValuesRepo,
+  createTagDefinitionsRepo,
+  createDealTagsRepo,
+  createDealMemoryRepo,
+  type DealMemoryRow,
+} from "@workspace/db/catalyst";
 import { calculateFlatTCV } from "@workspace/engine";
 import {
   ListDealCompetitorsParams,
@@ -68,12 +68,12 @@ import {
 } from "@workspace/api-zod";
 import { getActor } from "../../lib/auth";
 import { notFound, badRequest } from "../../lib/http";
-import { logSettingsChange } from "../../lib/settings-audit";
+import { logSettingsChange } from "../../lib/catalyst/settings-audit";
 import { emitDealEvent } from "../../lib/events";
 import { classifyAdvisorIntent, confidenceFor, composeNoDataAnswer, withLowSampleCaveat, type AdvisorCitation } from "../../lib/advisor";
-import { computeCompetitorIntel, percentiles } from "../../lib/memory-intel";
+import { computeCompetitorIntel, percentiles, type MemoryRow } from "../../lib/memory-intel";
 import { selectRevivalCandidates } from "../../lib/revival";
-import { getThresholds } from "../../lib/intelligence";
+import { getThresholds } from "../../lib/catalyst/intelligence";
 import { num } from "../../lib/engine-config";
 
 const router: IRouter = Router();
@@ -82,58 +82,56 @@ const router: IRouter = Router();
 
 router.get("/deals/:dealId/competitors", async (req: Request, res: Response) => {
   const { dealId } = ListDealCompetitorsParams.parse(req.params);
-  const rows = await db
-    .select({
-      id: dealCompetitors.id,
-      dealId: dealCompetitors.dealId,
-      competitorId: dealCompetitors.competitorId,
-      competitorName: competitors.name,
-      status: dealCompetitors.status,
-      displacementStrategy: dealCompetitors.displacementStrategy,
-      outcomeNotes: dealCompetitors.outcomeNotes,
-    })
-    .from(dealCompetitors)
-    .leftJoin(competitors, eq(dealCompetitors.competitorId, competitors.id))
-    .where(eq(dealCompetitors.dealId, dealId));
-  res.json({ data: rows });
+  const catalystApp = initCatalystApp(req);
+  const [links, competitors] = await Promise.all([
+    createDealCompetitorsRepo(catalystApp).list(dealId),
+    createCompetitorsRepo(catalystApp).listAll(),
+  ]);
+  const nameById = new Map(competitors.map((c) => [c.id, c.name]));
+  res.json({
+    data: links.map((l) => ({
+      id: l.id,
+      dealId: l.dealId,
+      competitorId: l.competitorId,
+      competitorName: nameById.get(l.competitorId) ?? null,
+      status: l.status,
+      displacementStrategy: l.displacementStrategy,
+      outcomeNotes: l.outcomeNotes,
+    })),
+  });
 });
 
 router.post("/deals/:dealId/competitors", async (req: Request, res: Response) => {
   const { dealId } = AddDealCompetitorParams.parse(req.params);
   const body = AddDealCompetitorBody.parse(req.body);
-  const [row] = await db
-    .insert(dealCompetitors)
-    .values({
-      dealId,
-      competitorId: body.competitor_id,
-      status: body.status ?? "Active",
-      displacementStrategy: body.displacement_strategy ?? null,
-      outcomeNotes: body.outcome_notes ?? null,
-    })
-    .returning();
+  const catalystApp = initCatalystApp(req);
+  const row = await createDealCompetitorsRepo(catalystApp).create({
+    dealId,
+    competitorId: body.competitor_id,
+    status: body.status ?? "Active",
+    displacementStrategy: body.displacement_strategy ?? null,
+    outcomeNotes: body.outcome_notes ?? null,
+  });
   res.status(201).json({ data: { ...row, competitorName: null } });
 });
 
 router.put("/deals/:dealId/competitors/:id", async (req: Request, res: Response) => {
   const { id } = UpdateDealCompetitorParams.parse(req.params);
   const body = UpdateDealCompetitorBody.parse(req.body);
-  const [row] = await db
-    .update(dealCompetitors)
-    .set({
-      status: body.status ?? undefined,
-      displacementStrategy: body.displacement_strategy ?? null,
-      outcomeNotes: body.outcome_notes ?? null,
-      updatedAt: new Date(),
-    })
-    .where(eq(dealCompetitors.id, id))
-    .returning();
+  const catalystApp = initCatalystApp(req);
+  const row = await createDealCompetitorsRepo(catalystApp).update(id, {
+    status: body.status ?? undefined,
+    displacementStrategy: body.displacement_strategy ?? null,
+    outcomeNotes: body.outcome_notes ?? null,
+  });
   if (!row) throw notFound("Competitor link not found");
   res.json({ data: { ...row, competitorName: null } });
 });
 
 router.delete("/deals/:dealId/competitors/:id", async (req: Request, res: Response) => {
   const { id } = DeleteDealCompetitorParams.parse(req.params);
-  await db.delete(dealCompetitors).where(eq(dealCompetitors.id, id));
+  const catalystApp = initCatalystApp(req);
+  await createDealCompetitorsRepo(catalystApp).delete(id);
   res.json({ message: "Competitor removed" });
 });
 
@@ -141,71 +139,77 @@ router.delete("/deals/:dealId/competitors/:id", async (req: Request, res: Respon
 
 router.get("/deals/:dealId/stakeholders", async (req: Request, res: Response) => {
   const { dealId } = ListStakeholdersParams.parse(req.params);
-  const rows = await db
-    .select()
-    .from(stakeholders)
-    .where(eq(stakeholders.dealId, dealId))
-    .orderBy(desc(stakeholders.isDecisionMaker), asc(stakeholders.name));
-  res.json({ data: rows });
+  const catalystApp = initCatalystApp(req);
+  const rows = await createStakeholdersRepo(catalystApp).list(dealId);
+  const sorted = [...rows].sort((a, b) => {
+    if (a.isDecisionMaker !== b.isDecisionMaker) return a.isDecisionMaker ? -1 : 1;
+    return a.name.localeCompare(b.name);
+  });
+  res.json({ data: sorted });
 });
 
 router.post("/deals/:dealId/stakeholders", async (req: Request, res: Response) => {
   const { dealId } = CreateStakeholderParams.parse(req.params);
   const b = CreateStakeholderBody.parse(req.body);
-  const [row] = await db
-    .insert(stakeholders)
-    .values({
-      dealId,
-      name: b.name,
-      title: b.title ?? null,
-      company: b.company ?? null,
-      roleType: b.role_type,
-      influenceLevel: b.influence_level,
-      sentiment: b.sentiment,
-      email: b.email ?? null,
-      phone: b.phone ?? null,
-      notes: b.notes ?? null,
-      reportsToId: b.reports_to_id ?? null,
-      isDecisionMaker: b.is_decision_maker ?? false,
-    })
-    .returning();
+  const catalystApp = initCatalystApp(req);
+  const row = await createStakeholdersRepo(catalystApp).create(dealId, {
+    name: b.name,
+    title: b.title ?? null,
+    company: b.company ?? null,
+    roleType: b.role_type,
+    influenceLevel: b.influence_level,
+    sentiment: b.sentiment,
+    email: b.email ?? null,
+    phone: b.phone ?? null,
+    notes: b.notes ?? null,
+    reportsToId: b.reports_to_id ?? null,
+    isDecisionMaker: b.is_decision_maker ?? false,
+  });
   res.status(201).json({ data: row });
 });
 
 router.put("/deals/:dealId/stakeholders/:id", async (req: Request, res: Response) => {
   const { id } = UpdateStakeholderParams.parse(req.params);
   const b = UpdateStakeholderBody.parse(req.body);
-  const [row] = await db
-    .update(stakeholders)
-    .set({
-      name: b.name,
-      title: b.title ?? null,
-      company: b.company ?? null,
-      roleType: b.role_type,
-      influenceLevel: b.influence_level,
-      sentiment: b.sentiment,
-      email: b.email ?? null,
-      phone: b.phone ?? null,
-      notes: b.notes ?? null,
-      reportsToId: b.reports_to_id ?? null,
-      isDecisionMaker: b.is_decision_maker ?? false,
-      updatedAt: new Date(),
-    })
-    .where(eq(stakeholders.id, id))
-    .returning();
+  const catalystApp = initCatalystApp(req);
+  const row = await createStakeholdersRepo(catalystApp).update(id, {
+    name: b.name,
+    title: b.title ?? null,
+    company: b.company ?? null,
+    roleType: b.role_type,
+    influenceLevel: b.influence_level,
+    sentiment: b.sentiment,
+    email: b.email ?? null,
+    phone: b.phone ?? null,
+    notes: b.notes ?? null,
+    reportsToId: b.reports_to_id ?? null,
+    isDecisionMaker: b.is_decision_maker ?? false,
+  });
   if (!row) throw notFound("Stakeholder not found");
   res.json({ data: row });
 });
 
 router.delete("/deals/:dealId/stakeholders/:id", async (req: Request, res: Response) => {
   const { id } = DeleteStakeholderParams.parse(req.params);
-  await db.delete(stakeholders).where(eq(stakeholders.id, id));
+  const catalystApp = initCatalystApp(req);
+  await createStakeholdersRepo(catalystApp).delete(id);
   res.json({ message: "Stakeholder removed" });
 });
 
 /* -------------------------------------------------------------- F9 Decisions */
 
-function decisionOut(r: typeof dealDecisions.$inferSelect) {
+function decisionOut(r: {
+  id: string;
+  dealId: string;
+  meetingSessionId: string | null;
+  decisionText: string;
+  rationale: string | null;
+  owner: string;
+  status: string;
+  decidedAt: Date;
+  dueDate: string | null;
+  completedAt: Date | null;
+}) {
   return {
     id: r.id,
     dealId: r.dealId,
@@ -214,19 +218,16 @@ function decisionOut(r: typeof dealDecisions.$inferSelect) {
     rationale: r.rationale,
     owner: r.owner,
     status: r.status,
-    decidedAt: (r.decidedAt instanceof Date ? r.decidedAt.toISOString() : String(r.decidedAt)),
+    decidedAt: r.decidedAt.toISOString(),
     dueDate: r.dueDate,
-    completedAt: r.completedAt instanceof Date ? r.completedAt.toISOString() : r.completedAt,
+    completedAt: r.completedAt ? r.completedAt.toISOString() : null,
   };
 }
 
 router.get("/deals/:dealId/decisions", async (req: Request, res: Response) => {
   const { dealId } = ListDecisionsParams.parse(req.params);
-  const rows = await db
-    .select()
-    .from(dealDecisions)
-    .where(eq(dealDecisions.dealId, dealId))
-    .orderBy(desc(dealDecisions.decidedAt));
+  const catalystApp = initCatalystApp(req);
+  const rows = await createDealDecisionsRepo(catalystApp).list(dealId);
   res.json({ data: rows.map(decisionOut) });
 });
 
@@ -234,48 +235,42 @@ router.post("/deals/:dealId/decisions", async (req: Request, res: Response) => {
   const { dealId } = CreateDecisionParams.parse(req.params);
   const b = CreateDecisionBody.parse(req.body);
   const actor = getActor(req);
-  const [row] = await db
-    .insert(dealDecisions)
-    .values({
-      dealId,
-      decisionText: b.decision_text,
-      rationale: b.rationale ?? null,
-      owner: b.owner,
-      decidedAt: b.decided_at ? new Date(b.decided_at) : new Date(),
-      dueDate: b.due_date ?? null,
-      meetingSessionId: b.meeting_session_id ?? null,
-      commanderId: actor.username,
-    })
-    .returning();
+  const catalystApp = initCatalystApp(req);
+  const row = await createDealDecisionsRepo(catalystApp).create({
+    dealId,
+    decisionText: b.decision_text,
+    rationale: b.rationale ?? null,
+    owner: b.owner,
+    decidedAt: b.decided_at ?? null,
+    dueDate: b.due_date ?? null,
+    meetingSessionId: b.meeting_session_id ?? null,
+    commanderId: actor.username,
+  });
   res.status(201).json({ data: decisionOut(row) });
 });
 
 router.put("/deals/:dealId/decisions/:id", async (req: Request, res: Response) => {
   const { id } = UpdateDecisionParams.parse(req.params);
   const b = UpdateDecisionBody.parse(req.body);
-  const [row] = await db
-    .update(dealDecisions)
-    .set({
-      status: b.status ?? undefined,
-      rationale: b.rationale ?? undefined,
-      dueDate: b.due_date ?? undefined,
-      completedAt: b.status === "Completed" ? new Date() : undefined,
-      updatedAt: new Date(),
-    })
-    .where(eq(dealDecisions.id, id))
-    .returning();
+  const catalystApp = initCatalystApp(req);
+  const row = await createDealDecisionsRepo(catalystApp).update(id, {
+    status: b.status ?? undefined,
+    rationale: b.rationale ?? undefined,
+    dueDate: b.due_date ?? undefined,
+  });
   if (!row) throw notFound("Decision not found");
   res.json({ data: decisionOut(row) });
 });
 
-router.get("/meeting-sessions", async (_req: Request, res: Response) => {
-  const rows = await db.select().from(meetingSessions).orderBy(desc(meetingSessions.occurredAt));
+router.get("/meeting-sessions", async (req: Request, res: Response) => {
+  const catalystApp = initCatalystApp(req);
+  const rows = await createMeetingSessionsRepo(catalystApp).listAll();
   res.json({
     data: rows.map((r) => ({
       id: r.id,
       sessionType: r.sessionType,
       title: r.title,
-      occurredAt: r.occurredAt instanceof Date ? r.occurredAt.toISOString() : String(r.occurredAt),
+      occurredAt: r.occurredAt.toISOString(),
       durationMinutes: r.durationMinutes,
       attendees: r.attendees,
       notes: r.notes,
@@ -286,24 +281,22 @@ router.get("/meeting-sessions", async (_req: Request, res: Response) => {
 router.post("/meeting-sessions", async (req: Request, res: Response) => {
   const b = CreateMeetingSessionBody.parse(req.body);
   const actor = getActor(req);
-  const [row] = await db
-    .insert(meetingSessions)
-    .values({
-      sessionType: b.session_type,
-      title: b.title ?? null,
-      occurredAt: new Date(b.occurred_at),
-      durationMinutes: b.duration_minutes ?? null,
-      attendees: b.attendees ?? null,
-      notes: b.notes ?? null,
-      commanderId: actor.username,
-    })
-    .returning();
+  const catalystApp = initCatalystApp(req);
+  const row = await createMeetingSessionsRepo(catalystApp).create({
+    sessionType: b.session_type,
+    title: b.title ?? null,
+    occurredAt: b.occurred_at,
+    durationMinutes: b.duration_minutes ?? null,
+    attendees: b.attendees ?? null,
+    notes: b.notes ?? null,
+    commanderId: actor.username,
+  });
   res.status(201).json({
     data: {
       id: row.id,
       sessionType: row.sessionType,
       title: row.title,
-      occurredAt: row.occurredAt instanceof Date ? row.occurredAt.toISOString() : String(row.occurredAt),
+      occurredAt: row.occurredAt.toISOString(),
       durationMinutes: row.durationMinutes,
       attendees: row.attendees,
       notes: row.notes,
@@ -313,7 +306,16 @@ router.post("/meeting-sessions", async (req: Request, res: Response) => {
 
 /* --------------------------------------------------------------- F1 Webhooks */
 
-function webhookOut(r: typeof webhooks.$inferSelect) {
+function webhookOut(r: {
+  id: string;
+  webhookName: string;
+  targetUrl: string;
+  events: string[];
+  isActive: boolean;
+  failureCount: number;
+  lastTriggeredAt: Date | null;
+  createdAt: Date;
+}) {
   return {
     id: r.id,
     webhookName: r.webhookName,
@@ -321,31 +323,30 @@ function webhookOut(r: typeof webhooks.$inferSelect) {
     events: r.events,
     isActive: r.isActive,
     failureCount: r.failureCount,
-    lastTriggeredAt: r.lastTriggeredAt instanceof Date ? r.lastTriggeredAt.toISOString() : r.lastTriggeredAt,
-    createdAt: r.createdAt instanceof Date ? r.createdAt.toISOString() : String(r.createdAt),
+    lastTriggeredAt: r.lastTriggeredAt ? r.lastTriggeredAt.toISOString() : null,
+    createdAt: r.createdAt.toISOString(),
   };
 }
 
-router.get("/webhooks", async (_req: Request, res: Response) => {
-  const rows = await db.select().from(webhooks).orderBy(desc(webhooks.createdAt));
+router.get("/webhooks", async (req: Request, res: Response) => {
+  const catalystApp = initCatalystApp(req);
+  const rows = await createWebhooksRepo(catalystApp).listAll();
   res.json({ data: rows.map(webhookOut) });
 });
 
 router.post("/webhooks", async (req: Request, res: Response) => {
   const b = CreateWebhookBody.parse(req.body);
   const actor = getActor(req);
-  const [row] = await db
-    .insert(webhooks)
-    .values({
-      webhookName: b.webhook_name,
-      targetUrl: b.target_url,
-      secretKey: b.secret_key ?? crypto.randomBytes(24).toString("hex"),
-      events: b.events,
-      isActive: b.is_active ?? true,
-      createdBy: actor.username,
-    })
-    .returning();
-  await logSettingsChange({
+  const catalystApp = initCatalystApp(req);
+  const row = await createWebhooksRepo(catalystApp).create({
+    webhookName: b.webhook_name,
+    targetUrl: b.target_url,
+    secretKey: b.secret_key ?? crypto.randomBytes(24).toString("hex"),
+    events: b.events,
+    isActive: b.is_active ?? true,
+    createdBy: actor.username,
+  });
+  await logSettingsChange(catalystApp, {
     module: "webhooks",
     settingKey: b.webhook_name,
     entityId: String(row.id),
@@ -361,26 +362,24 @@ router.put("/webhooks/:id", async (req: Request, res: Response) => {
   const { id } = UpdateWebhookParams.parse(req.params);
   const b = UpdateWebhookBody.parse(req.body);
   const actor = getActor(req);
-  const [prior] = await db.select().from(webhooks).where(eq(webhooks.id, id));
+  const catalystApp = initCatalystApp(req);
+  const webhooksRepo = createWebhooksRepo(catalystApp);
+  const prior = await webhooksRepo.getById(id);
   // Re-enabling a webhook (false -> true) clears the failure count it was
   // auto-disabled with — otherwise the only recourse for a user is delete +
   // recreate, which discards delivery history. Any other update (including
   // leaving an active webhook active) must NOT touch failureCount.
   const reactivating = !!prior && prior.isActive === false && b.is_active === true;
-  const [row] = await db
-    .update(webhooks)
-    .set({
-      webhookName: b.webhook_name,
-      targetUrl: b.target_url,
-      events: b.events,
-      isActive: b.is_active ?? undefined,
-      ...(reactivating ? { failureCount: 0 } : {}),
-      ...(b.secret_key ? { secretKey: b.secret_key } : {}),
-    })
-    .where(eq(webhooks.id, id))
-    .returning();
+  const row = await webhooksRepo.update(id, {
+    webhookName: b.webhook_name,
+    targetUrl: b.target_url,
+    events: b.events,
+    isActive: b.is_active ?? undefined,
+    ...(reactivating ? { failureCount: 0 } : {}),
+    ...(b.secret_key ? { secretKey: b.secret_key } : {}),
+  });
   if (!row) throw notFound("Webhook not found");
-  await logSettingsChange({
+  await logSettingsChange(catalystApp, {
     module: "webhooks",
     settingKey: b.webhook_name,
     entityId: String(id),
@@ -395,10 +394,12 @@ router.put("/webhooks/:id", async (req: Request, res: Response) => {
 router.delete("/webhooks/:id", async (req: Request, res: Response) => {
   const { id } = DeleteWebhookParams.parse(req.params);
   const actor = getActor(req);
-  const [prior] = await db.select().from(webhooks).where(eq(webhooks.id, id));
-  await db.delete(webhooks).where(eq(webhooks.id, id));
+  const catalystApp = initCatalystApp(req);
+  const webhooksRepo = createWebhooksRepo(catalystApp);
+  const prior = await webhooksRepo.getById(id);
+  await webhooksRepo.delete(id);
   if (prior) {
-    await logSettingsChange({
+    await logSettingsChange(catalystApp, {
       module: "webhooks",
       settingKey: prior.webhookName,
       entityId: String(id),
@@ -413,27 +414,24 @@ router.delete("/webhooks/:id", async (req: Request, res: Response) => {
 
 router.get("/webhooks/:id/deliveries", async (req: Request, res: Response) => {
   const { id } = ListWebhookDeliveriesParams.parse(req.params);
-  const rows = await db
-    .select()
-    .from(webhookDeliveryLog)
-    .where(eq(webhookDeliveryLog.webhookId, id))
-    .orderBy(desc(webhookDeliveryLog.deliveredAt))
-    .limit(100);
+  const catalystApp = initCatalystApp(req);
+  const rows = await createWebhookDeliveryLogRepo(catalystApp).listByWebhookId(id, 100);
   res.json({
     data: rows.map((r) => ({
       id: r.id,
       eventType: r.eventType,
       responseStatus: r.responseStatus,
       success: r.success,
-      deliveredAt: r.deliveredAt instanceof Date ? r.deliveredAt.toISOString() : String(r.deliveredAt),
+      deliveredAt: r.deliveredAt.toISOString(),
     })),
   });
 });
 
 /* ---------------------------------------------------------- F12 Notifications */
 
-router.get("/notification-rules", async (_req: Request, res: Response) => {
-  const rows = await db.select().from(notificationRules).orderBy(desc(notificationRules.createdAt));
+router.get("/notification-rules", async (req: Request, res: Response) => {
+  const catalystApp = initCatalystApp(req);
+  const rows = await createNotificationRulesRepo(catalystApp).listAll();
   res.json({
     data: rows.map((r) => ({
       id: r.id,
@@ -449,18 +447,16 @@ router.get("/notification-rules", async (_req: Request, res: Response) => {
 router.post("/notification-rules", async (req: Request, res: Response) => {
   const b = CreateNotificationRuleBody.parse(req.body);
   const actor = getActor(req);
-  const [row] = await db
-    .insert(notificationRules)
-    .values({
-      commanderId: actor.username,
-      ruleName: b.rule_name,
-      triggerEvent: b.trigger_event,
-      triggerConditions: (b.trigger_conditions ?? null) as Record<string, unknown> | null,
-      channel: b.channel ?? "in_app",
-      isActive: b.is_active ?? true,
-    })
-    .returning();
-  await logSettingsChange({
+  const catalystApp = initCatalystApp(req);
+  const row = await createNotificationRulesRepo(catalystApp).create({
+    commanderId: actor.username,
+    ruleName: b.rule_name,
+    triggerEvent: b.trigger_event,
+    triggerConditions: (b.trigger_conditions ?? null) as Record<string, unknown> | null,
+    channel: b.channel ?? "in_app",
+    isActive: b.is_active ?? true,
+  });
+  await logSettingsChange(catalystApp, {
     module: "notification_rules",
     settingKey: b.rule_name,
     entityId: String(row.id),
@@ -485,20 +481,18 @@ router.put("/notification-rules/:id", async (req: Request, res: Response) => {
   const { id } = UpdateNotificationRuleParams.parse(req.params);
   const b = UpdateNotificationRuleBody.parse(req.body);
   const actor = getActor(req);
-  const [prior] = await db.select().from(notificationRules).where(eq(notificationRules.id, id));
-  const [row] = await db
-    .update(notificationRules)
-    .set({
-      ruleName: b.rule_name,
-      triggerEvent: b.trigger_event,
-      triggerConditions: (b.trigger_conditions ?? null) as Record<string, unknown> | null,
-      channel: b.channel ?? undefined,
-      isActive: b.is_active ?? undefined,
-    })
-    .where(eq(notificationRules.id, id))
-    .returning();
+  const catalystApp = initCatalystApp(req);
+  const rulesRepo = createNotificationRulesRepo(catalystApp);
+  const prior = await rulesRepo.getById(id);
+  const row = await rulesRepo.update(id, {
+    ruleName: b.rule_name,
+    triggerEvent: b.trigger_event,
+    triggerConditions: (b.trigger_conditions ?? null) as Record<string, unknown> | null,
+    channel: b.channel ?? undefined,
+    isActive: b.is_active ?? undefined,
+  });
   if (!row) throw notFound("Rule not found");
-  await logSettingsChange({
+  await logSettingsChange(catalystApp, {
     module: "notification_rules",
     settingKey: b.rule_name,
     entityId: String(id),
@@ -522,10 +516,12 @@ router.put("/notification-rules/:id", async (req: Request, res: Response) => {
 router.delete("/notification-rules/:id", async (req: Request, res: Response) => {
   const { id } = DeleteNotificationRuleParams.parse(req.params);
   const actor = getActor(req);
-  const [prior] = await db.select().from(notificationRules).where(eq(notificationRules.id, id));
-  await db.delete(notificationRules).where(eq(notificationRules.id, id));
+  const catalystApp = initCatalystApp(req);
+  const rulesRepo = createNotificationRulesRepo(catalystApp);
+  const prior = await rulesRepo.getById(id);
+  await rulesRepo.delete(id);
   if (prior) {
-    await logSettingsChange({
+    await logSettingsChange(catalystApp, {
       module: "notification_rules",
       settingKey: prior.ruleName,
       entityId: String(id),
@@ -540,12 +536,8 @@ router.delete("/notification-rules/:id", async (req: Request, res: Response) => 
 
 router.get("/notifications", async (req: Request, res: Response) => {
   const unack = req.query.unacknowledged === "true";
-  const rows = await db
-    .select()
-    .from(notificationLog)
-    .where(unack ? sql`${notificationLog.acknowledgedAt} is null` : sql`true`)
-    .orderBy(desc(notificationLog.sentAt))
-    .limit(100);
+  const catalystApp = initCatalystApp(req);
+  const rows = await createNotificationLogRepo(catalystApp).list(unack, 100);
   res.json({
     data: rows.map((r) => ({
       id: r.id,
@@ -553,153 +545,115 @@ router.get("/notifications", async (req: Request, res: Response) => {
       channel: r.channel,
       subject: r.subject,
       message: r.message,
-      sentAt: r.sentAt instanceof Date ? r.sentAt.toISOString() : String(r.sentAt),
-      acknowledgedAt: r.acknowledgedAt instanceof Date ? r.acknowledgedAt.toISOString() : r.acknowledgedAt,
+      sentAt: r.sentAt.toISOString(),
+      acknowledgedAt: r.acknowledgedAt ? r.acknowledgedAt.toISOString() : null,
     })),
   });
 });
 
 router.post("/notifications/:id/ack", async (req: Request, res: Response) => {
   const id = String(req.params.id);
-  await db.update(notificationLog).set({ acknowledgedAt: new Date() }).where(eq(notificationLog.id, id));
+  const catalystApp = initCatalystApp(req);
+  await createNotificationLogRepo(catalystApp).acknowledge(id);
   res.json({ message: "Acknowledged" });
 });
 
 /* -------------------------------------------------------- F16 Custom fields/tags */
 
-router.get("/custom-fields", async (_req: Request, res: Response) => {
-  const rows = await db
-    .select()
-    .from(customFieldDefinitions)
-    .orderBy(asc(customFieldDefinitions.displayOrder));
-  res.json({
-    data: rows.map((r) => ({
-      id: r.id,
-      fieldName: r.fieldName,
-      fieldKey: r.fieldKey,
-      fieldType: r.fieldType,
-      options: r.options,
-      isRequired: r.isRequired,
-      displayOrder: r.displayOrder,
-    })),
-  });
+router.get("/custom-fields", async (req: Request, res: Response) => {
+  const catalystApp = initCatalystApp(req);
+  const rows = await createCustomFieldDefinitionsRepo(catalystApp).listAll();
+  res.json({ data: rows });
 });
 
 router.post("/custom-fields", async (req: Request, res: Response) => {
   const b = CreateCustomFieldBody.parse(req.body);
   const actor = getActor(req);
-  const [row] = await db
-    .insert(customFieldDefinitions)
-    .values({
-      fieldName: b.field_name,
-      fieldKey: b.field_key,
-      fieldType: b.field_type,
-      options: b.options ?? null,
-      isRequired: b.is_required ?? false,
-      displayOrder: b.display_order ?? 0,
-      createdBy: actor.username,
-    })
-    .returning();
-  res.status(201).json({
-    data: {
-      id: row.id,
-      fieldName: row.fieldName,
-      fieldKey: row.fieldKey,
-      fieldType: row.fieldType,
-      options: row.options,
-      isRequired: row.isRequired,
-      displayOrder: row.displayOrder,
-    },
+  const catalystApp = initCatalystApp(req);
+  const row = await createCustomFieldDefinitionsRepo(catalystApp).create({
+    fieldName: b.field_name,
+    fieldKey: b.field_key,
+    fieldType: b.field_type,
+    options: b.options ?? null,
+    isRequired: b.is_required ?? false,
+    displayOrder: b.display_order ?? 0,
+    createdBy: actor.username,
   });
+  res.status(201).json({ data: row });
 });
 
 router.get("/deals/:dealId/custom-fields", async (req: Request, res: Response) => {
   const { dealId } = GetDealCustomFieldsParams.parse(req.params);
-  const rows = await db
-    .select()
-    .from(customFieldValues)
-    .where(eq(customFieldValues.dealId, dealId));
-  res.json({ data: { values: rows } });
+  const catalystApp = initCatalystApp(req);
+  const values = await createCustomFieldValuesRepo(catalystApp).listForDeal(dealId);
+  res.json({ data: { values } });
 });
 
 router.put("/deals/:dealId/custom-fields/:fieldId", async (req: Request, res: Response) => {
   const { dealId, fieldId } = SetDealCustomFieldParams.parse(req.params);
   const b = SetDealCustomFieldBody.parse(req.body);
-  await db
-    .insert(customFieldValues)
-    .values({
-      dealId,
-      fieldId,
-      valueText: b.value_text ?? null,
-      valueNumber: b.value_number != null ? String(b.value_number) : null,
-      valueDate: b.value_date ?? null,
-      valueSelect: b.value_select ?? null,
-      valueMultiSelect: b.value_multi_select ?? null,
-    })
-    .onConflictDoUpdate({
-      target: [customFieldValues.dealId, customFieldValues.fieldId],
-      set: {
-        valueText: b.value_text ?? null,
-        valueNumber: b.value_number != null ? String(b.value_number) : null,
-        valueDate: b.value_date ?? null,
-        valueSelect: b.value_select ?? null,
-        valueMultiSelect: b.value_multi_select ?? null,
-      },
-    });
+  const catalystApp = initCatalystApp(req);
+  await createCustomFieldValuesRepo(catalystApp).upsert({
+    dealId,
+    fieldId,
+    valueText: b.value_text ?? null,
+    valueNumber: b.value_number ?? null,
+    valueDate: b.value_date ?? null,
+    valueSelect: b.value_select ?? null,
+    valueMultiSelect: b.value_multi_select ?? null,
+  });
   res.json({ message: "Saved" });
 });
 
-router.get("/tags", async (_req: Request, res: Response) => {
-  const rows = await db.select().from(tagDefinitions).orderBy(asc(tagDefinitions.tagName));
-  res.json({ data: rows.map((r) => ({ id: r.id, tagName: r.tagName, color: r.color })) });
+router.get("/tags", async (req: Request, res: Response) => {
+  const catalystApp = initCatalystApp(req);
+  const rows = await createTagDefinitionsRepo(catalystApp).listAll();
+  res.json({ data: rows });
 });
 
 router.post("/tags", async (req: Request, res: Response) => {
   const b = CreateTagBody.parse(req.body);
-  const [row] = await db
-    .insert(tagDefinitions)
-    .values({ tagName: b.tag_name, color: b.color })
-    .returning();
-  res.status(201).json({ data: { id: row.id, tagName: row.tagName, color: row.color } });
+  const catalystApp = initCatalystApp(req);
+  const row = await createTagDefinitionsRepo(catalystApp).create(b.tag_name, b.color);
+  res.status(201).json({ data: row });
 });
 
-// Delete a tag definition outright. The deal_tags FK cascades, but we also clear
-// associations explicitly inside the transaction so the behaviour is the same
-// even if a given DB lacks the ON DELETE CASCADE constraint.
+// Delete a tag definition outright. Data Store has no native FK cascade, so
+// deal_tags associations are cleared explicitly first — same behaviour the
+// original ON DELETE CASCADE + defensive transaction produced.
 router.delete("/tags/:tagId", async (req: Request, res: Response) => {
   const { tagId } = DeleteTagParams.parse(req.params);
-  await db.transaction(async (tx) => {
-    await tx.delete(dealTags).where(eq(dealTags.tagId, tagId));
-    await tx.delete(tagDefinitions).where(eq(tagDefinitions.id, tagId));
-  });
+  const catalystApp = initCatalystApp(req);
+  const dealTagsRepo = createDealTagsRepo(catalystApp);
+  await dealTagsRepo.removeAllForTag(tagId);
+  await createTagDefinitionsRepo(catalystApp).delete(tagId);
   res.json({ message: "Tag deleted" });
 });
 
 router.get("/deals/:dealId/tags", async (req: Request, res: Response) => {
   const { dealId } = GetDealTagsParams.parse(req.params);
-  const rows = await db
-    .select({ id: tagDefinitions.id, tagName: tagDefinitions.tagName, color: tagDefinitions.color })
-    .from(dealTags)
-    .innerJoin(tagDefinitions, eq(dealTags.tagId, tagDefinitions.id))
-    .where(eq(dealTags.dealId, dealId));
+  const catalystApp = initCatalystApp(req);
+  const rows = await createDealTagsRepo(catalystApp).listForDeal(dealId);
   res.json({ data: rows });
 });
 
 router.post("/deals/:dealId/tags/:tagId", async (req: Request, res: Response) => {
   const { dealId, tagId } = ApplyDealTagParams.parse(req.params);
-  await db.insert(dealTags).values({ dealId, tagId }).onConflictDoNothing();
+  const catalystApp = initCatalystApp(req);
+  await createDealTagsRepo(catalystApp).apply(dealId, tagId);
   res.json({ message: "Tag applied" });
 });
 
 router.delete("/deals/:dealId/tags/:tagId", async (req: Request, res: Response) => {
   const { dealId, tagId } = RemoveDealTagParams.parse(req.params);
-  await db.delete(dealTags).where(and(eq(dealTags.dealId, dealId), eq(dealTags.tagId, tagId)));
+  const catalystApp = initCatalystApp(req);
+  await createDealTagsRepo(catalystApp).remove(dealId, tagId);
   res.json({ message: "Tag removed" });
 });
 
 /* ------------------------------------------------------------- F5/F6 Memory */
 
-function memoryOut(r: typeof dealMemory.$inferSelect) {
+function memoryOut(r: DealMemoryRow) {
   return {
     id: r.id,
     dealId: r.dealId,
@@ -716,7 +670,7 @@ function memoryOut(r: typeof dealMemory.$inferSelect) {
     winLossNarrative: r.winLossNarrative,
     keyLessons: r.keyLessons,
     tags: r.tags,
-    archivedAt: r.archivedAt instanceof Date ? r.archivedAt.toISOString() : String(r.archivedAt),
+    archivedAt: r.archivedAt.toISOString(),
     primaryLossCategory: r.primaryLossCategory,
     lossSubcategory: r.lossSubcategory,
     lossNarrative: r.lossNarrative,
@@ -728,7 +682,7 @@ function memoryOut(r: typeof dealMemory.$inferSelect) {
     championIdentified: r.championIdentified,
     productGaps: r.productGaps,
     qualityScore: r.qualityScore,
-    autopsyCompletedAt: r.autopsyCompletedAt instanceof Date ? r.autopsyCompletedAt.toISOString() : r.autopsyCompletedAt,
+    autopsyCompletedAt: r.autopsyCompletedAt ? r.autopsyCompletedAt.toISOString() : null,
   };
 }
 
@@ -764,93 +718,101 @@ function computeAutopsyQualityScore(f: {
   return Math.round((filled / checks.length) * 100);
 }
 
-router.get("/memory", async (_req: Request, res: Response) => {
-  const rows = await db.select().from(dealMemory).orderBy(desc(dealMemory.archivedAt)).limit(200);
-  res.json({ data: rows.map(memoryOut) });
+router.get("/memory", async (req: Request, res: Response) => {
+  const catalystApp = initCatalystApp(req);
+  const rows = await createDealMemoryRepo(catalystApp).listAll();
+  const sorted = [...rows].sort((a, b) => b.archivedAt.getTime() - a.archivedAt.getTime()).slice(0, 200);
+  res.json({ data: sorted.map(memoryOut) });
 });
+
+// Data Store has no tsvector/ts_rank equivalent (see docs/CATALYST_SCHEMA.md's
+// "Known open items" — Catalyst Search integration is Slice 5 scope). At this
+// app's actual data volume (tens of archived deals), an in-memory
+// case-insensitive substring match over the same two fields the original
+// tsvector column covered (win_loss_narrative + key_lessons) is a reasonable
+// substitute: every row is already fetched for the JS-side facet filters
+// below, so no separate index is needed. Ranking is by match-count instead of
+// ts_rank's weighted scoring — simpler, but orders "more mentions" above
+// "fewer mentions", which is the same intuition ts_rank encodes.
+function memorySearchText(r: DealMemoryRow): string {
+  return `${r.winLossNarrative ?? ""} ${(r.keyLessons ?? []).join(" ")}`;
+}
+
+function countOccurrences(haystack: string, needle: string): number {
+  if (!needle) return 0;
+  let count = 0;
+  let idx = 0;
+  const lowerHay = haystack.toLowerCase();
+  const lowerNeedle = needle.toLowerCase();
+  while ((idx = lowerHay.indexOf(lowerNeedle, idx)) !== -1) {
+    count += 1;
+    idx += lowerNeedle.length;
+  }
+  return count;
+}
+
+// A short highlighted excerpt around the first match — mirrors ts_headline's
+// StartSel=<mark>,StopSel=</mark> markup so the existing frontend rendering
+// (components/memory/memory-result-card.tsx) needs no changes.
+function buildSnippet(text: string, term: string): string | null {
+  const idx = text.toLowerCase().indexOf(term.toLowerCase());
+  if (idx === -1) return null;
+  const start = Math.max(0, idx - 60);
+  const end = Math.min(text.length, idx + term.length + 120);
+  const prefix = start > 0 ? "…" : "";
+  const suffix = end < text.length ? "…" : "";
+  const before = text.slice(start, idx);
+  const match = text.slice(idx, idx + term.length);
+  const after = text.slice(idx + term.length, end);
+  return `${prefix}${before}<mark>${match}</mark>${after}${suffix}`;
+}
 
 router.get("/memory/search", async (req: Request, res: Response) => {
   const q = SearchDealMemoryQueryParams.parse(req.query);
   const term = (q.q ?? "").trim();
+  const catalystApp = initCatalystApp(req);
+  const all = await createDealMemoryRepo(catalystApp).listAll();
 
-  const extraFilters = [];
-  // deal_memory.deal_id is unique (see post-mortem.ts's onConflictDoUpdate
-  // target), so this always resolves to at most one row — the caller no
-  // longer needs to page through the outcome-scoped LIMIT 50 list to find a
-  // specific deal's record (which silently missed anything past the 50th
-  // most recently archived).
-  if (q.dealId) extraFilters.push(sql`AND deal_id = ${q.dealId}`);
-  if (q.outcome) extraFilters.push(sql`AND outcome = ${q.outcome}`);
-  if (q.competitor) extraFilters.push(sql`AND competitors_faced @> ARRAY[${q.competitor}]::text[]`);
-  if (q.pricingModel) extraFilters.push(sql`AND pricing_model = ${q.pricingModel}`);
-  if (q.servicesTier) extraFilters.push(sql`AND services_tier = ${q.servicesTier}`);
-  if (q.minTcv != null) extraFilters.push(sql`AND final_tcv::numeric >= ${q.minTcv}`);
-  if (q.maxTcv != null) extraFilters.push(sql`AND final_tcv::numeric <= ${q.maxTcv}`);
-  if (q.archivedFrom) extraFilters.push(sql`AND archived_at >= ${new Date(q.archivedFrom)}`);
-  if (q.archivedTo) extraFilters.push(sql`AND archived_at <= ${new Date(q.archivedTo)}`);
-  if (q.hasNarrative === true) extraFilters.push(sql`AND win_loss_narrative IS NOT NULL AND win_loss_narrative <> ''`);
-  const extra = sql.join(extraFilters, sql` `);
+  let candidates = all;
+  // deal_memory.deal_id is unique, so this always resolves to at most one row.
+  if (q.dealId) candidates = candidates.filter((r) => r.dealId === q.dealId);
+  if (q.outcome) candidates = candidates.filter((r) => r.outcome === q.outcome);
+  if (q.competitor) candidates = candidates.filter((r) => r.competitorsFaced?.includes(q.competitor as string));
+  if (q.pricingModel) candidates = candidates.filter((r) => r.pricingModel === q.pricingModel);
+  if (q.servicesTier) candidates = candidates.filter((r) => r.servicesTier === q.servicesTier);
+  if (q.minTcv != null) candidates = candidates.filter((r) => (r.finalTcv ?? 0) >= q.minTcv!);
+  if (q.maxTcv != null) candidates = candidates.filter((r) => (r.finalTcv ?? 0) <= q.maxTcv!);
+  if (q.archivedFrom) {
+    const from = new Date(q.archivedFrom).getTime();
+    candidates = candidates.filter((r) => r.archivedAt.getTime() >= from);
+  }
+  if (q.archivedTo) {
+    const to = new Date(q.archivedTo).getTime();
+    candidates = candidates.filter((r) => r.archivedAt.getTime() <= to);
+  }
+  if (q.hasNarrative === true) candidates = candidates.filter((r) => !!r.winLossNarrative);
 
-  const rows = term
-    ? await db.execute(sql`
-        SELECT *,
-          ts_headline('english',
-            coalesce(win_loss_narrative,'') || ' ' || coalesce(array_to_string(key_lessons, ' '), ''),
-            plainto_tsquery('english', ${term}),
-            'StartSel=<mark>,StopSel=</mark>,MaxWords=40,MinWords=15,MaxFragments=2'
-          ) AS snippet
-        FROM edc_v2.deal_memory
-        WHERE searchable_vector @@ plainto_tsquery('english', ${term})
-        ${extra}
-        ORDER BY ts_rank(searchable_vector, plainto_tsquery('english', ${term})) DESC
-        LIMIT 50`)
-    : await db.execute(sql`
-        SELECT *, NULL AS snippet
-        FROM edc_v2.deal_memory
-        WHERE true
-        ${extra}
-        ORDER BY archived_at DESC
-        LIMIT 50`);
-  const list = Array.isArray(rows) ? rows : (rows as { rows: unknown[] }).rows ?? [];
-  res.json({ data: (list as Record<string, unknown>[]).map(normalizeMemoryRow) });
+  let list: { row: DealMemoryRow; snippet: string | null }[];
+  if (term) {
+    list = candidates
+      .map((row) => ({ row, score: countOccurrences(memorySearchText(row), term) }))
+      .filter((x) => x.score > 0)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 50)
+      .map(({ row }) => ({ row, snippet: buildSnippet(memorySearchText(row), term) }));
+  } else {
+    list = [...candidates]
+      .sort((a, b) => b.archivedAt.getTime() - a.archivedAt.getTime())
+      .slice(0, 50)
+      .map((row) => ({ row, snippet: null }));
+  }
+
+  res.json({ data: list.map(({ row, snippet }) => ({ ...memoryOut(row), snippet })) });
 });
 
-// Raw SQL rows come back snake_cased; normalize to the API shape.
-function normalizeMemoryRow(r: Record<string, unknown>) {
-  return {
-    id: r.id ?? r["id"],
-    dealId: r.dealId ?? r["deal_id"],
-    accountName: r.accountName ?? r["account_name"],
-    dealName: r.dealName ?? r["deal_name"],
-    outcome: r.outcome,
-    finalTcv: r.finalTcv ?? r["final_tcv"] ?? null,
-    pricingModel: r.pricingModel ?? r["pricing_model"] ?? null,
-    servicesTier: r.servicesTier ?? r["services_tier"] ?? null,
-    totalGatesCompleted: r.totalGatesCompleted ?? r["total_gates_completed"] ?? null,
-    totalBlockersEncountered: r.totalBlockersEncountered ?? r["total_blockers_encountered"] ?? null,
-    totalDaysActive: r.totalDaysActive ?? r["total_days_active"] ?? null,
-    competitorsFaced: r.competitorsFaced ?? r["competitors_faced"] ?? null,
-    winLossNarrative: r.winLossNarrative ?? r["win_loss_narrative"] ?? null,
-    keyLessons: r.keyLessons ?? r["key_lessons"] ?? null,
-    tags: r.tags ?? null,
-    archivedAt:
-      (r.archivedAt as string) ??
-      (r["archived_at"] instanceof Date
-        ? (r["archived_at"] as Date).toISOString()
-        : String(r["archived_at"] ?? "")),
-    snippet: (r.snippet as string | null) ?? null,
-  };
-}
-
-router.get("/memory/facets", async (_req: Request, res: Response) => {
-  const rows = await db
-    .select({
-      outcome: dealMemory.outcome,
-      pricingModel: dealMemory.pricingModel,
-      servicesTier: dealMemory.servicesTier,
-      competitorsFaced: dealMemory.competitorsFaced,
-    })
-    .from(dealMemory);
+router.get("/memory/facets", async (req: Request, res: Response) => {
+  const catalystApp = initCatalystApp(req);
+  const rows = await createDealMemoryRepo(catalystApp).listAll();
 
   const bump = (m: Map<string, number>, k: string | null | undefined) => {
     if (!k) return;
@@ -882,16 +844,27 @@ router.get("/memory/facets", async (_req: Request, res: Response) => {
 
 router.get("/memory/ask", async (req: Request, res: Response) => {
   const { q } = AskDealMemoryQueryParams.parse(req.query);
-  const memory = await db.select().from(dealMemory);
+  const catalystApp = initCatalystApp(req);
+  const memory = await createDealMemoryRepo(catalystApp).listAll();
   if (memory.length === 0) return res.json({ data: composeNoDataAnswer() });
 
   const knownCompetitors = [...new Set(memory.flatMap((m) => m.competitorsFaced ?? []))];
   const intent = classifyAdvisorIntent(q, knownCompetitors);
-  const cite = (rows: typeof memory): AdvisorCitation[] =>
+  const cite = (rows: DealMemoryRow[]): AdvisorCitation[] =>
     rows.slice(0, 5).map((r) => ({ id: r.id, dealName: r.dealName, accountName: r.accountName }));
+  const asMemoryRow = (r: DealMemoryRow): MemoryRow => ({
+    id: r.id,
+    outcome: r.outcome,
+    finalTcv: r.finalTcv != null ? String(r.finalTcv) : null,
+    totalDaysActive: r.totalDaysActive,
+    competitorsFaced: r.competitorsFaced,
+    pricingModel: r.pricingModel,
+    servicesTier: r.servicesTier,
+    primaryLossCategory: r.primaryLossCategory,
+  });
 
   if (intent.type === "competitive") {
-    const intel = computeCompetitorIntel(memory).find((c) => c.name === intent.competitor);
+    const intel = computeCompetitorIntel(memory.map(asMemoryRow)).find((c) => c.name === intent.competitor);
     const encounters = memory.filter((m) => m.competitorsFaced?.includes(intent.competitor));
     if (!intel) return res.json({ data: composeNoDataAnswer() });
     const citations = cite(encounters);
@@ -904,9 +877,9 @@ router.get("/memory/ask", async (req: Request, res: Response) => {
   }
 
   if (intent.type === "pricing") {
-    const won = memory.filter((m) => m.outcome === "Won" && Number(m.finalTcv) > 0);
+    const won = memory.filter((m) => m.outcome === "Won" && (m.finalTcv ?? 0) > 0);
     if (won.length === 0) return res.json({ data: composeNoDataAnswer() });
-    const median = percentiles(won.map((m) => Number(m.finalTcv))).median;
+    const median = percentiles(won.map((m) => m.finalTcv ?? 0)).median;
     const citations = cite(won);
     const answer = {
       answer: `Across ${won.length} won archived deals, the median total contract value is $${Math.round(median).toLocaleString("en-US")}. Check the Pricing tab for percentile breakdowns filtered by pricing model or services tier.`,
@@ -917,59 +890,49 @@ router.get("/memory/ask", async (req: Request, res: Response) => {
   }
 
   if (intent.type === "biggest") {
-    const sorted = [...memory].sort((a, b) => (Number(b.finalTcv) || 0) - (Number(a.finalTcv) || 0)).slice(0, 3);
+    const sorted = [...memory].sort((a, b) => (b.finalTcv ?? 0) - (a.finalTcv ?? 0)).slice(0, 3);
     const citations = cite(sorted);
     if (citations.length === 0) return res.json({ data: composeNoDataAnswer() });
     const top = sorted[0];
     return res.json({
       data: {
-        answer: `The largest archived deal is ${top.dealName} (${top.accountName}) at $${Math.round(Number(top.finalTcv)).toLocaleString("en-US")}, outcome: ${top.outcome}.`,
+        answer: `The largest archived deal is ${top.dealName} (${top.accountName}) at $${Math.round(top.finalTcv ?? 0).toLocaleString("en-US")}, outcome: ${top.outcome}.`,
         confidence: confidenceFor(citations.length),
         citations,
       },
     });
   }
 
-  // fulltext fallback — reuse the same tsvector search as /memory/search.
-  const termRows = await db.execute(sql`
-    SELECT id, deal_name AS "dealName", account_name AS "accountName", key_lessons AS "keyLessons"
-    FROM edc_v2.deal_memory
-    WHERE searchable_vector @@ plainto_tsquery('english', ${q})
-    ORDER BY ts_rank(searchable_vector, plainto_tsquery('english', ${q})) DESC
-    LIMIT 3`);
-  const list = (Array.isArray(termRows) ? termRows : (termRows as { rows: unknown[] }).rows ?? []) as {
-    id: string; dealName: string; accountName: string; keyLessons: string[] | null;
-  }[];
-  if (list.length === 0) return res.json({ data: composeNoDataAnswer() });
-  const lessons = list.flatMap((r) => r.keyLessons ?? []).slice(0, 5);
+  // fulltext fallback — reuse the same in-memory search as /memory/search.
+  const matches = memory
+    .map((row) => ({ row, score: countOccurrences(memorySearchText(row), q) }))
+    .filter((x) => x.score > 0)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 3)
+    .map((x) => x.row);
+  if (matches.length === 0) return res.json({ data: composeNoDataAnswer() });
+  const lessons = matches.flatMap((r) => r.keyLessons ?? []).slice(0, 5);
   return res.json({
     data: {
       answer: lessons.length > 0
         ? `The closest archived matches surfaced these lessons: ${lessons.join("; ")}.`
         : `The closest archived matches are cited below — no structured lessons were captured for them yet.`,
-      confidence: confidenceFor(list.length),
-      citations: list.map((r) => ({ id: r.id, dealName: r.dealName, accountName: r.accountName })),
+      confidence: confidenceFor(matches.length),
+      citations: matches.map((r) => ({ id: r.id, dealName: r.dealName, accountName: r.accountName })),
     },
   });
 });
 
 router.get("/memory/similar/:dealId", async (req: Request, res: Response) => {
   const { dealId } = GetSimilarDealsParams.parse(req.params);
-  const dealRows = await db
-    .select({
-      accountName: enterpriseDeals.accountName,
-      productRevenue: enterpriseDeals.productRevenue,
-      servicesRevenue: enterpriseDeals.servicesRevenue,
-      contractTermYears: enterpriseDeals.contractTermYears,
-      pricingModel: pricingModels.modelName,
-    })
-    .from(enterpriseDeals)
-    .leftJoin(pricingModels, eq(enterpriseDeals.pricingModelId, pricingModels.id))
-    .where(eq(enterpriseDeals.id, dealId))
-    .limit(1);
-  const deal = dealRows[0];
+  const catalystApp = initCatalystApp(req);
+  const [deal, pricingModelList, all] = await Promise.all([
+    createEnterpriseDealsRepo(catalystApp).getById(dealId),
+    createPricingModelsRepo(catalystApp).listAll(),
+    createDealMemoryRepo(catalystApp).listAll(),
+  ]);
   if (!deal) throw notFound("Deal not found");
-  const all = await db.select().from(dealMemory).limit(200);
+  const pricingModelName = pricingModelList.find((p) => p.id === deal.pricingModelId)?.modelName ?? "";
   // Compare like with like: `dealMemory.finalTcv` is written via calculateFlatTCV
   // (term-multiplied for Multi-Year Committed deals), so deriving this deal's
   // side from raw productRevenue alone would mis-scale a multi-year deal by its
@@ -978,11 +941,11 @@ router.get("/memory/similar/:dealId", async (req: Request, res: Response) => {
     productRevenue: Number(deal.productRevenue) || 0,
     servicesRevenue: Number(deal.servicesRevenue) || 0,
     contractTermYears: deal.contractTermYears,
-    pricingModel: deal.pricingModel ?? "",
+    pricingModel: pricingModelName,
   });
   const similar = all.filter((m) => {
     if (m.accountName === deal.accountName) return true;
-    const mt = Number(m.finalTcv) || 0;
+    const mt = m.finalTcv ?? 0;
     return tcv > 0 && Math.abs(mt - tcv) / tcv <= 0.5;
   });
   res.json({ data: similar.slice(0, 10).map(memoryOut) });
@@ -990,41 +953,38 @@ router.get("/memory/similar/:dealId", async (req: Request, res: Response) => {
 
 router.get("/memory/compare", async (req: Request, res: Response) => {
   const { ids } = CompareDealMemoryQueryParams.parse(req.query);
-  const idList = ids.split(",").map((s) => s.trim()).filter(Boolean).slice(0, 4);
-  if (idList.length === 0) return res.json({ data: [] });
-  const rows = await db.select().from(dealMemory).where(inArray(dealMemory.id, idList));
+  const idList = new Set(ids.split(",").map((s) => s.trim()).filter(Boolean).slice(0, 4));
+  if (idList.size === 0) return res.json({ data: [] });
+  const catalystApp = initCatalystApp(req);
+  const all = await createDealMemoryRepo(catalystApp).listAll();
+  const rows = all.filter((r) => idList.has(r.id));
   return res.json({ data: rows.map(memoryOut) });
 });
 
 // Literal route — MUST stay above "/memory/:id" so it isn't captured as an id.
-router.get("/memory/revival-candidates", async (_req: Request, res: Response) => {
-  const { thresholds } = await getThresholds();
+router.get("/memory/revival-candidates", async (req: Request, res: Response) => {
+  const catalystApp = initCatalystApp(req);
+  const { thresholds } = await getThresholds(catalystApp);
   const cfg = {
     minWinBack: num(thresholds, "revival_min_win_back", 3),
     cooloffDays: num(thresholds, "revival_cooloff_days", 60),
     maxAgeDays: num(thresholds, "revival_max_age_days", 365),
   };
-  const rows = await db
-    .select({
-      id: dealMemory.id,
-      dealId: dealMemory.dealId,
-      accountName: dealMemory.accountName,
-      dealName: dealMemory.dealName,
-      outcome: dealMemory.outcome,
-      finalTcv: dealMemory.finalTcv,
-      winBackPotential: dealMemory.winBackPotential,
-      winBackTimeline: dealMemory.winBackTimeline,
-      primaryLossCategory: dealMemory.primaryLossCategory,
-      archivedAt: dealMemory.archivedAt,
-    })
-    .from(dealMemory)
-    .where(eq(dealMemory.outcome, "Lost"));
+  const all = await createDealMemoryRepo(catalystApp).listAll();
+  const rows = all.filter((r) => r.outcome === "Lost");
 
   const candidates = selectRevivalCandidates(
     rows.map((r) => ({
-      ...r,
-      finalTcv: r.finalTcv == null ? null : Number(r.finalTcv),
-      archivedAt: r.archivedAt as unknown as string | Date,
+      id: r.id,
+      dealId: r.dealId,
+      accountName: r.accountName,
+      dealName: r.dealName,
+      outcome: r.outcome,
+      finalTcv: r.finalTcv,
+      winBackPotential: r.winBackPotential,
+      winBackTimeline: r.winBackTimeline,
+      primaryLossCategory: r.primaryLossCategory,
+      archivedAt: r.archivedAt,
     })),
     cfg,
     Date.now(),
@@ -1034,18 +994,20 @@ router.get("/memory/revival-candidates", async (_req: Request, res: Response) =>
 
 router.get("/memory/:id", async (req: Request, res: Response) => {
   const { id } = GetDealMemoryParams.parse(req.params);
-  const rows = await db.select().from(dealMemory).where(eq(dealMemory.id, id)).limit(1);
-  if (!rows[0]) throw notFound("Memory not found");
-  res.json({ data: memoryOut(rows[0]) });
+  const catalystApp = initCatalystApp(req);
+  const row = await createDealMemoryRepo(catalystApp).getById(id);
+  if (!row) throw notFound("Memory not found");
+  res.json({ data: memoryOut(row) });
 });
 
 router.put("/memory/:id", async (req: Request, res: Response) => {
   const { id } = UpdateDealMemoryParams.parse(req.params);
   const b = UpdateDealMemoryBody.parse(req.body);
+  const catalystApp = initCatalystApp(req);
+  const memoryRepo = createDealMemoryRepo(catalystApp);
 
-  const existingRows = await db.select().from(dealMemory).where(eq(dealMemory.id, id)).limit(1);
-  if (!existingRows[0]) throw notFound("Memory not found");
-  const existing = existingRows[0];
+  const existing = await memoryRepo.getById(id);
+  if (!existing) throw notFound("Memory not found");
 
   // `"x" in b` (not `b.x ?? existing.x`) so an explicit null CLEARS a field.
   // `??` treats an explicit null the same as "field omitted" and silently
@@ -1072,24 +1034,21 @@ router.put("/memory/:id", async (req: Request, res: Response) => {
   // Dashboard's autopsyCompletenessPct.
   const autopsyCaptured = isAutopsyUpdate && qualityScore > 0;
 
-  const [row] = await db
-    .update(dealMemory)
-    .set({
-      winLossNarrative: b.win_loss_narrative ?? undefined,
-      keyLessons: b.key_lessons ?? undefined,
-      tags: b.tags ?? undefined,
-      ...merged,
-      qualityScore,
-      autopsyCompletedAt: autopsyCaptured ? new Date() : undefined,
-    })
-    .where(eq(dealMemory.id, id))
-    .returning();
+  const row = await memoryRepo.update(id, {
+    ...(b.win_loss_narrative !== undefined ? { winLossNarrative: b.win_loss_narrative } : {}),
+    ...(b.key_lessons !== undefined ? { keyLessons: b.key_lessons } : {}),
+    ...(b.tags !== undefined ? { tags: b.tags } : {}),
+    ...merged,
+    qualityScore,
+    ...(autopsyCaptured ? { autopsyCompletedAt: new Date() } : {}),
+  });
   if (!row) throw notFound("Memory not found");
   if (autopsyCaptured) {
     emitDealEvent("deal.autopsy_captured", {
       dealId: row.dealId,
       actor: getActor(req).displayName,
       qualityScore: row.qualityScore ?? 0,
+      catalystApp,
     });
   }
   res.json({ data: memoryOut(row) });

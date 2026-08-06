@@ -1,5 +1,4 @@
-import { eq } from "drizzle-orm";
-import { db, notificationRules, notificationLog } from "@workspace/db";
+import { type CatalystApp, createNotificationRulesRepo, createNotificationLogRepo } from "@workspace/db/catalyst";
 import { dealEvents, type DealEvent } from "../events";
 import { sendMail } from "../mail";
 import { logger } from "../logger";
@@ -43,11 +42,14 @@ export function registerNotificationService(): () => void {
   return dealEvents.on(async (event) => {
     const trigger = EVENT_TO_TRIGGER[event.type];
     if (!trigger) return;
+    // Absent if this event came from an emitter that hasn't migrated off
+    // Drizzle yet — no-op rather than throw, per the event bus's "never
+    // break the request path" contract (see lib/events.ts).
+    if (!event.catalystApp) return;
+    const catalystApp = event.catalystApp as CatalystApp;
 
-    const rules = await db
-      .select()
-      .from(notificationRules)
-      .where(eq(notificationRules.isActive, true));
+    const allRules = await createNotificationRulesRepo(catalystApp).listAll();
+    const rules = allRules.filter((r) => r.isActive);
 
     for (const rule of rules) {
       if (rule.triggerEvent !== trigger) continue;
@@ -55,17 +57,17 @@ export function registerNotificationService(): () => void {
 
       const message = messageFor(event);
       const subject = `[EDC] ${rule.ruleName}`;
-      await db.insert(notificationLog).values({
+      await createNotificationLogRepo(catalystApp).create({
         ruleId: rule.id,
         dealId: event.dealId,
         channel: rule.channel,
-        recipient: rule.commanderId,
+        recipient: rule.createdBy,
         subject,
         message,
       });
 
       if (rule.channel === "email") {
-        void sendMail({ to: rule.commanderId, subject, html: `<p>${message}</p>` }).catch((err) =>
+        void sendMail({ to: rule.createdBy, subject, html: `<p>${message}</p>` }).catch((err) =>
           logger.error({ err, ruleId: rule.id }, "Notification email failed"),
         );
       }

@@ -1,14 +1,12 @@
 import { Router, type IRouter, type Request, type Response } from "express";
-import { desc, eq } from "drizzle-orm";
 import {
-  db,
-  enterpriseDeals,
-  pipelineStages,
-  pricingModels,
-  dealDecisions,
-} from "@workspace/db";
+  initCatalystApp,
+  createEnterpriseDealsRepo,
+  createPipelineStagesRepo,
+  createPricingModelsRepo,
+  createDealDecisionsRepo,
+} from "@workspace/db/catalyst";
 import { runPipelineSimulation, calculateFlatTCV, type SimDeal } from "@workspace/engine";
-import { notDeletedFilter } from "../../lib/deal-filters";
 
 /**
  * Non-JSON output routes (V2 F14 reports, F15 digest, F17 export). These return
@@ -32,34 +30,61 @@ function esc(v: unknown): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 
-async function activeDealRows() {
-  return db
-    .select({
-      dealName: enterpriseDeals.dealName,
-      accountName: enterpriseDeals.accountName,
-      accountManager: enterpriseDeals.accountManager,
-      technicalLead: enterpriseDeals.technicalLead,
-      stage: pipelineStages.stageName,
-      stageSortOrder: pipelineStages.sortOrder,
-      productRevenue: enterpriseDeals.productRevenue,
-      servicesRevenue: enterpriseDeals.servicesRevenue,
-      contractTermYears: enterpriseDeals.contractTermYears,
-      pricingModel: pricingModels.modelName,
-      currency: enterpriseDeals.dealCurrency,
-      expectedCloseDate: enterpriseDeals.expectedCloseDate,
-      winProbabilityPct: enterpriseDeals.winProbabilityPct,
-    })
-    .from(enterpriseDeals)
-    .leftJoin(pipelineStages, eq(enterpriseDeals.salesStageId, pipelineStages.id))
-    .leftJoin(pricingModels, eq(enterpriseDeals.pricingModelId, pricingModels.id))
-    .where(notDeletedFilter)
-    .orderBy(desc(enterpriseDeals.productRevenue));
+interface ActiveDealRow {
+  dealName: string;
+  accountName: string;
+  accountManager: string;
+  technicalLead: string;
+  stage: string | null;
+  stageSortOrder: number | null;
+  productRevenue: string;
+  servicesRevenue: string;
+  contractTermYears: number;
+  pricingModel: string | null;
+  currency: string;
+  expectedCloseDate: string | null;
+  winProbabilityPct: number | null;
+}
+
+async function activeDealRows(req: Request): Promise<ActiveDealRow[]> {
+  const catalystApp = initCatalystApp(req);
+  const [deals, stages, pricingModels] = await Promise.all([
+    createEnterpriseDealsRepo(catalystApp).list(),
+    createPipelineStagesRepo(catalystApp).listAll(),
+    createPricingModelsRepo(catalystApp).listAll(),
+  ]);
+  const stageById = new Map(stages.map((s) => [s.id, s]));
+  const pricingModelNameById = new Map(pricingModels.map((p) => [p.id, p.modelName]));
+
+  const rows = deals
+    .filter((d) => d.deletedAt == null)
+    .map((d) => {
+      const stage = stageById.get(d.salesStageId);
+      return {
+        dealName: d.dealName,
+        accountName: d.accountName,
+        accountManager: d.accountManager,
+        technicalLead: d.technicalLead,
+        stage: stage?.stageName ?? null,
+        stageSortOrder: stage?.sortOrder ?? null,
+        productRevenue: d.productRevenue,
+        servicesRevenue: d.servicesRevenue,
+        contractTermYears: d.contractTermYears,
+        pricingModel: pricingModelNameById.get(d.pricingModelId) ?? null,
+        currency: d.dealCurrency,
+        expectedCloseDate: d.expectedCloseDate,
+        winProbabilityPct: d.winProbabilityPct,
+      };
+    });
+  // Matches the original ORDER BY productRevenue DESC (numeric, not lexical).
+  rows.sort((a, b) => (Number(b.productRevenue) || 0) - (Number(a.productRevenue) || 0));
+  return rows;
 }
 
 // F17 — Export deals as CSV or JSON.
 router.get("/export/deals", async (req: Request, res: Response) => {
   const format = String(req.query.format ?? "csv").toLowerCase();
-  const rows = await activeDealRows();
+  const rows = await activeDealRows(req);
   if (format === "json") {
     res.setHeader("Content-Type", "application/json");
     res.setHeader("Content-Disposition", 'attachment; filename="deals-export.json"');
@@ -146,8 +171,8 @@ function fmtDateTime(v: string | Date | null | undefined): string {
   return `${fmtDate(d)}, ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
 }
 
-async function pipelineFacts() {
-  const rows = await activeDealRows();
+async function pipelineFacts(req: Request) {
+  const rows = await activeDealRows(req);
   let totalTcv = 0;
   let weightedTcv = 0;
   const sim: SimDeal[] = [];
@@ -304,8 +329,8 @@ const reportStyle = `<style>
 </style>`;
 
 // F14 — Board-ready pipeline report (HTML; client prints to PDF).
-router.get("/reports/pipeline", async (_req: Request, res: Response) => {
-  const { rows, totalTcv, weightedTcv, simulation, stageBreakdown } = await pipelineFacts();
+router.get("/reports/pipeline", async (req: Request, res: Response) => {
+  const { rows, totalTcv, weightedTcv, simulation, stageBreakdown } = await pipelineFacts(req);
   const top = rows.slice(0, 8);
   const html =
     `<!doctype html><html><head><meta charset="utf-8"><title>EDC Pipeline Report</title>${reportStyle}</head><body>` +
@@ -354,13 +379,11 @@ router.get("/reports/pipeline", async (_req: Request, res: Response) => {
 });
 
 // F15 — Email digest preview (HTML).
-router.get("/digest/preview", async (_req: Request, res: Response) => {
-  const { rows, totalTcv, simulation } = await pipelineFacts();
-  const overdue = await db
-    .select({ decisionText: dealDecisions.decisionText, owner: dealDecisions.owner, dueDate: dealDecisions.dueDate })
-    .from(dealDecisions)
-    .where(eq(dealDecisions.status, "Pending"))
-    .limit(10);
+router.get("/digest/preview", async (req: Request, res: Response) => {
+  const { rows, totalTcv, simulation } = await pipelineFacts(req);
+  const catalystApp = initCatalystApp(req);
+  const allDecisions = await createDealDecisionsRepo(catalystApp).listAll();
+  const overdue = allDecisions.filter((d) => d.status === "Pending").slice(0, 10);
   const html =
     `<!doctype html><html><head><meta charset="utf-8"><title>EDC Pipeline Digest</title>${reportStyle}</head><body>` +
     letterhead("Enterprise Pipeline Digest", "Weekly pipeline pulse") +

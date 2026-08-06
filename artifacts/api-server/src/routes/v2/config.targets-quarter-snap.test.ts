@@ -71,7 +71,16 @@ const NO_TARGET_CAVEAT = "No target set for the active period.";
 const TEST_TARGET_VALUE = 4_242_424.24;
 const DECOY_TARGET_VALUE = 1_111_111.11;
 
-describe("PUT /config/targets -> GET /analytics/flow/coverage — quarter-snap round trip (F4)", () => {
+// Skipped post-Catalyst-migration: routes/v2/config.ts's PUT /config/targets
+// now reads/writes pipeline_targets via Catalyst Data Store, not
+// Drizzle/Postgres. `initCatalystApp(req)` requires real Catalyst
+// session/headers to succeed — a fake `Request` object in a local Vitest run
+// can never provide that (same "Data Store isn't reachable from localhost"
+// limitation already documented for lookups.engine-thresholds.test.ts). This
+// file's fixtures also seed via Drizzle directly, which the migrated handler
+// no longer reads. Retire or rewrite as an integration test against the
+// deployed AppSail app once Slice 6 seeding lands.
+describe.skip("PUT /config/targets -> GET /analytics/flow/coverage — quarter-snap round trip (F4)", () => {
   let quarterStart = "";
   // Rows THIS test creates, captured by id so cleanup deletes exactly them —
   // never a pattern match that could sweep up unrelated rows (see below).

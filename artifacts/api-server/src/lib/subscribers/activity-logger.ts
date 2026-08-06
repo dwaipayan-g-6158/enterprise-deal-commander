@@ -1,4 +1,4 @@
-import { db, dealActivityLog } from "@workspace/db";
+import { type CatalystApp, createDealActivityLogRepo } from "@workspace/db/catalyst";
 import type { DealEvent } from "../events";
 import { dealEvents } from "../events";
 
@@ -74,8 +74,13 @@ function metadataOf(event: DealEvent): Record<string, unknown> {
 
 export function registerActivityLogger(): () => void {
   return dealEvents.on(async (event) => {
+    // Absent if this event came from an emitter that hasn't migrated off
+    // Drizzle yet — no-op rather than throw, per the event bus's "never
+    // break the request path" contract (see lib/events.ts).
+    if (!event.catalystApp) return;
+    const catalystApp = event.catalystApp as CatalystApp;
     const { entityType, entityId } = entityOf(event);
-    await db.insert(dealActivityLog).values({
+    await createDealActivityLogRepo(catalystApp).create({
       dealId: event.dealId,
       eventType: event.type,
       entityType,

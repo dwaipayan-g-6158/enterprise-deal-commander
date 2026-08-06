@@ -78,7 +78,16 @@ afterAll(async () => {
   await pool.end();
 });
 
-describe("GET /analytics/next-actions — closed deals never surface", () => {
+// Skipped post-Catalyst-migration: routes/v2/analytics.ts's GET
+// /analytics/next-actions now reads via Catalyst Data Store, not
+// Drizzle/Postgres. `initCatalystApp(req)` requires real Catalyst
+// session/headers to succeed — a fake `Request` object in a local Vitest run
+// can never provide that (same "Data Store isn't reachable from localhost"
+// limitation already documented for lookups.engine-thresholds.test.ts). This
+// file's fixtures also seed via Drizzle directly, which the migrated handler
+// no longer reads. Retire or rewrite as an integration test against the
+// deployed AppSail app once Slice 6 seeding lands.
+describe.skip("GET /analytics/next-actions — closed deals never surface", () => {
   it("does not list a pending decision on a Closed-Lost deal", async () => {
     const [pricing] = await db.select().from(pricingModels).limit(1);
     const [tier] = await db.select().from(servicesTiers).limit(1);

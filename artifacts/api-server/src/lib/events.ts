@@ -19,6 +19,25 @@ export interface DealEventBase {
   actor: string;
   /** When the event occurred (defaults to emit time). */
   occurredAt: Date;
+  /**
+   * The emitting request's Catalyst Data Store handle, so Data-Store-backed
+   * subscribers (activity logger, health tracker, snapshot service, playbook
+   * engine, post-mortem, pipeline transitions, webhook dispatcher,
+   * notification service, scoring) can perform their own repo calls without
+   * a `req` of their own. Typed as `unknown` here (not `CatalystApp`) so this
+   * module — otherwise completely DB-agnostic — doesn't need a hard
+   * dependency on `@workspace/db/catalyst`; subscribers cast it themselves.
+   * Optional and may be `undefined`: not every emitter has migrated off
+   * Drizzle yet (as of this writing, every route handler has — the last
+   * holdout, `lib/meddpicc-playbook-gate.ts`'s internal `emitStepChanged`,
+   * is unreachable in production now that its only caller,
+   * `lib/meddpicc.ts`'s `computeMeddpiccScoreForDeal`, has no live callers
+   * of its own — see `lib/catalyst/meddpicc-playbook-gate.ts`'s equivalent,
+   * which does pass `catalystApp`) — a Data-Store-backed subscriber MUST
+   * still treat a missing value as a no-op, never a throw, matching the
+   * event bus's existing "never break the request path" contract.
+   */
+  catalystApp?: unknown;
 }
 
 export type DealEventPayloads = {

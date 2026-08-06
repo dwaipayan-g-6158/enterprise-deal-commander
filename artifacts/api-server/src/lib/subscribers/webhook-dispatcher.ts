@@ -1,6 +1,10 @@
 import crypto from "node:crypto";
-import { eq, sql } from "drizzle-orm";
-import { db, webhooks, webhookDeliveryLog } from "@workspace/db";
+import {
+  type CatalystApp,
+  createWebhooksRepo,
+  createWebhookDeliveryLogRepo,
+  type WebhookRow,
+} from "@workspace/db/catalyst";
 import { dealEvents, type DealEvent } from "../events";
 import { logger } from "../logger";
 
@@ -14,7 +18,8 @@ const MAX_ATTEMPTS = 3;
 const TIMEOUT_MS = 10_000;
 
 async function deliver(
-  webhook: typeof webhooks.$inferSelect,
+  catalystApp: CatalystApp,
+  webhook: WebhookRow,
   eventType: string,
   data: Record<string, unknown>,
   attempt = 1,
@@ -44,7 +49,8 @@ async function deliver(
     responseBody = err instanceof Error ? err.message : String(err);
   }
 
-  await db.insert(webhookDeliveryLog).values({
+  const webhooksRepo = createWebhooksRepo(catalystApp);
+  await createWebhookDeliveryLogRepo(catalystApp).create({
     webhookId: webhook.id,
     eventType,
     payload: data,
@@ -54,42 +60,44 @@ async function deliver(
   });
 
   if (ok) {
-    await db
-      .update(webhooks)
-      .set({ lastTriggeredAt: new Date(), failureCount: 0 })
-      .where(eq(webhooks.id, webhook.id));
+    await webhooksRepo.update(webhook.id, { failureCount: 0 });
     return;
   }
 
   if (attempt < MAX_ATTEMPTS) {
-    setTimeout(() => void deliver(webhook, eventType, data, attempt + 1), attempt * 5000).unref();
+    setTimeout(() => void deliver(catalystApp, webhook, eventType, data, attempt + 1), attempt * 5000).unref();
     return;
   }
 
   // Exhausted retries — bump failure count and auto-disable at 10 consecutive.
-  const [row] = await db
-    .update(webhooks)
-    .set({ failureCount: sql`${webhooks.failureCount} + 1` })
-    .where(eq(webhooks.id, webhook.id))
-    .returning({ failureCount: webhooks.failureCount });
-  if (row && row.failureCount >= 10) {
-    await db.update(webhooks).set({ isActive: false }).where(eq(webhooks.id, webhook.id));
+  const current = await webhooksRepo.getById(webhook.id);
+  const nextFailureCount = (current?.failureCount ?? webhook.failureCount) + 1;
+  await webhooksRepo.update(webhook.id, { failureCount: nextFailureCount });
+  if (nextFailureCount >= 10) {
+    await webhooksRepo.update(webhook.id, { isActive: false });
     logger.warn({ webhookId: webhook.id }, "Webhook auto-disabled after 10 failures");
   }
 }
 
 function eventData(event: DealEvent): Record<string, unknown> {
-  const { type, ...rest } = event;
+  const { type, catalystApp, ...rest } = event;
   void type;
+  void catalystApp;
   return rest as Record<string, unknown>;
 }
 
 export function registerWebhookDispatcher(): () => void {
   return dealEvents.on(async (event) => {
-    const subscribed = await db.select().from(webhooks).where(eq(webhooks.isActive, true));
+    // Absent if this event came from an emitter that hasn't migrated off
+    // Drizzle yet — no-op rather than throw, per the event bus's "never
+    // break the request path" contract (see lib/events.ts).
+    if (!event.catalystApp) return;
+    const catalystApp = event.catalystApp as CatalystApp;
+    const allWebhooks = await createWebhooksRepo(catalystApp).listAll();
+    const subscribed = allWebhooks.filter((w) => w.isActive);
     for (const webhook of subscribed) {
       if (!webhook.events.includes(event.type)) continue;
-      void deliver(webhook, event.type, eventData(event)).catch((err) =>
+      void deliver(catalystApp, webhook, event.type, eventData(event)).catch((err) =>
         logger.error({ err, webhookId: webhook.id }, "Webhook delivery error"),
       );
     }

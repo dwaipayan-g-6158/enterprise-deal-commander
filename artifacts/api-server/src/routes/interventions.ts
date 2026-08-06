@@ -1,19 +1,18 @@
 import { Router, type IRouter, type Request, type Response } from "express";
-import { eq } from "drizzle-orm";
 import {
-  db,
-  enterpriseDeals,
-  dealInterventions,
-  interventionChecklists,
-} from "@workspace/db";
+  initCatalystApp,
+  createEnterpriseDealsRepo,
+  createDealInterventionsRepo,
+  createInterventionChecklistsRepo,
+} from "@workspace/db/catalyst";
 import {
   LaunchInterventionParams,
   LaunchInterventionBody,
 } from "@workspace/api-zod";
 import { getActor } from "../lib/auth";
 import { badRequest, notFound } from "../lib/http";
-import { toISO } from "../lib/intelligence";
-import { writeAudit } from "../lib/audit";
+import { toISO } from "../lib/catalyst/intelligence";
+import { writeAudit } from "../lib/catalyst/audit";
 
 // Auth + write-role enforcement is applied centrally in routes/index.ts.
 const router: IRouter = Router();
@@ -26,34 +25,24 @@ router.post(
     if (!parsed.success) {
       throw badRequest("Invalid intervention payload", parsed.error.issues);
     }
-    const dealRows = await db
-      .select({ id: enterpriseDeals.id })
-      .from(enterpriseDeals)
-      .where(eq(enterpriseDeals.id, dealId))
-      .limit(1);
-    if (dealRows.length === 0) throw notFound("Deal not found");
+    const catalystApp = initCatalystApp(req);
+    const deal = await createEnterpriseDealsRepo(catalystApp).getById(dealId);
+    if (!deal) throw notFound("Deal not found");
 
     const actor = getActor(req);
     const body = parsed.data;
 
-    const checklist = await db
-      .select({ id: interventionChecklists.id })
-      .from(interventionChecklists)
-      .where(eq(interventionChecklists.id, body.checklist_id))
-      .limit(1);
-    if (checklist.length === 0) throw notFound("Checklist not found");
+    const checklist = await createInterventionChecklistsRepo(catalystApp).getById(body.checklist_id);
+    if (!checklist) throw notFound("Checklist not found");
 
-    const inserted = await db
-      .insert(dealInterventions)
-      .values({
-        dealId,
-        patternCode: body.pattern_code,
-        checklistId: body.checklist_id,
-        launchedBy: actor.displayName,
-      })
-      .returning();
+    const created = await createDealInterventionsRepo(catalystApp).create({
+      dealId,
+      patternCode: body.pattern_code,
+      checklistId: body.checklist_id,
+      launchedBy: actor.displayName,
+    });
 
-    await writeAudit({
+    await writeAudit(catalystApp, {
       dealId,
       entityType: "intervention",
       fieldChanged: body.pattern_code,
@@ -61,15 +50,14 @@ router.post(
       changedBy: actor.displayName,
     });
 
-    const row = inserted[0];
     res.status(201).json({
       data: {
-        id: row.id,
-        dealId: row.dealId,
-        patternCode: row.patternCode,
-        checklistId: row.checklistId,
-        launchedBy: row.launchedBy,
-        launchedAt: toISO(row.launchedAt) ?? new Date().toISOString(),
+        id: created.id,
+        dealId: created.dealId,
+        patternCode: created.patternCode,
+        checklistId: created.checklistId,
+        launchedBy: created.launchedBy,
+        launchedAt: toISO(created.launchedAt) ?? new Date().toISOString(),
       },
     });
   },

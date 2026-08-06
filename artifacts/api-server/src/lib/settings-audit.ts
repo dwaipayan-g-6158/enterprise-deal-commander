@@ -1,6 +1,12 @@
 import { db, settingsChangeLog } from "@workspace/db";
+import { computeRollback, type ChangeLogRowForRollback, type RollbackChange, type SettingsAction } from "./settings-rollback";
 
-export type SettingsAction = "create" | "update" | "deactivate" | "reactivate" | "delete" | "rollback" | "import";
+// Re-exported for backward compatibility — computeRollback and its types
+// moved to the DB-free lib/settings-rollback.ts so routes/settings-audit.ts
+// (migrated to Catalyst Data Store) can use them without importing this
+// Drizzle-backed module. See settings-rollback.ts's header comment.
+export { computeRollback };
+export type { ChangeLogRowForRollback, RollbackChange, SettingsAction };
 
 export interface SettingsChangeInput {
   module: string;
@@ -22,6 +28,16 @@ export interface SettingsChangeInput {
  * the calling routes' manual smoke tests rather than a unit test (this
  * codebase does not unit-test `@workspace/db`-importing modules — see the
  * Global Constraints section of this plan).
+ *
+ * NOTE (Catalyst migration): still Drizzle/Postgres-backed. `routes/lookups.ts`
+ * has been ported to Data Store and calls its own Catalyst-backed settings
+ * audit repo directly (`createSettingsChangeLogRepo` from
+ * `@workspace/db/catalyst`) rather than through this function, specifically
+ * so that changing this shared helper's signature doesn't ripple into the
+ * ~4 other files that still call it (settings-audit.ts route, users.ts,
+ * v2/config.ts, v2/crud.ts) before their own Drizzle→Data Store migration
+ * lands. Port this function itself once all of its callers are migrated
+ * together — see docs/CATALYST_SCHEMA.md / the plan file for what's left.
  */
 export async function logSettingsChange(input: SettingsChangeInput): Promise<void> {
   await db.insert(settingsChangeLog).values({
@@ -38,63 +54,3 @@ export async function logSettingsChange(input: SettingsChangeInput): Promise<voi
   });
 }
 
-export interface ChangeLogRowForRollback {
-  module: string;
-  settingKey: string;
-  entityId: string | null;
-  action: string;
-  oldValue: unknown;
-  newValue: unknown;
-}
-
-export interface RollbackChange {
-  module: string;
-  settingKey: string;
-  entityId: string | null;
-  action: SettingsAction;
-  valueToRestore: unknown;
-}
-
-/**
- * Given a change-log row, compute what a rollback of it must write — pure,
- * no DB. The caller (Task 11's rollback route) is responsible for actually
- * applying `valueToRestore` to the right table via a per-module dispatch.
- */
-export function computeRollback(row: ChangeLogRowForRollback): RollbackChange {
-  switch (row.action) {
-    case "update":
-      return {
-        module: row.module,
-        settingKey: row.settingKey,
-        entityId: row.entityId,
-        action: "update",
-        valueToRestore: row.oldValue,
-      };
-    case "create":
-      return {
-        module: row.module,
-        settingKey: row.settingKey,
-        entityId: row.entityId,
-        action: "deactivate",
-        valueToRestore: null,
-      };
-    case "deactivate":
-      return {
-        module: row.module,
-        settingKey: row.settingKey,
-        entityId: row.entityId,
-        action: "reactivate",
-        valueToRestore: null,
-      };
-    case "delete":
-      return {
-        module: row.module,
-        settingKey: row.settingKey,
-        entityId: row.entityId,
-        action: "create",
-        valueToRestore: row.oldValue,
-      };
-    default:
-      throw new Error(`Cannot compute rollback for action "${row.action}"`);
-  }
-}

@@ -1,16 +1,15 @@
-import { eq, sql } from "drizzle-orm";
 import {
-  db,
-  pipelineStages,
-  enterpriseDeals,
-  pricingModels,
-  servicesTiers,
-  dealTechnicalGates,
-  dealBlockers,
-  dealCompetitors,
-  competitors,
-  dealMemory,
-} from "@workspace/db";
+  type CatalystApp,
+  createPipelineStagesRepo,
+  createPricingModelsRepo,
+  createServicesTiersRepo,
+  createEnterpriseDealsRepo,
+  createDealTechnicalGatesRepo,
+  createDealBlockersRepo,
+  createDealCompetitorsRepo,
+  createCompetitorsRepo,
+  createDealMemoryRepo,
+} from "@workspace/db/catalyst";
 import { calculateFlatTCV } from "@workspace/engine";
 import { dealEvents } from "../events";
 import { logger } from "../logger";
@@ -21,15 +20,6 @@ import { logger } from "../logger";
  * Narrative fields (win_loss_narrative, key_lessons, tags) are filled later via
  * the deal-memory API.
  */
-async function stageName(stageId: number): Promise<string | null> {
-  const rows = await db
-    .select({ name: pipelineStages.stageName })
-    .from(pipelineStages)
-    .where(eq(pipelineStages.id, stageId))
-    .limit(1);
-  return rows[0]?.name ?? null;
-}
-
 function outcomeFor(stage: string): "Won" | "Lost" | null {
   const s = stage.toLowerCase();
   if (s.includes("won")) return "Won";
@@ -40,89 +30,60 @@ function outcomeFor(stage: string): "Won" | "Lost" | null {
 export function registerPostMortem(): () => void {
   return dealEvents.on(async (event) => {
     if (event.type !== "deal.stage_changed") return;
-    const name = await stageName(event.toStageId);
-    if (!name) return;
-    const outcome = outcomeFor(name);
+    // Absent if this event came from an emitter that hasn't migrated off
+    // Drizzle yet — no-op rather than throw, per the event bus's "never
+    // break the request path" contract (see lib/events.ts).
+    if (!event.catalystApp) return;
+    const catalystApp = event.catalystApp as CatalystApp;
+
+    const stages = await createPipelineStagesRepo(catalystApp).listAll();
+    const stage = stages.find((s) => s.id === event.toStageId);
+    if (!stage) return;
+    const outcome = outcomeFor(stage.stageName);
     if (!outcome) return;
 
-    const dealRows = await db
-      .select({
-        id: enterpriseDeals.id,
-        accountName: enterpriseDeals.accountName,
-        dealName: enterpriseDeals.dealName,
-        productRevenue: enterpriseDeals.productRevenue,
-        servicesRevenue: enterpriseDeals.servicesRevenue,
-        contractTermYears: enterpriseDeals.contractTermYears,
-        createdAt: enterpriseDeals.createdAt,
-        pricingModel: pricingModels.modelName,
-        servicesTier: servicesTiers.tierName,
-      })
-      .from(enterpriseDeals)
-      .leftJoin(pricingModels, eq(enterpriseDeals.pricingModelId, pricingModels.id))
-      .leftJoin(servicesTiers, eq(enterpriseDeals.servicesTierId, servicesTiers.id))
-      .where(eq(enterpriseDeals.id, event.dealId))
-      .limit(1);
-    const deal = dealRows[0];
+    const deal = await createEnterpriseDealsRepo(catalystApp).getById(event.dealId);
     if (!deal) return;
 
-    const [gates] = await db
-      .select({ n: sql<number>`count(*)::int` })
-      .from(dealTechnicalGates)
-      .where(sql`${dealTechnicalGates.dealId} = ${event.dealId} and ${dealTechnicalGates.isCompleted} = true`);
-    const [blockers] = await db
-      .select({ n: sql<number>`count(*)::int` })
-      .from(dealBlockers)
-      .where(eq(dealBlockers.dealId, event.dealId));
-    const competitorRows = await db
-      .select({ name: competitors.name })
-      .from(dealCompetitors)
-      .leftJoin(competitors, eq(dealCompetitors.competitorId, competitors.id))
-      .where(eq(dealCompetitors.dealId, event.dealId));
+    const [pricingModels, servicesTiers, gates, blockers, competitorLinks, competitors] = await Promise.all([
+      createPricingModelsRepo(catalystApp).listAll(),
+      createServicesTiersRepo(catalystApp).listAll(),
+      createDealTechnicalGatesRepo(catalystApp).list(event.dealId),
+      createDealBlockersRepo(catalystApp).list(event.dealId),
+      createDealCompetitorsRepo(catalystApp).list(event.dealId),
+      createCompetitorsRepo(catalystApp).listAll(),
+    ]);
+    const pricingModel = pricingModels.find((p) => p.id === deal.pricingModelId)?.modelName ?? null;
+    const servicesTier = servicesTiers.find((t) => t.id === deal.servicesTierId)?.tierName ?? null;
+    const competitorNameById = new Map(competitors.map((c) => [c.id, c.name]));
 
     const finalTcv = calculateFlatTCV({
       productRevenue: Number(deal.productRevenue) || 0,
       servicesRevenue: Number(deal.servicesRevenue) || 0,
       contractTermYears: deal.contractTermYears,
-      pricingModel: deal.pricingModel ?? "",
+      pricingModel: pricingModel ?? "",
     });
     const daysActive = Math.max(
       0,
-      Math.round((Date.now() - new Date(deal.createdAt).getTime()) / 86_400_000),
+      Math.round((Date.now() - deal.createdAt.getTime()) / 86_400_000),
     );
-    const competitorsFaced = competitorRows.map((r) => r.name).filter((n): n is string => !!n);
+    const competitorsFaced = competitorLinks
+      .map((l) => competitorNameById.get(l.competitorId))
+      .filter((n): n is string => !!n);
 
-    await db
-      .insert(dealMemory)
-      .values({
-        dealId: deal.id,
-        accountName: deal.accountName,
-        dealName: deal.dealName,
-        outcome,
-        finalTcv: String(finalTcv),
-        pricingModel: deal.pricingModel ?? null,
-        servicesTier: deal.servicesTier ?? null,
-        totalGatesCompleted: gates?.n ?? 0,
-        totalBlockersEncountered: blockers?.n ?? 0,
-        totalDaysActive: daysActive,
-        competitorsFaced,
-      })
-      .onConflictDoUpdate({
-        target: dealMemory.dealId,
-        set: {
-          outcome,
-          finalTcv: String(finalTcv),
-          // Refresh these on every re-close too — otherwise a deal whose
-          // competitors/pricing/tier were only linked after its first
-          // archival keeps a stale (often empty) snapshot forever.
-          pricingModel: deal.pricingModel ?? null,
-          servicesTier: deal.servicesTier ?? null,
-          competitorsFaced,
-          totalGatesCompleted: gates?.n ?? 0,
-          totalBlockersEncountered: blockers?.n ?? 0,
-          totalDaysActive: daysActive,
-          archivedAt: new Date(),
-        },
-      });
+    await createDealMemoryRepo(catalystApp).upsertByDealId({
+      dealId: deal.id,
+      accountName: deal.accountName,
+      dealName: deal.dealName,
+      outcome,
+      finalTcv,
+      pricingModel,
+      servicesTier,
+      totalGatesCompleted: gates.filter((g) => g.isCompleted).length,
+      totalBlockersEncountered: blockers.length,
+      totalDaysActive: daysActive,
+      competitorsFaced,
+    });
     logger.info({ dealId: deal.id, outcome }, "Post-mortem archived to deal memory");
   });
 }
