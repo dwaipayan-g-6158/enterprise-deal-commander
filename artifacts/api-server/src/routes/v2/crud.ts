@@ -73,6 +73,7 @@ import { emitDealEvent } from "../../lib/events";
 import { classifyAdvisorIntent, confidenceFor, composeNoDataAnswer, withLowSampleCaveat, type AdvisorCitation } from "../../lib/advisor";
 import { computeCompetitorIntel, percentiles, type MemoryRow } from "../../lib/memory-intel";
 import { selectRevivalCandidates } from "../../lib/revival";
+import { memorySearchScore, memorySnippetText, buildSnippet } from "../../lib/memory-search";
 import { getThresholds } from "../../lib/catalyst/intelligence";
 import { num } from "../../lib/engine-config";
 
@@ -725,47 +726,9 @@ router.get("/memory", async (req: Request, res: Response) => {
   res.json({ data: sorted.map(memoryOut) });
 });
 
-// Data Store has no tsvector/ts_rank equivalent (see docs/CATALYST_SCHEMA.md's
-// "Known open items" — Catalyst Search integration is Slice 5 scope). At this
-// app's actual data volume (tens of archived deals), an in-memory
-// case-insensitive substring match over the same two fields the original
-// tsvector column covered (win_loss_narrative + key_lessons) is a reasonable
-// substitute: every row is already fetched for the JS-side facet filters
-// below, so no separate index is needed. Ranking is by match-count instead of
-// ts_rank's weighted scoring — simpler, but orders "more mentions" above
-// "fewer mentions", which is the same intuition ts_rank encodes.
-function memorySearchText(r: DealMemoryRow): string {
-  return `${r.winLossNarrative ?? ""} ${(r.keyLessons ?? []).join(" ")}`;
-}
-
-function countOccurrences(haystack: string, needle: string): number {
-  if (!needle) return 0;
-  let count = 0;
-  let idx = 0;
-  const lowerHay = haystack.toLowerCase();
-  const lowerNeedle = needle.toLowerCase();
-  while ((idx = lowerHay.indexOf(lowerNeedle, idx)) !== -1) {
-    count += 1;
-    idx += lowerNeedle.length;
-  }
-  return count;
-}
-
-// A short highlighted excerpt around the first match — mirrors ts_headline's
-// StartSel=<mark>,StopSel=</mark> markup so the existing frontend rendering
-// (components/memory/memory-result-card.tsx) needs no changes.
-function buildSnippet(text: string, term: string): string | null {
-  const idx = text.toLowerCase().indexOf(term.toLowerCase());
-  if (idx === -1) return null;
-  const start = Math.max(0, idx - 60);
-  const end = Math.min(text.length, idx + term.length + 120);
-  const prefix = start > 0 ? "…" : "";
-  const suffix = end < text.length ? "…" : "";
-  const before = text.slice(start, idx);
-  const match = text.slice(idx, idx + term.length);
-  const after = text.slice(idx + term.length, end);
-  return `${prefix}${before}<mark>${match}</mark>${after}${suffix}`;
-}
+// Search scoring/highlighting lives in lib/memory-search.ts so it can be unit
+// tested without Data Store — see that file for why the field list and the
+// snippet source are deliberately different, and what broke when they weren't.
 
 router.get("/memory/search", async (req: Request, res: Response) => {
   const q = SearchDealMemoryQueryParams.parse(req.query);
@@ -795,11 +758,11 @@ router.get("/memory/search", async (req: Request, res: Response) => {
   let list: { row: DealMemoryRow; snippet: string | null }[];
   if (term) {
     list = candidates
-      .map((row) => ({ row, score: countOccurrences(memorySearchText(row), term) }))
+      .map((row) => ({ row, score: memorySearchScore(row, term) }))
       .filter((x) => x.score > 0)
       .sort((a, b) => b.score - a.score)
       .slice(0, 50)
-      .map(({ row }) => ({ row, snippet: buildSnippet(memorySearchText(row), term) }));
+      .map(({ row }) => ({ row, snippet: buildSnippet(memorySnippetText(row), term) }));
   } else {
     list = [...candidates]
       .sort((a, b) => b.archivedAt.getTime() - a.archivedAt.getTime())
@@ -905,7 +868,7 @@ router.get("/memory/ask", async (req: Request, res: Response) => {
 
   // fulltext fallback — reuse the same in-memory search as /memory/search.
   const matches = memory
-    .map((row) => ({ row, score: countOccurrences(memorySearchText(row), q) }))
+    .map((row) => ({ row, score: memorySearchScore(row, q) }))
     .filter((x) => x.score > 0)
     .sort((a, b) => b.score - a.score)
     .slice(0, 3)

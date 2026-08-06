@@ -190,13 +190,65 @@ Two things worth knowing if this is ever revisited:
 
 ## Known open items for later slices
 
-- **Full-text search fields**: the Data Store `Create_Column` API's `search_index_enabled`
-  flag is only exposed for `varchar`/`int`/`double`/`bigint`/`date`/`datetime` columns, **not**
-  for `text` — so `v2_deal_memory.win_loss_narrative`/`loss_narrative` (the fields
-  `/v2/memory/search` and `/v2/memory/ask` search over today via Postgres tsvector) have no
-  schema-level search flag to enable. Slice 5 needs to resolve this — likely Catalyst Search
-  configured separately from column creation, or an in-memory JS scan (matching Periscope's
-  proven approach for its own search feature, at a comparable data scale).
+- **Full-text search fields — RESOLVED (2026-08-06): stays an in-memory JS scan.** The
+  `Create_Column` API's `search_index_enabled` flag is only exposed for
+  `varchar`/`int`/`double`/`bigint`/`date`/`datetime`, **not** for `text` — and
+  `v2_deal_memory.win_loss_narrative`/`loss_narrative`, the fields `/v2/memory/search` and
+  `/v2/memory/ask` exist to search, are `text`. Catalyst Search therefore cannot index the one
+  thing that needs indexing, so it is not a candidate here regardless of data volume. The scan
+  lives in `artifacts/api-server/src/lib/memory-search.ts`, which mirrors the tsvector's field
+  list and A/B/C/D weights and is unit-tested. Revisit only if a future Catalyst release
+  exposes the flag for `text`.
 - **CHECK constraint enforcement**: needs Zod validation added at the Slice 3 repository
   boundary for every constraint listed in the type-mapping table above — none of them are
   enforced by Data Store itself.
+
+## A column this manifest missed: `v2_deal_memory.key_lessons`
+
+Added 2026-08-06, as `text` (10,000), matching how every other array column on this table is
+stored (JSON-encoded `string[]`). It should have been created in Slice 2 — the Drizzle schema
+has `keyLessons: text("key_lessons").array()` and the repository read and wrote
+`r["key_lessons"]` from the start.
+
+The failure mode is worth remembering, because it is specific to Data Store:
+
+- **Reads of a missing column fail silently.** `r["key_lessons"]` is just `undefined`, so
+  `keyLessons` came back `null` on every row. The Deal Memory UI's lessons list, `/memory/ask`'s
+  lessons answer, and `memory-health`'s lesson count all read as legitimately-empty data.
+- **Writes fail loudly, but only when the field is sent**:
+  `{statusCode: 400, code: "INVALID_INPUT", message: "Invalid column name key_lessons"}`. The
+  autopsy editor always sends it, so **every autopsy save 500'd** — while the rest of the
+  Deal Memory surface looked completely healthy.
+
+That asymmetry is why the Slice 6 walkthrough missed it: read paths render fine and only the
+write breaks, so nothing looks wrong until someone saves. When adding a column to a repository,
+confirm it exists in Data Store rather than assuming the Slice 2 manifest is complete —
+`List_All_Columns` is one call.
+
+`description` is also worth noting: `Create_Column` rejected a perfectly short one with
+`PATTERN_NOT_MATCHED`, and only succeeded once the field was omitted entirely.
+
+### Full parity re-verified after that fix (2026-08-06)
+
+Rather than fix the one column and hope, every Drizzle table/column was diffed against every
+live Data Store table/column. Result: **71/71 tables present, and `key_lessons` was the only
+missing column.** The only three remaining differences are the deliberate renames already
+documented above:
+
+| Drizzle | Data Store | Why |
+|---|---|---|
+| `v2_deal_snapshots.payload` | `payload_inline` + `payload_key` | 10,000-char text limit → Stratus offload pair |
+| `engine_thresholds.data_type` | `data_type_` | `data_type` is rejected as a column name |
+| `v2_settings_change_log.data_type` | `data_type_` | same |
+
+To redo the diff: pull each table's columns from
+`GET /baas/v1/project/{projectId}/table/{TABLE_NAME}/column` (console session, `Environment`
+header), then compare against the `pgTable(...)`/`edcV2.table(...)` declarations in
+`lib/db/src/schema/*.ts`, applying the `v2_` prefix rule.
+
+**Address that endpoint by table NAME, never by the `table_id` from the table-list response.**
+Catalyst returns `table_id` as a JSON *number*, and these IDs (~3.1e16) exceed
+`Number.MAX_SAFE_INTEGER`, so `JSON.parse` silently rounds them —
+`31210000000625826` → `...824`. Some rounded IDs still resolve and some don't, which presents
+as a random-looking subset of tables failing and reads exactly like rate limiting. It is the
+same precision trap that made `ROWID` unusable as an exposed `id` in Slice 3.
