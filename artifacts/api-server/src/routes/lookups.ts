@@ -1,24 +1,26 @@
 import { Router, type IRouter, type Request, type Response } from "express";
-import { asc, eq } from "drizzle-orm";
 import {
-  db,
-  pipelineStages,
-  pricingModels,
-  servicesTiers,
-  productCatalog,
-  ad360Features,
-  gateDefinitions,
-  blockerCategories,
-  blockerSeverities,
-  lossArchetypes,
-  interventionChecklists,
-  engineThresholds,
-  fxRates,
-  competitors,
-  complianceDrivers,
-  competitorBattlecards,
-  teamMembers,
-} from "@workspace/db";
+  initCatalystApp,
+  createPipelineStagesRepo,
+  createPricingModelsRepo,
+  createServicesTiersRepo,
+  createProductCatalogRepo,
+  createAd360FeaturesRepo,
+  createCompetitorsRepo,
+  createComplianceDriversRepo,
+  createTeamMembersRepo,
+  createCompetitorBattlecardsRepo,
+  createGateDefinitionsRepo,
+  createBlockerCategoriesRepo,
+  createBlockerSeveritiesRepo,
+  createLossArchetypesRepo,
+  createInterventionChecklistsRepo,
+  createEngineThresholdsRepo,
+  createFxRatesRepo,
+  createSettingsChangeLogRepo,
+  DuplicateNameError,
+  type SettingsChangeInput,
+} from "@workspace/db/catalyst";
 import {
   ListPipelineStagesResponse,
   ListPricingModelsResponse,
@@ -45,7 +47,6 @@ import {
   CreateTeamMemberBody,
   DeleteTeamMemberParams,
 } from "@workspace/api-zod";
-import { logSettingsChange } from "../lib/settings-audit";
 import { getActor } from "../lib/auth";
 import { badRequest, conflict, notFound } from "../lib/http";
 import { validateThresholdUpdate } from "../lib/threshold-validation";
@@ -53,84 +54,50 @@ import { validateThresholdUpdate } from "../lib/threshold-validation";
 // Auth + write-role enforcement is applied centrally in routes/index.ts.
 const router: IRouter = Router();
 
-router.get("/lookups/pipeline-stages", async (_req: Request, res: Response) => {
-  const rows = await db
-    .select()
-    .from(pipelineStages)
-    .where(eq(pipelineStages.isActive, true))
-    .orderBy(asc(pipelineStages.sortOrder));
-  const data = rows.map((r) => ({
-    id: r.id,
-    stageName: r.stageName,
-    sortOrder: r.sortOrder,
-    description: r.description,
-  }));
+// Calls the Catalyst-backed settings-audit repo directly rather than through
+// the shared lib/settings-audit.ts's `logSettingsChange` — that helper is
+// still Drizzle/Postgres-backed for its other ~4 callers (settings-audit.ts
+// route, users.ts, v2/config.ts, v2/crud.ts), which haven't been migrated
+// off Drizzle yet. See the note in lib/settings-audit.ts.
+async function logSettingsChange(req: Request, input: SettingsChangeInput): Promise<void> {
+  const repo = createSettingsChangeLogRepo(initCatalystApp(req));
+  await repo.record(input);
+}
+
+router.get("/lookups/pipeline-stages", async (req: Request, res: Response) => {
+  const repo = createPipelineStagesRepo(initCatalystApp(req));
+  const data = await repo.listActive();
   res.json(ListPipelineStagesResponse.parse({ data }));
 });
 
-router.get("/lookups/pricing-models", async (_req: Request, res: Response) => {
-  const rows = await db
-    .select()
-    .from(pricingModels)
-    .where(eq(pricingModels.isActive, true))
-    .orderBy(asc(pricingModels.id));
-  const data = rows.map((r) => ({ id: r.id, modelName: r.modelName }));
+router.get("/lookups/pricing-models", async (req: Request, res: Response) => {
+  const repo = createPricingModelsRepo(initCatalystApp(req));
+  const data = await repo.listActive();
   res.json(ListPricingModelsResponse.parse({ data }));
 });
 
-router.get("/lookups/services-tiers", async (_req: Request, res: Response) => {
-  const rows = await db
-    .select()
-    .from(servicesTiers)
-    .where(eq(servicesTiers.isActive, true))
-    .orderBy(asc(servicesTiers.id));
-  const data = rows.map((r) => ({ id: r.id, tierName: r.tierName }));
+router.get("/lookups/services-tiers", async (req: Request, res: Response) => {
+  const repo = createServicesTiersRepo(initCatalystApp(req));
+  const data = await repo.listActive();
   res.json(ListServicesTiersResponse.parse({ data }));
 });
 
-router.get("/lookups/product-catalog", async (_req: Request, res: Response) => {
-  const rows = await db
-    .select()
-    .from(productCatalog)
-    .where(eq(productCatalog.isActive, true))
-    .orderBy(asc(productCatalog.productName));
-  const data = rows.map((r) => ({
-    id: r.id,
-    code: r.code,
-    productName: r.productName,
-    productCategory: r.productCategory,
-    suite: r.suite,
-  }));
+router.get("/lookups/product-catalog", async (req: Request, res: Response) => {
+  const repo = createProductCatalogRepo(initCatalystApp(req));
+  const data = await repo.listActive();
   res.json(ListProductCatalogResponse.parse({ data }));
 });
 
 // Predefined AD360 Enterprise platform-customization pick-list.
-router.get("/lookups/ad360-features", async (_req: Request, res: Response) => {
-  const rows = await db
-    .select()
-    .from(ad360Features)
-    .where(eq(ad360Features.isActive, true))
-    .orderBy(asc(ad360Features.sortOrder), asc(ad360Features.label));
-  const data = rows.map((r) => ({
-    id: r.id,
-    code: r.code,
-    label: r.label,
-    description: r.description,
-  }));
+router.get("/lookups/ad360-features", async (req: Request, res: Response) => {
+  const repo = createAd360FeaturesRepo(initCatalystApp(req));
+  const data = await repo.listActive();
   res.json(ListAd360FeaturesResponse.parse({ data }));
 });
 
-router.get("/lookups/competitors", async (_req: Request, res: Response) => {
-  const rows = await db
-    .select()
-    .from(competitors)
-    .where(eq(competitors.isActive, true))
-    .orderBy(asc(competitors.name));
-  const data = rows.map((r) => ({
-    id: r.id,
-    name: r.name,
-    category: r.category,
-  }));
+router.get("/lookups/competitors", async (req: Request, res: Response) => {
+  const repo = createCompetitorsRepo(initCatalystApp(req));
+  const data = await repo.listActive();
   res.json(ListCompetitorsResponse.parse({ data }));
 });
 
@@ -141,15 +108,13 @@ router.post("/lookups/competitors", async (req: Request, res: Response) => {
     throw badRequest("Invalid competitor payload", parsed.error.issues);
   }
   const actor = getActor(req);
+  const repo = createCompetitorsRepo(initCatalystApp(req));
   try {
-    const [created] = await db
-      .insert(competitors)
-      .values({
-        name: parsed.data.name,
-        category: parsed.data.category ?? "IAM",
-      })
-      .returning();
-    await logSettingsChange({
+    const created = await repo.create({
+      name: parsed.data.name,
+      category: parsed.data.category ?? "IAM",
+    });
+    await logSettingsChange(req, {
       module: "competitors",
       settingKey: created.name,
       entityId: String(created.id),
@@ -158,16 +123,10 @@ router.post("/lookups/competitors", async (req: Request, res: Response) => {
       newValue: { name: created.name, category: created.category },
       actor: actor.username,
     });
-    res.status(201).json({
-      data: { id: created.id, name: created.name, category: created.category },
-    });
+    res.status(201).json({ data: created });
   } catch (err) {
-    if (
-      err instanceof Error &&
-      "code" in err &&
-      (err as { code?: string }).code === "23505"
-    ) {
-      throw conflict("A competitor with this name already exists");
+    if (err instanceof DuplicateNameError) {
+      throw conflict(err.message);
     }
     throw err;
   }
@@ -175,13 +134,9 @@ router.post("/lookups/competitors", async (req: Request, res: Response) => {
 
 router.get(
   "/lookups/compliance-drivers",
-  async (_req: Request, res: Response) => {
-    const rows = await db
-      .select()
-      .from(complianceDrivers)
-      .where(eq(complianceDrivers.isActive, true))
-      .orderBy(asc(complianceDrivers.name));
-    const data = rows.map((r) => ({ id: r.id, name: r.name }));
+  async (req: Request, res: Response) => {
+    const repo = createComplianceDriversRepo(initCatalystApp(req));
+    const data = await repo.listActive();
     res.json(ListComplianceDriversResponse.parse({ data }));
   },
 );
@@ -195,12 +150,10 @@ router.post(
       throw badRequest("Invalid compliance driver payload", parsed.error.issues);
     }
     const actor = getActor(req);
+    const repo = createComplianceDriversRepo(initCatalystApp(req));
     try {
-      const [created] = await db
-        .insert(complianceDrivers)
-        .values({ name: parsed.data.name })
-        .returning();
-      await logSettingsChange({
+      const created = await repo.create({ name: parsed.data.name });
+      await logSettingsChange(req, {
         module: "compliance_drivers",
         settingKey: created.name,
         entityId: String(created.id),
@@ -209,14 +162,10 @@ router.post(
         newValue: { name: created.name },
         actor: actor.username,
       });
-      res.status(201).json({ data: { id: created.id, name: created.name } });
+      res.status(201).json({ data: created });
     } catch (err) {
-      if (
-        err instanceof Error &&
-        "code" in err &&
-        (err as { code?: string }).code === "23505"
-      ) {
-        throw conflict("A compliance driver with this name already exists");
+      if (err instanceof DuplicateNameError) {
+        throw conflict(err.message);
       }
       throw err;
     }
@@ -225,13 +174,9 @@ router.post(
 
 // B2: team roster for AM/TL dropdowns. Literal path registered before the
 // :id param path (Express route ordering).
-router.get("/lookups/team-members", async (_req: Request, res: Response) => {
-  const rows = await db
-    .select()
-    .from(teamMembers)
-    .where(eq(teamMembers.isActive, true))
-    .orderBy(asc(teamMembers.name));
-  const data = rows.map((r) => ({
+router.get("/lookups/team-members", async (req: Request, res: Response) => {
+  const repo = createTeamMembersRepo(initCatalystApp(req));
+  const data = (await repo.listActive()).map((r) => ({
     id: r.id,
     name: r.name,
     can_be_am: r.canBeAm,
@@ -246,16 +191,14 @@ router.post("/lookups/team-members", async (req: Request, res: Response) => {
     throw badRequest("Invalid team member payload", parsed.error.issues);
   }
   const actor = getActor(req);
+  const repo = createTeamMembersRepo(initCatalystApp(req));
   try {
-    const [created] = await db
-      .insert(teamMembers)
-      .values({
-        name: parsed.data.name,
-        canBeAm: parsed.data.can_be_am ?? true,
-        canBeTl: parsed.data.can_be_tl ?? false,
-      })
-      .returning();
-    await logSettingsChange({
+    const created = await repo.create({
+      name: parsed.data.name,
+      canBeAm: parsed.data.can_be_am ?? true,
+      canBeTl: parsed.data.can_be_tl ?? false,
+    });
+    await logSettingsChange(req, {
       module: "team_members",
       settingKey: created.name,
       entityId: String(created.id),
@@ -273,12 +216,8 @@ router.post("/lookups/team-members", async (req: Request, res: Response) => {
       },
     });
   } catch (err) {
-    if (
-      err instanceof Error &&
-      "code" in err &&
-      (err as { code?: string }).code === "23505"
-    ) {
-      throw conflict("A team member with this name already exists");
+    if (err instanceof DuplicateNameError) {
+      throw conflict(err.message);
     }
     throw err;
   }
@@ -289,15 +228,12 @@ router.delete(
   async (req: Request, res: Response) => {
     const { id } = DeleteTeamMemberParams.parse(req.params);
     const actor = getActor(req);
-    const result = await db
-      .update(teamMembers)
-      .set({ isActive: false })
-      .where(eq(teamMembers.id, id))
-      .returning({ id: teamMembers.id, name: teamMembers.name });
-    if (result.length === 0) throw notFound("Team member not found");
-    await logSettingsChange({
+    const repo = createTeamMembersRepo(initCatalystApp(req));
+    const result = await repo.deactivate(Number(id));
+    if (!result) throw notFound("Team member not found");
+    await logSettingsChange(req, {
       module: "team_members",
-      settingKey: result[0].name,
+      settingKey: result.name,
       entityId: String(id),
       action: "deactivate",
       oldValue: { isActive: true },
@@ -310,111 +246,57 @@ router.delete(
 
 router.get(
   "/lookups/competitor-battlecards",
-  async (_req: Request, res: Response) => {
-    const rows = await db
-      .select({
-        competitorId: competitorBattlecards.competitorId,
-        competitorName: competitors.name,
-        talkingPoints: competitorBattlecards.talkingPoints,
-      })
-      .from(competitorBattlecards)
-      .innerJoin(
-        competitors,
-        eq(competitorBattlecards.competitorId, competitors.id),
-      )
-      .where(eq(competitorBattlecards.isActive, true))
-      .orderBy(asc(competitors.name));
-    res.json(ListCompetitorBattlecardsResponse.parse({ data: rows }));
+  async (req: Request, res: Response) => {
+    const repo = createCompetitorBattlecardsRepo(initCatalystApp(req));
+    const data = await repo.listActive();
+    res.json(ListCompetitorBattlecardsResponse.parse({ data }));
   },
 );
 
-router.get("/lookups/gate-definitions", async (_req: Request, res: Response) => {
-  const rows = await db
-    .select()
-    .from(gateDefinitions)
-    .where(eq(gateDefinitions.isActive, true))
-    .orderBy(asc(gateDefinitions.sortOrder));
-  const data = rows.map((r) => ({
-    gateGroup: r.gateGroup,
-    gateCode: r.gateCode,
-    label: r.label,
-    description: r.description,
-    sortOrder: r.sortOrder,
-    prerequisiteGateCodes: r.prerequisiteGateCodes,
-  }));
+router.get("/lookups/gate-definitions", async (req: Request, res: Response) => {
+  const repo = createGateDefinitionsRepo(initCatalystApp(req));
+  const data = await repo.listActive();
   res.json(ListGateDefinitionsResponse.parse({ data }));
 });
 
 router.get(
   "/lookups/blocker-categories",
-  async (_req: Request, res: Response) => {
-    const rows = await db
-      .select()
-      .from(blockerCategories)
-      .where(eq(blockerCategories.isActive, true))
-      .orderBy(asc(blockerCategories.id));
-    const data = rows.map((r) => ({ id: r.id, categoryName: r.categoryName }));
+  async (req: Request, res: Response) => {
+    const repo = createBlockerCategoriesRepo(initCatalystApp(req));
+    const data = await repo.listActive();
     res.json(ListBlockerCategoriesResponse.parse({ data }));
   },
 );
 
 router.get(
   "/lookups/blocker-severities",
-  async (_req: Request, res: Response) => {
-    const rows = await db
-      .select()
-      .from(blockerSeverities)
-      .orderBy(asc(blockerSeverities.sortOrder));
-    const data = rows.map((r) => ({
-      id: r.id,
-      severityName: r.severityName,
-      sortOrder: r.sortOrder,
-    }));
+  async (req: Request, res: Response) => {
+    const repo = createBlockerSeveritiesRepo(initCatalystApp(req));
+    const data = await repo.listAll();
     res.json(ListBlockerSeveritiesResponse.parse({ data }));
   },
 );
 
-router.get("/lookups/loss-archetypes", async (_req: Request, res: Response) => {
-  const rows = await db
-    .select()
-    .from(lossArchetypes)
-    .where(eq(lossArchetypes.isActive, true))
-    .orderBy(asc(lossArchetypes.id));
-  const data = rows.map((r) => ({ id: r.id, archetypeName: r.archetypeName }));
+router.get("/lookups/loss-archetypes", async (req: Request, res: Response) => {
+  const repo = createLossArchetypesRepo(initCatalystApp(req));
+  const data = await repo.listActive();
   res.json(ListLossArchetypesResponse.parse({ data }));
 });
 
 router.get(
   "/lookups/intervention-checklists",
-  async (_req: Request, res: Response) => {
-    const rows = await db
-      .select()
-      .from(interventionChecklists)
-      .where(eq(interventionChecklists.isActive, true))
-      .orderBy(asc(interventionChecklists.id));
-    const data = rows.map((r) => ({
-      id: r.id,
-      triggerPatternCode: r.triggerPatternCode,
-      name: r.name,
-      steps: r.steps,
-    }));
+  async (req: Request, res: Response) => {
+    const repo = createInterventionChecklistsRepo(initCatalystApp(req));
+    const data = await repo.listActive();
     res.json(ListInterventionChecklistsResponse.parse({ data }));
   },
 );
 
 router.get(
   "/lookups/engine-thresholds",
-  async (_req: Request, res: Response) => {
-    const rows = await db
-      .select()
-      .from(engineThresholds)
-      .orderBy(asc(engineThresholds.parameterKey));
-    const data = rows.map((r) => ({
-      parameterKey: r.parameterKey,
-      parameterValue: r.parameterValue,
-      dataType: r.dataType,
-      description: r.description,
-    }));
+  async (req: Request, res: Response) => {
+    const repo = createEngineThresholdsRepo(initCatalystApp(req));
+    const data = await repo.listAll();
     res.json(ListEngineThresholdsResponse.parse({ data }));
   },
 );
@@ -427,9 +309,8 @@ router.put(
       throw badRequest("Invalid thresholds payload", parsed.error.issues);
     }
     const actor = getActor(req);
-    const before = await db.select().from(engineThresholds);
-    const beforeByKey = new Map(before.map((r) => [r.parameterKey, r]));
-    const currentMap = new Map(before.map((r) => [r.parameterKey, { parameterValue: r.parameterValue, dataType: r.dataType }]));
+    const repo = createEngineThresholdsRepo(initCatalystApp(req));
+    const beforeByKey = await repo.mapByKey();
 
     // validateThresholdUpdate only applies its numeric/bounds rules to keys
     // it recognizes by name (POSITIVE_WEIGHT_KEYS etc.) or that are already
@@ -445,23 +326,17 @@ router.put(
       throw badRequest(`Unrecognized engine threshold parameter_key(s): ${unknownKeys.join(", ")}`);
     }
 
+    const currentMap = new Map(
+      [...beforeByKey.entries()].map(([k, v]) => [k, { parameterValue: v.parameterValue, dataType: v.dataType }]),
+    );
     const validation = validateThresholdUpdate(parsed.data.updates, currentMap);
     if (!validation.valid) {
       throw badRequest(validation.error ?? "Invalid threshold update");
     }
     for (const update of parsed.data.updates) {
       const prior = beforeByKey.get(update.parameter_key);
-      await db
-        .insert(engineThresholds)
-        .values({
-          parameterKey: update.parameter_key,
-          parameterValue: update.parameter_value,
-        })
-        .onConflictDoUpdate({
-          target: engineThresholds.parameterKey,
-          set: { parameterValue: update.parameter_value },
-        });
-      await logSettingsChange({
+      await repo.upsertOne(update.parameter_key, update.parameter_value);
+      await logSettingsChange(req, {
         module: "engine_thresholds",
         settingKey: update.parameter_key,
         action: "update",
@@ -471,31 +346,14 @@ router.put(
         actor: actor.username,
       });
     }
-    const rows = await db
-      .select()
-      .from(engineThresholds)
-      .orderBy(asc(engineThresholds.parameterKey));
-    const data = rows.map((r) => ({
-      parameterKey: r.parameterKey,
-      parameterValue: r.parameterValue,
-      dataType: r.dataType,
-      description: r.description,
-    }));
+    const data = await repo.listAll();
     res.json(UpdateEngineThresholdsResponse.parse({ data }));
   },
 );
 
-router.get("/lookups/fx-rates", async (_req: Request, res: Response) => {
-  const rows = await db
-    .select()
-    .from(fxRates)
-    .orderBy(asc(fxRates.baseCurrency));
-  const data = rows.map((r) => ({
-    baseCurrency: r.baseCurrency,
-    quoteCurrency: r.quoteCurrency,
-    rate: Number(r.rate),
-    asOf: r.asOf,
-  }));
+router.get("/lookups/fx-rates", async (req: Request, res: Response) => {
+  const repo = createFxRatesRepo(initCatalystApp(req));
+  const data = await repo.listAll();
   res.json(ListFxRatesResponse.parse({ data }));
 });
 
@@ -505,45 +363,23 @@ router.put("/lookups/fx-rates", async (req: Request, res: Response) => {
     throw badRequest("Invalid fx rates payload", parsed.error.issues);
   }
   const actor = getActor(req);
-  const before = await db.select().from(fxRates);
-  const beforeByKey = new Map(
-    before.map((r) => [`${r.baseCurrency}:${r.quoteCurrency}:${r.asOf}`, r]),
-  );
+  const repo = createFxRatesRepo(initCatalystApp(req));
+  const beforeByKey = await repo.mapByKey();
   for (const update of parsed.data.updates) {
     const key = `${update.base_currency}:${update.quote_currency}:${update.as_of}`;
     const prior = beforeByKey.get(key);
-    await db
-      .insert(fxRates)
-      .values({
-        baseCurrency: update.base_currency,
-        quoteCurrency: update.quote_currency,
-        rate: String(update.rate),
-        asOf: update.as_of,
-      })
-      .onConflictDoUpdate({
-        target: [fxRates.baseCurrency, fxRates.quoteCurrency, fxRates.asOf],
-        set: { rate: String(update.rate) },
-      });
-    await logSettingsChange({
+    await repo.upsertOne(update.base_currency, update.quote_currency, update.as_of, update.rate);
+    await logSettingsChange(req, {
       module: "fx_rates",
       settingKey: key,
       action: "update",
-      oldValue: prior ? Number(prior.rate) : null,
+      oldValue: prior ? prior.rate : null,
       newValue: update.rate,
       dataType: "number",
       actor: actor.username,
     });
   }
-  const rows = await db
-    .select()
-    .from(fxRates)
-    .orderBy(asc(fxRates.baseCurrency));
-  const data = rows.map((r) => ({
-    baseCurrency: r.baseCurrency,
-    quoteCurrency: r.quoteCurrency,
-    rate: Number(r.rate),
-    asOf: r.asOf,
-  }));
+  const data = await repo.listAll();
   res.json(UpdateFxRatesResponse.parse({ data }));
 });
 

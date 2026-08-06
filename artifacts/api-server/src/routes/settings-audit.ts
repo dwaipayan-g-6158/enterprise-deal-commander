@@ -1,6 +1,11 @@
 import { Router, type IRouter, type Request, type Response } from "express";
-import { eq, desc } from "drizzle-orm";
-import { db, settingsChangeLog, engineThresholds, scoringModelWeights } from "@workspace/db";
+import {
+  initCatalystApp,
+  createSettingsChangeLogRepo,
+  createEngineThresholdsRepo,
+  createScoringModelWeightsRepo,
+  type SettingsChangeLogRow,
+} from "@workspace/db/catalyst";
 import {
   ListSettingsChangeLogResponse,
   GetSettingsChangeParams,
@@ -11,13 +16,13 @@ import {
 } from "@workspace/api-zod";
 import { getActor } from "../lib/auth";
 import { badRequest, notFound, conflict } from "../lib/http";
-import { computeRollback, logSettingsChange } from "../lib/settings-audit";
+import { logSettingsChange } from "../lib/catalyst/settings-audit";
+import { computeRollback } from "../lib/settings-rollback";
 import { validateThresholdUpdate } from "../lib/threshold-validation";
-import { toISO } from "../lib/intelligence";
 
 const router: IRouter = Router();
 
-function toRow(r: typeof settingsChangeLog.$inferSelect) {
+function toRow(r: SettingsChangeLogRow) {
   return {
     id: r.id,
     module: r.module,
@@ -30,30 +35,26 @@ function toRow(r: typeof settingsChangeLog.$inferSelect) {
     actor: r.actor,
     reason: r.reason,
     rollbackOf: r.rollbackOf,
-    // changedAt is a `timestamp` column — reuse the same Date|string coercion
-    // the rest of the codebase already applies to timestamp columns (see
-    // `toISO` in intelligence.ts and the equivalent inline check in
-    // `webhookOut` in routes/v2/crud.ts) rather than assuming the pg driver
-    // always hands back a Date instance.
-    changedAt: toISO(r.changedAt) ?? new Date(0).toISOString(),
+    changedAt: r.changedAt.toISOString(),
   };
 }
 
 router.get("/settings/change-log", async (req: Request, res: Response) => {
+  const catalystApp = initCatalystApp(req);
   const moduleFilter = typeof req.query.module === "string" ? req.query.module : undefined;
   const limit = Math.max(1, Math.min(200, Number(req.query.limit ?? 50)));
-  const rows = await db
-    .select()
-    .from(settingsChangeLog)
-    .where(moduleFilter ? eq(settingsChangeLog.module, moduleFilter) : undefined)
-    .orderBy(desc(settingsChangeLog.changedAt))
-    .limit(limit);
-  res.json(ListSettingsChangeLogResponse.parse({ data: rows.map(toRow) }));
+  // listAll() already returns newest-first (see the repo) — Data Store has no
+  // WHERE/LIMIT at the Row API level, so the module filter and limit are
+  // plain JS array ops, same pattern as every other migrated list endpoint.
+  const rows = await createSettingsChangeLogRepo(catalystApp).listAll();
+  const filtered = moduleFilter ? rows.filter((r) => r.module === moduleFilter) : rows;
+  res.json(ListSettingsChangeLogResponse.parse({ data: filtered.slice(0, limit).map(toRow) }));
 });
 
 router.get("/settings/change-log/:id", async (req: Request, res: Response) => {
+  const catalystApp = initCatalystApp(req);
   const { id } = GetSettingsChangeParams.parse(req.params);
-  const [row] = await db.select().from(settingsChangeLog).where(eq(settingsChangeLog.id, id));
+  const row = await createSettingsChangeLogRepo(catalystApp).getById(id);
   if (!row) throw notFound("Change-log entry not found");
   res.json(GetSettingsChangeResponse.parse({ data: toRow(row) }));
 });
@@ -66,10 +67,11 @@ router.get("/settings/change-log/:id", async (req: Request, res: Response) => {
 // plan's Global Constraints: entity-table and fx_rates rollback are
 // deferred to the Governance & Audit UI phase).
 router.post("/settings/change-log/:id/rollback", async (req: Request, res: Response) => {
+  const catalystApp = initCatalystApp(req);
   const { id } = RollbackSettingsChangeParams.parse(req.params);
   const body = RollbackSettingsChangeBody.safeParse(req.body ?? {});
   const actor = getActor(req);
-  const [row] = await db.select().from(settingsChangeLog).where(eq(settingsChangeLog.id, id));
+  const row = await createSettingsChangeLogRepo(catalystApp).getById(id);
   if (!row) throw notFound("Change-log entry not found");
 
   if (row.module !== "engine_thresholds") {
@@ -89,19 +91,14 @@ router.post("/settings/change-log/:id/rollback", async (req: Request, res: Respo
     newValue: row.newValue,
   });
 
-  // `settingsChangeLog.oldValue`/`newValue` are jsonb columns, and
-  // drizzle-orm's PgJsonb#mapFromDriverValue unconditionally re-JSON.parses
-  // any string the driver hands back — but `pg` already auto-decodes jsonb
-  // text itself, so a stored plain string like the JSON text `"21"` comes
-  // back from `pg` as the JS string "21", then gets *re*-parsed by drizzle
-  // into the JS number 21. engine_thresholds values are always strings at
-  // the storage layer (parameterValue is `text`), so this double-decode is
-  // silently lossy for anything that also happens to be valid JSON on its
-  // own (numbers, "true"/"false"/"null") — a bare `typeof === "string"`
-  // check would incorrectly 409 on exactly the numeric thresholds this
-  // route exists to roll back. Coerce any of the primitive shapes drizzle
-  // could have handed back into the text form the column actually needs;
-  // only reject non-primitives (object/array) and null/undefined.
+  // engine_thresholds values are always strings at the storage layer
+  // (parameter_value is varchar) — coerce any primitive shape the change-log
+  // JSON round-trip could have handed back into the text form the column
+  // actually needs; only reject non-primitives (object/array) and
+  // null/undefined. (No drizzle-orm jsonb double-decode gotcha to guard
+  // against here — old_value/new_value are a plain JSON.stringify/parse
+  // round-trip over a `text` column, not a Postgres jsonb driver value; see
+  // the repo's rowToSettingsChangeLog comment.)
   const restoreValue =
     typeof inverse.valueToRestore === "string" ||
     typeof inverse.valueToRestore === "number" ||
@@ -120,7 +117,8 @@ router.post("/settings/change-log/:id/rollback", async (req: Request, res: Respo
   // non-monotonic risk_level_* boundary. The rollback is a single
   // parameterKey/parameterValue pair; boundary rules resolve their unspecified
   // siblings from current DB state.
-  const currentThresholds = await db.select().from(engineThresholds);
+  const thresholdsRepo = createEngineThresholdsRepo(catalystApp);
+  const currentThresholds = await thresholdsRepo.listAll();
   const currentMap = new Map(
     currentThresholds.map((t) => [t.parameterKey, { parameterValue: t.parameterValue, dataType: t.dataType }]),
   );
@@ -132,15 +130,9 @@ router.post("/settings/change-log/:id/rollback", async (req: Request, res: Respo
     throw badRequest(validation.error ?? "Invalid threshold rollback value");
   }
 
-  await db
-    .insert(engineThresholds)
-    .values({ parameterKey: inverse.settingKey, parameterValue: restoreValue })
-    .onConflictDoUpdate({
-      target: engineThresholds.parameterKey,
-      set: { parameterValue: restoreValue },
-    });
+  await thresholdsRepo.upsertOne(inverse.settingKey, restoreValue);
 
-  await logSettingsChange({
+  await logSettingsChange(catalystApp, {
     module: row.module,
     settingKey: row.settingKey,
     action: "rollback",
@@ -155,23 +147,26 @@ router.post("/settings/change-log/:id/rollback", async (req: Request, res: Respo
   res.json({ data: { restored: restoreValue } });
 });
 
-router.get("/settings/config/export", async (_req: Request, res: Response) => {
-  const thresholds = await db.select().from(engineThresholds);
+/** Dedupe an append-only calibration history down to the newest row per featureId. */
+function latestWeightPerFeature<T extends { featureId: string }>(sortedNewestFirst: T[]): Map<string, T> {
+  const latest = new Map<string, T>();
+  for (const row of sortedNewestFirst) {
+    if (!latest.has(row.featureId)) latest.set(row.featureId, row);
+  }
+  return latest;
+}
+
+router.get("/settings/config/export", async (req: Request, res: Response) => {
+  const catalystApp = initCatalystApp(req);
+  const thresholds = await createEngineThresholdsRepo(catalystApp).listAll();
   // scoring_model_weights is an append-only history table (one row per
   // calibration, not per feature) — mirror the same "latest row per
-  // featureId" dedup that `getScoringWeights()` (lib/scoring.ts) already
-  // does internally, so "export" means "the current effective
+  // featureId" dedup that `getScoringWeights()` (lib/catalyst/scoring.ts)
+  // already does internally, so "export" means "the current effective
   // configuration" rather than the entire calibration history. Without
   // this, repeated export -> import round-trips grow the table unbounded.
-  const scoringWeightHistory = await db
-    .select()
-    .from(scoringModelWeights)
-    .orderBy(desc(scoringModelWeights.calibrationDate));
-  const latestByFeature = new Map<string, typeof scoringModelWeights.$inferSelect>();
-  for (const row of scoringWeightHistory) {
-    if (!latestByFeature.has(row.featureId)) latestByFeature.set(row.featureId, row);
-  }
-  const scoringWeights = [...latestByFeature.values()];
+  const scoringWeightHistory = await createScoringModelWeightsRepo(catalystApp).listAll();
+  const scoringWeights = [...latestWeightPerFeature(scoringWeightHistory).values()];
   res.json({
     data: {
       exportedAt: new Date().toISOString(),
@@ -182,13 +177,7 @@ router.get("/settings/config/export", async (_req: Request, res: Response) => {
       })),
       scoringModelWeights: scoringWeights.map((w) => ({
         featureId: w.featureId,
-        // scoringModelWeights.calibratedWeight is a Postgres `numeric`
-        // column; drizzle-orm returns numeric columns as strings (to avoid
-        // silent float-precision loss), but ImportSettingsConfigBody's
-        // `calibratedWeight` is typed `number` (it's re-stringified on the
-        // way back in via `String(...)` on the import side below) — coerce
-        // here so an export is directly re-postable to /config/import.
-        calibratedWeight: Number(w.calibratedWeight),
+        calibratedWeight: w.calibratedWeight,
       })),
     },
   });
@@ -201,13 +190,15 @@ router.get("/settings/config/export", async (_req: Request, res: Response) => {
 // change log stays a complete record of what happened, not just that an
 // import occurred.
 router.post("/settings/config/import", async (req: Request, res: Response) => {
+  const catalystApp = initCatalystApp(req);
   const parsed = ImportSettingsConfigBody.safeParse(req.body);
   if (!parsed.success) {
     throw badRequest("Invalid config import payload", parsed.error.issues);
   }
   const actor = getActor(req);
 
-  const priorThresholds = await db.select().from(engineThresholds);
+  const thresholdsRepo = createEngineThresholdsRepo(catalystApp);
+  const priorThresholds = await thresholdsRepo.listAll();
   const priorByKey = new Map(priorThresholds.map((t) => [t.parameterKey, t.parameterValue]));
   // Same bounded validation PUT /lookups/engine-thresholds applies (M4) — an
   // import is otherwise a way to smuggle in the values that gate rejects.
@@ -229,14 +220,8 @@ router.post("/settings/config/import", async (req: Request, res: Response) => {
     throw badRequest(thresholdValidation.error ?? "Invalid engine thresholds in import payload");
   }
   for (const row of parsed.data.engineThresholds) {
-    await db
-      .insert(engineThresholds)
-      .values({ parameterKey: row.parameterKey, parameterValue: row.parameterValue })
-      .onConflictDoUpdate({
-        target: engineThresholds.parameterKey,
-        set: { parameterValue: row.parameterValue },
-      });
-    await logSettingsChange({
+    await thresholdsRepo.upsertOne(row.parameterKey, row.parameterValue);
+    await logSettingsChange(catalystApp, {
       module: "engine_thresholds",
       settingKey: row.parameterKey,
       action: "import",
@@ -247,17 +232,22 @@ router.post("/settings/config/import", async (req: Request, res: Response) => {
     });
   }
 
-  const priorWeights = await db.select().from(scoringModelWeights);
-  const priorWeightByFeature = new Map(priorWeights.map((w) => [w.featureId, w.calibratedWeight]));
+  const scoringWeightsRepo = createScoringModelWeightsRepo(catalystApp);
+  // The Drizzle original built `priorWeightByFeature` from an un-ordered
+  // `db.select()`, so its "prior value" was really "whatever row order
+  // Postgres happened to return" — not necessarily the latest calibration.
+  // Data Store's Row API gives no comparable implicit ordering to replicate,
+  // so this uses the same "latest per featureId" dedup as the export
+  // endpoint above, which is the only value that's actually meaningful here
+  // (the current effective weight being replaced).
+  const priorWeights = await scoringWeightsRepo.listAll();
+  const priorWeightByFeature = new Map(
+    [...latestWeightPerFeature(priorWeights).values()].map((w) => [w.featureId, w.calibratedWeight]),
+  );
   const importedAt = new Date().toISOString().slice(0, 10);
   for (const row of parsed.data.scoringModelWeights) {
-    await db.insert(scoringModelWeights).values({
-      featureId: row.featureId,
-      calibratedWeight: String(row.calibratedWeight),
-      sampleSize: 0,
-      calibrationDate: importedAt,
-    });
-    await logSettingsChange({
+    await scoringWeightsRepo.append(row.featureId, row.calibratedWeight, importedAt);
+    await logSettingsChange(catalystApp, {
       module: "scoring_model_weights",
       settingKey: row.featureId,
       action: "import",

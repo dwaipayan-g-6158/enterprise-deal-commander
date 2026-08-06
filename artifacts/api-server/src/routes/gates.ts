@@ -1,6 +1,10 @@
 import { Router, type IRouter, type Request, type Response } from "express";
-import { and, eq } from "drizzle-orm";
-import { db, enterpriseDeals, dealTechnicalGates } from "@workspace/db";
+import {
+  initCatalystApp,
+  createEnterpriseDealsRepo,
+  createDealTechnicalGatesRepo,
+  type CatalystApp,
+} from "@workspace/db/catalyst";
 import {
   ListGatesParams,
   ListGatesResponse,
@@ -13,8 +17,8 @@ import {
 } from "@workspace/api-zod";
 import { getActor } from "../lib/auth";
 import { badRequest, notFound } from "../lib/http";
-import { getDealGates } from "../lib/intelligence";
-import { writeAudit, type AuditEntry } from "../lib/audit";
+import { getDealGates } from "../lib/catalyst/intelligence";
+import { writeAudit, type AuditEntry } from "../lib/catalyst/audit";
 import { emitDealEvent } from "../lib/events";
 
 // Auth + write-role enforcement is applied centrally in routes/index.ts.
@@ -45,19 +49,16 @@ function computeIntegrityWarnings(gates: GateView[]) {
   return warnings;
 }
 
-async function ensureDeal(dealId: string) {
-  const rows = await db
-    .select({ id: enterpriseDeals.id })
-    .from(enterpriseDeals)
-    .where(eq(enterpriseDeals.id, dealId))
-    .limit(1);
-  if (rows.length === 0) throw notFound("Deal not found");
+async function ensureDeal(catalystApp: CatalystApp, dealId: string) {
+  const deal = await createEnterpriseDealsRepo(catalystApp).getById(dealId);
+  if (!deal) throw notFound("Deal not found");
 }
 
 router.get("/deals/:dealId/gates", async (req: Request, res: Response) => {
   const { dealId } = ListGatesParams.parse(req.params);
-  await ensureDeal(dealId);
-  const gates = await getDealGates(dealId);
+  const catalystApp = initCatalystApp(req);
+  await ensureDeal(catalystApp, dealId);
+  const gates = await getDealGates(catalystApp, dealId);
   res.json(ListGatesResponse.parse({ data: gates }));
 });
 
@@ -69,13 +70,12 @@ router.put(
     if (!parsed.success) {
       throw badRequest("Invalid batch gate payload", parsed.error.issues);
     }
-    await ensureDeal(dealId);
+    const catalystApp = initCatalystApp(req);
+    await ensureDeal(catalystApp, dealId);
     const actor = getActor(req);
 
-    const existing = await db
-      .select()
-      .from(dealTechnicalGates)
-      .where(eq(dealTechnicalGates.dealId, dealId));
+    const gatesRepo = createDealTechnicalGatesRepo(catalystApp);
+    const existing = await gatesRepo.list(dealId);
     const existingMap = new Map(existing.map((g) => [g.gateCode, g]));
 
     const audits: AuditEntry[] = [];
@@ -88,21 +88,7 @@ router.put(
         completedBy: update.is_completed ? actor.displayName : null,
         notes: update.notes ?? prev?.notes ?? null,
       };
-      if (!prev) {
-        await db
-          .insert(dealTechnicalGates)
-          .values({ dealId, gateCode: update.gate_code, ...values });
-      } else {
-        await db
-          .update(dealTechnicalGates)
-          .set(values)
-          .where(
-            and(
-              eq(dealTechnicalGates.dealId, dealId),
-              eq(dealTechnicalGates.gateCode, update.gate_code),
-            ),
-          );
-      }
+      await gatesRepo.upsert(dealId, update.gate_code, values);
       if (wasCompleted !== update.is_completed) {
         audits.push({
           dealId,
@@ -115,7 +101,7 @@ router.put(
         });
       }
     }
-    if (audits.length > 0) await writeAudit(audits);
+    if (audits.length > 0) await writeAudit(catalystApp, audits);
     for (const a of audits) {
       if (a.entityType === "gate" && a.entityId) {
         emitDealEvent("gate.toggled", {
@@ -123,11 +109,12 @@ router.put(
           actor: actor.displayName,
           gateCode: a.entityId,
           isCompleted: a.newValue === "true",
+          catalystApp,
         });
       }
     }
 
-    const gates = await getDealGates(dealId);
+    const gates = await getDealGates(catalystApp, dealId);
     res.json(
       UpdateGatesBatchResponse.parse({
         data: gates,
@@ -145,48 +132,26 @@ router.put(
     if (!parsed.success) {
       throw badRequest("Invalid gate payload", parsed.error.issues);
     }
-    await ensureDeal(dealId);
+    const catalystApp = initCatalystApp(req);
+    await ensureDeal(catalystApp, dealId);
     const actor = getActor(req);
     const body = parsed.data;
 
-    const existingRows = await db
-      .select()
-      .from(dealTechnicalGates)
-      .where(
-        and(
-          eq(dealTechnicalGates.dealId, dealId),
-          eq(dealTechnicalGates.gateCode, gateCode),
-        ),
-      )
-      .limit(1);
-
-    const wasCompleted = existingRows[0]?.isCompleted ?? false;
+    const gatesRepo = createDealTechnicalGatesRepo(catalystApp);
+    const existing = await gatesRepo.list(dealId);
+    const existingGate = existing.find((g) => g.gateCode === gateCode);
+    const wasCompleted = existingGate?.isCompleted ?? false;
 
     const values = {
       isCompleted: body.is_completed,
       completedAt: body.is_completed ? new Date() : null,
       completedBy: body.is_completed ? actor.displayName : null,
-      notes: body.notes ?? existingRows[0]?.notes ?? null,
+      notes: body.notes ?? existingGate?.notes ?? null,
     };
-
-    if (existingRows.length === 0) {
-      await db
-        .insert(dealTechnicalGates)
-        .values({ dealId, gateCode, ...values });
-    } else {
-      await db
-        .update(dealTechnicalGates)
-        .set(values)
-        .where(
-          and(
-            eq(dealTechnicalGates.dealId, dealId),
-            eq(dealTechnicalGates.gateCode, gateCode),
-          ),
-        );
-    }
+    await gatesRepo.upsert(dealId, gateCode, values);
 
     if (wasCompleted !== body.is_completed) {
-      await writeAudit({
+      await writeAudit(catalystApp, {
         dealId,
         entityType: "gate",
         entityId: gateCode,
@@ -200,10 +165,11 @@ router.put(
         actor: actor.displayName,
         gateCode,
         isCompleted: body.is_completed,
+        catalystApp,
       });
     }
 
-    const gates = await getDealGates(dealId);
+    const gates = await getDealGates(catalystApp, dealId);
     const updated = gates.find((g) => g.gateCode === gateCode);
     if (!updated) throw notFound("Gate not found");
     res.json(

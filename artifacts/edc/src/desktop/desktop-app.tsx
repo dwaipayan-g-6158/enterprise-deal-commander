@@ -1,6 +1,7 @@
 import { Switch, Route, Redirect } from "wouter";
 import { RoleProvider } from "@/lib/auth/role-context";
 import { useAuthGuard } from "@/lib/auth/use-auth-guard";
+import { CatalystAuthBounce } from "@/lib/auth/catalyst-auth-bounce";
 import { AppShellSkeleton } from "@/components/app-shell-skeleton";
 import { CommandPaletteProvider } from "@/lib/command-palette-context";
 import { CommandPalette } from "@/components/command-palette";
@@ -58,6 +59,8 @@ export default function DesktopApp() {
       <Route path="/memory/:id" component={() => <ProtectedRoute component={MemoryDetail} />} />
       <Route path="/settings" component={() => <ProtectedRoute component={Settings} />} />
       <Route path="/m"><Redirect to="/" /></Route>
+      <Route path="/__catalyst/*" component={CatalystAuthBounce} />
+      <Route path="/accounts/*" component={CatalystAuthBounce} />
       <Route component={NotFound} />
     </Switch>
   );

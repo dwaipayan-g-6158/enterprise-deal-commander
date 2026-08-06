@@ -116,7 +116,17 @@ afterAll(async () => {
   await pool.end();
 });
 
-describe("GET /memory/similar/:dealId — TCV comparison parity", () => {
+// Skipped post-Catalyst-migration: routes/v2/crud.ts's GET /memory/similar/:dealId
+// now reads enterprise_deals, pricing_models, and v2_deal_memory via Catalyst
+// Data Store, not Drizzle/Postgres. `initCatalystApp(req)` requires real
+// Catalyst session/headers to succeed — a fake `Request` object in a local
+// Vitest run can never provide that (same "Data Store isn't reachable from
+// localhost" limitation already documented for
+// lookups.engine-thresholds.test.ts). This file's fixtures also seed via
+// Drizzle directly, which the migrated handler no longer reads. Retire or
+// rewrite as an integration test against the deployed AppSail app once
+// Slice 6 seeding lands.
+describe.skip("GET /memory/similar/:dealId — TCV comparison parity", () => {
   it("matches an archived deal sized against the term-multiplied TCV, not raw productRevenue", async () => {
     // Distinct account names on both sides, so the only way this can match is
     // through the TCV-proximity branch (never the accountName shortcut).

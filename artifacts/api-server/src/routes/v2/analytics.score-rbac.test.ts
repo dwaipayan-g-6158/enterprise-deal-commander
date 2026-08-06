@@ -87,7 +87,17 @@ afterAll(async () => {
   await pool.end();
 });
 
-describe("GET /deals/:dealId/score — role-gated persistence", () => {
+// Skipped post-Catalyst-migration (both describe blocks in this file):
+// routes/v2/analytics.ts's GET /deals/:dealId/score and GET /analytics/engagement
+// now read/write via Catalyst Data Store, not Drizzle/Postgres.
+// `initCatalystApp(req)` requires real Catalyst session/headers to succeed —
+// a fake `Request` object in a local Vitest run can never provide that (same
+// "Data Store isn't reachable from localhost" limitation already documented
+// for lookups.engine-thresholds.test.ts). This file's fixtures also seed via
+// Drizzle directly, which the migrated handlers no longer read. Retire or
+// rewrite as an integration test against the deployed AppSail app once
+// Slice 6 seeding lands.
+describe.skip("GET /deals/:dealId/score — role-gated persistence", () => {
   it("a reader gets a score without appending to deal_scores", async () => {
     const dealId = await createDeal();
     const handler = getHandler("/deals/:dealId/score");
@@ -111,7 +121,8 @@ describe("GET /deals/:dealId/score — role-gated persistence", () => {
   });
 });
 
-describe("GET /analytics/engagement — achievement ledger is admin-only to write", () => {
+// Skipped post-Catalyst-migration — see the comment on the describe block above.
+describe.skip("GET /analytics/engagement — achievement ledger is admin-only to write", () => {
   it("a reader's call never inserts into the app-global commander_achievements table", async () => {
     const handler = getHandler("/analytics/engagement");
     const before = await db.select({ code: commanderAchievements.achievementCode }).from(commanderAchievements);

@@ -50,42 +50,12 @@ paths:
                 $ref: "#/components/schemas/HealthStatus"
 
   # ============ AUTH ============
-  /v1/auth/login:
-    post:
-      operationId: login
-      tags: [auth]
-      summary: Authenticate the commander
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/LoginInput"
-      responses:
-        "200":
-          description: Authenticated
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/MessageResponse"
-        "401":
-          description: Invalid credentials
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-  /v1/auth/logout:
-    post:
-      operationId: logout
-      tags: [auth]
-      summary: Log out
-      responses:
-        "200":
-          description: Logged out
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/MessageResponse"
+  # Sign-in/sign-out have no server routes at all: Catalyst embedded auth's
+  # Web SDK widget talks directly to Zoho's own identity servers to establish
+  # and end a session (see artifacts/edc/src/pages/login.tsx). This server
+  # only ever resolves identity FROM an already-established Catalyst session
+  # — there is nothing here to authenticate a password against or a cookie to
+  # issue/clear, so the old POST /auth/login and POST /auth/logout are gone.
   /v1/auth/me:
     get:
       operationId: getMe
@@ -127,8 +97,8 @@ paths:
   # Every non-GET route here is enforced by the app-wide requireWriteRole gate
   # (artifacts/api-server/src/lib/rbac.ts) — readers hit 403 automatically.
   # GET is intentionally open to readers too: no secret leaves the server
-  # (passwordHash is never a field), and "readers see everything" is a
-  # settled product decision for this app.
+  # (there is no password field at all anymore — see CreateUserInput), and
+  # "readers see everything" is a settled product decision for this app.
   /v1/users:
     get:
       operationId: listUsers
@@ -144,7 +114,7 @@ paths:
     post:
       operationId: createUser
       tags: [users]
-      summary: Create a user (admin only)
+      summary: Invite a user via Catalyst embedded auth (admin only)
       requestBody:
         required: true
         content:
@@ -240,45 +210,6 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-  /v1/users/{id}/password:
-    post:
-      operationId: resetUserPassword
-      tags: [users]
-      summary: Reset a user's password (admin only; also usable on self)
-      parameters:
-        - { name: id, in: path, required: true, schema: { type: string } }
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/ResetPasswordInput"
-      responses:
-        "200":
-          description: Password reset
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/MessageResponse"
-        "400":
-          description: Password too short
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-        "403":
-          description: Forbidden (reader)
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-        "404":
-          description: User not found
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-
   # ============ DEALS ============
   /v1/deals:
     get:
@@ -2082,12 +2013,6 @@ components:
           required: [code, message, patternCodes]
       required: [error]
 
-    LoginInput:
-      type: object
-      properties:
-        email: { type: string }
-        password: { type: string }
-      required: [email, password]
     AuthUser:
       type: object
       properties:
@@ -2130,9 +2055,8 @@ components:
       properties:
         email: { type: string, minLength: 1 }
         display_name: { type: string, minLength: 1, maxLength: 255 }
-        password: { type: string, minLength: 12 }
         role: { type: string, enum: [admin, reader] }
-      required: [email, display_name, password]
+      required: [email, display_name]
     UpdateUserInput:
       type: object
       properties:
@@ -2140,11 +2064,6 @@ components:
         role: { type: string, enum: [admin, reader] }
         is_active: { type: boolean }
       minProperties: 1
-    ResetPasswordInput:
-      type: object
-      properties:
-        password: { type: string, minLength: 12 }
-      required: [password]
 
     Deal:
       type: object

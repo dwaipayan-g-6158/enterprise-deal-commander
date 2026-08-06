@@ -1,7 +1,6 @@
-import { db, dealHealthHistory } from "@workspace/db";
-import { desc, eq } from "drizzle-orm";
+import { type CatalystApp, createDealHealthHistoryRepo } from "@workspace/db/catalyst";
 import { dealEvents, emitDealEvent, type DealEventType } from "../events";
-import { assembleDealIntelligence } from "../intelligence";
+import { assembleDealIntelligence } from "../catalyst/intelligence";
 
 /**
  * Tracks governance health transitions. After any mutation that could change a
@@ -12,30 +11,21 @@ import { assembleDealIntelligence } from "../intelligence";
  *
  * It deliberately ignores `health.changed` itself to avoid recursion.
  */
-async function lastRecordedHealth(dealId: string): Promise<string | null> {
-  const rows = await db
-    .select({ toStatus: dealHealthHistory.toStatus })
-    .from(dealHealthHistory)
-    .where(eq(dealHealthHistory.dealId, dealId))
-    .orderBy(desc(dealHealthHistory.changedAt))
-    .limit(1);
-  return rows[0]?.toStatus ?? null;
-}
-
 export async function reconcileHealth(
+  catalystApp: CatalystApp,
   dealId: string,
   actor: string,
 ): Promise<boolean> {
-  const intel = await assembleDealIntelligence(dealId);
+  const intel = await assembleDealIntelligence(catalystApp, dealId);
   if (!intel) return false;
   const current = intel.governance.healthStatus;
-  const previous = await lastRecordedHealth(dealId);
+  const previous = await createDealHealthHistoryRepo(catalystApp).lastRecordedStatus(dealId);
   if (previous === current) return false;
 
   const topRed = intel.governance.alerts.find((a) => a.severity === "RED");
   const reason = topRed?.message ?? topRed?.code ?? `Health is ${current}`;
 
-  await db.insert(dealHealthHistory).values({
+  await createDealHealthHistoryRepo(catalystApp).create({
     dealId,
     fromStatus: previous,
     toStatus: current,
@@ -49,6 +39,7 @@ export async function reconcileHealth(
     fromStatus: previous,
     toStatus: current,
     reason,
+    catalystApp,
   });
   return true;
 }
@@ -92,8 +83,13 @@ export function shouldSkipHealthReconcile(eventType: DealEventType): boolean {
 export function registerHealthTracker(): () => void {
   return dealEvents.on(async (event) => {
     if (shouldSkipHealthReconcile(event.type)) return;
+    // Absent if this event came from an emitter that hasn't migrated off
+    // Drizzle yet — no-op rather than throw, per the event bus's "never
+    // break the request path" contract (see lib/events.ts).
+    if (!event.catalystApp) return;
+    const catalystApp = event.catalystApp as CatalystApp;
     await runSerialPerDeal(event.dealId, () =>
-      reconcileHealth(event.dealId, event.actor),
+      reconcileHealth(catalystApp, event.dealId, event.actor),
     );
   });
 }

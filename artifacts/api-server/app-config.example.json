@@ -1,0 +1,12 @@
+{
+  "command": "node --enable-source-maps ./index.mjs",
+  "stack": "node24",
+  "memory": 512,
+  "env_variables": {
+    "NODE_ENV": "production",
+    "APP_ORIGIN": "",
+    "SUPER_ADMIN_EMAIL": "admin@example.com"
+  },
+  "catalyst_auth": true,
+  "login_redirect": "/"
+}

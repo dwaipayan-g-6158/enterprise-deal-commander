@@ -1,6 +1,10 @@
 import { Router, type IRouter, type Request, type Response } from "express";
-import { and, eq } from "drizzle-orm";
-import { db, enterpriseDeals, dealAlertDispositions } from "@workspace/db";
+import {
+  initCatalystApp,
+  createEnterpriseDealsRepo,
+  createDealAlertDispositionsRepo,
+  type CatalystApp,
+} from "@workspace/db/catalyst";
 import {
   SetDispositionParams,
   SetDispositionBody,
@@ -9,20 +13,16 @@ import {
 } from "@workspace/api-zod";
 import { getActor } from "../lib/auth";
 import { badRequest, notFound } from "../lib/http";
-import { toISO, getDealWithLookups } from "../lib/intelligence";
-import { writeAudit } from "../lib/audit";
+import { toISO, getDealWithLookups } from "../lib/catalyst/intelligence";
+import { writeAudit } from "../lib/catalyst/audit";
 import { snapshotFieldValue } from "../lib/snooze-fields";
 
 // Auth + write-role enforcement is applied centrally in routes/index.ts.
 const router: IRouter = Router();
 
-async function ensureDeal(dealId: string) {
-  const rows = await db
-    .select({ id: enterpriseDeals.id })
-    .from(enterpriseDeals)
-    .where(eq(enterpriseDeals.id, dealId))
-    .limit(1);
-  if (rows.length === 0) throw notFound("Deal not found");
+async function ensureDeal(catalystApp: CatalystApp, dealId: string) {
+  const deal = await createEnterpriseDealsRepo(catalystApp).getById(dealId);
+  if (!deal) throw notFound("Deal not found");
 }
 
 router.put(
@@ -33,7 +33,8 @@ router.put(
     if (!parsed.success) {
       throw badRequest("Invalid disposition payload", parsed.error.issues);
     }
-    await ensureDeal(dealId);
+    const catalystApp = initCatalystApp(req);
+    await ensureDeal(catalystApp, dealId);
     const actor = getActor(req);
     const body = parsed.data;
 
@@ -46,8 +47,8 @@ router.put(
 
     // Snooze auto-expires on whichever comes first: the duration elapsing
     // (snoozeUntil) or the watched field changing (snoozeFieldBaseline vs.
-    // its current value, compared lazily in intelligence.ts). Both are null
-    // for acknowledge/accept.
+    // its current value, compared lazily in lib/catalyst/intelligence.ts).
+    // Both are null for acknowledge/accept.
     let snoozeUntil: Date | null = null;
     let snoozeFieldBaseline: string | null = null;
     if (body.disposition === "snooze") {
@@ -55,7 +56,7 @@ router.put(
         Date.now() + body.snooze_duration_days! * 86_400_000,
       );
       if (body.snooze_until_field_change) {
-        const dealRow = await getDealWithLookups(dealId);
+        const dealRow = await getDealWithLookups(catalystApp, dealId);
         if (!dealRow) throw notFound("Deal not found");
         snoozeFieldBaseline = snapshotFieldValue(
           body.snooze_until_field_change,
@@ -64,7 +65,7 @@ router.put(
       }
     }
 
-    const values = {
+    const created = await createDealAlertDispositionsRepo(catalystApp).upsert({
       dealId,
       patternCode,
       disposition: body.disposition,
@@ -73,28 +74,9 @@ router.put(
       snoozeUntil,
       snoozeFieldBaseline,
       createdBy: actor.displayName,
-    };
+    });
 
-    const inserted = await db
-      .insert(dealAlertDispositions)
-      .values(values)
-      .onConflictDoUpdate({
-        target: [
-          dealAlertDispositions.dealId,
-          dealAlertDispositions.patternCode,
-        ],
-        set: {
-          disposition: values.disposition,
-          rationale: values.rationale,
-          snoozeUntilFieldChange: values.snoozeUntilFieldChange,
-          snoozeUntil: values.snoozeUntil,
-          snoozeFieldBaseline: values.snoozeFieldBaseline,
-          createdBy: values.createdBy,
-        },
-      })
-      .returning();
-
-    await writeAudit({
+    await writeAudit(catalystApp, {
       dealId,
       entityType: "disposition",
       fieldChanged: patternCode,
@@ -102,19 +84,18 @@ router.put(
       changedBy: actor.displayName,
     });
 
-    const row = inserted[0];
     res.json(
       SetDispositionResponse.parse({
         data: {
-          id: row.id,
-          dealId: row.dealId,
-          patternCode: row.patternCode,
-          disposition: row.disposition,
-          rationale: row.rationale,
-          snoozeUntilFieldChange: row.snoozeUntilFieldChange,
-          snoozeUntil: toISO(row.snoozeUntil),
-          createdBy: row.createdBy,
-          createdAt: toISO(row.createdAt) ?? undefined,
+          id: created.id,
+          dealId: created.dealId,
+          patternCode: created.patternCode,
+          disposition: created.disposition,
+          rationale: created.rationale,
+          snoozeUntilFieldChange: created.snoozeUntilFieldChange,
+          snoozeUntil: toISO(created.snoozeUntil),
+          createdBy: created.createdBy,
+          createdAt: toISO(created.createdAt) ?? undefined,
         },
       }),
     );
@@ -125,19 +106,12 @@ router.delete(
   "/deals/:dealId/alerts/:patternCode/disposition",
   async (req: Request, res: Response) => {
     const { dealId, patternCode } = ClearDispositionParams.parse(req.params);
-    await ensureDeal(dealId);
+    const catalystApp = initCatalystApp(req);
+    await ensureDeal(catalystApp, dealId);
     const actor = getActor(req);
-    const result = await db
-      .delete(dealAlertDispositions)
-      .where(
-        and(
-          eq(dealAlertDispositions.dealId, dealId),
-          eq(dealAlertDispositions.patternCode, patternCode),
-        ),
-      )
-      .returning({ id: dealAlertDispositions.id });
-    if (result.length === 0) throw notFound("Disposition not found");
-    await writeAudit({
+    const deleted = await createDealAlertDispositionsRepo(catalystApp).delete(dealId, patternCode);
+    if (!deleted) throw notFound("Disposition not found");
+    await writeAudit(catalystApp, {
       dealId,
       entityType: "disposition",
       fieldChanged: patternCode,

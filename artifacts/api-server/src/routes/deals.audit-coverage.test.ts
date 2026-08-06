@@ -103,7 +103,17 @@ async function loadSeedFixtures() {
   return { models, tiers, stages, competitor, driver, archetype };
 }
 
-describe("PUT /deals/:id — audit coverage", () => {
+// Skipped post-Catalyst-migration: routes/deals.ts now reads/writes
+// enterprise_deals (and its audit trail) via Catalyst Data Store, not
+// Drizzle/Postgres. `initCatalystApp(req)` requires real Catalyst
+// session/headers to succeed — a fake `Request` object in a local Vitest run
+// can never provide that (same "Data Store isn't reachable from localhost"
+// limitation already documented for lookups.engine-thresholds.test.ts and the
+// sibling Customer-Insight-Engine project). This file's fixtures also seed via
+// Drizzle directly, which the migrated handler no longer reads. Retire or
+// rewrite as an integration test against the deployed AppSail app once Slice 6
+// seeding lands — tracked in the migration plan.
+describe.skip("PUT /deals/:id — audit coverage", () => {
   it("writes a deal_audit_log row for every auditable field of DealUpdate", async () => {
     const { models, tiers, stages, competitor, driver, archetype } =
       await loadSeedFixtures();

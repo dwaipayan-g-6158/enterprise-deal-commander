@@ -1,32 +1,33 @@
 import { Router, type IRouter, type Request, type Response } from "express";
-import { and, asc, desc, eq, gte, inArray, isNull, lte, max, ne, notInArray, sql } from "drizzle-orm";
 import {
-  db,
-  enterpriseDeals,
-  pipelineStages,
-  pricingModels,
-  dealTechnicalGates,
-  dealScores,
-  dealActivityLog,
-  dealCompetitors,
-  competitors,
-  dealMemory,
-  dealProductInterests,
-  productCatalog,
-  dealBlockers,
-  blockerCategories,
-  lossArchetypes,
-  gateDefinitions,
-  dealDecisions,
-  dealPlaybookAssignments,
-  playbooks,
-  playbookSteps,
-  playbookStepCompletions,
-  dealSnapshots,
-  pipelineTransitions,
-  pipelineTargets,
-  commanderAchievements,
-} from "@workspace/db";
+  initCatalystApp,
+  type CatalystApp,
+  createEnterpriseDealsRepo,
+  createPipelineStagesRepo,
+  createPricingModelsRepo,
+  createDealTechnicalGatesRepo,
+  createDealScoresRepo,
+  createDealActivityLogRepo,
+  createDealCompetitorsRepo,
+  createCompetitorsRepo,
+  createDealMemoryRepo,
+  createDealProductInterestsRepo,
+  createProductCatalogRepo,
+  createDealBlockersRepo,
+  createBlockerCategoriesRepo,
+  createLossArchetypesRepo,
+  createGateDefinitionsRepo,
+  createDealDecisionsRepo,
+  createDealPlaybookAssignmentsRepo,
+  createPlaybooksRepo,
+  createPlaybookStepsRepo,
+  createPlaybookStepCompletionsRepo,
+  createDealSnapshotsRepo,
+  createPipelineTransitionsRepo,
+  createPipelineTargetsRepo,
+  createCommanderAchievementsRepo,
+  type EnterpriseDeal,
+} from "@workspace/db/catalyst";
 import {
   runPipelineSimulation,
   parseNLC,
@@ -56,25 +57,15 @@ import {
   GetLossDashboardResponse,
 } from "@workspace/api-zod";
 import { notFound } from "../../lib/http";
-import { toISO, getHealthWeights, getThresholds, getFxRate } from "../../lib/intelligence";
+import { toISO, getHealthWeights, getThresholds, getFxRate } from "../../lib/catalyst/intelligence";
 import { getActor } from "../../lib/auth";
-import { computeDealScore, scoreDeal, rescoreActiveDeals } from "../../lib/scoring";
-import {
-  cachedIntel,
-  computeSummary,
-  mapWithConcurrency,
-  INTEL_CONCURRENCY,
-} from "../../lib/portfolio";
-import { computeMemoryHealth } from "../../lib/memory-health";
-import { computeCompetitorIntel, computePlaybookEffectiveness, percentiles } from "../../lib/memory-intel";
+import { computeDealScore, scoreDeal, rescoreActiveDeals } from "../../lib/catalyst/scoring";
+import { cachedIntel, computeSummary, mapWithConcurrency, INTEL_CONCURRENCY } from "../../lib/catalyst/portfolio";
+import { computeMemoryHealth, type MemoryRow as MemoryHealthRow } from "../../lib/memory-health";
+import { computeCompetitorIntel, computePlaybookEffectiveness, percentiles, type MemoryRow as CompetitorMemoryRow } from "../../lib/memory-intel";
 import { pickLatestPerDeal, computeScoreDelta } from "../../lib/roster-enrichment";
 import { clusterProductGaps } from "../../lib/product-gaps";
-import {
-  notDeletedFilter,
-  CLOSED_STAGES,
-  termAwareTcv,
-  normalizeTcv,
-} from "../../lib/deal-filters";
+import { CLOSED_STAGES, termAwareTcv, normalizeTcv } from "../../lib/deal-filters";
 import { computeVelocityRows } from "../../lib/velocity";
 import { computeLossDashboardMetrics } from "../../lib/loss-dashboard";
 import { calendarDaysUntil, isWithinDays } from "../../lib/calendar-days";
@@ -86,51 +77,120 @@ function daysBetween(from: Date | string | null, to = new Date()): number {
   return Math.max(0, Math.floor((to.getTime() - new Date(from).getTime()) / 86_400_000));
 }
 
+// -------------------------------------------------------------- Shared loaders
+//
+// Every handler below does its own independent fetch (no cross-request
+// caching) — matching the original Drizzle version, which issued its own
+// queries per handler too. These helpers only remove IN-HANDLER duplication.
+
+async function loadPricingModelNames(catalystApp: CatalystApp): Promise<Map<number, string>> {
+  const models = await createPricingModelsRepo(catalystApp).listAll();
+  return new Map(models.map((m) => [m.id, m.modelName]));
+}
+
+async function loadStageNames(catalystApp: CatalystApp): Promise<Map<number, string>> {
+  const stages = await createPipelineStagesRepo(catalystApp).listAll();
+  return new Map(stages.map((s) => [s.id, s.stageName]));
+}
+
+interface DealWithStage {
+  deal: EnterpriseDeal;
+  stageName: string | null;
+}
+
+/** Every not-hard-deleted deal, joined to its stage name (dangling stage id -> null, mirrors the original innerJoin dropping the row). */
+async function loadLiveDealsWithStage(catalystApp: CatalystApp): Promise<DealWithStage[]> {
+  const [deals, stageNameById] = await Promise.all([
+    createEnterpriseDealsRepo(catalystApp).list(),
+    loadStageNames(catalystApp),
+  ]);
+  return deals
+    .filter((d) => d.deletedAt == null)
+    .map((deal) => ({ deal, stageName: stageNameById.get(deal.salesStageId) ?? null }));
+}
+
+/** Live, OPEN (not Closed-Won/Closed-Lost) deals with a resolved stage name — the population /analytics/velocity, /analytics/simulation, and the health-score aging dimension all share. */
+async function loadOpenDealsWithStage(catalystApp: CatalystApp): Promise<DealWithStage[]> {
+  const all = await loadLiveDealsWithStage(catalystApp);
+  return all.filter((d) => d.stageName != null && !CLOSED_STAGES.includes(d.stageName));
+}
+
+async function latestScores(catalystApp: CatalystApp): Promise<Map<string, number>> {
+  const rows = await createDealScoresRepo(catalystApp).listAll();
+  return pickLatestPerDeal(rows);
+}
+
+// Each deal's score as of `cutoff` (latest row at or before it) — the baseline
+// for the roster score-trend arrow.
+async function scoresAsOf(catalystApp: CatalystApp, cutoff: Date): Promise<Map<string, number>> {
+  const rows = await createDealScoresRepo(catalystApp).listAll();
+  return pickLatestPerDeal(rows.filter((r) => r.computedAt.getTime() <= cutoff.getTime()));
+}
+
+function toMemoryHealthRow(r: Awaited<ReturnType<ReturnType<typeof createDealMemoryRepo>["listAll"]>>[number]): MemoryHealthRow {
+  return {
+    id: r.id,
+    outcome: r.outcome,
+    finalTcv: r.finalTcv != null ? String(r.finalTcv) : null,
+    competitorsFaced: r.competitorsFaced,
+    winLossNarrative: r.winLossNarrative,
+    keyLessons: r.keyLessons,
+    archivedAt: r.archivedAt,
+    autopsyCompletedAt: r.autopsyCompletedAt,
+  };
+}
+
+function toCompetitorMemoryRow(r: Awaited<ReturnType<ReturnType<typeof createDealMemoryRepo>["listAll"]>>[number]): CompetitorMemoryRow {
+  return {
+    id: r.id,
+    outcome: r.outcome,
+    finalTcv: r.finalTcv != null ? String(r.finalTcv) : null,
+    totalDaysActive: r.totalDaysActive,
+    competitorsFaced: r.competitorsFaced,
+    pricingModel: r.pricingModel,
+    servicesTier: r.servicesTier,
+    primaryLossCategory: r.primaryLossCategory,
+  };
+}
+
 /* ----------------------------------------------------------- F3 Scoring */
 
 router.get("/deals/:dealId/score", async (req: Request, res: Response) => {
   const { dealId } = GetDealScoreParams.parse(req.params);
+  const catalystApp = initCatalystApp(req);
   // Readers get an identical number; they just don't append to deal_scores.
   // A GET must not silently grow an append-only history table every time a
   // reader loads a deal page.
   const isAdmin = getActor(req).role === "admin";
-  const score = isAdmin ? await scoreDeal(dealId) : await computeDealScore(dealId);
+  const score = isAdmin ? await scoreDeal(catalystApp, dealId) : await computeDealScore(catalystApp, dealId);
   if (!score) throw notFound("Deal not found");
   res.json({ data: { ...score, computedAt: new Date().toISOString() } });
 });
 
-router.post("/scores/recalculate", async (_req: Request, res: Response) => {
-  const count = await rescoreActiveDeals();
+router.post("/scores/recalculate", async (req: Request, res: Response) => {
+  const catalystApp = initCatalystApp(req);
+  const count = await rescoreActiveDeals(catalystApp);
   res.json({ data: { rescored: count } });
 });
 
 /* ----------------------------------------------------------- F4 Velocity / pipeline */
 
-router.get("/analytics/velocity", async (_req: Request, res: Response) => {
-  const deals = await db
-    .select({
-      id: enterpriseDeals.id,
-      dealName: enterpriseDeals.dealName,
-      accountName: enterpriseDeals.accountName,
-      stageEnteredAt: enterpriseDeals.stageEnteredAt,
-      stageName: pipelineStages.stageName,
-    })
-    .from(enterpriseDeals)
-    .innerJoin(pipelineStages, eq(enterpriseDeals.salesStageId, pipelineStages.id))
-    // Closed deals never enter this comparison — a Closed-Won/Closed-Lost
-    // deal can't be "overdue," and including it polluted every OPEN deal's
-    // benchmark too (this table used to list Closed-Lost deals as "32 days
-    // overdue").
-    .where(and(notDeletedFilter, notInArray(pipelineStages.stageName, CLOSED_STAGES)));
+router.get("/analytics/velocity", async (req: Request, res: Response) => {
+  const catalystApp = initCatalystApp(req);
+  // Closed deals never enter this comparison — a Closed-Won/Closed-Lost
+  // deal can't be "overdue," and including it polluted every OPEN deal's
+  // benchmark too (this table used to list Closed-Lost deals as "32 days
+  // overdue").
+  const candidates = await loadOpenDealsWithStage(catalystApp);
 
   // computeVelocityRows (lib/velocity.ts) computes each deal's benchmark as
   // a leave-one-out median — excluding the deal itself — and returns null
   // (not a self-fulfilling "exactly at benchmark") when it's the only open
   // deal in its stage.
   const rows = computeVelocityRows(
-    deals.map((d) => ({ id: d.id, stageName: d.stageName, daysInStage: daysBetween(d.stageEnteredAt) })),
+    candidates.map((d) => ({ id: d.deal.id, stageName: d.stageName as string, daysInStage: daysBetween(d.deal.stageEnteredAt) })),
   );
-  const byId = new Map(deals.map((d) => [d.id, d]));
+  const byId = new Map(candidates.map((d) => [d.deal.id, d.deal]));
 
   const out = rows.map((r) => {
     const d = byId.get(r.id)!;
@@ -152,24 +212,18 @@ router.get("/analytics/velocity", async (_req: Request, res: Response) => {
   res.json({ data: { deals: out } });
 });
 
-router.get("/analytics/velocity/benchmarks", async (_req: Request, res: Response) => {
-  const rows = await db
-    .select({
-      stageEnteredAt: enterpriseDeals.stageEnteredAt,
-      stageName: pipelineStages.stageName,
-      sortOrder: pipelineStages.sortOrder,
-    })
-    .from(enterpriseDeals)
-    .innerJoin(pipelineStages, eq(enterpriseDeals.salesStageId, pipelineStages.id))
-    // Closed stages aren't pipeline benchmarks — a "Closed-Lost median: 67d"
-    // entry read as if it were a stage a deal could still be progressing
-    // through.
-    .where(and(notDeletedFilter, notInArray(pipelineStages.stageName, CLOSED_STAGES)));
+router.get("/analytics/velocity/benchmarks", async (req: Request, res: Response) => {
+  const catalystApp = initCatalystApp(req);
+  const candidates = await loadOpenDealsWithStage(catalystApp);
+  const stages = await createPipelineStagesRepo(catalystApp).listAll();
+  const sortOrderByName = new Map(stages.map((s) => [s.stageName, s.sortOrder]));
+
   const byStage = new Map<string, { sortOrder: number; days: number[] }>();
-  for (const r of rows) {
-    const entry = byStage.get(r.stageName) ?? { sortOrder: r.sortOrder, days: [] };
-    entry.days.push(daysBetween(r.stageEnteredAt));
-    byStage.set(r.stageName, entry);
+  for (const d of candidates) {
+    const stageName = d.stageName as string;
+    const entry = byStage.get(stageName) ?? { sortOrder: sortOrderByName.get(stageName) ?? 0, days: [] };
+    entry.days.push(daysBetween(d.deal.stageEnteredAt));
+    byStage.set(stageName, entry);
   }
   const pct = (xs: number[], p: number) => {
     const s = [...xs].sort((a, b) => a - b);
@@ -188,32 +242,25 @@ router.get("/analytics/velocity/benchmarks", async (_req: Request, res: Response
   res.json({ data: { benchmarks } });
 });
 
-router.get("/analytics/pipeline", async (_req: Request, res: Response) => {
-  const rows = await db
-    .select({
-      productRevenue: enterpriseDeals.productRevenue,
-      servicesRevenue: enterpriseDeals.servicesRevenue,
-      contractTermYears: enterpriseDeals.contractTermYears,
-      pricingModel: pricingModels.modelName,
-      stageName: pipelineStages.stageName,
-    })
-    .from(enterpriseDeals)
-    .leftJoin(pipelineStages, eq(enterpriseDeals.salesStageId, pipelineStages.id))
-    .leftJoin(pricingModels, eq(enterpriseDeals.pricingModelId, pricingModels.id))
-    .where(notDeletedFilter);
+router.get("/analytics/pipeline", async (req: Request, res: Response) => {
+  const catalystApp = initCatalystApp(req);
+  const [live, pricingModelNameById] = await Promise.all([
+    loadLiveDealsWithStage(catalystApp),
+    loadPricingModelNames(catalystApp),
+  ]);
   let totalTcv = 0;
   let openTcv = 0;
   let openDealCount = 0;
   const byStage = new Map<string, { count: number; tcv: number }>();
-  for (const r of rows) {
+  for (const { deal, stageName } of live) {
     const tcv = calculateFlatTCV({
-      productRevenue: Number(r.productRevenue) || 0,
-      servicesRevenue: Number(r.servicesRevenue) || 0,
-      contractTermYears: r.contractTermYears,
-      pricingModel: r.pricingModel ?? "",
+      productRevenue: Number(deal.productRevenue) || 0,
+      servicesRevenue: Number(deal.servicesRevenue) || 0,
+      contractTermYears: deal.contractTermYears,
+      pricingModel: pricingModelNameById.get(deal.pricingModelId) ?? "",
     });
     totalTcv += tcv;
-    const key = r.stageName ?? "?";
+    const key = stageName ?? "?";
     const cur = byStage.get(key) ?? { count: 0, tcv: 0 };
     cur.count++;
     cur.tcv += tcv;
@@ -233,7 +280,7 @@ router.get("/analytics/pipeline", async (_req: Request, res: Response) => {
   res.json({
     data: {
       totalTcv,
-      activeDeals: rows.length,
+      activeDeals: live.length,
       openTcv,
       openDealCount,
       byStage: [...byStage.entries()].map(([stage, v]) => ({ stage, ...v })),
@@ -243,57 +290,25 @@ router.get("/analytics/pipeline", async (_req: Request, res: Response) => {
 
 /* ----------------------------------------------------------- F20 Simulation */
 
-async function latestScores(): Promise<Map<string, number>> {
-  const rows = await db
-    .select({ dealId: dealScores.dealId, score: dealScores.score, computedAt: dealScores.computedAt })
-    .from(dealScores)
-    .orderBy(desc(dealScores.computedAt));
-  return pickLatestPerDeal(rows);
-}
-
-// Each deal's score as of `cutoff` (latest row at or before it) — the baseline
-// for the roster score-trend arrow.
-async function scoresAsOf(cutoff: Date): Promise<Map<string, number>> {
-  const rows = await db
-    .select({ dealId: dealScores.dealId, score: dealScores.score, computedAt: dealScores.computedAt })
-    .from(dealScores)
-    .where(lte(dealScores.computedAt, cutoff))
-    .orderBy(desc(dealScores.computedAt));
-  return pickLatestPerDeal(rows);
-}
-
 router.get("/analytics/simulation", async (req: Request, res: Response) => {
+  const catalystApp = initCatalystApp(req);
   const iterations = Math.min(50_000, Math.max(1000, Number(req.query.iterations) || 10000));
   // Closed deals (Won or Lost) never enter the forecast, regardless of
   // archive state — a booked/lost deal has no remaining outcome to simulate.
-  // Before archiving stopped meaning "excluded from everything," archiving a
-  // closed deal was the only way to remove it from this Monte Carlo run;
-  // this stage filter is what replaces that escape hatch now that archived
-  // deals still count elsewhere in analytics. CLOSED_STAGES imported from
-  // lib/deal-filters (was locally re-declared here and twice more below).
-  const deals = await db
-    .select({
-      id: enterpriseDeals.id,
-      productRevenue: enterpriseDeals.productRevenue,
-      servicesRevenue: enterpriseDeals.servicesRevenue,
-      contractTermYears: enterpriseDeals.contractTermYears,
-      pricingModel: pricingModels.modelName,
-      winProbabilityPct: enterpriseDeals.winProbabilityPct,
-    })
-    .from(enterpriseDeals)
-    .innerJoin(pipelineStages, eq(enterpriseDeals.salesStageId, pipelineStages.id))
-    .leftJoin(pricingModels, eq(enterpriseDeals.pricingModelId, pricingModels.id))
-    .where(and(notDeletedFilter, notInArray(pipelineStages.stageName, CLOSED_STAGES)));
-  const scores = await latestScores();
-  const sim: SimDeal[] = deals.map((d) => ({
+  const [openDeals, pricingModelNameById, scores] = await Promise.all([
+    loadOpenDealsWithStage(catalystApp),
+    loadPricingModelNames(catalystApp),
+    latestScores(catalystApp),
+  ]);
+  const sim: SimDeal[] = openDeals.map(({ deal }) => ({
     calculatedTCV: calculateFlatTCV({
-      productRevenue: Number(d.productRevenue) || 0,
-      servicesRevenue: Number(d.servicesRevenue) || 0,
-      contractTermYears: d.contractTermYears,
-      pricingModel: d.pricingModel ?? "",
+      productRevenue: Number(deal.productRevenue) || 0,
+      servicesRevenue: Number(deal.servicesRevenue) || 0,
+      contractTermYears: deal.contractTermYears,
+      pricingModel: pricingModelNameById.get(deal.pricingModelId) ?? "",
     }),
-    predictiveScore: scores.get(d.id) ?? null,
-    winProbabilityPct: d.winProbabilityPct ?? null,
+    predictiveScore: scores.get(deal.id) ?? null,
+    winProbabilityPct: deal.winProbabilityPct ?? null,
   }));
   // The engine's own `weightedPipeline` (in runPipelineSimulation's result)
   // is Σ tcv × dealProbability, where dealProbability blends in the AI
@@ -302,21 +317,12 @@ router.get("/analytics/simulation", async (req: Request, res: Response) => {
   // cross-check of it. traditionalWeightedPipeline is the actual
   // stage-weighted figure ("weighted pipeline" as sales teams usually mean
   // it): Σ tcv × winProbabilityPct, deals without a manually-set win
-  // probability excluded rather than defaulted — same convention as
-  // computeCoverage's "weighted" ratio (lib/engine/src/flow.ts) and
-  // exports.ts's weightedTcv.
-  // TCV comes from `sim` (index-parallel to `deals`), i.e. the SAME
-  // term-aware calculateFlatTCV value the simulation itself runs on. This used
-  // to re-derive a flat `productRevenue + servicesRevenue` sum, which dropped
-  // the `× contractTermYears` multiplier under the Multi-Year Committed pricing
-  // model — a 3-year deal contributed a third of its product revenue here
-  // while every other TCV readout in the app (lib/deal-filters.ts's
-  // termAwareTcv, the tile above, /analytics/pipeline) counted the full term.
-  const traditionalWeightedPipeline = deals.reduce((s, d, i) => {
-    if (d.winProbabilityPct == null) return s;
-    return s + sim[i].calculatedTCV * (Number(d.winProbabilityPct) / 100);
+  // probability excluded rather than defaulted.
+  const traditionalWeightedPipeline = openDeals.reduce((s, { deal }, i) => {
+    if (deal.winProbabilityPct == null) return s;
+    return s + sim[i].calculatedTCV * (Number(deal.winProbabilityPct) / 100);
   }, 0);
-  const dealsWithoutWinProbability = deals.filter((d) => d.winProbabilityPct == null).length;
+  const dealsWithoutWinProbability = openDeals.filter((d) => d.deal.winProbabilityPct == null).length;
   res.json({
     data: {
       ...runPipelineSimulation(sim, iterations),
@@ -333,20 +339,24 @@ router.get("/analytics/simulation", async (req: Request, res: Response) => {
 // noise, not signal. Mirrors /analytics/memory-insights's MIN_SAMPLE floor.
 const MIN_COMPETITIVE_SAMPLE = 3;
 
-router.get("/analytics/competitive", async (_req: Request, res: Response) => {
-  const rows = await db
-    .select({ name: competitors.name, status: dealCompetitors.status })
-    .from(dealCompetitors)
-    .innerJoin(enterpriseDeals, eq(dealCompetitors.dealId, enterpriseDeals.id))
-    .leftJoin(competitors, eq(dealCompetitors.competitorId, competitors.id))
-    .where(notDeletedFilter);
+router.get("/analytics/competitive", async (req: Request, res: Response) => {
+  const catalystApp = initCatalystApp(req);
+  const [links, competitors, deals] = await Promise.all([
+    createDealCompetitorsRepo(catalystApp).listAll(),
+    createCompetitorsRepo(catalystApp).listAll(),
+    createEnterpriseDealsRepo(catalystApp).list(),
+  ]);
+  const nameById = new Map(competitors.map((c) => [c.id, c.name]));
+  const liveDealIds = new Set(deals.filter((d) => d.deletedAt == null).map((d) => d.id));
+
   const agg = new Map<string, { encounters: number; wins: number; losses: number }>();
-  for (const r of rows) {
-    const key = r.name ?? "Unknown";
+  for (const link of links) {
+    if (!liveDealIds.has(link.dealId)) continue;
+    const key = nameById.get(link.competitorId) ?? "Unknown";
     const cur = agg.get(key) ?? { encounters: 0, wins: 0, losses: 0 };
     cur.encounters++;
-    if (r.status === "Won Against") cur.wins++;
-    if (r.status === "Lost To") cur.losses++;
+    if (link.status === "Won Against") cur.wins++;
+    if (link.status === "Lost To") cur.losses++;
     agg.set(key, cur);
   }
   const competitorsOut = [...agg.entries()]
@@ -362,12 +372,15 @@ router.get("/analytics/competitive", async (_req: Request, res: Response) => {
 
 /* ----------------------------------------------------------- F5 Win/Loss analytics */
 
-router.get("/analytics/win-loss", async (_req: Request, res: Response) => {
-  const rows = await db
-    .select({ outcome: dealMemory.outcome, finalTcv: dealMemory.finalTcv })
-    .from(dealMemory)
-    .innerJoin(enterpriseDeals, eq(dealMemory.dealId, enterpriseDeals.id))
-    .where(notDeletedFilter);
+router.get("/analytics/win-loss", async (req: Request, res: Response) => {
+  const catalystApp = initCatalystApp(req);
+  const [memory, deals] = await Promise.all([
+    createDealMemoryRepo(catalystApp).listAll(),
+    createEnterpriseDealsRepo(catalystApp).list(),
+  ]);
+  const liveDealIds = new Set(deals.filter((d) => d.deletedAt == null).map((d) => d.id));
+  const rows = memory.filter((m) => liveDealIds.has(m.dealId));
+
   const won = rows.filter((r) => r.outcome === "Won").length;
   const lost = rows.filter((r) => r.outcome === "Lost").length;
   const ranges = [
@@ -378,7 +391,7 @@ router.get("/analytics/win-loss", async (_req: Request, res: Response) => {
   ];
   const byTcv = ranges.map((rg) => {
     const inRange = rows.filter((r) => {
-      const t = Number(r.finalTcv) || 0;
+      const t = r.finalTcv ?? 0;
       return t >= rg.min && t < rg.max;
     });
     const w = inRange.filter((r) => r.outcome === "Won").length;
@@ -399,35 +412,26 @@ router.get("/analytics/win-loss", async (_req: Request, res: Response) => {
 
 // Completion percentage per gate across all active deals. Reveals systemic
 // technical bottlenecks (e.g. "only 50% of deals have cleared Gate 3").
-router.get("/analytics/gates", async (_req: Request, res: Response) => {
-  const defs = await db
-    .select({
-      gateCode: gateDefinitions.gateCode,
-      label: gateDefinitions.label,
-      gateGroup: gateDefinitions.gateGroup,
-      sortOrder: gateDefinitions.sortOrder,
-    })
-    .from(gateDefinitions)
-    .where(eq(gateDefinitions.isActive, true))
-    .orderBy(asc(gateDefinitions.sortOrder));
-
-  const gateRows = await db
-    .select({
-      gateCode: dealTechnicalGates.gateCode,
-      isCompleted: dealTechnicalGates.isCompleted,
-    })
-    .from(dealTechnicalGates)
-    .innerJoin(enterpriseDeals, eq(dealTechnicalGates.dealId, enterpriseDeals.id))
-    .where(notDeletedFilter);
+router.get("/analytics/gates", async (req: Request, res: Response) => {
+  const catalystApp = initCatalystApp(req);
+  const [defs, gateRows, deals] = await Promise.all([
+    createGateDefinitionsRepo(catalystApp).listActive(),
+    createDealTechnicalGatesRepo(catalystApp).listAll(),
+    createEnterpriseDealsRepo(catalystApp).list(),
+  ]);
+  const liveDealIds = new Set(deals.filter((d) => d.deletedAt == null).map((d) => d.id));
 
   const agg = new Map<string, { completed: number; total: number }>();
   for (const r of gateRows) {
+    if (!liveDealIds.has(r.dealId)) continue;
     const cur = agg.get(r.gateCode) ?? { completed: 0, total: 0 };
     cur.total++;
     if (r.isCompleted) cur.completed++;
     agg.set(r.gateCode, cur);
   }
 
+  // defs is already sorted by sortOrder (createGateDefinitionsRepo.listActive) —
+  // matches the original ORDER BY sort_order, no additional sort here.
   const gates = defs.map((d) => {
     const a = agg.get(d.gateCode) ?? { completed: 0, total: 0 };
     return {
@@ -462,57 +466,48 @@ interface ActionItem {
 
 // The Commander's 48-hour priority queue: overdue + due-soon decisions, the
 // next open playbook step per active assignment, and imminent close dates.
-router.get("/analytics/next-actions", async (_req: Request, res: Response) => {
+router.get("/analytics/next-actions", async (req: Request, res: Response) => {
   // The one clock read for this handler. Both date-only windows below are
   // measured in LOCAL CALENDAR DAYS off it (see lib/calendar-days.ts), not as
   // instant arithmetic, so "due today" and "closing today" land in the right
   // bucket regardless of the host's UTC offset.
   const now = new Date();
+  const catalystApp = initCatalystApp(req);
+
+  const [live, decisionsAll, assignmentsAll, playbooksAll] = await Promise.all([
+    loadLiveDealsWithStage(catalystApp),
+    createDealDecisionsRepo(catalystApp).listAll(),
+    createDealPlaybookAssignmentsRepo(catalystApp).listAll(),
+    createPlaybooksRepo(catalystApp).listAll(),
+  ]);
+  const liveById = new Map(live.map((d) => [d.deal.id, d]));
+  const playbookNameById = new Map(playbooksAll.map((p) => [p.id, p.playbookName]));
 
   // next-actions is a reminder surface, so closed deals (Won or Lost) are
   // excluded — which also excludes archived deals for free, since archiving
-  // requires a closed stage (enforced on /deals/:id/archive and on later
-  // stage edits — see routes/deals.ts). CLOSED_STAGES imported from
-  // lib/deal-filters.
-
-  const decisions = await db
-    .select({
-      id: dealDecisions.id,
-      dealId: dealDecisions.dealId,
-      dealName: enterpriseDeals.dealName,
-      accountName: enterpriseDeals.accountName,
-      action: dealDecisions.decisionText,
-      owner: dealDecisions.owner,
-      dueDate: dealDecisions.dueDate,
-    })
-    .from(dealDecisions)
-    .innerJoin(enterpriseDeals, eq(dealDecisions.dealId, enterpriseDeals.id))
-    .innerJoin(pipelineStages, eq(enterpriseDeals.salesStageId, pipelineStages.id))
-    .where(
-      and(
-        notDeletedFilter,
-        eq(dealDecisions.status, "Pending"),
-        notInArray(pipelineStages.stageName, CLOSED_STAGES),
-      ),
+  // requires a closed stage.
+  const decisions = decisionsAll
+    .filter((d) => d.status === "Pending")
+    .map((d) => ({ decision: d, live: liveById.get(d.dealId) }))
+    .filter((x): x is { decision: typeof decisionsAll[number]; live: DealWithStage } =>
+      x.live != null && x.live.stageName != null && !CLOSED_STAGES.includes(x.live.stageName),
     );
 
   const overdue: ActionItem[] = [];
   const dueThisWeek: ActionItem[] = [];
-  for (const d of decisions) {
+  for (const { decision: d, live } of decisions) {
     if (!d.dueDate) continue;
     const item: ActionItem = {
       id: d.id,
       dealId: d.dealId,
-      dealName: d.dealName,
-      accountName: d.accountName,
-      action: d.action,
+      dealName: live.deal.dealName,
+      accountName: live.deal.accountName,
+      action: d.decisionText,
       owner: d.owner,
       dueDate: d.dueDate,
     };
     // `due_date` is a date-only column: bucket it by LOCAL CALENDAR DAY, not by
-    // instant. `new Date("2026-08-04") < now` treats a decision due TODAY as
-    // overdue in every timezone east of UTC — and the client's own fmtDue then
-    // labelled that same row "today" inside the Overdue group.
+    // instant.
     const daysUntilDue = calendarDaysUntil(d.dueDate, now);
     if (daysUntilDue == null) continue;
     if (daysUntilDue < 0) overdue.push(item);
@@ -525,24 +520,11 @@ router.get("/analytics/next-actions", async (_req: Request, res: Response) => {
   // Next open playbook step per active assignment. A deal can now legitimately
   // hold 2+ concurrent assignments (one per stage it has touched on its
   // journey), so each row carries the playbook name to stay disambiguated.
-  const assignments = await db
-    .select({
-      assignmentId: dealPlaybookAssignments.id,
-      dealId: dealPlaybookAssignments.dealId,
-      dealName: enterpriseDeals.dealName,
-      playbookId: dealPlaybookAssignments.playbookId,
-      playbookName: playbooks.playbookName,
-    })
-    .from(dealPlaybookAssignments)
-    .innerJoin(enterpriseDeals, eq(dealPlaybookAssignments.dealId, enterpriseDeals.id))
-    .innerJoin(playbooks, eq(dealPlaybookAssignments.playbookId, playbooks.id))
-    .innerJoin(pipelineStages, eq(enterpriseDeals.salesStageId, pipelineStages.id))
-    .where(
-      and(
-        notDeletedFilter,
-        eq(dealPlaybookAssignments.status, "Active"),
-        notInArray(pipelineStages.stageName, CLOSED_STAGES),
-      ),
+  const assignments = assignmentsAll
+    .filter((a) => a.status === "Active")
+    .map((a) => ({ assignment: a, live: liveById.get(a.dealId) }))
+    .filter((x): x is { assignment: typeof assignmentsAll[number]; live: DealWithStage } =>
+      x.live != null && x.live.stageName != null && !CLOSED_STAGES.includes(x.live.stageName),
     );
 
   const playbookStepsOut: {
@@ -553,32 +535,20 @@ router.get("/analytics/next-actions", async (_req: Request, res: Response) => {
     stepOrder: number;
     totalSteps: number;
   }[] = [];
-  for (const a of assignments) {
-    const steps = await db
-      .select({ id: playbookSteps.id, stepName: playbookSteps.stepName, stepOrder: playbookSteps.stepOrder })
-      .from(playbookSteps)
-      .where(eq(playbookSteps.playbookId, a.playbookId))
-      .orderBy(asc(playbookSteps.stepOrder));
-    const completions = await db
-      .select({
-        stepId: playbookStepCompletions.stepId,
-        status: playbookStepCompletions.status,
-      })
-      .from(playbookStepCompletions)
-      .where(eq(playbookStepCompletions.assignmentId, a.assignmentId));
+  for (const { assignment: a, live } of assignments) {
+    const steps = await createPlaybookStepsRepo(catalystApp).listByPlaybookId(a.playbookId);
+    const completions = await createPlaybookStepCompletionsRepo(catalystApp).listByAssignmentId(a.id);
     // Completed/skipped are terminal; a blocked step still needs attention, so it
     // surfaces as the next open action.
     const doneIds = new Set(
-      completions
-        .filter((c) => c.status === "completed" || c.status === "skipped")
-        .map((c) => c.stepId),
+      completions.filter((c) => c.status === "completed" || c.status === "skipped").map((c) => c.stepId),
     );
     const next = steps.find((s) => !doneIds.has(s.id));
     if (next) {
       playbookStepsOut.push({
         dealId: a.dealId,
-        dealName: a.dealName,
-        playbookName: a.playbookName,
+        dealName: live.deal.dealName,
+        playbookName: playbookNameById.get(a.playbookId) ?? "",
         action: next.stepName,
         stepOrder: next.stepOrder,
         totalSteps: steps.length,
@@ -587,32 +557,18 @@ router.get("/analytics/next-actions", async (_req: Request, res: Response) => {
   }
 
   // Imminent close dates: deals still OPEN (i.e. not Closed-Won/Closed-Lost)
-  // within 30 days. "Open" here is distinct from "active" (= just not-deleted
-  // elsewhere in this file, per notDeletedFilter above) — a closed deal has
-  // no meaningful close date left to remind anyone about.
-  const closeRows = await db
-    .select({
-      id: enterpriseDeals.id,
-      dealName: enterpriseDeals.dealName,
-      accountName: enterpriseDeals.accountName,
-      expectedCloseDate: enterpriseDeals.expectedCloseDate,
-    })
-    .from(enterpriseDeals)
-    .innerJoin(pipelineStages, eq(enterpriseDeals.salesStageId, pipelineStages.id))
-    .where(and(notDeletedFilter, notInArray(pipelineStages.stageName, CLOSED_STAGES)));
+  // within 30 days.
+  const closeRows = live.filter((d) => d.stageName != null && !CLOSED_STAGES.includes(d.stageName));
   // Calendar-day window, inclusive at both ends. `expected_close_date` is a
-  // date-only column, so the old `new Date(str) >= now` comparison silently
-  // dropped every deal closing TODAY (UTC midnight is already in the past by
-  // 00:01 local in any zone east of UTC), and `daysToClose` derived from a raw
-  // millisecond difference was off by one depending on the hour of day.
+  // date-only column.
   const upcomingCloses = closeRows
-    .filter((d) => isWithinDays(d.expectedCloseDate, 30, now))
+    .filter((d) => isWithinDays(d.deal.expectedCloseDate, 30, now))
     .map((d) => ({
-      id: d.id,
-      dealName: d.dealName,
-      accountName: d.accountName,
-      expectedCloseDate: d.expectedCloseDate,
-      daysToClose: calendarDaysUntil(d.expectedCloseDate, now) as number,
+      id: d.deal.id,
+      dealName: d.deal.dealName,
+      accountName: d.deal.accountName,
+      expectedCloseDate: d.deal.expectedCloseDate,
+      daysToClose: calendarDaysUntil(d.deal.expectedCloseDate, now) as number,
     }))
     .sort((a, b) => a.daysToClose - b.daysToClose);
 
@@ -635,57 +591,42 @@ router.get("/analytics/next-actions", async (_req: Request, res: Response) => {
 // Baseline is null when no snapshot history exists (deltas then hide).
 //
 // Every money figure here — current AND baseline — is in the REPORTING currency.
-// This route used to report raw native-currency TCV (calculateFlatTCV) against a
-// raw `dealSnapshots.calculatedTcv` baseline, while the dashboard tile above the
-// delta shows `computeSummary`'s FX-normalized total. The tile therefore
-// subtracted an un-normalized baseline from a normalized current value, and
-// WeightedPipelineDialog's "Blended win rate" divided a raw weighted pipeline by
-// a normalized total (and could exceed 100%). Both sides are normalized now, so
-// this route, computeSummary, and the DailyBar Week segment all agree.
-router.get("/analytics/vital-signs", async (_req: Request, res: Response) => {
-  const deals = await db
-    .select({
-      id: enterpriseDeals.id,
-      dealCurrency: enterpriseDeals.dealCurrency,
-      productRevenue: enterpriseDeals.productRevenue,
-      servicesRevenue: enterpriseDeals.servicesRevenue,
-      contractTermYears: enterpriseDeals.contractTermYears,
-      pricingModel: pricingModels.modelName,
-      winProbabilityPct: enterpriseDeals.winProbabilityPct,
-    })
-    .from(enterpriseDeals)
-    .innerJoin(pipelineStages, eq(enterpriseDeals.salesStageId, pipelineStages.id))
-    .leftJoin(pricingModels, eq(enterpriseDeals.pricingModelId, pricingModels.id))
-    .where(and(notDeletedFilter, notInArray(pipelineStages.stageName, CLOSED_STAGES)));
-  const openIds = deals.map((d) => d.id);
-  const scores = await latestScores();
+router.get("/analytics/vital-signs", async (req: Request, res: Response) => {
+  const catalystApp = initCatalystApp(req);
+  const [openDeals, pricingModelNameById, scores] = await Promise.all([
+    loadOpenDealsWithStage(catalystApp),
+    loadPricingModelNames(catalystApp),
+    latestScores(catalystApp),
+  ]);
+  const openIds = openDeals.map((d) => d.deal.id);
 
   // One cached getFxRate lookup per DISTINCT currency in the open cohort (in
   // practice 1-3), not one per deal.
-  const { thresholds } = await getThresholds();
+  const { thresholds } = await getThresholds(catalystApp);
   const reportingCurrency = String(thresholds.reporting_currency || "USD");
-  const currencies = [...new Set(deals.map((d) => d.dealCurrency ?? reportingCurrency))];
+  const currencies = [...new Set(openDeals.map((d) => d.deal.dealCurrency ?? reportingCurrency))];
   const fxByCurrency = new Map(
-    await Promise.all(
-      currencies.map(
-        async (c) => [c, await getFxRate(c, reportingCurrency)] as const,
-      ),
-    ),
+    await Promise.all(currencies.map(async (c) => [c, await getFxRate(catalystApp, c, reportingCurrency)] as const)),
   );
 
   let totalTCV = 0;
   let weightedPipeline = 0;
   let scoreSum = 0;
   let scoreCount = 0;
-  for (const d of deals) {
+  for (const { deal } of openDeals) {
     const tcv = normalizeTcv(
-      termAwareTcv(d),
-      fxByCurrency.get(d.dealCurrency ?? reportingCurrency),
+      termAwareTcv({
+        productRevenue: deal.productRevenue,
+        servicesRevenue: deal.servicesRevenue,
+        contractTermYears: deal.contractTermYears,
+        pricingModel: pricingModelNameById.get(deal.pricingModelId) ?? null,
+      }),
+      fxByCurrency.get(deal.dealCurrency ?? reportingCurrency),
     );
     totalTCV += tcv;
-    const pct = scores.get(d.id) ?? d.winProbabilityPct ?? 30;
+    const pct = scores.get(deal.id) ?? deal.winProbabilityPct ?? 30;
     weightedPipeline += tcv * Math.max(0, Math.min(1, pct / 100));
-    const s = scores.get(d.id);
+    const s = scores.get(deal.id);
     if (s != null) {
       scoreSum += s;
       scoreCount++;
@@ -694,31 +635,7 @@ router.get("/analytics/vital-signs", async (_req: Request, res: Response) => {
   const avgScore = scoreCount ? Math.round(scoreSum / scoreCount) : null;
 
   const cutoff = new Date(Date.now() - 7 * 86_400_000);
-  // DISTINCT ON returns exactly ONE row per deal — the newest snapshot at or
-  // before the cutoff — instead of streaming every historical snapshot row into
-  // the process and reducing in JS. That old scan was unbounded and grew with
-  // the snapshot table forever (periodic rows can't be pruned; they ARE this
-  // baseline). Restricted to the currently-open cohort for the same reason the
-  // original was: keeping both sides of the delta over one population means the
-  // week-over-week numbers reflect change WITHIN the open cohort, not deals
-  // entering or leaving it.
-  const latestSnaps = openIds.length
-    ? await db
-        .selectDistinctOn([dealSnapshots.dealId], {
-          dealId: dealSnapshots.dealId,
-          healthStatus: dealSnapshots.healthStatus,
-          normalizedTcv: dealSnapshots.normalizedTcv,
-          payload: dealSnapshots.payload,
-        })
-        .from(dealSnapshots)
-        .where(
-          and(
-            lte(dealSnapshots.snapshotAt, cutoff),
-            inArray(dealSnapshots.dealId, openIds),
-          ),
-        )
-        .orderBy(dealSnapshots.dealId, desc(dealSnapshots.snapshotAt))
-    : [];
+  const latestSnaps = await createDealSnapshotsRepo(catalystApp).latestAtOrBeforePerDeal(openIds, cutoff);
 
   let baseline: {
     totalTCV: number;
@@ -731,12 +648,11 @@ router.get("/analytics/vital-signs", async (_req: Request, res: Response) => {
     let bRedAlerts = 0;
     let bRedDeals = 0;
     for (const s of latestSnaps) {
-      bTcv += Number(s.normalizedTcv) || 0;
+      bTcv += s.normalizedTcv ?? 0;
       // Two DISTINCT baselines, because the dashboard shows two different
       // quantities that used to share this one field: the "Red Alerts" tile
       // counts RED-severity ALERTS, while Pipeline Health's "N RED this week"
-      // counts RED-health DEALS. A deal can carry a RED alert without its
-      // health being RED, so one number can't serve both.
+      // counts RED-health DEALS.
       if (s.healthStatus === "RED") bRedDeals++;
       const alerts = (s.payload as { governance?: { alerts?: { severity?: string }[] } } | null)
         ?.governance?.alerts;
@@ -756,7 +672,7 @@ router.get("/analytics/vital-signs", async (_req: Request, res: Response) => {
     data: {
       totalTCV,
       weightedPipeline: Math.round(weightedPipeline),
-      activeDeals: deals.length,
+      activeDeals: openDeals.length,
       avgScore,
       reportingCurrency,
       baseline,
@@ -769,39 +685,30 @@ router.get("/analytics/vital-signs", async (_req: Request, res: Response) => {
 // Per-deal score / gate-progress / velocity, keyed by id. Health, TCV, stage and
 // close date come from /v1/deals (engine-computed health); the dashboard roster
 // merges this enrichment onto that list by id.
-router.get("/analytics/roster", async (_req: Request, res: Response) => {
-  const deals = await db
-    .select({
-      id: enterpriseDeals.id,
-      dealName: enterpriseDeals.dealName,
-      stageEnteredAt: enterpriseDeals.stageEnteredAt,
-      stageName: pipelineStages.stageName,
-    })
-    .from(enterpriseDeals)
-    .leftJoin(pipelineStages, eq(enterpriseDeals.salesStageId, pipelineStages.id))
-    .where(notDeletedFilter);
+router.get("/analytics/roster", async (req: Request, res: Response) => {
+  const catalystApp = initCatalystApp(req);
+  const live = await loadLiveDealsWithStage(catalystApp);
+  const liveDealIds = new Set(live.map((d) => d.deal.id));
 
-  const scores = await latestScores();
+  const scores = await latestScores(catalystApp);
   // Score trend: baseline = each deal's score as of 7 days ago (null delta when
   // there's no prior score to compare against).
-  const baselineScores = await scoresAsOf(new Date(Date.now() - 7 * 86_400_000));
+  const baselineScores = await scoresAsOf(catalystApp, new Date(Date.now() - 7 * 86_400_000));
 
   // Last-activity age: newest activity-log entry per deal, excluding the
   // auto-generated health.changed churn so the metric reflects real work.
-  const activityRows = await db
-    .select({ dealId: dealActivityLog.dealId, last: max(dealActivityLog.occurredAt) })
-    .from(dealActivityLog)
-    .where(ne(dealActivityLog.eventType, "health.changed"))
-    .groupBy(dealActivityLog.dealId);
-  const lastActivityByDeal = new Map(activityRows.map((r) => [r.dealId, r.last]));
+  const activityRows = await createDealActivityLogRepo(catalystApp).listAll();
+  const lastActivityByDeal = new Map<string, Date>();
+  for (const r of activityRows) {
+    if (r.eventType === "health.changed") continue;
+    const cur = lastActivityByDeal.get(r.dealId);
+    if (!cur || r.occurredAt.getTime() > cur.getTime()) lastActivityByDeal.set(r.dealId, r.occurredAt);
+  }
 
-  const gateRows = await db
-    .select({ dealId: dealTechnicalGates.dealId, isCompleted: dealTechnicalGates.isCompleted })
-    .from(dealTechnicalGates)
-    .innerJoin(enterpriseDeals, eq(dealTechnicalGates.dealId, enterpriseDeals.id))
-    .where(notDeletedFilter);
+  const gateRows = await createDealTechnicalGatesRepo(catalystApp).listAll();
   const gateAgg = new Map<string, { c: number; t: number }>();
   for (const g of gateRows) {
+    if (!liveDealIds.has(g.dealId)) continue;
     const cur = gateAgg.get(g.dealId) ?? { c: 0, t: 0 };
     cur.t++;
     if (g.isCompleted) cur.c++;
@@ -809,52 +716,32 @@ router.get("/analytics/roster", async (_req: Request, res: Response) => {
   }
 
   // Benchmark/velocity comes from the SHARED computeVelocityRows helper
-  // (lib/velocity.ts), the same one /analytics/velocity uses. This handler used
-  // to inline its own `median(byStage)` that (a) included the deal being scored
-  // in its own comparison set and (b) spanned closed stages — so the Deal
-  // Roster widget and the Velocity Map widget, side by side on the dashboard,
-  // reported different benchmarkDays/deltaDays for the same deal, and a deal
-  // alone in its stage read "On Pace" here while reading "New" there.
+  // (lib/velocity.ts), the same one /analytics/velocity uses.
   //
   // Only OPEN deals form the population (a Closed-Won deal has no pipeline
   // motion left to benchmark), matching /analytics/velocity's own filter.
   // Closed deals still get a row — with the velocity trio null — because this
   // response's other fields (score, gatesPct, riskLevel, daysSinceLastActivity)
-  // are consumed for every non-deleted deal by the roster page and
-  // use-pipeline-risk.ts.
+  // are consumed for every non-deleted deal by the roster page.
   const openVelocityById = new Map(
     computeVelocityRows(
-      deals
+      live
         .filter((d) => d.stageName != null && !CLOSED_STAGES.includes(d.stageName))
-        .map((d) => ({
-          id: d.id,
-          stageName: d.stageName as string,
-          daysInStage: daysBetween(d.stageEnteredAt),
-        })),
+        .map((d) => ({ id: d.deal.id, stageName: d.stageName as string, daysInStage: daysBetween(d.deal.stageEnteredAt) })),
     ).map((r) => [r.id, r]),
   );
 
   // Fetch per-deal risk from the cached intelligence tier (intel: prefix,
-  // 30 s TTL, event-bus-invalidated on mutation). cachedIntel() wraps
-  // assembleDealIntelligence() in cache.wrap(CacheKeys.intelligence(dealId),
-  // CacheTtl.intelligence, ...) so this is the same cached path used by the
-  // portfolio summary and the single-deal intelligence route — not an uncached
-  // O(N) loop.
+  // 30 s TTL, event-bus-invalidated on mutation).
   //
-  // Bounded, not a raw Promise.all: on a cache miss each cachedIntel issues
-  // ~15 sequential queries against a 10-connection pool, so fanning out over
-  // EVERY non-deleted deal at once starves concurrent request handlers instead
-  // of going faster (see the INTEL_CONCURRENCY comment in lib/portfolio.ts).
-  // mapWithConcurrency preserves input order, which the index-keyed zip below
-  // depends on.
-  const intelResults = await mapWithConcurrency(deals, INTEL_CONCURRENCY, (d) =>
-    cachedIntel(d.id),
-  );
+  // Bounded, not a raw Promise.all: mapWithConcurrency preserves input order,
+  // which the index-keyed zip below depends on.
+  const intelResults = await mapWithConcurrency(live, INTEL_CONCURRENCY, (d) => cachedIntel(catalystApp, d.deal.id));
   const riskByDeal = new Map(
-    deals.map((d, i) => {
+    live.map((d, i) => {
       const intel = intelResults[i];
       return [
-        d.id,
+        d.deal.id,
         {
           riskScore: intel?.risk?.compositeScore ?? null,
           riskLevel: intel?.risk?.riskLevel ?? null,
@@ -863,7 +750,7 @@ router.get("/analytics/roster", async (_req: Request, res: Response) => {
     }),
   );
 
-  const rows = deals.map((d) => {
+  const rows = live.map(({ deal: d }) => {
     const g = gateAgg.get(d.id) ?? { c: 0, t: 0 };
     const days = daysBetween(d.stageEnteredAt);
     const risk = riskByDeal.get(d.id);
@@ -896,62 +783,61 @@ router.get("/analytics/roster", async (_req: Request, res: Response) => {
 // Cluster the free-text product gaps captured in loss autopsies across Lost
 // deals, augmented by unresolved Technical blockers, into a "what to build/fix"
 // register with TCV-at-risk. Computed on read — no new tables.
-router.get("/analytics/product-gaps", async (_req: Request, res: Response) => {
-  // Joined to enterpriseDeals (never hard-deleted, so innerJoin is safe) for
-  // termAwareTcv — deal_memory.finalTcv was a flat sum, which disagreed with
-  // Archetypes/Competitive for a multi-year deal. notDeletedFilter excludes a
-  // soft-deleted deal's archived gaps from the TCV-at-risk math, same as
-  // every other Autopsy tab.
-  const lostMemories = await db
-    .select({
-      dealId: dealMemory.dealId,
-      dealName: dealMemory.dealName,
-      productGaps: dealMemory.productGaps,
-      productRevenue: enterpriseDeals.productRevenue,
-      servicesRevenue: enterpriseDeals.servicesRevenue,
-      contractTermYears: enterpriseDeals.contractTermYears,
-      pricingModel: pricingModels.modelName,
+router.get("/analytics/product-gaps", async (req: Request, res: Response) => {
+  const catalystApp = initCatalystApp(req);
+  const [memoryAll, deals, blockersAll, blockerCategories, catalog, pricingModelNameById] = await Promise.all([
+    createDealMemoryRepo(catalystApp).listAll(),
+    createEnterpriseDealsRepo(catalystApp).list(),
+    createDealBlockersRepo(catalystApp).listAll(),
+    createBlockerCategoriesRepo(catalystApp).listAll(),
+    createProductCatalogRepo(catalystApp).listAll(),
+    loadPricingModelNames(catalystApp),
+  ]);
+  const liveDealById = new Map(deals.filter((d) => d.deletedAt == null).map((d) => [d.id, d]));
+  const technicalCategoryId = blockerCategories.find((c) => c.categoryName === "Technical")?.id;
+
+  // Joined to enterpriseDeals (never hard-deleted, so a missing/deleted deal
+  // just drops the row) for termAwareTcv — deal_memory.finalTcv was a flat
+  // sum, which disagreed with Archetypes/Competitive for a multi-year deal.
+  const lostMemories = memoryAll
+    .filter((m) => m.outcome === "Lost")
+    .map((m) => {
+      const deal = liveDealById.get(m.dealId);
+      if (!deal) return null;
+      return {
+        dealId: m.dealId,
+        dealName: m.dealName,
+        finalTcv: termAwareTcv({
+          productRevenue: deal.productRevenue,
+          servicesRevenue: deal.servicesRevenue,
+          contractTermYears: deal.contractTermYears,
+          pricingModel: pricingModelNameById.get(deal.pricingModelId) ?? null,
+        }),
+        productGaps: m.productGaps ?? [],
+      };
     })
-    .from(dealMemory)
-    .innerJoin(enterpriseDeals, eq(dealMemory.dealId, enterpriseDeals.id))
-    .leftJoin(pricingModels, eq(enterpriseDeals.pricingModelId, pricingModels.id))
-    .where(and(eq(dealMemory.outcome, "Lost"), notDeletedFilter));
+    .filter((m): m is NonNullable<typeof m> => m != null);
 
-  const techBlockers = await db
-    .select({
-      dealId: dealBlockers.dealId,
-      dealName: enterpriseDeals.dealName,
-      description: dealBlockers.description,
-      productRevenue: enterpriseDeals.productRevenue,
-      servicesRevenue: enterpriseDeals.servicesRevenue,
-      contractTermYears: enterpriseDeals.contractTermYears,
-      pricingModel: pricingModels.modelName,
+  const techBlockers = blockersAll
+    .filter((b) => !b.isResolved && b.categoryId === technicalCategoryId)
+    .map((b) => {
+      const deal = liveDealById.get(b.dealId);
+      if (!deal) return null;
+      return {
+        dealId: b.dealId,
+        dealName: deal.dealName,
+        description: b.description,
+        tcv: termAwareTcv({
+          productRevenue: deal.productRevenue,
+          servicesRevenue: deal.servicesRevenue,
+          contractTermYears: deal.contractTermYears,
+          pricingModel: pricingModelNameById.get(deal.pricingModelId) ?? null,
+        }),
+      };
     })
-    .from(dealBlockers)
-    .innerJoin(enterpriseDeals, eq(dealBlockers.dealId, enterpriseDeals.id))
-    .innerJoin(blockerCategories, eq(dealBlockers.categoryId, blockerCategories.id))
-    .leftJoin(pricingModels, eq(enterpriseDeals.pricingModelId, pricingModels.id))
-    .where(and(eq(dealBlockers.isResolved, false), eq(blockerCategories.categoryName, "Technical"), notDeletedFilter));
+    .filter((b): b is NonNullable<typeof b> => b != null);
 
-  const catalog = await db
-    .select({ id: productCatalog.id, productName: productCatalog.productName, code: productCatalog.code })
-    .from(productCatalog);
-
-  const clusters = clusterProductGaps(
-    lostMemories.map((m) => ({
-      dealId: m.dealId,
-      dealName: m.dealName,
-      finalTcv: termAwareTcv(m),
-      productGaps: (m.productGaps as string[] | null) ?? [],
-    })),
-    techBlockers.map((b) => ({
-      dealId: b.dealId,
-      dealName: b.dealName,
-      description: b.description,
-      tcv: termAwareTcv(b),
-    })),
-    catalog,
-  );
+  const clusters = clusterProductGaps(lostMemories, techBlockers, catalog);
 
   res.json({ data: { clusters } });
 });
@@ -960,25 +846,29 @@ router.get("/analytics/product-gaps", async (_req: Request, res: Response) => {
 
 // Deterministic (no-LLM) pattern matching of archived deals against the current
 // pipeline. Each rule emits an insight only when its sample size is sufficient.
-router.get("/analytics/memory-insights", async (_req: Request, res: Response) => {
+router.get("/analytics/memory-insights", async (req: Request, res: Response) => {
   const MIN_SAMPLE = 3;
-  const memory = await db.select().from(dealMemory);
+  const catalystApp = initCatalystApp(req);
+  const [memory, deals, competitors, pricingModelNameById] = await Promise.all([
+    createDealMemoryRepo(catalystApp).listAll(),
+    createEnterpriseDealsRepo(catalystApp).list(),
+    createCompetitorsRepo(catalystApp).listAll(),
+    loadPricingModelNames(catalystApp),
+  ]);
   const archivedCount = memory.length;
+  const competitorNameById = new Map(competitors.map((c) => [c.id, c.name]));
 
-  const active = await db
-    .select({
-      id: enterpriseDeals.id,
-      dealName: enterpriseDeals.dealName,
-      productRevenue: enterpriseDeals.productRevenue,
-      servicesRevenue: enterpriseDeals.servicesRevenue,
-      contractTermYears: enterpriseDeals.contractTermYears,
-      pricingModel: pricingModels.modelName,
-      competitorName: competitors.name,
-    })
-    .from(enterpriseDeals)
-    .leftJoin(competitors, eq(enterpriseDeals.competitorId, competitors.id))
-    .leftJoin(pricingModels, eq(enterpriseDeals.pricingModelId, pricingModels.id))
-    .where(notDeletedFilter);
+  const active = deals
+    .filter((d) => d.deletedAt == null)
+    .map((d) => ({
+      id: d.id,
+      dealName: d.dealName,
+      productRevenue: d.productRevenue,
+      servicesRevenue: d.servicesRevenue,
+      contractTermYears: d.contractTermYears,
+      pricingModel: pricingModelNameById.get(d.pricingModelId) ?? null,
+      competitorName: d.competitorId != null ? competitorNameById.get(d.competitorId) ?? null : null,
+    }));
   const tcvOf = (d: {
     productRevenue: unknown;
     servicesRevenue: unknown;
@@ -1030,7 +920,7 @@ router.get("/analytics/memory-insights", async (_req: Request, res: Response) =>
     const bands = ranges
       .map((rg) => {
         const inRange = memory.filter((m) => {
-          const t = Number(m.finalTcv) || 0;
+          const t = m.finalTcv ?? 0;
           return t >= rg.min && t < rg.max;
         });
         return { ...rg, count: inRange.length, wr: winRate(inRange) };
@@ -1081,9 +971,10 @@ router.get("/analytics/memory-insights", async (_req: Request, res: Response) =>
   res.json({ data: { insights, archivedCount } });
 });
 
-router.get("/analytics/memory-health", async (_req: Request, res: Response) => {
-  const rows = await db.select().from(dealMemory);
-  res.json({ data: computeMemoryHealth(rows) });
+router.get("/analytics/memory-health", async (req: Request, res: Response) => {
+  const catalystApp = initCatalystApp(req);
+  const rows = await createDealMemoryRepo(catalystApp).listAll();
+  res.json({ data: computeMemoryHealth(rows.map(toMemoryHealthRow)) });
 });
 
 /* ------------------------------------------ Dashboard: Engagement (Achievements) */
@@ -1095,10 +986,10 @@ interface AchievementDef {
 }
 
 // Rescaled to this app's actual data volume (~12-14 deals) rather than the
-// PRD's literal examples (100 closes, 25-deal veteran) — see the design spec
-// for why. Permanence comes from the commander_achievements table, not from
-// these live metrics being monotonic: dealPlaybookAssignments.status CAN
-// revert on a reopened step, but once earned, an achievement stays earned.
+// PRD's literal examples (100 closes, 25-deal veteran). Permanence comes from
+// the commander_achievements table, not from these live metrics being
+// monotonic: dealPlaybookAssignments.status CAN revert on a reopened step,
+// but once earned, an achievement stays earned.
 const ACHIEVEMENT_DEFS: AchievementDef[] = [
   { code: "first_close", name: "First Deal Closed", description: "Every journey starts with a single close." },
   { code: "playbooks_3", name: "3 Playbooks Completed", description: "Process is what separates good from great." },
@@ -1106,33 +997,25 @@ const ACHIEVEMENT_DEFS: AchievementDef[] = [
   { code: "clean_pipeline", name: "Clean Pipeline", description: "Zero stalled deals, zero red alerts. Enjoy the calm." },
 ];
 
-async function evaluateAchievements(): Promise<Record<string, boolean>> {
-  // Only true deletions are excluded here (same predicate as the file's
-  // `notDeletedFilter`, inlined for locality) — a Closed-Won deal is
-  // typically archived shortly after closing (post-mortem subscriber), so
-  // excluding archived deals would undercount "ever closed."
-  const [closedWonRow] = await db
-    .select({ count: sql<number>`count(*)` })
-    .from(enterpriseDeals)
-    .innerJoin(pipelineStages, eq(enterpriseDeals.salesStageId, pipelineStages.id))
-    .where(and(eq(pipelineStages.stageName, "Closed-Won"), isNull(enterpriseDeals.deletedAt)));
+async function evaluateAchievements(catalystApp: CatalystApp): Promise<Record<string, boolean>> {
+  // Only true deletions are excluded here — a Closed-Won deal is typically
+  // archived shortly after closing (post-mortem subscriber), so excluding
+  // archived deals would undercount "ever closed."
+  const [live, playbookAssignments, competitorLinks, summary] = await Promise.all([
+    loadLiveDealsWithStage(catalystApp),
+    createDealPlaybookAssignmentsRepo(catalystApp).listAll(),
+    createDealCompetitorsRepo(catalystApp).listAll(),
+    computeSummary(catalystApp),
+  ]);
 
-  const [playbooksRow] = await db
-    .select({ count: sql<number>`count(*)` })
-    .from(dealPlaybookAssignments)
-    .where(eq(dealPlaybookAssignments.status, "Completed"));
-
-  const wonAgainst = await db
-    .select({ competitorId: dealCompetitors.competitorId })
-    .from(dealCompetitors)
-    .where(eq(dealCompetitors.status, "Won Against"));
+  const closedWonCount = live.filter((d) => d.stageName === "Closed-Won").length;
+  const playbooksCompletedCount = playbookAssignments.filter((a) => a.status === "Completed").length;
+  const wonAgainst = competitorLinks.filter((l) => l.status === "Won Against");
   const distinctCompetitorsBeaten = new Set(wonAgainst.map((r) => r.competitorId)).size;
 
-  const summary = await computeSummary();
-
   return {
-    first_close: Number(closedWonRow.count) >= 1,
-    playbooks_3: Number(playbooksRow.count) >= 3,
+    first_close: closedWonCount >= 1,
+    playbooks_3: playbooksCompletedCount >= 3,
     giant_slayer: distinctCompetitorsBeaten >= 2,
     clean_pipeline: summary.staleDeals.length === 0 && summary.dealsByHealth.RED === 0,
   };
@@ -1140,9 +1023,11 @@ async function evaluateAchievements(): Promise<Record<string, boolean>> {
 
 router.get("/analytics/engagement", async (req: Request, res: Response) => {
   const since = typeof req.query.since === "string" ? req.query.since : undefined;
+  const catalystApp = initCatalystApp(req);
 
-  const trueNow = await evaluateAchievements();
-  const existingRows = await db.select().from(commanderAchievements);
+  const trueNow = await evaluateAchievements(catalystApp);
+  const achievementsRepo = createCommanderAchievementsRepo(catalystApp);
+  const existingRows = await achievementsRepo.listAll();
   const existingCodes = new Set(existingRows.map((r) => r.achievementCode));
   // First-ever evaluation (empty table): silently backfill whatever's
   // already true rather than reporting it as "newly earned" — the live dev
@@ -1153,19 +1038,16 @@ router.get("/analytics/engagement", async (req: Request, res: Response) => {
 
   // commander_achievements has no per-commander column at all (its PK is
   // achievement_code alone) — the ledger is app-global, not per-user. A
-  // reader's page load must not be able to mint a row here: that would be a
-  // reader silently earning the owner's achievement. Readers still see the
-  // full achievement list below (locked/earned as of the last admin
-  // evaluation) — only the write is gated.
+  // reader's page load must not be able to mint a row here.
   if (getActor(req).role === "admin") {
     for (const def of ACHIEVEMENT_DEFS) {
       if (trueNow[def.code] && !existingCodes.has(def.code)) {
-        await db.insert(commanderAchievements).values({ achievementCode: def.code }).onConflictDoNothing();
+        await achievementsRepo.earnIfMissing(def.code);
       }
     }
   }
 
-  const finalRows = await db.select().from(commanderAchievements);
+  const finalRows = await achievementsRepo.listAll();
   const earnedMap = new Map(finalRows.map((r) => [r.achievementCode, r.earnedAt]));
   const achievements = ACHIEVEMENT_DEFS.map((def) => ({
     code: def.code,
@@ -1175,19 +1057,10 @@ router.get("/analytics/engagement", async (req: Request, res: Response) => {
     locked: !earnedMap.has(def.code),
   }));
 
-  // Derived from earnedAt vs `since`, NOT "inserted during this exact call".
-  // This route is hit by two independent callers (AchievementsSettings with no
-  // `since`, CelebrationWatcher with `since: previousVisitAt`) that share the
-  // same unconditional upsert above. If "newly earned" meant "this call did
-  // the insert," whichever caller happened to hit the server first after a
-  // criterion became true would silently claim it — and a later caller would
-  // just see the code already in `existingCodes` and never report it, even
-  // though it genuinely became earned within its own `since` window. Comparing
-  // timestamps instead makes the answer caller-order-independent: every caller
-  // that passes `since` gets a consistent, timestamp-derived result.
-  // isFirstEverEvaluation still silences the very first evaluation (empty
-  // table) so backfilled pre-existing history is never reported as "new",
-  // even if a caller's `since` happens to be old.
+  // Derived from earnedAt vs `since`, NOT "inserted during this exact call" —
+  // see the equivalent comment on the original Drizzle version for the full
+  // caller-order-independence rationale (two independent callers share this
+  // same unconditional upsert-above).
   const sinceDate = !isFirstEverEvaluation && since ? new Date(since) : null;
   const newlyEarnedCodes =
     sinceDate && !Number.isNaN(sinceDate.getTime())
@@ -1196,18 +1069,11 @@ router.get("/analytics/engagement", async (req: Request, res: Response) => {
 
   let dealsClosedWonSince: { dealId: string; dealName: string }[] = [];
   if (since) {
-    const rows = await db
-      .select({ id: enterpriseDeals.id, dealName: enterpriseDeals.dealName })
-      .from(enterpriseDeals)
-      .innerJoin(pipelineStages, eq(enterpriseDeals.salesStageId, pipelineStages.id))
-      .where(
-        and(
-          eq(pipelineStages.stageName, "Closed-Won"),
-          isNull(enterpriseDeals.deletedAt),
-          gte(enterpriseDeals.stageEnteredAt, new Date(since)),
-        ),
-      );
-    dealsClosedWonSince = rows.map((d) => ({ dealId: d.id, dealName: d.dealName }));
+    const sinceTime = new Date(since).getTime();
+    const live = await loadLiveDealsWithStage(catalystApp);
+    dealsClosedWonSince = live
+      .filter((d) => d.stageName === "Closed-Won" && d.deal.stageEnteredAt.getTime() >= sinceTime)
+      .map((d) => ({ dealId: d.deal.id, dealName: d.deal.dealName }));
   }
 
   res.json({ data: { achievements, newlyEarnedCodes, dealsClosedWonSince } });
@@ -1215,22 +1081,24 @@ router.get("/analytics/engagement", async (req: Request, res: Response) => {
 
 /* ------------------------------------- Competitive & Pricing Intelligence */
 
-router.get("/analytics/competitor-intel", async (_req: Request, res: Response) => {
-  const rows = await db.select().from(dealMemory);
-  res.json({ data: computeCompetitorIntel(rows) });
+router.get("/analytics/competitor-intel", async (req: Request, res: Response) => {
+  const catalystApp = initCatalystApp(req);
+  const rows = await createDealMemoryRepo(catalystApp).listAll();
+  res.json({ data: computeCompetitorIntel(rows.map(toCompetitorMemoryRow)) });
 });
 
 router.get("/analytics/pricing-benchmarks", async (req: Request, res: Response) => {
   const q = GetPricingBenchmarksQueryParams.parse(req.query);
-  const conditions = [];
-  if (q.pricingModel) conditions.push(eq(dealMemory.pricingModel, q.pricingModel));
-  if (q.servicesTier) conditions.push(eq(dealMemory.servicesTier, q.servicesTier));
-  if (q.outcome) conditions.push(eq(dealMemory.outcome, q.outcome));
-  const rows = conditions.length
-    ? await db.select().from(dealMemory).where(and(...conditions))
-    : await db.select().from(dealMemory);
+  const catalystApp = initCatalystApp(req);
+  const all = await createDealMemoryRepo(catalystApp).listAll();
+  const rows = all.filter(
+    (r) =>
+      (!q.pricingModel || r.pricingModel === q.pricingModel) &&
+      (!q.servicesTier || r.servicesTier === q.servicesTier) &&
+      (!q.outcome || r.outcome === q.outcome),
+  );
 
-  const tcvs = rows.map((r) => Number(r.finalTcv) || 0).filter((n) => n > 0);
+  const tcvs = rows.map((r) => r.finalTcv ?? 0).filter((n) => n > 0);
   const cycles = rows.map((r) => r.totalDaysActive ?? 0).filter((n) => n > 0);
 
   res.json({
@@ -1238,8 +1106,7 @@ router.get("/analytics/pricing-benchmarks", async (req: Request, res: Response) 
       sampleSize: rows.length,
       // Separate from sampleSize: rows with a null/zero TCV or cycle time are
       // excluded from their respective percentiles, so the two counts can be
-      // smaller than the matched-row total. Surfacing both keeps a full sample
-      // of empty values from looking like a healthy "$0 across N deals".
+      // smaller than the matched-row total.
       tcvSampleSize: tcvs.length,
       cycleSampleSize: cycles.length,
       tcv: percentiles(tcvs),
@@ -1248,11 +1115,14 @@ router.get("/analytics/pricing-benchmarks", async (req: Request, res: Response) 
   });
 });
 
-router.get("/analytics/playbook-effectiveness", async (_req: Request, res: Response) => {
-  const memory = await db.select({ dealId: dealMemory.dealId, outcome: dealMemory.outcome }).from(dealMemory);
-  const assignments = await db.select({ dealId: dealPlaybookAssignments.dealId }).from(dealPlaybookAssignments);
+router.get("/analytics/playbook-effectiveness", async (req: Request, res: Response) => {
+  const catalystApp = initCatalystApp(req);
+  const [memory, assignments] = await Promise.all([
+    createDealMemoryRepo(catalystApp).listAll(),
+    createDealPlaybookAssignmentsRepo(catalystApp).listAll(),
+  ]);
   const assignedIds = new Set(assignments.map((a) => a.dealId));
-  res.json({ data: computePlaybookEffectiveness(memory, assignedIds) });
+  res.json({ data: computePlaybookEffectiveness(memory.map((m) => ({ dealId: m.dealId, outcome: m.outcome })), assignedIds) });
 });
 
 /* ------------------------------------------ Closed-Lost Autopsy: Early Warning */
@@ -1260,39 +1130,28 @@ router.get("/analytics/playbook-effectiveness", async (_req: Request, res: Respo
 // Cross-references each ACTIVE deal's currently-firing pattern codes against
 // how often those same patterns fired on deals that were ultimately
 // Closed-Lost (lib/engine/src/loss-risk.ts). This is a small enrichment on top
-// of the same cachedIntel() tier the roster/summary already use — it
-// complements the Risk Engine v2 composite score, not a competing model.
-router.get("/analytics/loss-risk", async (_req: Request, res: Response) => {
-  const lostDeals = await db
-    .select({ id: enterpriseDeals.id })
-    .from(enterpriseDeals)
-    .innerJoin(pipelineStages, eq(enterpriseDeals.salesStageId, pipelineStages.id))
-    .where(and(notDeletedFilter, eq(pipelineStages.stageName, "Closed-Lost")));
+// of the same cachedIntel() tier the roster/summary already use.
+router.get("/analytics/loss-risk", async (req: Request, res: Response) => {
+  const catalystApp = initCatalystApp(req);
+  const live = await loadLiveDealsWithStage(catalystApp);
+  const lostDeals = live.filter((d) => d.stageName === "Closed-Lost");
 
-  const lostIntel = await Promise.all(lostDeals.map((d) => cachedIntel(d.id)));
+  const lostIntel = await Promise.all(lostDeals.map((d) => cachedIntel(catalystApp, d.deal.id)));
   const lostAlertCodes = lostIntel
     .filter((i): i is NonNullable<typeof i> => i != null)
     .map((i) => [...i.governance.alerts, ...i.governance.managedAlerts].map((a) => a.code));
   const lethality = computePatternLethality(lostAlertCodes);
 
-  const activeDeals = await db
-    .select({
-      id: enterpriseDeals.id,
-      dealName: enterpriseDeals.dealName,
-      accountName: enterpriseDeals.accountName,
-    })
-    .from(enterpriseDeals)
-    .innerJoin(pipelineStages, eq(enterpriseDeals.salesStageId, pipelineStages.id))
-    .where(and(notDeletedFilter, notInArray(pipelineStages.stageName, CLOSED_STAGES)));
+  const activeDeals = live.filter((d) => d.stageName != null && !CLOSED_STAGES.includes(d.stageName));
 
-  const activeIntel = await Promise.all(activeDeals.map((d) => cachedIntel(d.id)));
+  const activeIntel = await Promise.all(activeDeals.map((d) => cachedIntel(catalystApp, d.deal.id)));
   const deals = activeDeals
     .map((d, i) => {
       const intel = activeIntel[i];
       if (!intel) return null;
       const codes = [...intel.governance.alerts, ...intel.governance.managedAlerts].map((a) => a.code);
       const { score, matchedPatterns } = scoreLossRisk(codes, lethality);
-      return { dealId: d.id, dealName: d.dealName, accountName: d.accountName, score, matchedPatterns };
+      return { dealId: d.deal.id, dealName: d.deal.dealName, accountName: d.deal.accountName, score, matchedPatterns };
     })
     .filter((r): r is NonNullable<typeof r> => r != null && r.score > 0)
     .sort((a, b) => b.score - a.score);
@@ -1302,47 +1161,64 @@ router.get("/analytics/loss-risk", async (_req: Request, res: Response) => {
 
 /* ------------------------------------------- Closed-Lost Autopsy: Competitive */
 
-// Aggregates the EXISTING per-deal deal_competitors tracking (captured today
-// via the Competitive tab on the deal cockpit — components/cockpit/v2/
-// competitive-panel.tsx) into a portfolio-wide view: which competitors we
-// lose to most, and a sparse product-suite x competitor win/loss matrix. No
-// new capture UI needed — deal_competitors already holds this data.
-router.get("/analytics/competitive-loss", async (_req: Request, res: Response) => {
-  const rows = await db
-    .select({
-      dealId: dealCompetitors.dealId,
-      competitorId: dealCompetitors.competitorId,
-      competitorName: competitors.name,
-      status: dealCompetitors.status,
-      salesStage: pipelineStages.stageName,
-      productRevenue: enterpriseDeals.productRevenue,
-      servicesRevenue: enterpriseDeals.servicesRevenue,
-      contractTermYears: enterpriseDeals.contractTermYears,
-      pricingModel: pricingModels.modelName,
-      lossArchetypeId: enterpriseDeals.lossArchetypeId,
-    })
-    .from(dealCompetitors)
-    .innerJoin(competitors, eq(dealCompetitors.competitorId, competitors.id))
-    .innerJoin(enterpriseDeals, eq(dealCompetitors.dealId, enterpriseDeals.id))
-    .innerJoin(pipelineStages, eq(enterpriseDeals.salesStageId, pipelineStages.id))
-    .leftJoin(pricingModels, eq(enterpriseDeals.pricingModelId, pricingModels.id))
-    .where(and(notDeletedFilter, inArray(dealCompetitors.status, ["Lost To", "Won Against"])));
+// Aggregates the EXISTING per-deal deal_competitors tracking into a
+// portfolio-wide view: which competitors we lose to most, and a sparse
+// product-suite x competitor win/loss matrix. No new capture UI needed —
+// deal_competitors already holds this data.
+router.get("/analytics/competitive-loss", async (req: Request, res: Response) => {
+  const catalystApp = initCatalystApp(req);
+  const [links, competitors, deals, archetypes, productInterests, catalog, pricingModelNameById] = await Promise.all([
+    createDealCompetitorsRepo(catalystApp).listAll(),
+    createCompetitorsRepo(catalystApp).listAll(),
+    createEnterpriseDealsRepo(catalystApp).list(),
+    createLossArchetypesRepo(catalystApp).listAll(),
+    createDealProductInterestsRepo(catalystApp).listAll(),
+    createProductCatalogRepo(catalystApp).listAll(),
+    loadPricingModelNames(catalystApp),
+  ]);
+  const stageNameById = await loadStageNames(catalystApp);
+  const competitorNameById = new Map(competitors.map((c) => [c.id, c.name]));
+  const liveDealById = new Map(deals.filter((d) => d.deletedAt == null).map((d) => [d.id, d]));
+  const archetypeNameById = new Map(archetypes.map((a) => [a.id, a.archetypeName]));
+  const archetypeName = (id: number | null) => (id == null ? null : archetypeNameById.get(id) ?? null);
 
-  const archetypeRows = await db.select().from(lossArchetypes);
-  const archetypeName = (id: number | null) =>
-    archetypeRows.find((a) => a.id === id)?.archetypeName ?? null;
-
-  const suiteRows = await db
-    .select({ dealId: dealProductInterests.dealId, suite: productCatalog.suite })
-    .from(dealProductInterests)
-    .innerJoin(productCatalog, eq(dealProductInterests.productId, productCatalog.id));
+  const productById = new Map(catalog.map((p) => [p.id, p]));
   const suitesByDeal = new Map<string, Set<string>>();
-  for (const r of suiteRows) {
-    if (!r.suite) continue;
-    const s = suitesByDeal.get(r.dealId) ?? new Set<string>();
-    s.add(r.suite);
-    suitesByDeal.set(r.dealId, s);
+  for (const pi of productInterests) {
+    const product = productById.get(pi.productId);
+    if (!product?.suite) continue;
+    const s = suitesByDeal.get(pi.dealId) ?? new Set<string>();
+    s.add(product.suite);
+    suitesByDeal.set(pi.dealId, s);
   }
+
+  // Mirrors the original's three inner joins (competitors, enterpriseDeals,
+  // pipelineStages) — a link whose competitor, deal, or stage doesn't resolve
+  // is dropped entirely, not defaulted. pricingModels stays a left join
+  // (null pricingModel falls through to termAwareTcv's own "" fallback).
+  const rows = links
+    .filter((l) => l.status === "Lost To" || l.status === "Won Against")
+    .map((l) => {
+      const competitorName = competitorNameById.get(l.competitorId);
+      if (competitorName === undefined) return null;
+      const deal = liveDealById.get(l.dealId);
+      if (!deal) return null;
+      const salesStage = stageNameById.get(deal.salesStageId);
+      if (salesStage === undefined) return null;
+      return {
+        dealId: l.dealId,
+        competitorId: l.competitorId,
+        competitorName,
+        status: l.status,
+        salesStage,
+        productRevenue: deal.productRevenue,
+        servicesRevenue: deal.servicesRevenue,
+        contractTermYears: deal.contractTermYears,
+        pricingModel: pricingModelNameById.get(deal.pricingModelId) ?? null,
+        lossArchetypeId: deal.lossArchetypeId,
+      };
+    })
+    .filter((r): r is NonNullable<typeof r> => r != null);
 
   const byCompetitor = new Map<
     number,
@@ -1352,11 +1228,9 @@ router.get("/analytics/competitive-loss", async (_req: Request, res: Response) =
 
   for (const r of rows) {
     // A "Lost To"/"Won Against" competitor tag used to be booked as a win or
-    // loss immediately, even on a deal that hadn't closed yet — so an open
-    // deal already flagged "Won Against" inflated a competitor's win count
-    // before the deal ever reached Closed-Won. Only count a row once the
-    // deal has ACTUALLY closed in the direction its status claims; anything
-    // else (open, or closed the other way) is excluded entirely.
+    // loss immediately, even on a deal that hadn't closed yet — so only count
+    // a row once the deal has ACTUALLY closed in the direction its status
+    // claims; anything else (open, or closed the other way) is excluded.
     const isClosedLoss = r.salesStage === "Closed-Lost" && r.status === "Lost To";
     const isClosedWin = r.salesStage === "Closed-Won" && r.status === "Won Against";
     if (!isClosedLoss && !isClosedWin) continue;
@@ -1406,39 +1280,42 @@ router.get("/analytics/competitive-loss", async (_req: Request, res: Response) =
 
 // Loss Pulse is a transparent average of a FEW legible, currently-computable
 // inputs (autopsy completeness, autopsy quality, loss rate) — deliberately not
-// a tuned/weighted model. False precision would be worse than an honest
-// average at the loss volumes this single-user product will ever see.
-router.get("/analytics/loss-dashboard", async (_req: Request, res: Response) => {
+// a tuned/weighted model.
+router.get("/analytics/loss-dashboard", async (req: Request, res: Response) => {
+  const catalystApp = initCatalystApp(req);
+  const [live, memoryAll, pricingModelNameById] = await Promise.all([
+    loadLiveDealsWithStage(catalystApp),
+    createDealMemoryRepo(catalystApp).listAll(),
+    loadPricingModelNames(catalystApp),
+  ]);
+  const memoryByDeal = new Map(memoryAll.map((m) => [m.dealId, m]));
+
   // Stage is the canonical loss cohort (not deal_memory.outcome — the two can
   // disagree whenever the post-mortem subscriber missed a row), with
   // dealMemory as a left-joined enrichment. termAwareTcv (not
   // deal_memory.finalTcv's flat sum) so this tab's TCV agrees with Archetypes
-  // and Competitive for multi-year deals, and notDeletedFilter so an archived
-  // loss doesn't disappear from one tab but not another.
-  const lostRows = await db
-    .select({
-      dealId: enterpriseDeals.id,
-      productRevenue: enterpriseDeals.productRevenue,
-      servicesRevenue: enterpriseDeals.servicesRevenue,
-      contractTermYears: enterpriseDeals.contractTermYears,
-      pricingModel: pricingModels.modelName,
-      primaryLossCategory: dealMemory.primaryLossCategory,
-      autopsyCompletedAt: dealMemory.autopsyCompletedAt,
-      qualityScore: dealMemory.qualityScore,
-    })
-    .from(enterpriseDeals)
-    .innerJoin(pipelineStages, eq(enterpriseDeals.salesStageId, pipelineStages.id))
-    .leftJoin(pricingModels, eq(enterpriseDeals.pricingModelId, pricingModels.id))
-    .leftJoin(dealMemory, eq(dealMemory.dealId, enterpriseDeals.id))
-    .where(and(notDeletedFilter, eq(pipelineStages.stageName, "Closed-Lost")));
+  // and Competitive for multi-year deals.
+  const lostRows = live
+    .filter((d) => d.stageName === "Closed-Lost")
+    .map(({ deal }) => {
+      const memory = memoryByDeal.get(deal.id);
+      return {
+        dealId: deal.id,
+        tcv: termAwareTcv({
+          productRevenue: deal.productRevenue,
+          servicesRevenue: deal.servicesRevenue,
+          contractTermYears: deal.contractTermYears,
+          pricingModel: pricingModelNameById.get(deal.pricingModelId) ?? null,
+        }),
+        primaryLossCategory: memory?.primaryLossCategory ?? null,
+        autopsyCompletedAt: memory?.autopsyCompletedAt ?? null,
+        qualityScore: memory?.qualityScore ?? null,
+      };
+    });
 
-  const [{ n: wonCount }] = await db
-    .select({ n: sql<number>`count(*)::int` })
-    .from(enterpriseDeals)
-    .innerJoin(pipelineStages, eq(enterpriseDeals.salesStageId, pipelineStages.id))
-    .where(and(notDeletedFilter, eq(pipelineStages.stageName, "Closed-Won")));
+  const wonCount = live.filter((d) => d.stageName === "Closed-Won").length;
 
-  const lostIntel = await Promise.all(lostRows.map((r) => cachedIntel(r.dealId)));
+  const lostIntel = await Promise.all(lostRows.map((r) => cachedIntel(catalystApp, r.dealId)));
   const alertCodeLists = lostIntel
     .filter((i): i is NonNullable<typeof i> => i != null)
     .map((i) => [...i.governance.alerts, ...i.governance.managedAlerts].map((a) => a.code));
@@ -1449,7 +1326,7 @@ router.get("/analytics/loss-dashboard", async (_req: Request, res: Response) => 
 
   const metrics = computeLossDashboardMetrics(
     lostRows.map((r) => ({
-      tcv: termAwareTcv(r),
+      tcv: r.tcv,
       primaryLossCategory: r.primaryLossCategory,
       autopsyCompletedAt: r.autopsyCompletedAt,
       qualityScore: r.qualityScore,
@@ -1471,24 +1348,13 @@ router.get("/analytics/loss-dashboard", async (_req: Request, res: Response) => 
 // (GateView[] with `isCompleted`) written by the snapshot service.
 router.get("/analytics/deals/:dealId/trajectory", async (req: Request, res: Response) => {
   const dealId = String(req.params.dealId);
+  const catalystApp = initCatalystApp(req);
 
-  const snapRows = await db
-    .select({
-      healthStatus: dealSnapshots.healthStatus,
-      salesStage: dealSnapshots.salesStage,
-      calculatedTcv: dealSnapshots.calculatedTcv,
-      payload: dealSnapshots.payload,
-      snapshotAt: dealSnapshots.snapshotAt,
-    })
-    .from(dealSnapshots)
-    .where(eq(dealSnapshots.dealId, dealId))
-    .orderBy(asc(dealSnapshots.snapshotAt));
-
-  const scoreRows = await db
-    .select({ score: dealScores.score, computedAt: dealScores.computedAt })
-    .from(dealScores)
-    .where(eq(dealScores.dealId, dealId))
-    .orderBy(asc(dealScores.computedAt));
+  const snapRows = await createDealSnapshotsRepo(catalystApp).listByDealId(dealId);
+  const scoreRowsAll = await createDealScoresRepo(catalystApp).listAll();
+  const scoreRows = scoreRowsAll
+    .filter((r) => r.dealId === dealId)
+    .sort((a, b) => a.computedAt.getTime() - b.computedAt.getTime());
 
   // Derive gate completion % from the snapshot payload's gate array, if present.
   const gatePctOf = (payload: Record<string, unknown> | null): number | null => {
@@ -1529,7 +1395,7 @@ router.get("/analytics/deals/:dealId/trajectory", async (req: Request, res: Resp
     at: toISO(r.snapshotAt) ?? new Date().toISOString(),
     health: r.healthStatus ?? null,
     stage: r.salesStage ?? null,
-    tcv: r.calculatedTcv != null ? Number(r.calculatedTcv) : null,
+    tcv: r.calculatedTcv,
     gatePct: gatePctOf(r.payload),
     playbookPct: playbookPctOf(r.payload),
     meddpiccPct: meddpiccPctOf(r.payload),
@@ -1606,9 +1472,9 @@ router.post("/nlc/parse", async (req: Request, res: Response) => {
 // endpoints are low-traffic analytics calls; caching is deferred to a future
 // task if needed.
 
-async function loadFlowStages(): Promise<StageDef[]> {
-  const rows = await db.select().from(pipelineStages);
-  return rows.map((s) => ({
+async function loadFlowStages(catalystApp: CatalystApp): Promise<StageDef[]> {
+  const stages = await createPipelineStagesRepo(catalystApp).listAll();
+  return stages.map((s) => ({
     id: s.id,
     name: s.stageName,
     sortOrder: s.sortOrder,
@@ -1621,85 +1487,55 @@ async function loadFlowStages(): Promise<StageDef[]> {
   }));
 }
 
-async function loadTransitions(): Promise<TransitionRec[]> {
-  // Joined to enterpriseDeals + notDeletedFilter — pipelineTransitions has
-  // no soft-delete column of its own, so a soft-deleted deal's history was
-  // otherwise still summed into every Flow tab metric (funnel, conversion
-  // matrix, Sankey, recycle/exit rates, the value-bridge waterfall) even
-  // though loadOpenDeals below already excludes that same deal — the two
-  // halves of the Flow tab were drawing from two differently-scoped deal
-  // populations.
-  const rows = await db
-    .select({
-      dealId: pipelineTransitions.dealId,
-      fromStageId: pipelineTransitions.fromStageId,
-      toStageId: pipelineTransitions.toStageId,
-      transitionType: pipelineTransitions.transitionType,
-      tcvAtTransition: pipelineTransitions.tcvAtTransition,
-      daysInFromStage: pipelineTransitions.daysInFromStage,
-      transitionedAt: pipelineTransitions.transitionedAt,
-    })
-    .from(pipelineTransitions)
-    .innerJoin(enterpriseDeals, eq(pipelineTransitions.dealId, enterpriseDeals.id))
-    .where(notDeletedFilter)
-    .orderBy(asc(pipelineTransitions.transitionedAt));
-  return rows.map((r) => ({
-    dealId: r.dealId,
-    fromStageId: r.fromStageId,
-    toStageId: r.toStageId,
-    transitionType: r.transitionType as TransitionRec["transitionType"],
-    tcv: Number(r.tcvAtTransition ?? 0),
-    daysInFromStage: r.daysInFromStage,
-    transitionedAt: new Date(r.transitionedAt).toISOString(),
-  }));
+async function loadTransitions(catalystApp: CatalystApp): Promise<TransitionRec[]> {
+  // Filtered against the live (not soft-deleted) deal set — pipelineTransitions
+  // has no soft-delete column of its own, so a soft-deleted deal's history was
+  // otherwise still summed into every Flow tab metric even though
+  // loadOpenDeals below already excludes that same deal.
+  const [rows, deals] = await Promise.all([
+    createPipelineTransitionsRepo(catalystApp).listAll(),
+    createEnterpriseDealsRepo(catalystApp).list(),
+  ]);
+  const liveDealIds = new Set(deals.filter((d) => d.deletedAt == null).map((d) => d.id));
+  return rows
+    .filter((r) => liveDealIds.has(r.dealId))
+    .map((r) => ({
+      dealId: r.dealId,
+      fromStageId: r.fromStageId,
+      toStageId: r.toStageId,
+      transitionType: r.transitionType as TransitionRec["transitionType"],
+      tcv: r.tcvAtTransition ?? 0,
+      daysInFromStage: r.daysInFromStage,
+      transitionedAt: r.transitionedAt.toISOString(),
+    }));
 }
 
-async function loadOpenDeals(): Promise<OpenDeal[]> {
-  const rows = await db
-    .select({
-      id: enterpriseDeals.id,
-      stageId: enterpriseDeals.salesStageId,
-      productRevenue: enterpriseDeals.productRevenue,
-      servicesRevenue: enterpriseDeals.servicesRevenue,
-      contractTermYears: enterpriseDeals.contractTermYears,
-      pricingModel: pricingModels.modelName,
-      wp: enterpriseDeals.winProbabilityPct,
-      createdAt: enterpriseDeals.createdAt,
-      landedAt: enterpriseDeals.landedAt,
-    })
-    .from(enterpriseDeals)
-    .leftJoin(pricingModels, eq(enterpriseDeals.pricingModelId, pricingModels.id))
-    .where(notDeletedFilter);
+async function loadOpenDeals(catalystApp: CatalystApp): Promise<OpenDeal[]> {
+  const [deals, pricingModelNameById, scores] = await Promise.all([
+    createEnterpriseDealsRepo(catalystApp).list(),
+    loadPricingModelNames(catalystApp),
+    latestScores(catalystApp),
+  ]);
+  const live = deals.filter((d) => d.deletedAt == null);
 
-  // AI win-probability from latest deal_scores per deal.
-  // dealScores.score is an integer 0-100; OpenDeal.aiWinProbability is 0..1.
-  // Take the latest score per deal (scores are ordered desc by computedAt in
-  // the latestScores() helper above; we replicate that pattern inline here).
-  const scoreRows = await db
-    .select({ dealId: dealScores.dealId, score: dealScores.score, computedAt: dealScores.computedAt })
-    .from(dealScores)
-    .orderBy(desc(dealScores.computedAt));
-  const aiByDeal = new Map<string, number>();
-  for (const s of scoreRows) {
-    if (!aiByDeal.has(s.dealId)) aiByDeal.set(s.dealId, s.score);
-  }
-
-  return rows.map((r) => {
+  return live.map((d) => {
     const tcv = calculateFlatTCV({
-      productRevenue: Number(r.productRevenue) || 0,
-      servicesRevenue: Number(r.servicesRevenue) || 0,
-      contractTermYears: r.contractTermYears,
-      pricingModel: r.pricingModel ?? "",
+      productRevenue: Number(d.productRevenue) || 0,
+      servicesRevenue: Number(d.servicesRevenue) || 0,
+      contractTermYears: d.contractTermYears,
+      pricingModel: pricingModelNameById.get(d.pricingModelId) ?? "",
     });
-    const rawScore = aiByDeal.get(r.id);
+    // AI win-probability from latest deal_scores per deal. dealScores.score is
+    // an integer 0-100; OpenDeal.aiWinProbability is 0..1.
+    const rawScore = scores.get(d.id);
     return {
-      id: r.id,
-      stageId: r.stageId ?? 0,
+      id: d.id,
+      stageId: d.salesStageId ?? 0,
       tcv,
-      winProbabilityPct: r.wp == null ? null : Number(r.wp),
+      winProbabilityPct: d.winProbabilityPct == null ? null : Number(d.winProbabilityPct),
       aiWinProbability: rawScore != null ? rawScore / 100 : null,
-      createdAt: r.createdAt ? new Date(r.createdAt).toISOString() : new Date().toISOString(),
-      landedAt: r.landedAt ? new Date(r.landedAt).toISOString() : null,
+      createdAt: d.createdAt ? d.createdAt.toISOString() : new Date().toISOString(),
+      landedAt: d.landedAt ? new Date(d.landedAt).toISOString() : null,
     };
   });
 }
@@ -1712,84 +1548,79 @@ async function loadOpenDeals(): Promise<OpenDeal[]> {
  * pipeline target row in" across the whole feature — pipeline_targets.
  * period_start is stored as a bare date-only string with no timezone
  * attached, so there is no "local time" to consult on the read side anyway.
- * The actual flooring math is `quarterStartUTC` (`@workspace/engine`, a pure
- * isomorphic module with zero DB/network deps) — the frontend's
- * targets-settings.tsx (via artifacts/edc/src/lib/format.ts's
- * quarterStartISO) calls the SAME function rather than duplicating the
- * formula, so a server-clock instant and a browser-clock instant can never
- * disagree about which quarter they land in.
  */
 function activeQuarterStart(now = new Date()): string {
   return quarterStartUTC(now);
 }
 
+async function targetForActiveQuarter(catalystApp: CatalystApp, periodStart: string): Promise<number | null> {
+  const targets = await createPipelineTargetsRepo(catalystApp).listAll();
+  // periodType is part of the upsert's conflict key ([periodType, periodStart]
+  // in config.ts) — filtering on periodStart alone could match a differently-
+  // typed row that happens to share the same date.
+  const match = targets.find((t) => t.periodType === "quarter" && t.periodStart === periodStart);
+  return match ? match.targetValue : null;
+}
+
 // NOTE: literal paths registered before any param-based routes per repo convention.
 
-router.get("/analytics/flow/funnel", async (_req: Request, res: Response) => {
+router.get("/analytics/flow/funnel", async (req: Request, res: Response) => {
+  const catalystApp = initCatalystApp(req);
   const [stages, deals, transitions] = await Promise.all([
-    loadFlowStages(),
-    loadOpenDeals(),
-    loadTransitions(),
+    loadFlowStages(catalystApp),
+    loadOpenDeals(catalystApp),
+    loadTransitions(catalystApp),
   ]);
   res.json({ data: computeFunnel(deals, transitions, stages) });
 });
 
 router.get("/analytics/flow/conversion-matrix", async (req: Request, res: Response) => {
+  const catalystApp = initCatalystApp(req);
   const windowDays = Math.max(1, Math.min(365, Number(req.query.windowDays ?? 90)));
-  const [stages, transitions] = await Promise.all([loadFlowStages(), loadTransitions()]);
+  const [stages, transitions] = await Promise.all([loadFlowStages(catalystApp), loadTransitions(catalystApp)]);
   res.json({
     data: computeConversionMatrix(transitions, stages, windowDays, new Date().toISOString()),
   });
 });
 
 router.get("/analytics/flow/sankey", async (req: Request, res: Response) => {
+  const catalystApp = initCatalystApp(req);
   const mode = req.query.mode === "value" ? "value" : "count";
-  const [stages, transitions] = await Promise.all([loadFlowStages(), loadTransitions()]);
+  const [stages, transitions] = await Promise.all([loadFlowStages(catalystApp), loadTransitions(catalystApp)]);
   res.json({
     data: {
       ...computeSankeyFlows(transitions, stages, mode),
       // The Sankey only ever shows forward progression (self-loops and
       // regressions are filtered client-side). `breakdown` accounts for every
-      // transition — advances, recycles, and both exit outcomes — so the
-      // widget can show the full picture alongside the diagram.
+      // transition — advances, recycles, and both exit outcomes.
       breakdown: computeTransitionBreakdown(transitions),
     },
   });
 });
 
-router.get("/analytics/flow/recycle", async (_req: Request, res: Response) => {
-  const [stages, transitions] = await Promise.all([loadFlowStages(), loadTransitions()]);
+router.get("/analytics/flow/recycle", async (req: Request, res: Response) => {
+  const catalystApp = initCatalystApp(req);
+  const [stages, transitions] = await Promise.all([loadFlowStages(catalystApp), loadTransitions(catalystApp)]);
   res.json({ data: computeRecycleExit(transitions, stages) });
 });
 
-router.get("/analytics/flow/coverage", async (_req: Request, res: Response) => {
-  const [stages, deals] = await Promise.all([loadFlowStages(), loadOpenDeals()]);
+router.get("/analytics/flow/coverage", async (req: Request, res: Response) => {
+  const catalystApp = initCatalystApp(req);
+  const [stages, deals] = await Promise.all([loadFlowStages(catalystApp), loadOpenDeals(catalystApp)]);
   const periodStart = activeQuarterStart();
-  // periodType is part of the upsert's conflict key ([periodType, periodStart]
-  // in config.ts) — filtering on periodStart alone could match a differently-
-  // typed row that happens to share the same date.
-  const [tgt] = await db
-    .select()
-    .from(pipelineTargets)
-    .where(and(eq(pipelineTargets.periodType, "quarter"), eq(pipelineTargets.periodStart, periodStart)));
-  const target = tgt ? Number(tgt.targetValue) : null;
+  const target = await targetForActiveQuarter(catalystApp, periodStart);
   res.json({ data: computeCoverage(deals, stages, target, periodStart) });
 });
 
-router.get("/analytics/flow/health-score", async (_req: Request, res: Response) => {
+router.get("/analytics/flow/health-score", async (req: Request, res: Response) => {
+  const catalystApp = initCatalystApp(req);
   const [stages, deals, transitions] = await Promise.all([
-    loadFlowStages(),
-    loadOpenDeals(),
-    loadTransitions(),
+    loadFlowStages(catalystApp),
+    loadOpenDeals(catalystApp),
+    loadTransitions(catalystApp),
   ]);
   const periodStart = activeQuarterStart();
-  // See the matching comment in /analytics/flow/coverage above: periodType is
-  // part of the upsert's conflict key, so it must be filtered on here too.
-  const [tgt] = await db
-    .select()
-    .from(pipelineTargets)
-    .where(and(eq(pipelineTargets.periodType, "quarter"), eq(pipelineTargets.periodStart, periodStart)));
-  const target = tgt ? Number(tgt.targetValue) : null;
+  const target = await targetForActiveQuarter(catalystApp, periodStart);
   const coverage = computeCoverage(deals, stages, target, periodStart);
   const recycle = computeRecycleExit(transitions, stages);
   const winExits = transitions.filter((t) => t.transitionType === "exit_won").length;
@@ -1802,27 +1633,10 @@ router.get("/analytics/flow/health-score", async (_req: Request, res: Response) 
 
   // Overdue share: fraction of currently-open deals classified SLOW by
   // computeVelocityRows (lib/velocity.ts) — the exact same open-deals-only,
-  // leave-one-out benchmark and >1.5x threshold /analytics/velocity uses, so
-  // "age" here means the same thing a viewer sees on the Velocity widget.
-  // Previously this ran its own inline median-by-stage loop that (a)
-  // included closed deals in both the benchmark and the denominator — a
-  // Closed-Lost deal can't be "overdue," so this contradicted the Velocity
-  // widget's own filtered list — and (b) let a deal's own days-in-stage
-  // count toward its own benchmark, the same self-referential bug fixed in
-  // /analytics/velocity. This also replaces the ORIGINAL agingScore, which
-  // just re-read avgResidence under a second label and so contributed no
-  // independent signal to the composite.
-  const openStageRows = await db
-    .select({
-      id: enterpriseDeals.id,
-      stageEnteredAt: enterpriseDeals.stageEnteredAt,
-      stageName: pipelineStages.stageName,
-    })
-    .from(enterpriseDeals)
-    .innerJoin(pipelineStages, eq(enterpriseDeals.salesStageId, pipelineStages.id))
-    .where(and(notDeletedFilter, notInArray(pipelineStages.stageName, CLOSED_STAGES)));
+  // leave-one-out benchmark and >1.5x threshold /analytics/velocity uses.
+  const openStageRows = await loadOpenDealsWithStage(catalystApp);
   const velocityRows = computeVelocityRows(
-    openStageRows.map((r) => ({ id: r.id, stageName: r.stageName, daysInStage: daysBetween(r.stageEnteredAt) })),
+    openStageRows.map((d) => ({ id: d.deal.id, stageName: d.stageName as string, daysInStage: daysBetween(d.deal.stageEnteredAt) })),
   );
   const overdueCount = velocityRows.filter((r) => r.velocity === "SLOW").length;
   const overdueShare = velocityRows.length > 0 ? overdueCount / velocityRows.length : 0;
@@ -1843,10 +1657,8 @@ router.get("/analytics/flow/health-score", async (_req: Request, res: Response) 
     agingScore: overdueShare,
     retentionRate: 1 - recycle.overallRecycleRate / 100,
   };
-  const weights = await getHealthWeights();
+  const weights = await getHealthWeights(catalystApp);
   res.json({ data: { ...scoreHealthAbsolute(inputs, DEFAULT_HEALTH_BENCHMARKS, weights), coverage } });
 });
-
-void sql;
 
 export default router;

@@ -1,12 +1,11 @@
 import { Router, type IRouter, type Request, type Response } from "express";
-import { and, desc, eq, gte, isNull, lte } from "drizzle-orm";
 import {
-  db,
-  enterpriseDeals,
-  dealActivityLog,
-  dealHealthHistory,
-  dealSnapshots,
-} from "@workspace/db";
+  initCatalystApp,
+  createEnterpriseDealsRepo,
+  createDealActivityLogRepo,
+  createDealHealthHistoryRepo,
+  createDealSnapshotsRepo,
+} from "@workspace/db/catalyst";
 import {
   ListPortfolioActivityQueryParams,
   ListPortfolioActivityResponse,
@@ -23,7 +22,7 @@ import {
   GetDealSnapshotResponse,
 } from "@workspace/api-zod";
 import { notFound } from "../../lib/http";
-import { toISO } from "../../lib/intelligence";
+import { toISO } from "../../lib/catalyst/intelligence";
 import crudRouter from "./crud";
 import analyticsRouter from "./analytics";
 import configRouter from "./config";
@@ -40,15 +39,6 @@ router.use(configRouter);
 router.use(exportsRouter);
 router.use(meddpiccRouter);
 
-async function ensureDeal(dealId: string) {
-  const rows = await db
-    .select({ id: enterpriseDeals.id })
-    .from(enterpriseDeals)
-    .where(eq(enterpriseDeals.id, dealId))
-    .limit(1);
-  if (rows.length === 0) throw notFound("Deal not found");
-}
-
 function clampLimit(limit: number | undefined, fallback: number) {
   return Math.min(Math.max(limit ?? fallback, 1), 200);
 }
@@ -58,47 +48,33 @@ function clampLimit(limit: number | undefined, fallback: number) {
 // registered first so it never collides with the param route.
 router.get("/activity", async (req: Request, res: Response) => {
   const q = ListPortfolioActivityQueryParams.parse(req.query);
+  const catalystApp = initCatalystApp(req);
 
   const limit = clampLimit(q.limit, 50);
   const offset = Math.max(q.offset ?? 0, 0);
 
-  const conditions = [isNull(enterpriseDeals.deletedAt)];
-  if (q.since)
-    conditions.push(gte(dealActivityLog.occurredAt, new Date(q.since)));
-  if (q.until)
-    conditions.push(lte(dealActivityLog.occurredAt, new Date(q.until)));
-  const where = and(...conditions);
+  const [activityAll, deals] = await Promise.all([
+    createDealActivityLogRepo(catalystApp).listAll(),
+    createEnterpriseDealsRepo(catalystApp).list(),
+  ]);
+  const liveDealNameById = new Map(
+    deals.filter((d) => d.deletedAt == null).map((d) => [d.id, d.dealName]),
+  );
 
-  const rows = await db
-    .select({
-      id: dealActivityLog.id,
-      dealId: dealActivityLog.dealId,
-      dealName: enterpriseDeals.dealName,
-      eventType: dealActivityLog.eventType,
-      entityType: dealActivityLog.entityType,
-      entityId: dealActivityLog.entityId,
-      summary: dealActivityLog.summary,
-      metadata: dealActivityLog.metadata,
-      actor: dealActivityLog.actor,
-      occurredAt: dealActivityLog.occurredAt,
-    })
-    .from(dealActivityLog)
-    .innerJoin(enterpriseDeals, eq(dealActivityLog.dealId, enterpriseDeals.id))
-    .where(where)
-    .orderBy(desc(dealActivityLog.occurredAt))
-    .limit(limit)
-    .offset(offset);
+  const sinceTime = q.since ? new Date(q.since).getTime() : null;
+  const untilTime = q.until ? new Date(q.until).getTime() : null;
+  const matched = activityAll.filter((r) => {
+    if (!liveDealNameById.has(r.dealId)) return false;
+    if (sinceTime != null && r.occurredAt.getTime() < sinceTime) return false;
+    if (untilTime != null && r.occurredAt.getTime() > untilTime) return false;
+    return true;
+  });
+  matched.sort((a, b) => b.occurredAt.getTime() - a.occurredAt.getTime());
 
-  const totalRows = await db
-    .select({ id: dealActivityLog.id })
-    .from(dealActivityLog)
-    .innerJoin(enterpriseDeals, eq(dealActivityLog.dealId, enterpriseDeals.id))
-    .where(where);
-
-  const data = rows.map((r) => ({
+  const data = matched.slice(offset, offset + limit).map((r) => ({
     id: r.id,
     dealId: r.dealId,
-    dealName: r.dealName,
+    dealName: liveDealNameById.get(r.dealId)!,
     eventType: r.eventType,
     entityType: r.entityType,
     entityId: r.entityId,
@@ -111,7 +87,7 @@ router.get("/activity", async (req: Request, res: Response) => {
   res.json(
     ListPortfolioActivityResponse.parse({
       data,
-      meta: { total: totalRows.length, limit, offset },
+      meta: { total: matched.length, limit, offset },
     }),
   );
 });
@@ -121,34 +97,26 @@ router.get(
   async (req: Request, res: Response) => {
     const { dealId } = ListDealActivityParams.parse(req.params);
     const q = ListDealActivityQueryParams.parse(req.query);
-    await ensureDeal(dealId);
+    const catalystApp = initCatalystApp(req);
+    const deal = await createEnterpriseDealsRepo(catalystApp).getById(dealId);
+    if (!deal) throw notFound("Deal not found");
 
     const limit = clampLimit(q.limit, 50);
     const offset = Math.max(q.offset ?? 0, 0);
 
-    const conditions = [eq(dealActivityLog.dealId, dealId)];
-    if (q.event_type)
-      conditions.push(eq(dealActivityLog.eventType, q.event_type));
-    if (q.since)
-      conditions.push(gte(dealActivityLog.occurredAt, new Date(q.since)));
-    if (q.until)
-      conditions.push(lte(dealActivityLog.occurredAt, new Date(q.until)));
-    const where = and(...conditions);
+    const activityAll = await createDealActivityLogRepo(catalystApp).listAll();
+    const sinceTime = q.since ? new Date(q.since).getTime() : null;
+    const untilTime = q.until ? new Date(q.until).getTime() : null;
+    const matched = activityAll.filter((r) => {
+      if (r.dealId !== dealId) return false;
+      if (q.event_type && r.eventType !== q.event_type) return false;
+      if (sinceTime != null && r.occurredAt.getTime() < sinceTime) return false;
+      if (untilTime != null && r.occurredAt.getTime() > untilTime) return false;
+      return true;
+    });
+    matched.sort((a, b) => b.occurredAt.getTime() - a.occurredAt.getTime());
 
-    const rows = await db
-      .select()
-      .from(dealActivityLog)
-      .where(where)
-      .orderBy(desc(dealActivityLog.occurredAt))
-      .limit(limit)
-      .offset(offset);
-
-    const totalRows = await db
-      .select({ id: dealActivityLog.id })
-      .from(dealActivityLog)
-      .where(where);
-
-    const data = rows.map((r) => ({
+    const data = matched.slice(offset, offset + limit).map((r) => ({
       id: r.id,
       dealId: r.dealId,
       eventType: r.eventType,
@@ -163,7 +131,7 @@ router.get(
     res.json(
       ListDealActivityResponse.parse({
         data,
-        meta: { total: totalRows.length, limit, offset },
+        meta: { total: matched.length, limit, offset },
       }),
     );
   },
@@ -174,32 +142,24 @@ router.get(
   async (req: Request, res: Response) => {
     const { dealId } = ListDealHealthHistoryParams.parse(req.params);
     const q = ListDealHealthHistoryQueryParams.parse(req.query);
-    await ensureDeal(dealId);
+    const catalystApp = initCatalystApp(req);
+    const deal = await createEnterpriseDealsRepo(catalystApp).getById(dealId);
+    if (!deal) throw notFound("Deal not found");
 
     const limit = clampLimit(q.limit, 50);
     const offset = Math.max(q.offset ?? 0, 0);
 
-    const conditions = [eq(dealHealthHistory.dealId, dealId)];
-    if (q.since)
-      conditions.push(gte(dealHealthHistory.changedAt, new Date(q.since)));
-    if (q.until)
-      conditions.push(lte(dealHealthHistory.changedAt, new Date(q.until)));
-    const where = and(...conditions);
+    const allForDeal = await createDealHealthHistoryRepo(catalystApp).listByDealId(dealId);
+    const sinceTime = q.since ? new Date(q.since).getTime() : null;
+    const untilTime = q.until ? new Date(q.until).getTime() : null;
+    // listByDealId already sorts newest-first; filter preserves that order.
+    const matched = allForDeal.filter((r) => {
+      if (sinceTime != null && r.changedAt.getTime() < sinceTime) return false;
+      if (untilTime != null && r.changedAt.getTime() > untilTime) return false;
+      return true;
+    });
 
-    const rows = await db
-      .select()
-      .from(dealHealthHistory)
-      .where(where)
-      .orderBy(desc(dealHealthHistory.changedAt))
-      .limit(limit)
-      .offset(offset);
-
-    const totalRows = await db
-      .select({ id: dealHealthHistory.id })
-      .from(dealHealthHistory)
-      .where(where);
-
-    const data = rows.map((r) => ({
+    const data = matched.slice(offset, offset + limit).map((r) => ({
       id: r.id,
       dealId: r.dealId,
       fromStatus: r.fromStatus,
@@ -212,7 +172,7 @@ router.get(
     res.json(
       ListDealHealthHistoryResponse.parse({
         data,
-        meta: { total: totalRows.length, limit, offset },
+        meta: { total: matched.length, limit, offset },
       }),
     );
   },
@@ -223,44 +183,26 @@ router.get(
   async (req: Request, res: Response) => {
     const { dealId } = ListDealSnapshotsParams.parse(req.params);
     const q = ListDealSnapshotsQueryParams.parse(req.query);
-    await ensureDeal(dealId);
+    const catalystApp = initCatalystApp(req);
+    const deal = await createEnterpriseDealsRepo(catalystApp).getById(dealId);
+    if (!deal) throw notFound("Deal not found");
 
     const limit = clampLimit(q.limit, 50);
     const offset = Math.max(q.offset ?? 0, 0);
 
-    const conditions = [eq(dealSnapshots.dealId, dealId)];
-    if (q.since)
-      conditions.push(gte(dealSnapshots.snapshotAt, new Date(q.since)));
-    if (q.until)
-      conditions.push(lte(dealSnapshots.snapshotAt, new Date(q.until)));
-    const where = and(...conditions);
-
-    const rows = await db
-      .select({
-        id: dealSnapshots.id,
-        dealId: dealSnapshots.dealId,
-        reason: dealSnapshots.reason,
-        triggerEvent: dealSnapshots.triggerEvent,
-        healthStatus: dealSnapshots.healthStatus,
-        salesStageId: dealSnapshots.salesStageId,
-        salesStage: dealSnapshots.salesStage,
-        calculatedTcv: dealSnapshots.calculatedTcv,
-        normalizedTcv: dealSnapshots.normalizedTcv,
-        createdBy: dealSnapshots.createdBy,
-        snapshotAt: dealSnapshots.snapshotAt,
+    const allForDeal = await createDealSnapshotsRepo(catalystApp).listByDealId(dealId);
+    const sinceTime = q.since ? new Date(q.since).getTime() : null;
+    const untilTime = q.until ? new Date(q.until).getTime() : null;
+    const matched = allForDeal
+      .filter((r) => {
+        if (sinceTime != null && r.snapshotAt.getTime() < sinceTime) return false;
+        if (untilTime != null && r.snapshotAt.getTime() > untilTime) return false;
+        return true;
       })
-      .from(dealSnapshots)
-      .where(where)
-      .orderBy(desc(dealSnapshots.snapshotAt))
-      .limit(limit)
-      .offset(offset);
+      // listByDealId returns oldest-first; the original query orders newest-first.
+      .sort((a, b) => b.snapshotAt.getTime() - a.snapshotAt.getTime());
 
-    const totalRows = await db
-      .select({ id: dealSnapshots.id })
-      .from(dealSnapshots)
-      .where(where);
-
-    const data = rows.map((r) => ({
+    const data = matched.slice(offset, offset + limit).map((r) => ({
       id: r.id,
       dealId: r.dealId,
       reason: r.reason,
@@ -277,7 +219,7 @@ router.get(
     res.json(
       ListDealSnapshotsResponse.parse({
         data,
-        meta: { total: totalRows.length, limit, offset },
+        meta: { total: matched.length, limit, offset },
       }),
     );
   },
@@ -285,14 +227,10 @@ router.get(
 
 router.get("/snapshots/:snapshotId", async (req: Request, res: Response) => {
   const { snapshotId } = GetDealSnapshotParams.parse(req.params);
+  const catalystApp = initCatalystApp(req);
 
-  const rows = await db
-    .select()
-    .from(dealSnapshots)
-    .where(eq(dealSnapshots.id, snapshotId))
-    .limit(1);
-  if (rows.length === 0) throw notFound("Snapshot not found");
-  const r = rows[0];
+  const r = await createDealSnapshotsRepo(catalystApp).getById(snapshotId);
+  if (!r) throw notFound("Snapshot not found");
 
   res.json(
     GetDealSnapshotResponse.parse({

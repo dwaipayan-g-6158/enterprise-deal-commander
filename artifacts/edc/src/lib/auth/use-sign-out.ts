@@ -1,7 +1,7 @@
 import { useCallback } from "react";
-import { useLocation } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
-import { useLogout } from "@workspace/api-client-react";
+import { catalystSignOut } from "./catalyst-client";
+import { resetAuthBounceGuard } from "./catalyst-auth-bounce";
 import { clearPersistedRole } from "./role-context";
 
 /**
@@ -13,24 +13,29 @@ import { clearPersistedRole } from "./role-context";
  * would also leave its role in localStorage. The next person to sign in on
  * that machine would inherit both until /auth/me resolved. Anything that
  * ends a session must go through here.
+ *
+ * Post-Catalyst-migration: there is no server logout route anymore (see
+ * routes/auth.ts's docstring) — `catalystSignOut()` calls the Web SDK's own
+ * `auth.signOut()` directly, which is what actually ends the Catalyst
+ * session, and it does its own navigation to /login. The local cache
+ * teardown below still needs to happen BEFORE that navigation fires, same
+ * as before.
  */
 export function useSignOut() {
-  const logout = useLogout();
   const queryClient = useQueryClient();
-  const [, setLocation] = useLocation();
 
   return useCallback(async () => {
-    try {
-      await logout.mutateAsync();
-    } catch (e) {
-      // Deliberate change from the old layout.tsx behavior: a failed logout
-      // call used to abort the whole teardown, stranding the user signed in
-      // with a live cache. Log it and clear locally regardless.
-      console.error(e);
-    }
-
     clearPersistedRole();
     queryClient.clear();
+
+    // CatalystAuthBounce fires at most once per path kind per tab so the SDK's
+    // sign-IN marker can't trap the browser in a redirect loop. Sign-out goes
+    // through that same component but is always a deliberate click, never a
+    // loop, so give it a fresh one-shot — otherwise the second sign-out in a
+    // tab finds the guard already spent, skips the reload that actually
+    // performs the logout, and leaves the user on the 404 route still signed
+    // in. See resetAuthBounceGuard's docstring.
+    resetAuthBounceGuard("accounts");
 
     if (typeof caches !== "undefined") {
       try {
@@ -48,6 +53,6 @@ export function useSignOut() {
       }
     }
 
-    setLocation("/login");
-  }, [logout, queryClient, setLocation]);
+    await catalystSignOut();
+  }, [queryClient]);
 }

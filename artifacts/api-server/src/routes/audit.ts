@@ -1,11 +1,11 @@
 import { Router, type IRouter, type Request, type Response } from "express";
-import { and, desc, eq, gt, gte, lte } from "drizzle-orm";
 import {
-  db,
-  enterpriseDeals,
-  dealAuditLog,
-  dealReviewMarkers,
-} from "@workspace/db";
+  initCatalystApp,
+  createEnterpriseDealsRepo,
+  createDealAuditLogRepo,
+  createDealReviewMarkersRepo,
+  type CatalystApp,
+} from "@workspace/db/catalyst";
 import {
   ListAuditParams,
   ListAuditQueryParams,
@@ -21,56 +21,47 @@ import {
 } from "@workspace/api-zod";
 import { getActor } from "../lib/auth";
 import { badRequest, notFound } from "../lib/http";
-import { toISO, getDealGates, serializeDeal } from "../lib/intelligence";
+import { toISO, getDealGates, serializeDeal } from "../lib/catalyst/intelligence";
 
 // Auth + write-role enforcement is applied centrally in routes/index.ts.
 const router: IRouter = Router();
 
-async function ensureDeal(dealId: string) {
-  const rows = await db
-    .select({ id: enterpriseDeals.id })
-    .from(enterpriseDeals)
-    .where(eq(enterpriseDeals.id, dealId))
-    .limit(1);
-  if (rows.length === 0) throw notFound("Deal not found");
+async function ensureDeal(catalystApp: CatalystApp, dealId: string) {
+  const deal = await createEnterpriseDealsRepo(catalystApp).getById(dealId);
+  if (!deal) throw notFound("Deal not found");
 }
 
 router.get("/deals/:dealId/audit", async (req: Request, res: Response) => {
   const { dealId } = ListAuditParams.parse(req.params);
   const q = ListAuditQueryParams.parse(req.query);
-  await ensureDeal(dealId);
+  const catalystApp = initCatalystApp(req);
+  await ensureDeal(catalystApp, dealId);
 
   const limit = Math.min(Math.max(q.limit ?? 50, 1), 200);
   const offset = Math.max(q.offset ?? 0, 0);
 
-  const conditions = [eq(dealAuditLog.dealId, dealId)];
-  if (q.entity_type) conditions.push(eq(dealAuditLog.entityType, q.entity_type));
-  if (q.field_changed)
-    conditions.push(eq(dealAuditLog.fieldChanged, q.field_changed));
-  if (q.since) conditions.push(gte(dealAuditLog.changedAt, new Date(q.since)));
-  if (q.until) conditions.push(lte(dealAuditLog.changedAt, new Date(q.until)));
+  // Already sorted desc(changedAt) by the repo.
+  let rows = await createDealAuditLogRepo(catalystApp).list(dealId);
+  if (q.entity_type) rows = rows.filter((r) => r.entityType === q.entity_type);
+  if (q.field_changed) rows = rows.filter((r) => r.fieldChanged === q.field_changed);
+  if (q.since) {
+    const since = new Date(q.since);
+    rows = rows.filter((r) => r.changedAt >= since);
+  }
+  if (q.until) {
+    const until = new Date(q.until);
+    rows = rows.filter((r) => r.changedAt <= until);
+  }
 
-  const where = and(...conditions);
+  const total = rows.length;
+  const page = rows.slice(offset, offset + limit);
 
-  const rows = await db
-    .select()
-    .from(dealAuditLog)
-    .where(where)
-    .orderBy(desc(dealAuditLog.changedAt))
-    .limit(limit)
-    .offset(offset);
-
-  const totalRows = await db
-    .select({ id: dealAuditLog.id })
-    .from(dealAuditLog)
-    .where(where);
-
-  const data = rows.map((r) => ({
+  const data = page.map((r) => ({
     id: r.id,
-    entityType: r.entityType,
     // Exposed so the client can tell rows of one batch apart: a batch gate
     // save writes every row with fieldChanged="is_completed" and one shared
     // changed_at, so entityId (the gate code) is the only discriminator.
+    entityType: r.entityType,
     entityId: r.entityId,
     fieldChanged: r.fieldChanged,
     oldValue: r.oldValue,
@@ -82,7 +73,7 @@ router.get("/deals/:dealId/audit", async (req: Request, res: Response) => {
   res.json(
     ListAuditResponse.parse({
       data,
-      meta: { total: totalRows.length, limit, offset },
+      meta: { total, limit, offset },
     }),
   );
 });
@@ -90,17 +81,15 @@ router.get("/deals/:dealId/audit", async (req: Request, res: Response) => {
 router.get("/deals/:dealId/changes", async (req: Request, res: Response) => {
   const { dealId } = ListChangesParams.parse(req.params);
   const q = ListChangesQueryParams.parse(req.query);
-  await ensureDeal(dealId);
+  const catalystApp = initCatalystApp(req);
+  await ensureDeal(catalystApp, dealId);
 
-  const conditions = [eq(dealAuditLog.dealId, dealId)];
-  if (q.since) conditions.push(gt(dealAuditLog.changedAt, new Date(q.since)));
-
-  const rows = await db
-    .select()
-    .from(dealAuditLog)
-    .where(and(...conditions))
-    .orderBy(desc(dealAuditLog.changedAt))
-    .limit(200);
+  let rows = await createDealAuditLogRepo(catalystApp).list(dealId);
+  if (q.since) {
+    const since = new Date(q.since);
+    rows = rows.filter((r) => r.changedAt > since);
+  }
+  rows = rows.slice(0, 200);
 
   const data = rows.map((r) => {
     const from = r.oldValue ? ` from "${r.oldValue}"` : "";
@@ -119,25 +108,20 @@ router.post(
   "/deals/:dealId/review-marker",
   async (req: Request, res: Response) => {
     const { dealId } = SetReviewMarkerParams.parse(req.params);
-    await ensureDeal(dealId);
+    const catalystApp = initCatalystApp(req);
+    await ensureDeal(catalystApp, dealId);
     const actor = getActor(req);
-    const now = new Date();
 
-    const inserted = await db
-      .insert(dealReviewMarkers)
-      .values({ dealId, lastReviewedAt: now, reviewedBy: actor.displayName })
-      .onConflictDoUpdate({
-        target: dealReviewMarkers.dealId,
-        set: { lastReviewedAt: now, reviewedBy: actor.displayName },
-      })
-      .returning();
+    const { lastReviewedAt, reviewedBy } = await createDealReviewMarkersRepo(catalystApp).upsert(
+      dealId,
+      actor.displayName,
+    );
 
-    const row = inserted[0];
     res.json(
       SetReviewMarkerResponse.parse({
         data: {
-          lastReviewedAt: toISO(row.lastReviewedAt) ?? now.toISOString(),
-          reviewedBy: row.reviewedBy,
+          lastReviewedAt: toISO(lastReviewedAt) ?? lastReviewedAt.toISOString(),
+          reviewedBy,
         },
       }),
     );
@@ -147,20 +131,18 @@ router.post(
 router.get("/deals/:dealId/snapshot", async (req: Request, res: Response) => {
   const { dealId } = GetSnapshotParams.parse(req.params);
   const q = GetSnapshotQueryParams.parse(req.query);
-  await ensureDeal(dealId);
+  const catalystApp = initCatalystApp(req);
+  await ensureDeal(catalystApp, dealId);
 
   const asOf = new Date(q.date);
   if (Number.isNaN(asOf.getTime())) throw badRequest("Invalid date");
 
-  const deal = await serializeDeal(dealId);
+  const deal = await serializeDeal(catalystApp, dealId);
   if (!deal) throw notFound("Deal not found");
-  const gates = await getDealGates(dealId);
+  const gates = await getDealGates(catalystApp, dealId);
 
-  const laterEntries = await db
-    .select()
-    .from(dealAuditLog)
-    .where(and(eq(dealAuditLog.dealId, dealId), gt(dealAuditLog.changedAt, asOf)))
-    .orderBy(desc(dealAuditLog.changedAt));
+  const allEntries = await createDealAuditLogRepo(catalystApp).list(dealId); // desc(changedAt)
+  const laterEntries = allEntries.filter((e) => e.changedAt > asOf);
 
   const dealRecord: Record<string, unknown> = { ...deal };
   const gateState = new Map(gates.map((g) => [g.gateCode, g.isCompleted]));

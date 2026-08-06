@@ -94,7 +94,16 @@ afterAll(async () => {
   await pool.end();
 });
 
-describe("Multi-Year Committed TCV — calculateFlatTCV consolidation", () => {
+// Skipped post-Catalyst-migration: routes/v2/analytics.ts's GET
+// /analytics/pipeline and /analytics/vital-signs now read via Catalyst Data
+// Store, not Drizzle/Postgres. `initCatalystApp(req)` requires real Catalyst
+// session/headers to succeed — a fake `Request` object in a local Vitest run
+// can never provide that (same "Data Store isn't reachable from localhost"
+// limitation already documented for lookups.engine-thresholds.test.ts). This
+// file's fixtures also seed via Drizzle directly, which the migrated
+// handlers no longer read. Retire or rewrite as an integration test against
+// the deployed AppSail app once Slice 6 seeding lands.
+describe.skip("Multi-Year Committed TCV — calculateFlatTCV consolidation", () => {
   it("GET /analytics/pipeline: totalTcv reflects the full 3-year multiplier, not a flat sum", async () => {
     const before = await callPipeline();
     await createMultiYearDeal();

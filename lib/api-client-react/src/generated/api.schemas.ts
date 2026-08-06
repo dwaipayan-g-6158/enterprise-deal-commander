@@ -35,11 +35,6 @@ export interface StageGuardrailError {
   error: StageGuardrailErrorError;
 }
 
-export interface LoginInput {
-  email: string;
-  password: string;
-}
-
 export type AuthUserRole = typeof AuthUserRole[keyof typeof AuthUserRole];
 
 
@@ -103,8 +98,6 @@ export interface CreateUserInput {
      * @maxLength 255
      */
   display_name: string;
-  /** @minLength 12 */
-  password: string;
   role?: CreateUserInputRole;
 }
 
@@ -124,11 +117,6 @@ export interface UpdateUserInput {
   display_name?: string;
   role?: UpdateUserInputRole;
   is_active?: boolean;
-}
-
-export interface ResetPasswordInput {
-  /** @minLength 12 */
-  password: string;
 }
 
 export type DealHealthStatus = typeof DealHealthStatus[keyof typeof DealHealthStatus];

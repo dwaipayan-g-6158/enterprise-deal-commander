@@ -1,13 +1,21 @@
 import { desc, eq } from "drizzle-orm";
 import { db, dealSnapshots } from "@workspace/db";
+import { type CatalystApp, createDealSnapshotsRepo } from "@workspace/db/catalyst";
 import { dealEvents, type DealEventType } from "../events";
 import {
   serializeDeal,
   getDealGates,
   assembleDealIntelligence,
 } from "../intelligence";
+import {
+  serializeDeal as serializeDealCatalyst,
+  getDealGates as getDealGatesCatalyst,
+  assembleDealIntelligence as assembleDealIntelligenceCatalyst,
+} from "../catalyst/intelligence";
 import { getPlaybookSignals } from "../playbook-signals";
+import { getPlaybookSignals as getPlaybookSignalsCatalyst } from "../catalyst/playbook-signals";
 import { getLatestMeddpiccScore } from "../meddpicc";
+import { getLatestMeddpiccScore as getLatestMeddpiccScoreCatalyst } from "../catalyst/meddpicc";
 import { logger } from "../logger";
 
 /**
@@ -208,6 +216,82 @@ export async function captureSnapshot(
   return true;
 }
 
+/**
+ * Catalyst-backed capture, used only by the event-driven subscriber below.
+ * `captureSnapshot` above stays Drizzle-backed and untouched — it also serves
+ * `snapshotAllActiveDeals`'s periodic job (index.ts's hourly timer), which
+ * has no per-request `req` to derive a `catalystApp` from at all (Slice 5 /
+ * Job Scheduling territory, same as `portfolio-rollups.ts`'s background
+ * refresh — not fixable by a data-layer change alone). The event-driven path
+ * never sets `skipIfUnchanged` (see the module docstring: "event-driven
+ * captures always write"), so this omits the fingerprint-comparison branch
+ * `captureSnapshot` needs for its periodic caller. The debounce map is
+ * shared with `captureSnapshot` — same intent (avoid a burst of near-
+ * simultaneous events over-snapshotting one deal) regardless of which
+ * backend actually ends up writing.
+ */
+export async function captureSnapshotCatalyst(
+  catalystApp: CatalystApp,
+  opts: Omit<CaptureSnapshotOptions, "skipIfUnchanged">,
+): Promise<boolean> {
+  const { dealId, reason, triggerEvent, actor, force } = opts;
+  const now = Date.now();
+  if (!force) {
+    const last = lastSnapshotAt.get(dealId);
+    if (last !== undefined && now - last < DEBOUNCE_MS) return false;
+  }
+  lastSnapshotAt.set(dealId, now);
+
+  const deal = await serializeDealCatalyst(catalystApp, dealId);
+  if (!deal) {
+    lastSnapshotAt.delete(dealId);
+    return false;
+  }
+  const gates = await getDealGatesCatalyst(catalystApp, dealId);
+  const intel = await assembleDealIntelligenceCatalyst(catalystApp, dealId);
+  const playbook = await getPlaybookSignalsCatalyst(catalystApp, dealId);
+  const meddpicc = await getLatestMeddpiccScoreCatalyst(catalystApp, dealId);
+
+  const governance = intel
+    ? {
+        healthStatus: intel.governance.healthStatus,
+        alerts: intel.governance.alerts.map((a) => ({
+          code: a.code,
+          severity: a.severity,
+        })),
+      }
+    : { healthStatus: deal.healthStatus, alerts: [] as unknown[] };
+
+  const payload = {
+    deal,
+    gates,
+    governance,
+    playbook: {
+      adherencePct: playbook.adherencePct,
+      progressPct: playbook.progressPct,
+      criticalGaps: playbook.criticalGaps,
+      overdueCount: playbook.overdueCount,
+    },
+    meddpicc: meddpicc
+      ? { overallPct: meddpicc.overallPct, stagePct: meddpicc.stagePct, ragStatus: meddpicc.ragStatus }
+      : null,
+  };
+
+  await createDealSnapshotsRepo(catalystApp).create({
+    dealId,
+    reason,
+    triggerEvent: triggerEvent ?? null,
+    healthStatus: deal.healthStatus,
+    salesStageId: deal.salesStageId,
+    salesStage: deal.salesStage,
+    calculatedTcv: deal.calculatedTCV ?? 0,
+    normalizedTcv: deal.normalizedTCV ?? 0,
+    payload,
+    createdBy: actor,
+  });
+  return true;
+}
+
 /** Events that never warrant a new snapshot: the deal was removed, or shelved
  *  — a closed deal's state is frozen, so archiving it teaches us nothing new. */
 export function shouldSkipSnapshot(eventType: DealEventType): boolean {
@@ -217,7 +301,11 @@ export function shouldSkipSnapshot(eventType: DealEventType): boolean {
 export function registerSnapshotService(): () => void {
   return dealEvents.on(async (event) => {
     if (shouldSkipSnapshot(event.type)) return;
-    await captureSnapshot({
+    // Absent if this event came from an emitter that hasn't migrated off
+    // Drizzle yet — no-op rather than throw, per the event bus's "never
+    // break the request path" contract (see lib/events.ts).
+    if (!event.catalystApp) return;
+    await captureSnapshotCatalyst(event.catalystApp as CatalystApp, {
       dealId: event.dealId,
       reason: `event:${event.type}`,
       triggerEvent: event.type,

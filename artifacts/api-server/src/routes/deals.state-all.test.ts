@@ -68,7 +68,16 @@ afterAll(async () => {
   await pool.end();
 });
 
-describe("GET /deals?state=... — all four predicates", () => {
+// Skipped post-Catalyst-migration: routes/deals.ts now reads enterprise_deals
+// via Catalyst Data Store, not Drizzle/Postgres. `initCatalystApp(req)`
+// requires real Catalyst session/headers to succeed — a fake `Request` object
+// in a local Vitest run can never provide that (same "Data Store isn't
+// reachable from localhost" limitation already documented for
+// lookups.engine-thresholds.test.ts and the sibling Customer-Insight-Engine
+// project). This file's fixtures also seed via Drizzle directly, which the
+// migrated handler no longer reads. Retire or rewrite as an integration test
+// against the deployed AppSail app once Slice 6 seeding lands.
+describe.skip("GET /deals?state=... — all four predicates", () => {
   it("includes active and archived deals, excludes deleted, for state=all", async () => {
     const activeId = await createDeal("active", {});
     const archivedId = await createDeal("archived", { archivedAt: new Date() });

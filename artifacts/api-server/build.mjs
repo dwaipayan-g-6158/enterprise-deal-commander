@@ -33,6 +33,15 @@ async function buildAll() {
     // - use path traversal to read files (e.g. @google-cloud/secret-manager loads sibling .proto files)
     external: [
       "*.node",
+      // zcatalyst-sdk-node vendors a pre-minified third-party APM agent that
+      // esbuild's bundler mis-transforms (a comma-declaration list loses a
+      // regex binding by the time it's referenced a few statements later,
+      // producing a runtime ReferenceError on first require — verified
+      // independently, matching the sibling Customer-Insight-Engine
+      // project's identical fix). Left external and shipped as real
+      // node_modules by scripts/src/build-appsail.ts's post-build npm
+      // install instead of trying to patch obfuscated vendor code.
+      "zcatalyst-sdk-node",
       "sharp",
       "better-sqlite3",
       "sqlite3",

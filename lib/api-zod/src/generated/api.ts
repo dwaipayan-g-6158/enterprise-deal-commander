@@ -17,27 +17,6 @@ export const HealthCheckResponse = zod.object({
 
 
 /**
- * @summary Authenticate the commander
- */
-export const LoginBody = zod.object({
-  "email": zod.string(),
-  "password": zod.string()
-})
-
-export const LoginResponse = zod.object({
-  "message": zod.string()
-})
-
-
-/**
- * @summary Log out
- */
-export const LogoutResponse = zod.object({
-  "message": zod.string()
-})
-
-
-/**
  * @summary Current commander
  */
 export const GetMeResponse = zod.object({
@@ -73,19 +52,16 @@ export const ListUsersResponse = zod.object({
 
 
 /**
- * @summary Create a user (admin only)
+ * @summary Invite a user via Catalyst embedded auth (admin only)
  */
 
 export const createUserBodyDisplayNameMax = 255;
-
-export const createUserBodyPasswordMin = 12;
 
 
 
 export const CreateUserBody = zod.object({
   "email": zod.string().min(1),
   "display_name": zod.string().min(1).max(createUserBodyDisplayNameMax),
-  "password": zod.string().min(createUserBodyPasswordMin),
   "role": zod.enum(['admin', 'reader']).optional()
 })
 
@@ -128,26 +104,6 @@ export const DeleteUserParams = zod.object({
 })
 
 export const DeleteUserResponse = zod.object({
-  "message": zod.string()
-})
-
-
-/**
- * @summary Reset a user's password (admin only; also usable on self)
- */
-export const ResetUserPasswordParams = zod.object({
-  "id": zod.coerce.string()
-})
-
-export const resetUserPasswordBodyPasswordMin = 12;
-
-
-
-export const ResetUserPasswordBody = zod.object({
-  "password": zod.string().min(resetUserPasswordBodyPasswordMin)
-})
-
-export const ResetUserPasswordResponse = zod.object({
   "message": zod.string()
 })
 

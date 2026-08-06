@@ -91,7 +91,19 @@ afterAll(async () => {
   await pool.end();
 });
 
-describe("POST /users", () => {
+// Skipped post-Catalyst-migration (Slice 4): routes/users.ts now reads/
+// writes `commanders` via Catalyst Data Store, not Drizzle/Postgres, and
+// POST /users also calls Catalyst's own `userManagement().registerUser()` to
+// invite the account. `initCatalystApp`/`initCatalystAdminApp` need real
+// Catalyst session/headers that only the deployed AppSail runtime can
+// supply — the fake `Request` objects this file's `call()` helper builds
+// can't provide them, same "Data Store isn't reachable from localhost"
+// limitation as every other Catalyst-backed route test in this migration.
+// The reader-vs-admin gate itself (requireWriteRole, tested exhaustively in
+// routes/index.rbac.test.ts) is unaffected. Retire or rewrite as an
+// integration test against the deployed AppSail app once Slice 6 seeding
+// lands.
+describe.skip("POST /users", () => {
   it("creates a user, returns no passwordHash, and writes one settings_change_log row", async () => {
     const email = `create-test-${Date.now()}@example.com`;
     const { result, status } = await call<{ data: Record<string, unknown> }>(
@@ -146,7 +158,8 @@ describe("POST /users", () => {
   });
 });
 
-describe("PATCH /users/:id — self and last-admin guards", () => {
+// Skipped post-Catalyst-migration (Slice 4) — same reasoning as the describe block above.
+describe.skip("PATCH /users/:id — self and last-admin guards", () => {
   // The self-guard is checked AFTER the target-existence lookup (users.ts
   // fetches `target` by :id first), so these need a REAL commanders row —
   // ACTOR itself has no row, only a stand-in id, and would 404 before the
@@ -235,7 +248,8 @@ describe("PATCH /users/:id — self and last-admin guards", () => {
   });
 });
 
-describe("DELETE /users/:id", () => {
+// Skipped post-Catalyst-migration (Slice 4) — same reasoning as the describe block above.
+describe.skip("DELETE /users/:id", () => {
   it("refuses to let an admin delete themselves", async () => {
     const self = await createUser({ role: "admin" });
     const selfActor = { id: self.id, username: self.email, displayName: self.displayName, role: "admin" };
@@ -297,30 +311,7 @@ describe("DELETE /users/:id", () => {
   });
 });
 
-describe("POST /users/:id/password", () => {
-  it("resets a password without ever writing the hash or plaintext into the audit log", async () => {
-    const user = await createUser();
-    const { status } = await call(
-      getHandler("post", "/users/:id/password"),
-      { params: { id: user.id }, body: { password: "brand-new-password-12" } },
-      ACTOR,
-    );
-    expect(status).toBe(200);
-
-    const logs = await db.select().from(settingsChangeLog).where(eq(settingsChangeLog.entityId, user.id));
-    const passwordLog = logs.find((l) => l.newValue && JSON.stringify(l.newValue).includes("passwordChanged"));
-    expect(passwordLog).toBeDefined();
-    const serialized = JSON.stringify(logs);
-    expect(serialized).not.toContain("brand-new-password-12");
-  });
-
-  it("rejects a password shorter than 12 characters", async () => {
-    const user = await createUser();
-    const { thrown } = await call(
-      getHandler("post", "/users/:id/password"),
-      { params: { id: user.id }, body: { password: "short" } },
-      ACTOR,
-    );
-    expect(thrown).toMatchObject({ status: 400 });
-  });
-});
+// POST /users/:id/password removed entirely (Slice 4): there is no
+// app-managed password anymore — Catalyst embedded auth owns sign-in
+// end to end, including its own "Forgot Password" flow. See routes/users.ts's
+// docstring.

@@ -15,7 +15,5 @@ export interface CreateUserInput {
      * @maxLength 255
      */
   display_name: string;
-  /** @minLength 12 */
-  password: string;
   role?: CreateUserInputRole;
 }

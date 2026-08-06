@@ -1,7 +1,10 @@
-import { and, eq } from "drizzle-orm";
-import { db, pipelineStages, playbooks } from "@workspace/db";
+import {
+  type CatalystApp,
+  createPipelineStagesRepo,
+  createPlaybooksRepo,
+} from "@workspace/db/catalyst";
 import { dealEvents, emitDealEvent } from "../events";
-import { startPlaybookForDeal, supersedeStalePlaybookAssignments } from "../playbook-signals";
+import { startPlaybookForDeal, supersedeStalePlaybookAssignments } from "../catalyst/playbook-signals";
 import { logger } from "../logger";
 
 /**
@@ -15,36 +18,30 @@ import { logger } from "../logger";
  * to auto-assign — so a deal that advances with steps still open stops
  * accruing overdue/adherence penalties against a playbook it has moved past.
  */
-async function stageInfo(stageId: number): Promise<{ name: string; sortOrder: number } | null> {
-  const rows = await db
-    .select({ name: pipelineStages.stageName, sortOrder: pipelineStages.sortOrder })
-    .from(pipelineStages)
-    .where(eq(pipelineStages.id, stageId))
-    .limit(1);
-  return rows[0] ?? null;
-}
-
 export function registerPlaybookEngine(): () => void {
   return dealEvents.on(async (event) => {
     if (event.type !== "deal.stage_changed") return;
-    const stage = await stageInfo(event.toStageId);
+    // Absent if this event came from an emitter that hasn't migrated off
+    // Drizzle yet — no-op rather than throw, per the event bus's "never
+    // break the request path" contract (see lib/events.ts).
+    if (!event.catalystApp) return;
+    const catalystApp = event.catalystApp as CatalystApp;
+
+    const stages = await createPipelineStagesRepo(catalystApp).listAll();
+    const stage = stages.find((s) => s.id === event.toStageId);
     if (!stage) return;
 
-    await supersedeStalePlaybookAssignments(event.dealId, stage.sortOrder);
+    await supersedeStalePlaybookAssignments(catalystApp, event.dealId, stage.sortOrder);
 
-    const candidates = await db
-      .select()
-      .from(playbooks)
-      .where(and(eq(playbooks.applicableStage, stage.name), eq(playbooks.isActive, true)))
-      .limit(1);
-    const playbook = candidates[0];
+    const activePlaybooks = await createPlaybooksRepo(catalystApp).listActive();
+    const playbook = activePlaybooks.find((p) => p.applicableStage === stage.stageName);
     if (!playbook) return;
 
-    const { assignment, created } = await startPlaybookForDeal(event.dealId, playbook.id);
+    const { assignment, created } = await startPlaybookForDeal(catalystApp, event.dealId, playbook.id);
     if (!created) return;
 
     logger.info(
-      { dealId: event.dealId, playbookId: playbook.id, stage: stage.name },
+      { dealId: event.dealId, playbookId: playbook.id, stage: stage.stageName },
       "Playbook auto-assigned on stage change",
     );
     emitDealEvent("playbook.assigned", {
@@ -52,6 +49,7 @@ export function registerPlaybookEngine(): () => void {
       actor: event.actor,
       assignmentId: assignment.id,
       playbookId: playbook.id,
+      catalystApp,
     });
   });
 }

@@ -1,5 +1,3 @@
-import type { enterpriseDeals } from "@workspace/db";
-
 // Deal fields a snooze can watch for change, keyed by their DB column name
 // (snake_case, matching the string the client sends and the disposition
 // stores verbatim). Shared between the write path (dispositions.ts, which
@@ -15,7 +13,19 @@ export const SNOOZE_WATCHABLE_FIELDS = [
 
 export type SnoozeWatchableField = (typeof SNOOZE_WATCHABLE_FIELDS)[number];
 
-type DealRow = typeof enterpriseDeals.$inferSelect;
+// Deliberately NOT `typeof enterpriseDeals.$inferSelect` (the Drizzle type) —
+// this module is shared by Catalyst-backed callers (lib/intelligence.ts,
+// routes/dispositions.ts) whose deal object comes from
+// `@workspace/db/catalyst`'s `EnterpriseDeal`, not a Drizzle row. Only the 5
+// watched fields are actually read, so a minimal structural type avoids
+// coupling to either data-access layer's full row shape.
+interface DealRow {
+  salesStageId: number;
+  winProbabilityPct: number | null;
+  expectedCloseDate: string | null;
+  productRevenue: string;
+  servicesRevenue: string;
+}
 
 const FIELD_ACCESSORS: Record<SnoozeWatchableField, (deal: DealRow) => string> = {
   sales_stage_id: (d) => String(d.salesStageId),

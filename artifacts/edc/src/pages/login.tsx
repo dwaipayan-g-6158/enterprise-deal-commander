@@ -1,68 +1,76 @@
-import { useState } from "react";
-import { useLocation } from "wouter";
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import * as z from "zod";
-import { useLogin } from "@workspace/api-client-react";
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
-import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
+import { useEffect, useRef } from "react";
 import { EdcLogoMark } from "@/components/edc-logo-mark";
+import { renderSignInForm } from "@/lib/auth/catalyst-client";
+import { attachCatalystIframeAutosize } from "@/lib/auth/catalyst-iframe-autosize";
 
-/**
- * The credential maps to `commanders.username`, matched case-insensitively —
- * an address works because usernames look like one, not because the server
- * checks a mail field. "Email" alone would be a promise the API doesn't keep.
- */
-const CREDENTIAL_LABEL = "Email or username";
-
-const loginSchema = z.object({
-  email: z.string().min(1, `${CREDENTIAL_LABEL} is required`),
-  password: z.string().min(1, "Password is required"),
-});
+const LOGIN_SLOT_ID = "catalyst-login-container";
+// Reserves space for Catalyst's typical email-step form so the card doesn't
+// visibly jump from a short box to the real content on first paint.
+const IFRAME_MIN_HEIGHT = 340;
+// How often to check whether the embedded sign-in completed. There is no
+// server callback route for Catalyst embedded auth — this app treats
+// GET /auth/me as the sole source of truth, same as everywhere else
+// (use-auth-guard.ts), so it's polled here too rather than relying on the
+// Web SDK's own client-side session helpers.
+const AUTH_POLL_MS = 3000;
 
 /**
  * Sign-in — the first screen anyone sees, on a phone as much as a laptop.
  *
- * It kept its own dialect long after the rest of the app stopped speaking it:
- * monospace inputs, `IDENTIFICATION` and `PASSCODE` in tracked capitals,
- * "Initialize Session" on the button. A control should say exactly what
- * happens when it is used, and this one now does.
+ * Post-Catalyst-migration: this used to be a hand-rolled email/password form
+ * posting to /auth/login. Catalyst's embedded Web SDK now renders its own
+ * sign-in iframe into the slot below (mounted shortly after first paint —
+ * the small delay matches the sibling Customer-Insight-Engine project's
+ * reference implementation, giving the slot time to exist in the DOM); a
+ * poll against /auth/me detects a completed sign-in and does a FULL page
+ * navigation (not client-side routing) to "/", so every auth-dependent hook
+ * re-runs its check fresh on the new page load.
  *
- * The mechanical work matters as much as the words. `100dvh` rather than
- * `100vh` so iOS's collapsing toolbar doesn't push the card under the fold;
- * safe-area insets because the installed app declares a translucent status bar
- * and would otherwise draw the wordmark under the clock; 48px targets, the
- * floor the mobile shell holds everything else to.
- *
- * The lockup above the card stays as-is. A wordmark is allowed to be
- * uppercase — it's a logotype, not a label.
+ * The iframe IS auto-resized (catalyst-iframe-autosize.ts) — the SDK hands
+ * back a fixed ~150px frame that clips Zoho's form behind an internal
+ * scrollbar. The sibling project's other polish (theme injection, error-copy
+ * rewriting) is still deliberately not ported: this project has CSS
+ * Customization disabled in the Catalyst console, so there is no stylesheet to
+ * inject.
  */
 export default function Login() {
-  const [, setLocation] = useLocation();
-  const [error, setError] = useState("");
-  const login = useLogin();
+  const slotRef = useRef<HTMLDivElement>(null);
 
-  const form = useForm<z.infer<typeof loginSchema>>({
-    resolver: zodResolver(loginSchema),
-    defaultValues: { email: "", password: "" },
-  });
+  useEffect(() => {
+    const t = setTimeout(() => {
+      void renderSignInForm(LOGIN_SLOT_ID);
+    }, 50);
+    return () => clearTimeout(t);
+  }, []);
 
-  const onSubmit = async (data: z.infer<typeof loginSchema>) => {
-    setError("");
-    try {
-      await login.mutateAsync({ data });
-      setLocation("/");
-    } catch (err: any) {
-      setError(err?.error?.message || "That didn't match an account. Check the spelling and try again.");
-    }
-  };
+  useEffect(() => {
+    const slot = slotRef.current;
+    if (!slot) return;
+    return attachCatalystIframeAutosize(slot);
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    const interval = window.setInterval(async () => {
+      try {
+        const res = await fetch(`${window.location.origin}/api/v1/auth/me`, { credentials: "include" });
+        if (!cancelled && res.ok) {
+          window.clearInterval(interval);
+          window.location.assign(`${window.location.origin}/`);
+        }
+      } catch {
+        // Ignore — try again on the next tick.
+      }
+    }, AUTH_POLL_MS);
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, []);
 
   return (
     <div
       className="relative flex min-h-[100dvh] flex-col items-center justify-center overflow-hidden bg-background p-4"
-      // Inline rather than a utility: the four insets differ and Tailwind has
-      // no arbitrary value for a shorthand of four env() calls.
       style={{
         paddingTop: "max(1rem, env(safe-area-inset-top))",
         paddingBottom: "max(1rem, env(safe-area-inset-bottom))",
@@ -97,64 +105,18 @@ export default function Login() {
           <div className="border-t border-border/60" />
 
           <div className="p-6">
-            <Form {...form}>
-              <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-5">
-                {error && (
-                  <div
-                    role="alert"
-                    className="rounded-md border border-destructive/20 bg-destructive/10 p-3 text-sm text-destructive"
-                  >
-                    {error}
-                  </div>
-                )}
-                <FormField
-                  control={form.control}
-                  name="email"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>{CREDENTIAL_LABEL}</FormLabel>
-                      <FormControl>
-                        <Input
-                          placeholder="commander@edc.local"
-                          autoComplete="username"
-                          {...field}
-                          className="h-12 bg-background/50"
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="password"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Password</FormLabel>
-                      <FormControl>
-                        <Input
-                          type="password"
-                          autoComplete="current-password"
-                          {...field}
-                          className="h-12 bg-background/50"
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <Button type="submit" className="h-12 w-full text-sm font-semibold" disabled={login.isPending}>
-                  {login.isPending ? "Signing in…" : "Sign in"}
-                </Button>
-              </form>
-            </Form>
+            <div
+              ref={slotRef}
+              id={LOGIN_SLOT_ID}
+              className="relative w-full [&_iframe]:!w-full [&_iframe]:!border-0 [&_iframe]:!bg-transparent"
+              style={{ minHeight: IFRAME_MIN_HEIGHT }}
+            />
           </div>
         </div>
 
-        {/* One plain fact, once. The "EDC · CONFIDENTIAL / INTERNAL USE ONLY"
-            band this replaces was 10px tracked capitals saying nothing a
-            reader could act on. */}
-        <p className="mt-5 text-center text-xs text-muted-foreground">Sessions are audited.</p>
+        <p className="mt-5 text-center text-xs text-muted-foreground">
+          Access is invite-only. Contact an admin if you need an account. Sessions are audited.
+        </p>
       </div>
     </div>
   );

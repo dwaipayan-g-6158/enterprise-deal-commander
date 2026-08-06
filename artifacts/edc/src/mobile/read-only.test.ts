@@ -21,13 +21,16 @@ const SRC = resolve(import.meta.dirname, "..");
 const MOBILE = join(SRC, "mobile");
 
 /**
- * Verbs the mobile surface may perform. Session endpoints and the
- * dashboard-visit ping (which writes only the caller's own last-visited
- * timestamp, and is on the server's reader allowlist) are deliberate
- * exceptions — listing them here makes them a decision rather than an
- * oversight.
+ * Verbs the mobile surface may perform. The dashboard-visit ping (which
+ * writes only the caller's own last-visited timestamp, and is on the
+ * server's reader allowlist) is a deliberate exception — listing it here
+ * makes it a decision rather than an oversight. Sign-in/sign-out no longer
+ * go through the generated API client at all post-Catalyst-migration
+ * (Slice 4) — they're a Catalyst Web SDK widget call and a GET /auth/me
+ * poll, not useLogin/useLogout mutations — so there is nothing to allowlist
+ * for them anymore.
  */
-const ALLOWED_MUTATION_HOOKS = new Set(["useLogin", "useLogout", "useDashboardVisit"]);
+const ALLOWED_MUTATION_HOOKS = new Set(["useDashboardVisit"]);
 
 /** Query-shaped hooks and the query-key/options helpers that pair with them. */
 const READ_HOOK = /^use(Get|List|Search|Compare)/;

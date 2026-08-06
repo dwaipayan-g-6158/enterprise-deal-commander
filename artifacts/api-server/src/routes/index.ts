@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import healthRouter from "./health";
-import { authPublicRouter, authSessionRouter } from "./auth";
+import { authSessionRouter } from "./auth";
 import sharedRouter from "./shared";
 import usersRouter from "./users";
 import dealsRouter from "./deals";
@@ -28,7 +28,6 @@ const router: IRouter = Router();
  * ========================================================================= */
 router.use(healthRouter); // GET /api/healthz
 router.use(cacheInvalidationMiddleware); // GET is a no-op; only hooks res "finish"
-router.use("/v1", authPublicRouter); // POST /auth/login, POST /auth/logout
 router.use("/v1", sharedRouter); // GET /share/:token (Bat-Signal)
 
 /* ============================== THE GATE =================================
@@ -36,10 +35,12 @@ router.use("/v1", sharedRouter); // GET /share/:token (Bat-Signal)
  * with end:false). These two lines are the ENTIRE authorization surface of
  * the application:
  *
- *   requireAuth      401 unless the cookie maps to an ACTIVE commanders row.
- *                    Role is read from that row, not from the token, so a
- *                    demotion or deactivation takes effect on the next
- *                    request instead of in up to 7 days.
+ *   requireAuth      401 unless Catalyst resolves a signed-in user AND that
+ *                    user maps to an ACTIVE commanders row (see lib/auth.ts's
+ *                    resolveCommander). Role is read from that row on every
+ *                    request, never cached in the Catalyst session itself, so
+ *                    a demotion or deactivation takes effect on the very next
+ *                    request.
  *   requireWriteRole 403 unless admin / safe method / exact allowlist hit.
  *
  * Do not reorder. Do not add a router above this line without a review that
