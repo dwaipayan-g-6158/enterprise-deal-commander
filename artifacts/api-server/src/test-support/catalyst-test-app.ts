@@ -123,6 +123,25 @@ export class CatalystTestStore {
     return this.table(name).rows.map((r) => ({ ...r }));
   }
 
+  /**
+   * Set columns on already-stored rows, for fixture state no repository method
+   * exposes (a soft-deleted deal, say). Still column-checked, so a typo fails
+   * rather than quietly creating a field nothing reads. Returns rows touched.
+   */
+  patchRaw(name: string, match: (row: FakeRow) => boolean, values: Record<string, unknown>): number {
+    this.assertColumns(name, values);
+    let touched = 0;
+    for (const row of this.table(name).rows) {
+      if (!match(row)) continue;
+      touched++;
+      for (const [k, v] of Object.entries(values)) {
+        if (v === undefined || v === null) delete row[k];
+        else row[k] = String(v);
+      }
+    }
+    return touched;
+  }
+
   count(name: string): number {
     return this.table(name).rows.length;
   }

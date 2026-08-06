@@ -1,8 +1,16 @@
-import { describe, it, expect, afterAll } from "vitest";
+import { describe, it, expect, beforeAll, beforeEach } from "vitest";
 import type { Request, Response } from "express";
-import { inArray } from "drizzle-orm";
-import { db, pool, enterpriseDeals, pricingModels, servicesTiers, pipelineStages } from "@workspace/db";
+import { initCatalystApp, createEnterpriseDealsRepo, formatCatalystDateTime } from "@workspace/db/catalyst";
+import { installCatalystFake, type CatalystTestStore } from "../test-support/catalyst-test-app";
 import router from "./deals";
+
+// Coverage for GET /deals?state= — the four lifecycle predicates. Per the audit
+// that motivated the archive/restore work, zero tests touched three of them
+// before this file existed.
+//
+// Runs against the in-memory Data Store (test-support/catalyst-test-app.ts);
+// previously skipped on the mistaken grounds that a route test needs to reach
+// Catalyst.
 
 function getHandler(method: "get" | "post" | "put" | "delete", path: string) {
   const stack = (router as unknown as {
@@ -19,81 +27,87 @@ function getHandler(method: "get" | "post" | "put" | "delete", path: string) {
   return layer.route.stack[0].handle;
 }
 
-interface DealSummary { id: string }
-interface ListDealsResponseShape { data: DealSummary[] }
-
-async function callList(query: Record<string, string>): Promise<DealSummary[]> {
+async function callList(query: Record<string, string>): Promise<{ id: string }[]> {
   const handler = getHandler("get", "/deals");
-  let captured: ListDealsResponseShape | undefined;
-  const fakeReq = { query } as unknown as Request;
-  const fakeRes = { json: (body: ListDealsResponseShape) => { captured = body; } } as unknown as Response;
-  await handler(fakeReq, fakeRes);
+  let captured: { data: { id: string }[] } | undefined;
+  const req = { query, headers: {} } as unknown as Request;
+  const res = { json: (body: { data: { id: string }[] }) => { captured = body; } } as unknown as Response;
+  await handler(req, res);
   if (!captured) throw new Error("Handler did not call res.json");
   return captured.data;
 }
 
-const createdDealIds: string[] = [];
+let store: CatalystTestStore;
+let seq = 0;
 
-async function createDeal(tag: string, overrides: { archivedAt?: Date; deletedAt?: Date }): Promise<string> {
-  const [pricing] = await db.select().from(pricingModels).limit(1);
-  const [tier] = await db.select().from(servicesTiers).limit(1);
-  const stages = await db.select().from(pipelineStages);
-  const stage = stages.find((s) => s.stageName === "Closed-Lost");
-  if (!stage) throw new Error('Seed data missing pipeline stage "Closed-Lost"');
+const STAGE_ID = 1;
+const PRICING_ID = 1;
+const TIER_ID = 1;
 
-  const [deal] = await db
-    .insert(enterpriseDeals)
-    .values({
-      dealName: `State All Test ${tag} ${Date.now()}`,
-      accountName: `State All Acct ${tag} ${Date.now()}`,
-      accountManager: "AM",
-      technicalLead: "TL",
-      salesStageId: stage.id,
-      pricingModelId: pricing.id,
-      servicesTierId: tier.id,
-      productRevenue: "1000.00",
-      servicesRevenue: "0",
-      archivedAt: overrides.archivedAt ?? null,
-      deletedAt: overrides.deletedAt ?? null,
-    })
-    .returning({ id: enterpriseDeals.id });
-  createdDealIds.push(deal.id);
+function seedLookups(): void {
+  store.seedRaw("pipeline_stages", [
+    { id: String(STAGE_ID), stage_name: "Closed-Lost", stage_order: "7", is_active: "true" },
+  ]);
+  store.seedRaw("pricing_models", [
+    { id: String(PRICING_ID), model_name: "Annual Subscription", is_active: "true" },
+  ]);
+  store.seedRaw("services_tiers", [{ id: String(TIER_ID), tier_name: "None", is_active: "true" }]);
+}
+
+/**
+ * Created through the real repository so the row shape is real, then patched
+ * for the archived/deleted state, which no repo method exposes directly.
+ */
+async function createDeal(
+  tag: string,
+  state: { archivedAt?: Date; deletedAt?: Date },
+): Promise<string> {
+  const app = initCatalystApp({ headers: {} });
+  const deal = await createEnterpriseDealsRepo(app).create({
+    dealName: `State All Test ${tag} ${seq}`,
+    accountName: `State All Acct ${tag} ${seq++}`,
+    accountManager: "AM",
+    technicalLead: "TL",
+    salesStageId: STAGE_ID,
+    pricingModelId: PRICING_ID,
+    servicesTierId: TIER_ID,
+    productRevenue: "1000.00",
+    servicesRevenue: "0",
+    contractTermYears: 1,
+    dealCurrency: "USD",
+  });
+  const patch: Record<string, unknown> = {};
+  if (state.archivedAt) patch["archived_at"] = formatCatalystDateTime(state.archivedAt);
+  if (state.deletedAt) patch["deleted_at"] = formatCatalystDateTime(state.deletedAt);
+  if (Object.keys(patch).length > 0) {
+    const touched = store.patchRaw("enterprise_deals", (r) => r["id"] === deal.id, patch);
+    if (touched !== 1) throw new Error(`fixture patch touched ${touched} rows, expected 1`);
+  }
   return deal.id;
 }
 
-afterAll(async () => {
-  if (createdDealIds.length > 0) {
-    await db.delete(enterpriseDeals).where(inArray(enterpriseDeals.id, createdDealIds));
-  }
-  await pool.end();
+beforeAll(() => {
+  ({ store } = installCatalystFake());
 });
 
-// Skipped post-Catalyst-migration: routes/deals.ts now reads enterprise_deals
-// via Catalyst Data Store, not Drizzle/Postgres. `initCatalystApp(req)`
-// requires real Catalyst session/headers to succeed — a fake `Request` object
-// in a local Vitest run can never provide that (same "Data Store isn't
-// reachable from localhost" limitation already documented for
-// lookups.engine-thresholds.test.ts and the sibling Customer-Insight-Engine
-// project). This file's fixtures also seed via Drizzle directly, which the
-// migrated handler no longer reads. Retire or rewrite as an integration test
-// against the deployed AppSail app once Slice 6 seeding lands.
-describe.skip("GET /deals?state=... — all four predicates", () => {
+beforeEach(() => {
+  store.reset();
+  seq = 0;
+  seedLookups();
+});
+
+describe("GET /deals?state=... — all four predicates", () => {
   it("includes active and archived deals, excludes deleted, for state=all", async () => {
     const activeId = await createDeal("active", {});
     const archivedId = await createDeal("archived", { archivedAt: new Date() });
     const deletedId = await createDeal("deleted", { deletedAt: new Date() });
 
-    const rows = await callList({ state: "all", limit: "500" });
-    const ids = new Set(rows.map((r) => r.id));
-
+    const ids = new Set((await callList({ state: "all", limit: "500" })).map((r) => r.id));
     expect(ids.has(activeId)).toBe(true);
     expect(ids.has(archivedId)).toBe(true);
     expect(ids.has(deletedId)).toBe(false);
   });
 
-  // The remaining three predicates are pre-existing and unchanged by this
-  // plan — asserted here anyway because, per the audit that motivated this
-  // whole plan, zero tests touched them before now.
   it("state=active excludes both archived and deleted", async () => {
     const activeId = await createDeal("active2", {});
     const archivedId = await createDeal("archived2", { archivedAt: new Date() });
