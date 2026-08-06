@@ -1,7 +1,7 @@
-import { describe, it, expect, afterAll } from "vitest";
+import { describe, it, expect, beforeAll, beforeEach } from "vitest";
 import type { Request, Response } from "express";
-import { inArray } from "drizzle-orm";
-import { db, pool, enterpriseDeals, pricingModels, servicesTiers, pipelineStages } from "@workspace/db";
+import { initCatalystApp, createEnterpriseDealsRepo } from "@workspace/db/catalyst";
+import { installCatalystFake, type CatalystTestStore } from "../test-support/catalyst-test-app";
 import router from "./deals";
 
 // Regression coverage for the `sort` query param on GET /deals — previously
@@ -9,6 +9,12 @@ import router from "./deals";
 // didn't exist on the serialized deal) and, even for a real numeric key,
 // unsafe once a null was present (fell through to `String(null)` comparison,
 // ordering "10" before "9"). See routes/deals.ts's SORTABLE_DEAL_KEYS.
+//
+// Runs against an in-memory Data Store (test-support/catalyst-test-app.ts).
+// This file was skipped through the Catalyst migration on the grounds that
+// "Data Store isn't reachable from localhost" — but the handler never needed
+// to reach Catalyst, only to be handed a `catalystApp`, so the coverage was
+// recoverable all along.
 
 function getHandler(method: "get" | "post" | "put" | "delete", path: string) {
   const stack = (router as unknown as {
@@ -30,64 +36,66 @@ interface DealSummary {
   dealName: string;
   winProbabilityPct: number | null;
 }
-interface ListDealsResponseShape {
-  data: DealSummary[];
-}
 
 async function callList(query: Record<string, string>): Promise<DealSummary[]> {
   const handler = getHandler("get", "/deals");
-  let captured: ListDealsResponseShape | undefined;
-  const fakeReq = { query } as unknown as Request;
-  const fakeRes = { json: (body: ListDealsResponseShape) => { captured = body; } } as unknown as Response;
+  let captured: { data: DealSummary[] } | undefined;
+  const fakeReq = { query, headers: {} } as unknown as Request;
+  const fakeRes = { json: (body: { data: DealSummary[] }) => { captured = body; } } as unknown as Response;
   await handler(fakeReq, fakeRes);
   if (!captured) throw new Error("Handler did not call res.json");
   return captured.data;
 }
 
-const createdDealIds: string[] = [];
+let store: CatalystTestStore;
 
+const STAGE_ID = 1;
+const PRICING_ID = 1;
+const TIER_ID = 1;
+
+/** The lookup rows the deal list joins against, in raw Data Store shape. */
+function seedLookups(): void {
+  store.seedRaw("pipeline_stages", [
+    { id: String(STAGE_ID), stage_name: "Discovery", stage_order: "1", is_active: "true" },
+  ]);
+  store.seedRaw("pricing_models", [
+    { id: String(PRICING_ID), model_name: "Annual Subscription", is_active: "true" },
+  ]);
+  store.seedRaw("services_tiers", [
+    { id: String(TIER_ID), tier_name: "None", is_active: "true" },
+  ]);
+}
+
+/** Created through the real repository, so the stored row shape is the real one. */
 async function createDeal(tag: string, winProbabilityPct: number | null): Promise<string> {
-  const [pricing] = await db.select().from(pricingModels).limit(1);
-  const [tier] = await db.select().from(servicesTiers).limit(1);
-  const stages = await db.select().from(pipelineStages);
-  const stage = stages.find((s) => s.stageName === "Discovery") ?? stages[0];
-
-  const [deal] = await db
-    .insert(enterpriseDeals)
-    .values({
-      dealName: `Sort Test ${tag} ${Date.now()}`,
-      accountName: `Sort Test Acct ${tag} ${Date.now()}`,
-      accountManager: "AM",
-      technicalLead: "TL",
-      salesStageId: stage.id,
-      pricingModelId: pricing.id,
-      servicesTierId: tier.id,
-      productRevenue: "1000.00",
-      servicesRevenue: "0",
-      winProbabilityPct,
-    })
-    .returning({ id: enterpriseDeals.id });
-  createdDealIds.push(deal.id);
+  const app = initCatalystApp({ headers: {} });
+  const deal = await createEnterpriseDealsRepo(app).create({
+    dealName: `Sort Test ${tag}`,
+    accountName: `Sort Test Acct ${tag}`,
+    accountManager: "AM",
+    technicalLead: "TL",
+    salesStageId: STAGE_ID,
+    pricingModelId: PRICING_ID,
+    servicesTierId: TIER_ID,
+    productRevenue: "1000.00",
+    servicesRevenue: "0",
+    contractTermYears: 1,
+    dealCurrency: "USD",
+    winProbabilityPct,
+  });
   return deal.id;
 }
 
-afterAll(async () => {
-  if (createdDealIds.length > 0) {
-    await db.delete(enterpriseDeals).where(inArray(enterpriseDeals.id, createdDealIds));
-  }
-  await pool.end();
+beforeAll(() => {
+  ({ store } = installCatalystFake());
 });
 
-// Skipped post-Catalyst-migration: routes/deals.ts now reads enterprise_deals
-// via Catalyst Data Store, not Drizzle/Postgres. `initCatalystApp(req)`
-// requires real Catalyst session/headers to succeed — a fake `Request` object
-// in a local Vitest run can never provide that (same "Data Store isn't
-// reachable from localhost" limitation already documented for
-// lookups.engine-thresholds.test.ts and the sibling Customer-Insight-Engine
-// project). This file's fixtures also seed via Drizzle directly, which the
-// migrated handler no longer reads. Retire or rewrite as an integration test
-// against the deployed AppSail app once Slice 6 seeding lands.
-describe.skip("GET /deals?sort=... — allowlist and null-safe numeric ordering", () => {
+beforeEach(() => {
+  store.reset();
+  seedLookups();
+});
+
+describe("GET /deals?sort=... — allowlist and null-safe numeric ordering", () => {
   it("rejects an unrecognized sort key instead of silently no-op sorting", async () => {
     await expect(callList({ sort: "bogus", limit: "500" })).rejects.toMatchObject({ status: 400 });
   });

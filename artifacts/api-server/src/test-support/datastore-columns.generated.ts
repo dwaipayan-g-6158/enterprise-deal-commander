@@ -1,0 +1,87 @@
+// GENERATED from the live Catalyst Data Store schema (Development, 2026-08-07).
+//
+// Regenerate by dumping GET /baas/v1/project/{id}/table/{TABLE_NAME}/column for
+// every table. Address that endpoint by table NAME, never by the table_id the
+// list endpoint returns: it is a JSON number already rounded past
+// Number.MAX_SAFE_INTEGER, so a subset of tables silently resolves to the wrong
+// row and it reads like rate limiting.
+//
+// The in-memory test store declares these so that writing to a column which
+// does not exist fails the way it does in production ("Invalid column name x")
+// instead of silently succeeding. That exact bug shipped once already:
+// v2_deal_memory.key_lessons was missing, reads returned null, and every
+// autopsy save 500'd while the feature looked healthy.
+
+export const DATASTORE_COLUMNS: Readonly<Record<string, readonly string[]>> = {
+  "ad360_features": ["code", "label", "description", "sort_order", "is_active", "id"],
+  "bat_signals": ["token", "deal_id", "created_by", "expires_at", "created_at"],
+  "blocker_categories": ["category_name", "is_active", "id"],
+  "blocker_severities": ["severity_name", "sort_order", "id"],
+  "commanders": ["id", "username", "display_name", "password_hash", "role", "is_active", "created_at", "last_dashboard_visit_at", "catalyst_user_id"],
+  "competitor_battlecards": ["competitor_id", "talking_points", "is_active", "id"],
+  "competitors": ["name", "category", "is_active", "id"],
+  "compliance_drivers": ["name", "is_active", "id"],
+  "deal_ad360_features": ["deal_id", "feature_id", "natural_key"],
+  "deal_alert_dispositions": ["id", "deal_id", "pattern_code", "disposition", "rationale", "snooze_until_field_change", "snooze_until", "snooze_field_baseline", "created_by", "created_at", "updated_at", "natural_key"],
+  "deal_audit_log": ["id", "deal_id", "entity_type", "entity_id", "field_changed", "old_value", "new_value", "changed_by", "changed_at"],
+  "deal_blockers": ["id", "deal_id", "category_id", "severity_id", "description", "is_resolved", "resolved_at", "resolution_notes", "logged_at", "updated_at"],
+  "deal_compliance_drivers": ["deal_id", "compliance_driver_id", "natural_key"],
+  "deal_cross_sells": ["deal_id", "product_id", "is_pitched", "pitched_at", "notes", "natural_key"],
+  "deal_interventions": ["id", "deal_id", "pattern_code", "checklist_id", "launched_by", "launched_at"],
+  "deal_product_interests": ["deal_id", "product_id", "noted_at", "natural_key"],
+  "deal_review_markers": ["deal_id", "last_reviewed_at", "reviewed_by"],
+  "deal_stage_overrides": ["id", "deal_id", "from_stage", "to_stage", "pattern_codes", "override_reason", "created_by", "created_at"],
+  "deal_technical_gates": ["id", "deal_id", "gate_code", "is_completed", "completed_at", "completed_by", "notes", "created_at", "updated_at", "natural_key"],
+  "deal_types": ["name", "description", "sort_order", "is_active", "id"],
+  "engine_thresholds": ["parameter_key", "parameter_value", "data_type_", "description", "updated_at", "id"],
+  "enterprise_deals": ["id", "deal_name", "account_name", "crm_record_url", "account_manager", "technical_lead", "sales_stage_id", "stage_entered_at", "product_revenue", "pricing_model_id", "contract_term_years", "deal_currency", "expected_close_date", "landed_at", "win_probability_pct", "committed", "services_revenue", "services_tier_id", "manager_strategic_blueprint", "loss_reason", "speaker_notes", "loss_archetype_id", "competitor_id", "compliance_driver_id", "compliance_deadline", "estimated_log_sources", "ad360_seat_count", "ad360_feature_notes", "archived_at", "deleted_at", "created_at", "updated_at", "natural_key"],
+  "fx_rates": ["base_currency", "quote_currency", "rate", "as_of", "natural_key", "id"],
+  "gate_definitions": ["gate_group", "gate_code", "label", "description", "sort_order", "prerequisite_gate_codes", "is_active", "id"],
+  "intervention_checklists": ["trigger_pattern_code", "name", "steps", "is_active", "natural_key", "id"],
+  "loss_archetypes": ["archetype_name", "is_active", "id"],
+  "pipeline_stages": ["stage_name", "sort_order", "description", "is_active", "id"],
+  "pricing_models": ["model_name", "is_active", "id"],
+  "product_catalog": ["id", "code", "product_name", "product_category", "suite", "is_active", "created_at"],
+  "segments": ["name", "description", "sort_order", "is_active", "id"],
+  "services_tiers": ["tier_name", "is_active", "id"],
+  "team_members": ["name", "can_be_am", "can_be_tl", "is_active", "id"],
+  "v2_automation_actions": ["id", "rule_id", "action_type", "config", "sort_order", "natural_key"],
+  "v2_automation_execution_log": ["id", "rule_id", "deal_id", "trigger_event", "matched", "actions_run", "status", "error", "executed_at"],
+  "v2_automation_rule_templates": ["id", "name", "description", "category", "trigger_event", "conditions", "actions", "is_builtin", "created_at"],
+  "v2_automation_rules": ["id", "rule_name", "description", "trigger_event", "conditions", "is_active", "template_id", "created_by", "created_at", "updated_at", "last_fired_at", "fire_count"],
+  "v2_commander_achievements": ["achievement_code", "earned_at"],
+  "v2_custom_field_definitions": ["id", "field_name", "field_key", "field_type", "options", "is_required", "display_order", "created_by", "created_at"],
+  "v2_custom_field_values": ["id", "deal_id", "field_id", "value_text", "value_number", "value_date", "value_select", "value_multi_select", "natural_key"],
+  "v2_custom_pattern_conditions": ["id", "pattern_id", "field_path", "operator", "comparison_value", "sort_order", "natural_key"],
+  "v2_custom_risk_patterns": ["id", "pattern_name", "description", "severity", "weight", "alert_message_template", "is_active", "created_by", "created_at", "updated_at", "last_triggered_at", "trigger_count"],
+  "v2_deal_activity_log": ["id", "deal_id", "event_type", "entity_type", "entity_id", "summary", "metadata", "actor", "occurred_at"],
+  "v2_deal_competitors": ["id", "deal_id", "competitor_id", "status", "displacement_strategy", "outcome_notes", "logged_at", "updated_at", "natural_key"],
+  "v2_deal_decisions": ["id", "deal_id", "meeting_session_id", "decision_text", "rationale", "owner", "status", "decided_at", "due_date", "completed_at", "commander_id", "created_at", "updated_at"],
+  "v2_deal_health_history": ["id", "deal_id", "from_status", "to_status", "reason", "actor", "changed_at"],
+  "v2_deal_meddpicc_answers": ["id", "deal_id", "question_id", "score", "note", "answered_at", "answered_by", "natural_key"],
+  "v2_deal_meddpicc_scores": ["id", "deal_id", "overall_score", "overall_pct", "stage_pct", "rag_status", "pillar_breakdown", "strong_no_count", "unknown_count", "computed_at"],
+  "v2_deal_memory": ["id", "deal_id", "account_name", "deal_name", "outcome", "final_tcv", "pricing_model", "services_tier", "total_gates_completed", "total_blockers_encountered", "total_days_active", "stage_durations", "competitors_faced", "win_loss_narrative", "recommended_playbook_id", "tags", "archived_at", "primary_loss_category", "loss_subcategory", "loss_narrative", "winning_competitor_id", "win_back_potential", "win_back_timeline", "causal_chain", "decision_maker_engaged", "champion_identified", "product_gaps", "quality_score", "autopsy_completed_at", "key_lessons"],
+  "v2_deal_playbook_assignments": ["id", "deal_id", "playbook_id", "current_step_id", "status", "assigned_at", "completed_at", "natural_key"],
+  "v2_deal_pricing_schedule": ["id", "deal_id", "year_number", "product_revenue", "services_revenue", "discount_pct", "notes", "natural_key"],
+  "v2_deal_scores": ["id", "deal_id", "score", "confidence", "breakdown", "computed_at"],
+  "v2_deal_snapshots": ["id", "deal_id", "reason", "trigger_event", "health_status", "sales_stage_id", "sales_stage", "calculated_tcv", "normalized_tcv", "payload_inline", "payload_key", "created_by", "snapshot_at"],
+  "v2_deal_tags": ["deal_id", "tag_id", "applied_at", "natural_key"],
+  "v2_financial_scenarios": ["id", "scenario_name", "description", "deal_id", "is_global", "modifications", "computed_results", "created_by", "created_at", "updated_at"],
+  "v2_meddpicc_questions": ["id", "question_order", "pillar", "stage_tag", "question_text", "help_text"],
+  "v2_meeting_sessions": ["id", "session_type", "title", "occurred_at", "duration_minutes", "attendees", "notes", "commander_id", "created_at"],
+  "v2_notification_log": ["id", "rule_id", "deal_id", "channel", "recipient", "subject", "message", "sent_at", "acknowledged_at"],
+  "v2_notification_rules": ["id", "commander_id", "rule_name", "trigger_event", "trigger_conditions", "channel", "is_active", "created_at"],
+  "v2_pipeline_targets": ["id", "period_type", "period_start", "target_value", "updated_at", "natural_key"],
+  "v2_pipeline_transitions": ["id", "deal_id", "from_stage_id", "to_stage_id", "transition_type", "tcv_at_transition", "days_in_from_stage", "overridden", "transitioned_at", "created_by", "natural_key"],
+  "v2_playbook_step_completions": ["id", "assignment_id", "step_id", "completed_at", "notes", "skipped", "skip_reason", "status", "completed_by"],
+  "v2_playbook_steps": ["id", "playbook_id", "step_order", "step_name", "description", "trigger_condition", "recommended_action", "expected_duration_days", "is_critical", "natural_key"],
+  "v2_playbooks": ["id", "playbook_name", "description", "applicable_stage", "applicable_deal_profile", "is_active", "created_by", "created_at"],
+  "v2_portfolio_rollups": ["name", "payload", "computed_at"],
+  "v2_scoring_model_weights": ["id", "feature_id", "calibrated_weight", "sample_size", "calibration_date", "created_at"],
+  "v2_settings_change_log": ["id", "module", "setting_key", "entity_id", "action", "old_value", "new_value", "data_type_", "actor", "reason", "rollback_of", "changed_at"],
+  "v2_stakeholders": ["id", "deal_id", "name", "title", "company", "role_type", "influence_level", "sentiment", "email", "phone", "notes", "reports_to_id", "is_decision_maker", "created_at", "updated_at"],
+  "v2_tag_definitions": ["id", "tag_name", "color", "created_at"],
+  "v2_velocity_benchmarks": ["stage_name", "p25_days", "median_days", "p75_days", "p90_days", "sample_size", "computed_at"],
+  "v2_webhook_delivery_log": ["id", "webhook_id", "event_type", "payload", "response_status", "response_body", "success", "delivered_at"],
+  "v2_webhooks": ["id", "webhook_name", "target_url", "secret_key", "events", "is_active", "created_by", "created_at", "last_triggered_at", "failure_count"],
+};

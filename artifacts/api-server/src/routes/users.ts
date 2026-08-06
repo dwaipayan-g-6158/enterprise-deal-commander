@@ -165,7 +165,16 @@ router.patch("/users/:id", async (req: Request, res: Response) => {
   if (!updated) throw notFound("User not found");
 
   if (willDemote || willDeactivate) {
-    const stillOk = (await repo.listAll()).some((u) => u.role === "admin" && u.isActive);
+    // MUST read through `adminRepo`, not `repo`. sdk.ts memoizes reads per
+    // request in a WeakMap keyed on the catalystApp OBJECT, and
+    // initCatalystApp/initCatalystAdminApp return two different objects with
+    // two separate caches. The write above invalidated only the admin app's
+    // cache, so `repo.listAll()` here would replay the rows it read during the
+    // pre-check — i.e. the state before the write — and `stillOk` would be
+    // true no matter what just happened. That made this entire self-revert
+    // backstop dead code: verified by disabling the pre-check above, at which
+    // point the invariant could be violated with no 409 and no revert.
+    const stillOk = (await adminRepo.listAll()).some((u) => u.role === "admin" && u.isActive);
     if (!stillOk) {
       await adminRepo.update(id, { role: target.role, isActive: target.isActive });
       throw conflict("At least one active admin must remain — promote another user first");

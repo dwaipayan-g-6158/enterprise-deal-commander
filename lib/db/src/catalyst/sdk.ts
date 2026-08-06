@@ -31,6 +31,26 @@ function loadSdk(): any {
   return catalystSdk;
 }
 
+/**
+ * Test seam: supply a stand-in for `zcatalyst-sdk-node`.
+ *
+ * Every route derives its Data Store handle from `initCatalystApp(req)`, which
+ * goes through `loadSdk()` above. In a Vitest run that `require` cannot work at
+ * all — the package resolves only from `lib/db`, not from `artifacts/api-server`
+ * where the tests live, and `require` is not even defined in Vitest's ESM
+ * context. That, not "Data Store is unreachable from localhost", is what
+ * actually blocked ~94 route tests after the Catalyst migration; the reachability
+ * story was a reasonable guess that happened to be wrong, and it cost the suite
+ * most of its coverage right when the migration needed it most.
+ *
+ * Injecting an in-memory stand-in here lets those tests drive the real routes,
+ * the real repositories and the real coercion helpers. See
+ * `artifacts/api-server/src/test-support/catalyst-test-app.ts`.
+ */
+export function __setCatalystSdkForTests(sdk: unknown): void {
+  catalystSdk = sdk;
+}
+
 export interface CatalystRequestLike {
   headers: Record<string, string | string[] | undefined>;
 }

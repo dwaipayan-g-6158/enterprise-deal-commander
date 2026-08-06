@@ -1,16 +1,26 @@
-import { describe, it, expect, afterAll } from "vitest";
+import { describe, it, expect, beforeAll, beforeEach } from "vitest";
 import type { Request, Response } from "express";
-import { and, eq, inArray, ne } from "drizzle-orm";
-import { db, pool, commanders, settingsChangeLog, dealAuditLog, enterpriseDeals } from "@workspace/db";
-import { writeAudit } from "../lib/audit";
+import { initCatalystApp, createCommandersRepo, createSettingsChangeLogRepo } from "@workspace/db/catalyst";
+import { installCatalystFake, type CatalystTestStore } from "../test-support/catalyst-test-app";
 import router from "./users";
 
-// Same technique as every other route test in this repo (see
-// routes/deals.lifecycle.test.ts) — no supertest harness exists, so pull the
-// real handler off the router's stack and call it directly. This exercises
-// users.ts's own business logic (uniqueness, self-guards, the last-admin
-// invariant, audit logging) — the RBAC gate itself (who is even allowed to
-// reach these handlers) is covered separately by routes/index.rbac.test.ts.
+// Same technique as every other route test in this repo — no supertest harness
+// exists, so pull the real handler off the router's stack and call it directly.
+// This exercises users.ts's own business logic (uniqueness, the self-guards,
+// the last-admin invariant, audit logging); the RBAC gate itself (who may reach
+// these handlers) is covered by routes/index.rbac.test.ts.
+//
+// Runs against an in-memory Data Store (test-support/catalyst-test-app.ts),
+// including a recorded stand-in for Catalyst's user directory. That last part
+// is what makes POST /users testable at all: the real handler invites through
+// Catalyst before writing the commanders row, and a real invite provisions an
+// account and emails a real person.
+//
+// The last-admin invariant below is the reason this file matters more than most.
+// It CANNOT be checked against the deployed app: the self-guards fire first, so
+// reaching it needs a second admin account, which needs a real invite. Here it
+// is reachable directly.
+
 function getHandler(method: "get" | "post" | "patch" | "delete", path: string) {
   const stack = (router as unknown as {
     stack: Array<{
@@ -26,108 +36,121 @@ function getHandler(method: "get" | "post" | "patch" | "delete", path: string) {
   return layer.route.stack[0].handle;
 }
 
+interface Actor { id: string; username: string; displayName: string; role: string }
+
 async function call<T>(
   handler: (req: Request, res: Response) => unknown,
   opts: { body?: unknown; params?: Record<string, string> },
-  actor: { id: string; username: string; displayName: string; role: string },
-): Promise<{ result?: T; status: number; thrown?: Error & { status?: number; code?: string } }> {
-  const req = { body: opts.body ?? {}, params: opts.params ?? {}, actor } as unknown as Request;
-  let captured: { body: T; status: number } = { body: undefined as unknown as T, status: 200 };
+  actor: Actor,
+): Promise<{ result?: T; status: number; thrown?: Error & { status?: number } }> {
+  const req = {
+    body: opts.body ?? {},
+    params: opts.params ?? {},
+    query: {},
+    headers: {},
+    actor,
+    protocol: "https",
+    get: () => "edc.test",
+  } as unknown as Request;
+  const captured: { body: T; status: number } = { body: undefined as unknown as T, status: 200 };
   const res = {
-    status(code: number) {
-      captured.status = code;
-      return this;
-    },
-    json(body: T) {
-      captured.body = body;
-      return this;
-    },
+    status(code: number) { captured.status = code; return this; },
+    json(body: T) { captured.body = body; return this; },
   } as unknown as Response;
   try {
     await handler(req, res);
     return { result: captured.body, status: captured.status };
   } catch (err) {
-    return { thrown: err as Error & { status?: number; code?: string }, status: (err as { status?: number }).status ?? 0 };
+    return { thrown: err as Error & { status?: number }, status: (err as { status?: number }).status ?? 0 };
   }
 }
 
-// commanders.id is a `uuid` column, and the self-guard tests below use these
-// ids as the :id path PARAM (simulating "target === self"), which reaches a
-// real `WHERE id = $1` query before any of users.ts's own guard logic runs —
-// so, unlike the plain-string stand-in actors used elsewhere in this repo
-// (e.g. deals.lifecycle.test.ts, where actor.id is never queried against a
-// uuid column), these must be valid UUIDs or Postgres 22P02s before the
-// guard is even reached.
-const ACTOR = { id: "cccccccc-0000-0000-0000-000000000001", username: "users-test-actor", displayName: "Users Test Actor", role: "admin" };
-const OTHER_ADMIN_ACTOR = { id: "cccccccc-0000-0000-0000-000000000002", username: "users-test-other-admin", displayName: "Other Admin", role: "admin" };
+let store: CatalystTestStore;
 
-const createdIds: string[] = [];
+const ACTOR: Actor = {
+  id: "cccccccc-0000-0000-0000-000000000001",
+  username: "users-test-actor",
+  displayName: "Users Test Actor",
+  role: "admin",
+};
 
-function trackId(id: string | undefined): string {
-  if (!id) throw new Error("expected an id");
-  createdIds.push(id);
-  return id;
-}
+interface UserRow { id: string; email: string; displayName: string; role: string; isActive: boolean }
 
-async function createUser(overrides: { email?: string; password?: string; role?: string } = {}) {
-  const handler = getHandler("post", "/users");
-  const email = overrides.email ?? `users-test-${Date.now()}-${Math.random().toString(36).slice(2)}@example.com`;
-  const { result, status } = await call<{ data: { id: string; email: string; displayName: string; role: string } }>(
-    handler,
-    { body: { email, display_name: "Test User", password: overrides.password ?? "at-least-12-chars", role: overrides.role } },
+async function createUser(overrides: { email?: string; role?: string } = {}): Promise<UserRow> {
+  const email = overrides.email ?? `users-test-${store.count("commanders")}@example.com`;
+  const { result, status, thrown } = await call<{ data: UserRow }>(
+    getHandler("post", "/users"),
+    { body: { email, display_name: "Test User", role: overrides.role } },
     ACTOR,
   );
-  if (status !== 201 || !result) throw new Error(`createUser setup failed: status ${status}`);
-  trackId(result.data.id);
+  if (status !== 201 || !result) throw new Error(`createUser setup failed: ${status} ${thrown?.message ?? ""}`);
   return result.data;
 }
 
-afterAll(async () => {
-  if (createdIds.length > 0) {
-    await db.delete(commanders).where(inArray(commanders.id, createdIds));
-    await db.delete(settingsChangeLog).where(inArray(settingsChangeLog.entityId, createdIds));
-    await db.delete(dealAuditLog).where(inArray(dealAuditLog.changedBy, ["Reader To Delete"]));
-  }
-  await pool.end();
+/** Put a commander row straight into the store, bypassing the invite handler. */
+async function seedCommander(role: "admin" | "reader", isActive = true): Promise<UserRow> {
+  const repo = createCommandersRepo(initCatalystApp({ headers: {} }));
+  const n = store.count("commanders");
+  const row = await repo.create({
+    catalystUserId: `cat-${n}`,
+    username: `seeded-${n}@example.com`,
+    displayName: `Seeded ${n}`,
+    role,
+    isActive,
+  });
+  return { id: row.id, email: row.username, displayName: row.displayName, role: row.role, isActive: row.isActive };
+}
+
+async function changeLogFor(entityId: string) {
+  const rows = await createSettingsChangeLogRepo(initCatalystApp({ headers: {} })).listAll();
+  return rows.filter((r) => r.entityId === entityId);
+}
+
+beforeAll(() => {
+  ({ store } = installCatalystFake());
 });
 
-// Skipped post-Catalyst-migration (Slice 4): routes/users.ts now reads/
-// writes `commanders` via Catalyst Data Store, not Drizzle/Postgres, and
-// POST /users also calls Catalyst's own `userManagement().registerUser()` to
-// invite the account. `initCatalystApp`/`initCatalystAdminApp` need real
-// Catalyst session/headers that only the deployed AppSail runtime can
-// supply — the fake `Request` objects this file's `call()` helper builds
-// can't provide them, same "Data Store isn't reachable from localhost"
-// limitation as every other Catalyst-backed route test in this migration.
-// The reader-vs-admin gate itself (requireWriteRole, tested exhaustively in
-// routes/index.rbac.test.ts) is unaffected. Retire or rewrite as an
-// integration test against the deployed AppSail app once Slice 6 seeding
-// lands.
-describe.skip("POST /users", () => {
-  it("creates a user, returns no passwordHash, and writes one settings_change_log row", async () => {
-    const email = `create-test-${Date.now()}@example.com`;
+beforeEach(() => {
+  store.reset();
+  // `id` and `username` are unique columns on `commanders` in Data Store.
+  // Declaring them means the handler's duplicate backstop is exercised against
+  // a real constraint rather than a pretend one.
+  store.declareUnique("commanders", ["id", "username"]);
+});
+
+describe("POST /users", () => {
+  it("creates a user, returns no password field, and writes one change-log row", async () => {
     const { result, status } = await call<{ data: Record<string, unknown> }>(
       getHandler("post", "/users"),
-      { body: { email, display_name: "Create Test", password: "at-least-12-chars", role: "reader" } },
+      { body: { email: "Create.Test@Example.com", display_name: "Create Test", role: "reader" } },
       ACTOR,
     );
     expect(status).toBe(201);
     expect(result?.data).not.toHaveProperty("passwordHash");
     expect(result?.data).not.toHaveProperty("password_hash");
-    const id = trackId(result?.data.id as string);
+    // Email is lower-cased on the way in, matching every lookup in the file.
+    expect(result?.data.email).toBe("create.test@example.com");
 
-    const logs = await db.select().from(settingsChangeLog).where(eq(settingsChangeLog.entityId, id));
+    const logs = await changeLogFor(result!.data.id as string);
     expect(logs).toHaveLength(1);
-    expect(logs[0].module).toBe("users");
-    expect(logs[0].action).toBe("create");
-    expect(logs[0].actor).toBe(ACTOR.username);
+    expect(logs[0]).toMatchObject({ module: "users", action: "create", actor: ACTOR.username });
+  });
+
+  it("invites through Catalyst with the display name split into first/last", async () => {
+    await createUser({ email: "split.me@example.com" });
+    expect(store.invites).toHaveLength(1);
+    expect(store.invites[0]).toMatchObject({
+      email: "split.me@example.com",
+      firstName: "Test",
+      lastName: "User",
+    });
   });
 
   it("rejects a duplicate email with 409", async () => {
     const user = await createUser();
     const { thrown } = await call(
       getHandler("post", "/users"),
-      { body: { email: user.email, display_name: "Dup", password: "at-least-12-chars" } },
+      { body: { email: user.email, display_name: "Dup" } },
       ACTOR,
     );
     expect(thrown).toMatchObject({ status: 409 });
@@ -137,99 +160,105 @@ describe.skip("POST /users", () => {
     const user = await createUser();
     const { thrown } = await call(
       getHandler("post", "/users"),
-      { body: { email: user.email.toUpperCase(), display_name: "Dup Case", password: "at-least-12-chars" } },
+      { body: { email: user.email.toUpperCase(), display_name: "Dup Case" } },
       ACTOR,
     );
     expect(thrown).toMatchObject({ status: 409 });
   });
 
-  it("rejects a password shorter than 12 characters with 400", async () => {
-    const { thrown } = await call(
-      getHandler("post", "/users"),
-      { body: { email: `short-${Date.now()}@example.com`, display_name: "Short", password: "short1234" } },
-      ACTOR,
-    );
-    expect(thrown).toMatchObject({ status: 400 });
+  it("defaults role to reader when not specified", async () => {
+    const user = await createUser();
+    expect(user).toMatchObject({ role: "reader" });
   });
 
-  it("defaults role to reader when not specified", async () => {
-    const user = await createUser({ role: undefined });
-    expect(user).toMatchObject({ role: "reader" });
+  it("writes NO commanders row when the Catalyst invite fails", async () => {
+    // Ordering matters: the handler invites first precisely so a rejected email
+    // can't leave an orphaned app account that will never be able to sign in.
+    store.failNextInvite();
+    const before = store.count("commanders");
+    const { thrown } = await call(
+      getHandler("post", "/users"),
+      { body: { email: "rejected@example.com", display_name: "Rejected" } },
+      ACTOR,
+    );
+    expect(thrown).toMatchObject({ status: 409 });
+    expect(store.count("commanders")).toBe(before);
   });
 });
 
-// Skipped post-Catalyst-migration (Slice 4) — same reasoning as the describe block above.
-describe.skip("PATCH /users/:id — self and last-admin guards", () => {
-  // The self-guard is checked AFTER the target-existence lookup (users.ts
-  // fetches `target` by :id first), so these need a REAL commanders row —
-  // ACTOR itself has no row, only a stand-in id, and would 404 before the
-  // self-check ever ran.
+describe("PATCH /users/:id — self and last-admin guards", () => {
   it("refuses to let an admin demote themselves", async () => {
-    const self = await createUser({ role: "admin" });
-    const selfActor = { id: self.id, username: self.email, displayName: self.displayName, role: "admin" };
+    const self = await seedCommander("admin");
     const { thrown } = await call(
       getHandler("patch", "/users/:id"),
       { params: { id: self.id }, body: { role: "reader" } },
-      selfActor,
+      { ...self, username: self.email },
     );
     expect(thrown).toMatchObject({ status: 409 });
   });
 
   it("refuses to let an admin deactivate themselves", async () => {
-    const self = await createUser({ role: "admin" });
-    const selfActor = { id: self.id, username: self.email, displayName: self.displayName, role: "admin" };
+    const self = await seedCommander("admin");
     const { thrown } = await call(
       getHandler("patch", "/users/:id"),
       { params: { id: self.id }, body: { is_active: false } },
-      selfActor,
+      { ...self, username: self.email },
     );
     expect(thrown).toMatchObject({ status: 409 });
   });
 
   it("allows an admin to change their own display name", async () => {
-    const user = await createUser({ role: "admin" });
+    const self = await seedCommander("admin");
     const { status } = await call(
       getHandler("patch", "/users/:id"),
-      { params: { id: user.id }, body: { display_name: "Renamed Self" } },
-      { id: user.id, username: user.email, displayName: user.displayName, role: "admin" },
+      { params: { id: self.id }, body: { display_name: "Renamed Self" } },
+      { ...self, username: self.email },
     );
     expect(status).toBe(200);
   });
 
-  it("refuses to demote or deactivate the last remaining active admin", async () => {
-    const testAdmin = await createUser({ role: "admin" });
+  // The invariant that cannot be reached against the deployed app.
+  it("refuses to demote the last remaining active admin", async () => {
+    const lastAdmin = await seedCommander("admin");
+    const otherAdminActor: Actor = { ...(await seedCommander("admin", false)), username: "other@example.com" };
 
-    // Temporarily deactivate every OTHER admin so testAdmin is the sole
-    // active admin for the duration of this check — always restored,
-    // success or failure, so the real seeded admin account is never left
-    // altered.
-    const others = await db
-      .select({ id: commanders.id })
-      .from(commanders)
-      .where(and(eq(commanders.role, "admin"), eq(commanders.isActive, true), ne(commanders.id, testAdmin.id)));
-    const otherIds = others.map((o) => o.id);
-    if (otherIds.length > 0) {
-      await db.update(commanders).set({ isActive: false }).where(inArray(commanders.id, otherIds));
-    }
-    try {
-      const demote = await call(
-        getHandler("patch", "/users/:id"),
-        { params: { id: testAdmin.id }, body: { role: "reader" } },
-        OTHER_ADMIN_ACTOR,
-      );
-      expect(demote.thrown).toMatchObject({ status: 409 });
+    const { thrown } = await call(
+      getHandler("patch", "/users/:id"),
+      { params: { id: lastAdmin.id }, body: { role: "reader" } },
+      otherAdminActor,
+    );
+    expect(thrown).toMatchObject({ status: 409 });
 
-      const deactivate = await call(
-        getHandler("patch", "/users/:id"),
-        { params: { id: testAdmin.id }, body: { is_active: false } },
-        OTHER_ADMIN_ACTOR,
-      );
-      expect(deactivate.thrown).toMatchObject({ status: 409 });
-    } finally {
-      if (otherIds.length > 0) {
-        await db.update(commanders).set({ isActive: true }).where(inArray(commanders.id, otherIds));
-      }
-    }
+    // And the row is genuinely unchanged, not merely reported as rejected.
+    const repo = createCommandersRepo(initCatalystApp({ headers: {} }));
+    expect(await repo.getById(lastAdmin.id)).toMatchObject({ role: "admin", isActive: true });
+  });
+
+  it("refuses to deactivate the last remaining active admin", async () => {
+    const lastAdmin = await seedCommander("admin");
+    const otherAdminActor: Actor = { ...(await seedCommander("admin", false)), username: "other@example.com" };
+
+    const { thrown } = await call(
+      getHandler("patch", "/users/:id"),
+      { params: { id: lastAdmin.id }, body: { is_active: false } },
+      otherAdminActor,
+    );
+    expect(thrown).toMatchObject({ status: 409 });
+    const repo = createCommandersRepo(initCatalystApp({ headers: {} }));
+    expect(await repo.getById(lastAdmin.id)).toMatchObject({ role: "admin", isActive: true });
+  });
+
+  it("ALLOWS demoting an admin while another active admin remains", async () => {
+    const target = await seedCommander("admin");
+    await seedCommander("admin"); // a second active admin
+    const { status } = await call(
+      getHandler("patch", "/users/:id"),
+      { params: { id: target.id }, body: { role: "reader" } },
+      ACTOR,
+    );
+    expect(status).toBe(200);
+    const repo = createCommandersRepo(initCatalystApp({ headers: {} }));
+    expect(await repo.getById(target.id)).toMatchObject({ role: "reader" });
   });
 
   it("returns 404 for a nonexistent user", async () => {
@@ -242,76 +271,45 @@ describe.skip("PATCH /users/:id — self and last-admin guards", () => {
   });
 
   it("rejects an empty update body", async () => {
-    const user = await createUser();
+    const user = await seedCommander("reader");
     const { thrown } = await call(getHandler("patch", "/users/:id"), { params: { id: user.id }, body: {} }, ACTOR);
     expect(thrown).toMatchObject({ status: 400 });
   });
 });
 
-// Skipped post-Catalyst-migration (Slice 4) — same reasoning as the describe block above.
-describe.skip("DELETE /users/:id", () => {
+describe("DELETE /users/:id", () => {
   it("refuses to let an admin delete themselves", async () => {
-    const self = await createUser({ role: "admin" });
-    const selfActor = { id: self.id, username: self.email, displayName: self.displayName, role: "admin" };
-    const { thrown } = await call(getHandler("delete", "/users/:id"), { params: { id: self.id } }, selfActor);
+    const self = await seedCommander("admin");
+    const { thrown } = await call(
+      getHandler("delete", "/users/:id"),
+      { params: { id: self.id } },
+      { ...self, username: self.email },
+    );
     expect(thrown).toMatchObject({ status: 409 });
   });
 
   it("refuses to delete the last remaining active admin", async () => {
-    const testAdmin = await createUser({ role: "admin" });
-    const others = await db
-      .select({ id: commanders.id })
-      .from(commanders)
-      .where(and(eq(commanders.role, "admin"), eq(commanders.isActive, true), ne(commanders.id, testAdmin.id)));
-    const otherIds = others.map((o) => o.id);
-    if (otherIds.length > 0) {
-      await db.update(commanders).set({ isActive: false }).where(inArray(commanders.id, otherIds));
-    }
-    try {
-      const { thrown } = await call(getHandler("delete", "/users/:id"), { params: { id: testAdmin.id } }, OTHER_ADMIN_ACTOR);
-      expect(thrown).toMatchObject({ status: 409 });
-    } finally {
-      if (otherIds.length > 0) {
-        await db.update(commanders).set({ isActive: true }).where(inArray(commanders.id, otherIds));
-      }
-    }
+    const lastAdmin = await seedCommander("admin");
+    const otherAdminActor: Actor = { ...(await seedCommander("admin", false)), username: "other@example.com" };
+    const { thrown } = await call(
+      getHandler("delete", "/users/:id"),
+      { params: { id: lastAdmin.id } },
+      otherAdminActor,
+    );
+    expect(thrown).toMatchObject({ status: 409 });
+    const repo = createCommandersRepo(initCatalystApp({ headers: {} }));
+    expect(await repo.getById(lastAdmin.id)).not.toBeNull();
   });
 
-  it("deletes a reader, writes a delete audit row, and leaves pre-existing deal_audit_log rows naming them untouched (no cascade, no FK)", async () => {
+  it("deletes a reader, removes the Catalyst directory user, and writes a delete audit row", async () => {
     const user = await createUser({ role: "reader" });
-    // Rename so this reader's displayName is distinctive and safely
-    // identifiable/cleanable in dealAuditLog afterwards.
-    await db.update(commanders).set({ displayName: "Reader To Delete" }).where(eq(commanders.id, user.id));
-
-    // A real deal is required for the FK on deal_audit_log.deal_id — reuse
-    // any existing seeded deal rather than inserting a throwaway one, since
-    // this test only cares about the audit row surviving, not the deal.
-    const [anyDeal] = await db.select({ id: enterpriseDeals.id }).from(enterpriseDeals).limit(1);
-    if (!anyDeal) throw new Error("Seed data has no deals to attach a test audit row to");
-
-    await writeAudit({
-      dealId: anyDeal.id,
-      entityType: "test",
-      fieldChanged: "test_field",
-      newValue: "reader-was-here",
-      changedBy: "Reader To Delete",
-    });
-
     const { status } = await call(getHandler("delete", "/users/:id"), { params: { id: user.id } }, ACTOR);
     expect(status).toBe(200);
 
-    const [gone] = await db.select().from(commanders).where(eq(commanders.id, user.id));
-    expect(gone).toBeUndefined();
+    const repo = createCommandersRepo(initCatalystApp({ headers: {} }));
+    expect(await repo.getById(user.id)).toBeNull();
 
-    const logs = await db.select().from(settingsChangeLog).where(eq(settingsChangeLog.entityId, user.id));
+    const logs = await changeLogFor(user.id);
     expect(logs.some((l) => l.action === "delete")).toBe(true);
-
-    const auditRows = await db.select().from(dealAuditLog).where(eq(dealAuditLog.changedBy, "Reader To Delete"));
-    expect(auditRows.length).toBeGreaterThan(0);
   });
 });
-
-// POST /users/:id/password removed entirely (Slice 4): there is no
-// app-managed password anymore — Catalyst embedded auth owns sign-in
-// end to end, including its own "Forgot Password" flow. See routes/users.ts's
-// docstring.
