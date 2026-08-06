@@ -1,18 +1,23 @@
-import { describe, it, expect, afterAll } from "vitest";
+import { describe, it, expect, beforeAll, beforeEach } from "vitest";
 import type { Request, Response } from "express";
-import { inArray } from "drizzle-orm";
 import {
-  db,
-  pool,
-  enterpriseDeals,
-  pricingModels,
-  servicesTiers,
-  pipelineStages,
-} from "@workspace/db";
+  initCatalystApp,
+  createEnterpriseDealsRepo,
+  formatCatalystDateTime,
+} from "@workspace/db/catalyst";
+import {
+  installCatalystFake,
+  seedStandardLookups,
+  STAGES,
+  PRICING_MODEL_ID,
+  SERVICES_TIER_ID,
+  type CatalystTestStore,
+} from "../../test-support/catalyst-test-app";
 import router from "./analytics";
 
 // Same handler-extraction technique as analytics.next-actions.test.ts and
 // analytics.archive-parity.test.ts — no supertest harness exists in this repo.
+// Runs against the in-memory Data Store (test-support/catalyst-test-app.ts).
 function getHandler(method: "get" | "post", path: string) {
   const stack = (router as unknown as {
     stack: Array<{
@@ -32,12 +37,16 @@ interface SimulationData {
   iterations: number;
   totalDeals: number;
   weightedPipeline: number;
+  traditionalWeightedPipeline: number;
 }
 
 async function callSimulation(): Promise<SimulationData> {
   const handler = getHandler("get", "/analytics/simulation");
   let captured: { data: SimulationData } | undefined;
-  const fakeReq = { query: {} } as unknown as Request;
+  // The smallest iteration count the handler accepts — the assertions below are
+  // all on deterministic fields (deal count and the two weighted sums), never
+  // on the RNG-driven percentiles, so there is nothing to gain from 10,000.
+  const fakeReq = { query: { iterations: "1000" }, params: {}, headers: {} } as unknown as Request;
   const fakeRes = {
     json: (body: { data: SimulationData }) => {
       captured = body;
@@ -48,66 +57,72 @@ async function callSimulation(): Promise<SimulationData> {
   return captured.data;
 }
 
-const createdDealIds: string[] = [];
+let store: CatalystTestStore;
+let seq = 0;
 
-async function createClosedWonDeal(tag: string, archivedAt?: Date): Promise<string> {
-  const [pricing] = await db.select().from(pricingModels).limit(1);
-  const [tier] = await db.select().from(servicesTiers).limit(1);
-  const stages = await db.select().from(pipelineStages);
-  const stage = stages.find((s) => s.stageName === "Closed-Won");
-  if (!stage) throw new Error('Seed data missing pipeline stage "Closed-Won"');
+const app = () => initCatalystApp({ headers: {} });
 
-  const [deal] = await db
-    .insert(enterpriseDeals)
-    .values({
-      dealName: `Simulation Closed Test ${tag} ${Date.now()}`,
-      accountName: `Simulation Closed Acct ${tag} ${Date.now()}`,
-      accountManager: "AM",
-      technicalLead: "TL",
-      salesStageId: stage.id,
-      pricingModelId: pricing.id,
-      servicesTierId: tier.id,
-      // Deliberately huge so any leak into the forecast would be unmissable.
-      productRevenue: "50000000.00",
-      servicesRevenue: "0",
-      archivedAt: archivedAt ?? null,
-    })
-    .returning({ id: enterpriseDeals.id });
-  createdDealIds.push(deal.id);
+const OPEN_TCV = 1_000_000;
+const OPEN_WIN_PCT = 50;
+// Deliberately huge so any leak into the forecast would be unmissable.
+const CLOSED_TCV = 50_000_000;
+
+async function createDeal(
+  tag: string,
+  stageName: "Discovery" | "Closed-Won",
+  productRevenue: number,
+  opts: { archivedAt?: Date } = {},
+): Promise<string> {
+  const deal = await createEnterpriseDealsRepo(app()).create({
+    dealName: `Simulation ${tag} ${seq}`,
+    accountName: `Simulation Acct ${tag} ${seq++}`,
+    accountManager: "AM",
+    technicalLead: "TL",
+    salesStageId: STAGES[stageName],
+    pricingModelId: PRICING_MODEL_ID,
+    servicesTierId: SERVICES_TIER_ID,
+    productRevenue: productRevenue.toFixed(2),
+    servicesRevenue: "0",
+    contractTermYears: 1,
+    dealCurrency: "USD",
+    winProbabilityPct: OPEN_WIN_PCT,
+  });
+  if (opts.archivedAt) {
+    const touched = store.patchRaw(
+      "enterprise_deals",
+      (r) => r["id"] === deal.id,
+      { archived_at: formatCatalystDateTime(opts.archivedAt) },
+    );
+    if (touched !== 1) throw new Error(`fixture patch touched ${touched} rows, expected 1`);
+  }
   return deal.id;
 }
 
-afterAll(async () => {
-  if (createdDealIds.length > 0) {
-    await db.delete(enterpriseDeals).where(inArray(enterpriseDeals.id, createdDealIds));
-  }
-  await pool.end();
+beforeAll(() => {
+  ({ store } = installCatalystFake());
 });
 
-// Skipped post-Catalyst-migration: routes/v2/analytics.ts's GET
-// /analytics/simulation now reads via Catalyst Data Store, not
-// Drizzle/Postgres. `initCatalystApp(req)` requires real Catalyst
-// session/headers to succeed — a fake `Request` object in a local Vitest run
-// can never provide that (same "Data Store isn't reachable from localhost"
-// limitation already documented for lookups.engine-thresholds.test.ts). This
-// file's fixtures also seed via Drizzle directly, which the migrated handler
-// no longer reads. Retire or rewrite as an integration test against the
-// deployed AppSail app once Slice 6 seeding lands.
-describe.skip("GET /analytics/simulation — closed deals never enter the forecast", () => {
-  it("leaves totalDeals/weightedPipeline unchanged for a large Closed-Won deal, archived or not", async () => {
-    const baseline = await callSimulation();
+beforeEach(() => {
+  store.reset();
+  seq = 0;
+  seedStandardLookups(store);
+});
 
-    const wonId = await createClosedWonDeal("plain");
-    const afterWon = await callSimulation();
-    expect(afterWon.totalDeals).toBe(baseline.totalDeals);
-    expect(afterWon.weightedPipeline).toBe(baseline.weightedPipeline);
+describe("GET /analytics/simulation — closed deals never enter the forecast", () => {
+  it("counts only the open deal, archived or not, in totalDeals and both weighted sums", async () => {
+    // One open deal gives the forecast a non-zero expected value, so the
+    // assertions are exact rather than "unchanged" — a handler returning
+    // nothing at all would satisfy a pure before/after comparison.
+    await createDeal("open", "Discovery", OPEN_TCV);
+    await createDeal("won", "Closed-Won", CLOSED_TCV);
+    await createDeal("won-archived", "Closed-Won", CLOSED_TCV, { archivedAt: new Date() });
 
-    const archivedWonId = await createClosedWonDeal("archived", new Date());
-    const afterArchivedWon = await callSimulation();
-    expect(afterArchivedWon.totalDeals).toBe(baseline.totalDeals);
-    expect(afterArchivedWon.weightedPipeline).toBe(baseline.weightedPipeline);
+    const result = await callSimulation();
 
-    expect(wonId).toBeTruthy();
-    expect(archivedWonId).toBeTruthy();
+    expect(result.totalDeals).toBe(1);
+    // No predictive score exists for the open deal, so dealProbability falls
+    // back to its manual win probability: 1,000,000 x 0.5.
+    expect(result.weightedPipeline).toBe(OPEN_TCV * (OPEN_WIN_PCT / 100));
+    expect(result.traditionalWeightedPipeline).toBe(OPEN_TCV * (OPEN_WIN_PCT / 100));
   });
 });

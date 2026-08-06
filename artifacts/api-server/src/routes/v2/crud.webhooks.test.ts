@@ -1,14 +1,15 @@
-import { describe, it, expect, afterAll } from "vitest";
+import { describe, it, expect, beforeAll, beforeEach } from "vitest";
 import type { Request, Response } from "express";
 import crypto from "node:crypto";
-import { inArray } from "drizzle-orm";
-import { db, pool, webhooks, settingsChangeLog } from "@workspace/db";
+import { initCatalystApp, createWebhooksRepo } from "@workspace/db/catalyst";
+import { installCatalystFake, type CatalystTestStore } from "../../test-support/catalyst-test-app";
 import type { AuthedRequest } from "../../lib/auth";
 import router from "./crud";
 
 // Same handler-extraction technique as crud.memory-autopsy.test.ts — no
 // supertest harness exists in this repo, so pull the real handler off the
-// router's stack and call it directly.
+// router's stack and call it directly. Runs against the in-memory Data Store
+// (test-support/catalyst-test-app.ts).
 function getHandler(method: "get" | "put", path: string) {
   const stack = (router as unknown as {
     stack: Array<{
@@ -29,6 +30,7 @@ function fakeReq(overrides: Partial<Request> = {}): Request {
     params: {},
     query: {},
     body: {},
+    headers: {},
     actor: { id: "test-actor", username: "test-actor", displayName: "Test Actor", role: "admin" },
     ...overrides,
   } as unknown as AuthedRequest as unknown as Request;
@@ -51,44 +53,47 @@ async function call(handler: (req: Request, res: Response) => unknown, req: Requ
   return captured;
 }
 
-const createdWebhookIds: string[] = [];
-const suffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+let store: CatalystTestStore;
+let seq = 0;
 
-async function createWebhookRow(overrides: Partial<typeof webhooks.$inferInsert> = {}) {
-  const [row] = await db
-    .insert(webhooks)
-    .values({
-      webhookName: `Toggle Test Webhook ${suffix}`,
-      targetUrl: "https://example.test/hook",
-      secretKey: crypto.randomBytes(16).toString("hex"),
-      events: ["deal.created"],
-      isActive: true,
-      createdBy: "test-actor",
-      ...overrides,
-    })
-    .returning();
-  createdWebhookIds.push(row.id);
-  return row;
+const app = () => initCatalystApp({ headers: {} });
+
+/**
+ * Created through the real repository, then patched into the is_active /
+ * failure_count state under test — `create()` deliberately hardcodes
+ * failure_count to 0 and exposes no way to set it, which is correct for
+ * production and useless for a fixture that needs a webhook already in the
+ * auto-disabled state.
+ */
+async function createWebhookRow(overrides: { isActive?: boolean; failureCount?: number } = {}) {
+  const row = await createWebhooksRepo(app()).create({
+    webhookName: `Toggle Test Webhook ${seq++}`,
+    targetUrl: "https://example.test/hook",
+    secretKey: crypto.randomBytes(16).toString("hex"),
+    events: ["deal.created"],
+    isActive: true,
+    createdBy: "test-actor",
+  });
+  const patch: Record<string, unknown> = {};
+  if (overrides.isActive !== undefined) patch["is_active"] = String(overrides.isActive);
+  if (overrides.failureCount !== undefined) patch["failure_count"] = String(overrides.failureCount);
+  if (Object.keys(patch).length > 0) {
+    const touched = store.patchRaw("v2_webhooks", (r) => r["id"] === row.id, patch);
+    if (touched !== 1) throw new Error(`fixture patch touched ${touched} rows, expected 1`);
+  }
+  return { ...row, ...overrides };
 }
 
-afterAll(async () => {
-  if (createdWebhookIds.length > 0) {
-    await db.delete(settingsChangeLog).where(inArray(settingsChangeLog.entityId, createdWebhookIds));
-    await db.delete(webhooks).where(inArray(webhooks.id, createdWebhookIds));
-  }
-  await pool.end();
+beforeAll(() => {
+  ({ store } = installCatalystFake());
 });
 
-// Skipped post-Catalyst-migration: routes/v2/crud.ts's PUT /webhooks/:id now
-// reads/writes v2_webhooks via Catalyst Data Store, not Drizzle/Postgres.
-// `initCatalystApp(req)` requires real Catalyst session/headers to succeed —
-// a fake `Request` object in a local Vitest run can never provide that (same
-// "Data Store isn't reachable from localhost" limitation already documented
-// for lookups.engine-thresholds.test.ts). This file's fixtures also seed via
-// Drizzle directly, which the migrated handler no longer reads. Retire or
-// rewrite as an integration test against the deployed AppSail app once
-// Slice 6 seeding lands.
-describe.skip("PUT /webhooks/:id — failureCount reset on re-enable (F1)", () => {
+beforeEach(() => {
+  store.reset();
+  seq = 0;
+});
+
+describe("PUT /webhooks/:id — failureCount reset on re-enable (F1)", () => {
   it("resets failureCount to 0 when is_active flips from false to true", async () => {
     const row = await createWebhookRow({ isActive: false, failureCount: 12 });
     const handler = getHandler("put", "/webhooks/:id");
@@ -105,6 +110,8 @@ describe.skip("PUT /webhooks/:id — failureCount reset on re-enable (F1)", () =
 
     expect(result.data.isActive).toBe(true);
     expect(result.data.failureCount).toBe(0);
+    // Persisted, not just reflected in the response body.
+    expect((await createWebhooksRepo(app()).getById(row.id))?.failureCount).toBe(0);
   });
 
   it("does not reset failureCount when toggling other fields on an already-active webhook", async () => {

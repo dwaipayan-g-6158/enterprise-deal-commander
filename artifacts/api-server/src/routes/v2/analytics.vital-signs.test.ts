@@ -1,13 +1,27 @@
-import { describe, it, expect, afterAll } from "vitest";
+import { describe, it, expect, beforeAll, beforeEach } from "vitest";
 import type { Request, Response } from "express";
-import { inArray } from "drizzle-orm";
-import { db, pool, enterpriseDeals, pricingModels, servicesTiers, pipelineStages, dealSnapshots } from "@workspace/db";
+import crypto from "node:crypto";
+import {
+  initCatalystApp,
+  createEnterpriseDealsRepo,
+  formatCatalystDateTime,
+} from "@workspace/db/catalyst";
+import {
+  installCatalystFake,
+  seedStandardLookups,
+  STAGES,
+  PRICING_MODEL_ID,
+  SERVICES_TIER_ID,
+  type CatalystTestStore,
+} from "../../test-support/catalyst-test-app";
+import { cache } from "../../lib/cache";
 import router from "./analytics";
 
 // The route handler isn't exported directly, but it's registered on the
 // default-exported Router. Pull it off the stack so this test exercises the
 // real production handler (query + baseline logic) rather than reimplementing
 // it, without needing a supertest/HTTP harness (none exists in this repo).
+// Runs against the in-memory Data Store (test-support/catalyst-test-app.ts).
 function getHandler(path: string) {
   const stack = (router as unknown as { stack: Array<{ route?: { path: string; methods: Record<string, boolean>; stack: Array<{ handle: (req: Request, res: Response) => unknown }> } }> }).stack;
   const layer = stack.find((l) => l.route?.path === path && l.route.methods.get);
@@ -26,91 +40,134 @@ interface VitalSigns {
 async function callVitalSigns(): Promise<VitalSigns> {
   const handler = getHandler("/analytics/vital-signs");
   let captured: { data: VitalSigns } | undefined;
+  const fakeReq = { headers: {}, params: {}, query: {} } as unknown as Request;
   const fakeRes = { json: (body: { data: VitalSigns }) => { captured = body; } } as unknown as Response;
-  await handler({} as Request, fakeRes);
+  await handler(fakeReq, fakeRes);
   if (!captured) throw new Error("Handler did not call res.json");
   return captured.data;
 }
 
-const createdDealIds: string[] = [];
+let store: CatalystTestStore;
+let seq = 0;
 
-async function createClosedDealWithSnapshot(): Promise<void> {
-  const [pricing] = await db.select().from(pricingModels).limit(1);
-  const [tier] = await db.select().from(servicesTiers).limit(1);
-  const stages = await db.select().from(pipelineStages);
-  const stage = stages.find((s) => s.stageName === "Closed-Won");
-  if (!stage) throw new Error('Seed data missing pipeline stage "Closed-Won"');
+const app = () => initCatalystApp({ headers: {} });
 
-  const [deal] = await db
-    .insert(enterpriseDeals)
-    .values({
-      dealName: `Vital Signs Exclusion Test ${Date.now()}`,
-      accountName: `Vital Signs Exclusion Acct ${Date.now()}`,
-      accountManager: "AM",
-      technicalLead: "TL",
-      salesStageId: stage.id,
-      pricingModelId: pricing.id,
-      servicesTierId: tier.id,
-      // Distinctive, large revenue so any regression that re-includes this
-      // deal in the "current" totals shows up unmistakably.
-      productRevenue: "88888800.00",
-      servicesRevenue: "0",
-    })
-    .returning({ id: enterpriseDeals.id });
-  createdDealIds.push(deal.id);
+const OPEN_TCV = 1_000_000;
+const OPEN_BASELINE_TCV = 500_000;
+// Distinctive, large figures so any regression that re-includes the closed deal
+// shows up unmistakably rather than as a plausible-looking total.
+const CLOSED_TCV = 88_888_800;
+const CLOSED_BASELINE_TCV = 77_777_700;
 
-  // A snapshot row dated well before the 7-day cutoff, with a distinctive
-  // TCV and a RED health status so a regression that re-includes it in the
-  // baseline shows up in both baseline.totalTCV and baseline.redAlerts.
-  await db.insert(dealSnapshots).values({
-    dealId: deal.id,
-    reason: "test-seed",
-    healthStatus: "RED",
-    salesStageId: stage.id,
-    salesStage: stage.stageName,
-    calculatedTcv: "77777700.00",
-    payload: {},
-    createdBy: "test",
-    snapshotAt: new Date(Date.now() - 10 * 86_400_000),
+async function createDeal(
+  tag: string,
+  stageName: "Discovery" | "Closed-Won",
+  productRevenue: number,
+): Promise<string> {
+  const deal = await createEnterpriseDealsRepo(app()).create({
+    dealName: `Vital Signs ${tag} ${seq}`,
+    accountName: `Vital Signs Acct ${tag} ${seq++}`,
+    accountManager: "AM",
+    technicalLead: "TL",
+    salesStageId: STAGES[stageName],
+    pricingModelId: PRICING_MODEL_ID,
+    servicesTierId: SERVICES_TIER_ID,
+    productRevenue: productRevenue.toFixed(2),
+    servicesRevenue: "0",
+    contractTermYears: 1,
+    dealCurrency: "USD",
   });
+  return deal.id;
 }
 
-afterAll(async () => {
-  if (createdDealIds.length > 0) {
-    // deal_snapshots.deal_id has onDelete: cascade, so this also removes the
-    // seeded snapshot row.
-    await db.delete(enterpriseDeals).where(inArray(enterpriseDeals.id, createdDealIds));
-  }
-  await pool.end();
+/**
+ * A snapshot dated well before the 7-day cutoff, carrying a distinctive TCV, a
+ * RED health status and `redAlerts` RED-severity alerts in its payload — so a
+ * regression that lets the wrong deal into the baseline shows up in
+ * baseline.totalTCV AND baseline.redAlerts, not just one of them.
+ */
+function seedSnapshot(dealId: string, stageName: string, tcv: number, redAlerts: number): void {
+  store.seedRaw("v2_deal_snapshots", [
+    {
+      id: crypto.randomUUID(),
+      deal_id: dealId,
+      reason: "test-seed",
+      health_status: "RED",
+      sales_stage_id: String(STAGES[stageName as keyof typeof STAGES]),
+      sales_stage: stageName,
+      calculated_tcv: String(tcv),
+      normalized_tcv: String(tcv),
+      payload_inline: JSON.stringify({
+        governance: { alerts: Array.from({ length: redAlerts }, () => ({ severity: "RED" })) },
+      }),
+      created_by: "test",
+      snapshot_at: formatCatalystDateTime(new Date(Date.now() - 10 * 86_400_000)),
+    },
+  ]);
+}
+
+beforeAll(() => {
+  ({ store } = installCatalystFake());
 });
 
-// Skipped post-Catalyst-migration: routes/v2/analytics.ts's GET
-// /analytics/vital-signs now reads via Catalyst Data Store, not
-// Drizzle/Postgres. `initCatalystApp(req)` requires real Catalyst
-// session/headers to succeed — a fake `Request` object in a local Vitest run
-// can never provide that (same "Data Store isn't reachable from localhost"
-// limitation already documented for lookups.engine-thresholds.test.ts). This
-// file's fixtures also seed via Drizzle directly, which the migrated handler
-// no longer reads. Retire or rewrite as an integration test against the
-// deployed AppSail app once Slice 6 seeding lands.
-describe.skip("GET /analytics/vital-signs — closed deals excluded", () => {
+beforeEach(() => {
+  store.reset();
+  seq = 0;
+  seedStandardLookups(store);
+  // getThresholds()/getFxRate() memoise under the `lookup:` tier for the life of
+  // the process, so they would otherwise outlive store.reset().
+  cache.clear();
+});
+
+describe("GET /analytics/vital-signs — closed deals excluded", () => {
   it("excludes a Closed-Won deal from current totals and from the 7-day baseline", async () => {
-    const before = await callVitalSigns();
+    // One open deal establishes non-zero expected values, so the assertions
+    // below are exact rather than "unchanged" — a handler that returned zeroes
+    // for everything would satisfy a pure before/after comparison.
+    const openId = await createDeal("open", "Discovery", OPEN_TCV);
+    seedSnapshot(openId, "Discovery", OPEN_BASELINE_TCV, 1);
 
-    await createClosedDealWithSnapshot();
+    const closedId = await createDeal("closed", "Closed-Won", CLOSED_TCV);
+    seedSnapshot(closedId, "Closed-Won", CLOSED_BASELINE_TCV, 3);
 
-    const after = await callVitalSigns();
+    const result = await callVitalSigns();
 
-    // Current query (Part 1): the closed deal must not move totalTCV,
-    // weightedPipeline, or activeDeals.
-    expect(after.totalTCV).toBe(before.totalTCV);
-    expect(after.activeDeals).toBe(before.activeDeals);
+    // Current query (Part 1): only the open deal counts.
+    expect(result.totalTCV).toBe(OPEN_TCV);
+    expect(result.activeDeals).toBe(1);
 
-    // Baseline (Part 2): the closed deal's snapshot must not move the
-    // ~7-day-ago baseline either, even though the snapshot predates the
-    // cutoff and would otherwise be the "latest" row for that deal.
-    expect(after.baseline?.totalTCV ?? null).toBe(before.baseline?.totalTCV ?? null);
-    expect(after.baseline?.activeDeals ?? null).toBe(before.baseline?.activeDeals ?? null);
-    expect(after.baseline?.redAlerts ?? null).toBe(before.baseline?.redAlerts ?? null);
+    // Baseline (Part 2): the closed deal's snapshot must not move the ~7-day-ago
+    // baseline either, even though it predates the cutoff and would otherwise
+    // be the "latest" row for that deal.
+    expect(result.baseline).not.toBeNull();
+    expect(result.baseline!.totalTCV).toBe(OPEN_BASELINE_TCV);
+    expect(result.baseline!.activeDeals).toBe(1);
+    expect(result.baseline!.redAlerts).toBe(1);
+  });
+
+  it("reports no baseline at all when every snapshot is newer than the 7-day cutoff", async () => {
+    const openId = await createDeal("recent-only", "Discovery", OPEN_TCV);
+    store.seedRaw("v2_deal_snapshots", [
+      {
+        id: crypto.randomUUID(),
+        deal_id: openId,
+        reason: "test-seed",
+        health_status: "GREEN",
+        sales_stage_id: String(STAGES.Discovery),
+        sales_stage: "Discovery",
+        calculated_tcv: String(OPEN_BASELINE_TCV),
+        normalized_tcv: String(OPEN_BASELINE_TCV),
+        payload_inline: "{}",
+        created_by: "test",
+        snapshot_at: formatCatalystDateTime(new Date()),
+      },
+    ]);
+
+    const result = await callVitalSigns();
+
+    expect(result.totalTCV).toBe(OPEN_TCV);
+    // A snapshot inside the window is not a baseline — comparing today against
+    // today would report a zero delta on the dashboard rather than "no data".
+    expect(result.baseline).toBeNull();
   });
 });

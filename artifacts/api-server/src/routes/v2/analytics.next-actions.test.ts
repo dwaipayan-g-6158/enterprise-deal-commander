@@ -1,29 +1,29 @@
-import { describe, it, expect, afterAll } from "vitest";
+import { describe, it, expect, beforeAll, beforeEach } from "vitest";
 import type { Request, Response } from "express";
-import { inArray } from "drizzle-orm";
+import crypto from "node:crypto";
 import {
-  db,
-  pool,
-  enterpriseDeals,
-  pricingModels,
-  servicesTiers,
-  pipelineStages,
-  dealDecisions,
-} from "@workspace/db";
+  initCatalystApp,
+  createEnterpriseDealsRepo,
+  formatCatalystDateTime,
+} from "@workspace/db/catalyst";
+import {
+  installCatalystFake,
+  seedStandardLookups,
+  STAGES,
+  PRICING_MODEL_ID,
+  SERVICES_TIER_ID,
+  type CatalystTestStore,
+} from "../../test-support/catalyst-test-app";
 import router from "./analytics";
 
 // NOTE: The originating task brief's test assumed a `{ data: { decisions } }`
 // response shape with `dealId` items. Neither is true after reading the real
-// handler (routes/v2/analytics.ts ~L356-489): the response has no top-level
-// `decisions` field — pending decisions land in either `overdue` or
-// `dueThisWeek` (both arrays of ActionItem, keyed by `dealId`) depending on
-// whether the due date has passed. Adjusted below per the brief's own
-// instruction not to guess.
+// handler: the response has no top-level `decisions` field — pending decisions
+// land in either `overdue` or `dueThisWeek` (both arrays of ActionItem, keyed
+// by `dealId`) depending on whether the due date has passed. Adjusted below per
+// the brief's own instruction not to guess.
 //
-// The brief's test insert for `dealDecisions` was also incomplete: the real
-// schema (lib/db/src/schema/edc_v2_intel.ts ~L216) requires NOT NULL
-// `decidedAt` (timestamp, no default) and `commanderId` (varchar, no
-// default) in addition to dealId/decisionText/owner/status/dueDate.
+// Runs against the in-memory Data Store (test-support/catalyst-test-app.ts).
 function getHandler(method: "get" | "post", path: string) {
   const stack = (router as unknown as {
     stack: Array<{
@@ -59,74 +59,81 @@ interface NextActionsData {
 async function callNextActions(): Promise<NextActionsData> {
   const handler = getHandler("get", "/analytics/next-actions");
   let captured: { data: NextActionsData } | undefined;
+  const fakeReq = { headers: {}, params: {}, query: {} } as unknown as Request;
   const fakeRes = {
     json: (body: { data: NextActionsData }) => {
       captured = body;
     },
   } as unknown as Response;
-  await handler({} as Request, fakeRes);
+  await handler(fakeReq, fakeRes);
   if (!captured) throw new Error("Handler did not call res.json");
   return captured.data;
 }
 
-const createdDealIds: string[] = [];
+let store: CatalystTestStore;
+let seq = 0;
 
-afterAll(async () => {
-  if (createdDealIds.length > 0) {
-    await db.delete(enterpriseDeals).where(inArray(enterpriseDeals.id, createdDealIds));
-  }
-  await pool.end();
-});
+const app = () => initCatalystApp({ headers: {} });
 
-// Skipped post-Catalyst-migration: routes/v2/analytics.ts's GET
-// /analytics/next-actions now reads via Catalyst Data Store, not
-// Drizzle/Postgres. `initCatalystApp(req)` requires real Catalyst
-// session/headers to succeed — a fake `Request` object in a local Vitest run
-// can never provide that (same "Data Store isn't reachable from localhost"
-// limitation already documented for lookups.engine-thresholds.test.ts). This
-// file's fixtures also seed via Drizzle directly, which the migrated handler
-// no longer reads. Retire or rewrite as an integration test against the
-// deployed AppSail app once Slice 6 seeding lands.
-describe.skip("GET /analytics/next-actions — closed deals never surface", () => {
-  it("does not list a pending decision on a Closed-Lost deal", async () => {
-    const [pricing] = await db.select().from(pricingModels).limit(1);
-    const [tier] = await db.select().from(servicesTiers).limit(1);
-    const stages = await db.select().from(pipelineStages);
-    const stage = stages.find((s) => s.stageName === "Closed-Lost");
-    if (!stage) throw new Error('Seed data missing pipeline stage "Closed-Lost"');
+async function createDeal(tag: string, stageName: "Discovery" | "Closed-Lost"): Promise<string> {
+  const deal = await createEnterpriseDealsRepo(app()).create({
+    dealName: `Next Actions ${tag} ${seq}`,
+    accountName: `Next Actions Acct ${tag} ${seq++}`,
+    accountManager: "AM",
+    technicalLead: "TL",
+    salesStageId: STAGES[stageName],
+    pricingModelId: PRICING_MODEL_ID,
+    servicesTierId: SERVICES_TIER_ID,
+    productRevenue: "1000.00",
+    servicesRevenue: "0",
+    contractTermYears: 1,
+    dealCurrency: "USD",
+  });
+  return deal.id;
+}
 
-    const [deal] = await db
-      .insert(enterpriseDeals)
-      .values({
-        dealName: `Next Actions Closed Test ${Date.now()}`,
-        accountName: `Next Actions Closed Acct ${Date.now()}`,
-        accountManager: "AM",
-        technicalLead: "TL",
-        salesStageId: stage.id,
-        pricingModelId: pricing.id,
-        servicesTierId: tier.id,
-        productRevenue: "1000.00",
-        servicesRevenue: "0",
-      })
-      .returning({ id: enterpriseDeals.id });
-    createdDealIds.push(deal.id);
-
-    // Due tomorrow so it deterministically lands in `dueThisWeek` (not
-    // `overdue`) prior to this task's fix, regardless of time-of-day skew.
-    const tomorrow = new Date(Date.now() + 86_400_000).toISOString().slice(0, 10);
-
-    await db.insert(dealDecisions).values({
-      dealId: deal.id,
-      decisionText: "Follow up on renewal terms",
+/** A Pending decision due tomorrow, so it deterministically lands in `dueThisWeek` rather than `overdue`. */
+function seedPendingDecision(dealId: string): void {
+  const tomorrow = new Date(Date.now() + 86_400_000).toISOString().slice(0, 10);
+  store.seedRaw("v2_deal_decisions", [
+    {
+      id: crypto.randomUUID(),
+      deal_id: dealId,
+      decision_text: "Follow up on renewal terms",
       owner: "AM",
       status: "Pending",
-      dueDate: tomorrow,
-      decidedAt: new Date(),
-      commanderId: "test-commander",
-    });
+      due_date: tomorrow,
+      decided_at: formatCatalystDateTime(new Date()),
+      commander_id: "test-commander",
+      created_at: formatCatalystDateTime(new Date()),
+    },
+  ]);
+}
+
+beforeAll(() => {
+  ({ store } = installCatalystFake());
+});
+
+beforeEach(() => {
+  store.reset();
+  seq = 0;
+  seedStandardLookups(store);
+});
+
+describe("GET /analytics/next-actions — closed deals never surface", () => {
+  it("does not list a pending decision on a Closed-Lost deal", async () => {
+    // An identically-shaped decision on an OPEN deal is seeded alongside it, so
+    // the assertion distinguishes "the closed deal was filtered out" from "the
+    // handler surfaced nothing at all".
+    const openId = await createDeal("open", "Discovery");
+    seedPendingDecision(openId);
+
+    const closedId = await createDeal("closed", "Closed-Lost");
+    seedPendingDecision(closedId);
 
     const { overdue, dueThisWeek } = await callNextActions();
     const allActions = [...overdue, ...dueThisWeek];
-    expect(allActions.some((d) => d.dealId === deal.id)).toBe(false);
+
+    expect(allActions.map((d) => d.dealId)).toEqual([openId]);
   });
 });
