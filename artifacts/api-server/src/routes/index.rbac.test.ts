@@ -20,6 +20,7 @@ import auditRouter from "./audit";
 import batSignalRouter from "./batsignal";
 import lookupsRouter from "./lookups";
 import settingsAuditRouter from "./settings-audit";
+import adminRouter from "./admin";
 import v2Router from "./v2";
 
 /**
@@ -90,6 +91,10 @@ const PROTECTED_V1_ROUTERS: Array<[unknown, string]> = [
   [batSignalRouter, "/v1"],
   [lookupsRouter, "/v1"],
   [settingsAuditRouter, "/v1"],
+  // POST /v1/admin/seed. Included so the sweep proves a reader gets 403 before
+  // the handler runs — which is also what keeps this test safe to run against
+  // a real store: requireWriteRole rejects it, so the seed never executes here.
+  [adminRouter, "/v1"],
   [v2Router, "/v2"],
 ];
 

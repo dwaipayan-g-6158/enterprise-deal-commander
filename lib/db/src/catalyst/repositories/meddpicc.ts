@@ -18,10 +18,16 @@ import {
   type RawRow,
 } from "../sdk";
 
+// All three live in the Postgres `edc_v2` schema, so their Data Store names
+// carry the `v2_` prefix (docs/CATALYST_SCHEMA.md's naming convention). They
+// were originally written here WITHOUT the prefix — three table names that do
+// not exist in the Data Store, so every MEDDPICC read/write failed at runtime.
+// Verified live against List_All_Columns: v2_meddpicc_questions (31210000000651544),
+// v2_deal_meddpicc_answers (31210000000650489), v2_deal_meddpicc_scores (31210000000646093).
 const TABLE = {
-  meddpiccQuestions: "meddpicc_questions",
-  dealMeddpiccAnswers: "deal_meddpicc_answers",
-  dealMeddpiccScores: "deal_meddpicc_scores",
+  meddpiccQuestions: "v2_meddpicc_questions",
+  dealMeddpiccAnswers: "v2_deal_meddpicc_answers",
+  dealMeddpiccScores: "v2_deal_meddpicc_scores",
 } as const;
 
 function optDate(raw: string | null | undefined): Date | null {

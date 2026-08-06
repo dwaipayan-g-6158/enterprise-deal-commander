@@ -86,6 +86,36 @@ export async function insertRow(
   return getTable(catalystApp, tableName).insertRow(values);
 }
 
+/**
+ * Insert many rows in ONE Data Store call.
+ *
+ * The seed writes ~400 rows across 31 tables; one insertRow() per row would be
+ * ~118 sequential HTTP round-trips and would blow AppSail's 30-second request
+ * timeout on its own. Chunked at 100 because the Row API caps a bulk insert at
+ * 200 — half that leaves headroom and keeps any single failing call small
+ * enough to reason about.
+ *
+ * Returns the inserted rows in call order. Not transactional: Data Store has no
+ * transactions, so a mid-way failure leaves earlier chunks written. Every seed
+ * phase is therefore written to be re-runnable.
+ */
+export async function insertRows(
+  catalystApp: CatalystApp,
+  tableName: string,
+  rows: Array<Record<string, unknown>>,
+): Promise<RawRow[]> {
+  if (rows.length === 0) return [];
+  const table = getTable(catalystApp, tableName);
+  const CHUNK = 100;
+  const inserted: RawRow[] = [];
+  for (let i = 0; i < rows.length; i += CHUNK) {
+    const chunk = rows.slice(i, i + CHUNK);
+    const result = (await table.insertRows(chunk)) as RawRow[];
+    inserted.push(...result);
+  }
+  return inserted;
+}
+
 export async function updateRow(
   catalystApp: CatalystApp,
   tableName: string,

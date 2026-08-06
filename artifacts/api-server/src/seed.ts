@@ -41,29 +41,41 @@ import {
 import { logger } from "./lib/logger";
 import { rescoreActiveDeals } from "./lib/scoring";
 import { QUESTION_CATALOG } from "@workspace/engine";
+// All seed DATA lives in ./seed-data — a database-agnostic module with no
+// Drizzle/bcrypt/network imports, so the Catalyst-backed seed can consume the
+// exact same literals. Everything below is the Postgres-specific *behavior*:
+// presence guards, id resolution, relative-date conversion, insert order.
+import {
+  PIPELINE_STAGES,
+  PRICING_MODELS,
+  SERVICES_TIERS,
+  TEAM_MEMBERS,
+  TAG_DEFINITIONS,
+  PRODUCT_CATALOG,
+  AD360_FEATURES,
+  COMPETITORS,
+  COMPLIANCE_DRIVERS,
+  BLOCKER_CATEGORIES,
+  BLOCKER_SEVERITIES,
+  LOSS_ARCHETYPES,
+  GATE_DEFINITIONS,
+  ALL_GATE_CODES,
+  INTERVENTION_CHECKLISTS,
+  COMPETITOR_BATTLECARDS,
+  ENGINE_THRESHOLDS,
+  FX_RATES,
+  SCORING_MODEL_WEIGHTS,
+  SEGMENTS,
+  DEAL_TYPES,
+  AUTOMATION_RULE_TEMPLATES,
+  PLAYBOOK_SEEDS,
+  DEAL_SEEDS,
+} from "./seed-data";
 
 async function seedLookups() {
-  await db
-    .insert(pipelineStages)
-    .values([
-      { stageName: "Discovery", sortOrder: 1, description: "Initial technical and business discovery" },
-      { stageName: "Validation", sortOrder: 2, description: "PoC execution and technical proof points" },
-      { stageName: "Commercial", sortOrder: 3, description: "Pricing negotiation and SOW drafting" },
-      { stageName: "Procurement", sortOrder: 4, description: "Legal review, security questionnaire, redlines" },
-      { stageName: "Closed-Won", sortOrder: 5, description: "Contract fully executed" },
-      { stageName: "Closed-Lost", sortOrder: 6, description: "Deal did not close — reason captured in notes" },
-    ])
-    .onConflictDoNothing();
+  await db.insert(pipelineStages).values(PIPELINE_STAGES).onConflictDoNothing();
 
-  await db
-    .insert(pricingModels)
-    .values([
-      { modelName: "Annual Subscription" },
-      { modelName: "Multi-Year Committed" },
-      { modelName: "Perpetual License" },
-      { modelName: "Usage-Based" },
-    ])
-    .onConflictDoNothing();
+  await db.insert(pricingModels).values(PRICING_MODELS).onConflictDoNothing();
   // B1: "Hybrid" retired — deactivate any pre-existing row so listPricingModels
   // (which filters isActive = true) hides it.
   await db
@@ -71,18 +83,7 @@ async function seedLookups() {
     .set({ isActive: false })
     .where(eq(pricingModels.modelName, "Hybrid"));
 
-  await db
-    .insert(servicesTiers)
-    .values([
-      { tierName: "None" },
-      { tierName: "Professional Services Pitched" },
-      { tierName: "Premium Support Pitched" },
-      { tierName: "Combined SOW Shared" },
-      { tierName: "Online Onboarding" },
-      { tierName: "Onsite Onboarding" },
-      { tierName: "Product Training" },
-    ])
-    .onConflictDoNothing();
+  await db.insert(servicesTiers).values(SERVICES_TIERS).onConflictDoNothing();
   // B3: "Managed Services Contract" retired — deactivate any pre-existing row so
   // listServicesTiers (which filters isActive = true) hides it.
   await db
@@ -90,206 +91,35 @@ async function seedLookups() {
     .set({ isActive: false })
     .where(eq(servicesTiers.tierName, "Managed Services Contract"));
 
-  // B2: default team roster so the AM/TL dropdowns aren't empty. A person may be
-  // both an AM and a TL — flags are independent.
-  await db
-    .insert(teamMembers)
-    .values([
-      { name: "Sarah Chen", canBeAm: true, canBeTl: false },
-      { name: "David Park", canBeAm: true, canBeTl: false },
-      { name: "Marcus Webb", canBeAm: false, canBeTl: true },
-      { name: "Priya Natarajan", canBeAm: false, canBeTl: true },
-      { name: "Alex Rivera", canBeAm: true, canBeTl: true },
-    ])
-    .onConflictDoNothing();
+  await db.insert(teamMembers).values(TEAM_MEMBERS).onConflictDoNothing();
 
-  // Default deal-tag palette: the PRD §22.3 set plus a few extra commander tags,
-  // each with a distinct hue. Tag definitions are otherwise minted from the
-  // cockpit's "+ Tag" popover.
-  await db
-    .insert(tagDefinitions)
-    .values([
-      // PRD §22.3
-      { tagName: "Net-New", color: "#3B82F6" },
-      { tagName: "Renewal", color: "#10B981" },
-      { tagName: "Expansion", color: "#8B5CF6" },
-      { tagName: "At-Risk", color: "#EF4444" },
-      { tagName: "Strategic", color: "#F59E0B" },
-      { tagName: "Compliance-Heavy", color: "#6366F1" },
-      { tagName: "Multi-Region", color: "#EC4899" },
-      { tagName: "First-Deal", color: "#14B8A6" },
-      // Extras
-      { tagName: "Land & Expand", color: "#06B6D4" },
-      { tagName: "Fast Track", color: "#84CC16" },
-      { tagName: "Executive Sponsor", color: "#A855F7" },
-      { tagName: "Competitive", color: "#F97316" },
-      { tagName: "POC", color: "#0EA5E9" },
-    ])
-    .onConflictDoNothing();
+  await db.insert(tagDefinitions).values(TAG_DEFINITIONS).onConflictDoNothing();
 
-  // ManageEngine AD360 (IAM) + Log360 (SIEM) component catalog.
-  await db
-    .insert(productCatalog)
-    .values([
-      { code: "ADMANAGER_PLUS", productName: "ADManager Plus", productCategory: "Identity Management", suite: "AD360" },
-      { code: "ADAUDIT_PLUS", productName: "ADAudit Plus", productCategory: "Auditing/UBA", suite: "AD360" },
-      { code: "ADSELFSERVICE_PLUS", productName: "ADSelfService Plus", productCategory: "SSPR/MFA/SSO", suite: "AD360" },
-      { code: "M365_MANAGER_PLUS", productName: "M365 Manager Plus", productCategory: "M365 Management", suite: "AD360" },
-      { code: "SHAREPOINT_MANAGER_PLUS", productName: "SharePoint Manager Plus", productCategory: "SharePoint", suite: "AD360" },
-      { code: "EXCHANGE_REPORTER_PLUS", productName: "Exchange Reporter Plus", productCategory: "Exchange", suite: "AD360" },
-      { code: "RECOVERYMANAGER_PLUS", productName: "RecoveryManager Plus", productCategory: "Backup/Recovery", suite: "AD360" },
-      { code: "EVENTLOG_ANALYZER", productName: "EventLog Analyzer", productCategory: "Log Management/SIEM", suite: "Log360" },
-      { code: "DATA_SECURITY_PLUS", productName: "Data Security Plus", productCategory: "DLP/FIM", suite: "Log360" },
-      { code: "CLOUD_SECURITY_PLUS", productName: "Cloud Security Plus", productCategory: "Cloud Log", suite: "Log360" },
-      { code: "LOG360_CLOUD", productName: "Log360 Cloud", productCategory: "Cloud SIEM", suite: "Log360" },
-      { code: "IDENTITY360", productName: "Identity360", productCategory: "Identity Platform", suite: "AD360" },
-      // User-based licensed AD360 bundle SKU — see lib/engine/src/index.ts
-      // (deliberately excluded from SUITE_MEMBERS; treated as a platform SKU
-      // like IDENTITY360/LOG360_CLOUD, not an à-la-carte component).
-      { code: "AD360_ENTERPRISE", productName: "AD360 Enterprise", productCategory: "Integrated IAM Suite", suite: "AD360" },
-    ])
-    .onConflictDoNothing();
+  await db.insert(productCatalog).values(PRODUCT_CATALOG).onConflictDoNothing();
 
-  // Predefined AD360 Enterprise platform-customization pick-list. Selected
-  // per deal via deal_ad360_features; free-text "other" notes live on
-  // enterprise_deals.ad360_feature_notes.
-  await db
-    .insert(ad360Features)
-    .values([
-      { code: "CUSTOM_WORKFLOWS", label: "Custom Workflows", sortOrder: 1 },
-      { code: "SSO_SAML", label: "SSO / SAML", sortOrder: 2 },
-      { code: "API_AUTOMATION", label: "API & Automation", sortOrder: 3 },
-      { code: "CUSTOM_REPORTS", label: "Custom Reports", sortOrder: 4 },
-      { code: "WHITE_LABELING", label: "White-Labeling", sortOrder: 5 },
-      { code: "ROLE_BASED_DELEGATION", label: "Role-Based Delegation", sortOrder: 6 },
-    ])
-    .onConflictDoNothing();
+  await db.insert(ad360Features).values(AD360_FEATURES).onConflictDoNothing();
 
-  await db
-    .insert(competitors)
-    .values([
-      { name: "Quest", category: "IAM" },
-      { name: "Netwrix", category: "IAM" },
-      { name: "Microsoft Entra", category: "IAM" },
-      { name: "Okta", category: "IAM" },
-      { name: "SailPoint", category: "IAM" },
-      { name: "One Identity", category: "IAM" },
-      { name: "Semperis", category: "IAM" },
-      { name: "Splunk", category: "SIEM" },
-      { name: "IBM QRadar", category: "SIEM" },
-      { name: "Microsoft Sentinel", category: "SIEM" },
-      { name: "LogRhythm", category: "SIEM" },
-      { name: "Securonix", category: "SIEM" },
-      // B4: named competitive tools by category (category column is varchar(10)).
-      { name: "Quest Active Roles", category: "IAM" },
-      { name: "SolarWinds Access Rights Manager (ARM)", category: "IAM" },
-      { name: "Cayosoft Administrator", category: "IAM" },
-      { name: "Softerra Adaxes", category: "IAM" },
-      { name: "Imanami GroupID", category: "IAM" },
-      { name: "Quest Change Auditor for Active Directory", category: "Audit" },
-      { name: "Netwrix Auditor", category: "Audit" },
-      { name: "Lepide Active Directory Auditor", category: "Audit" },
-      { name: "Varonis DatAdvantage", category: "Audit" },
-      { name: "Lepide Office 365 Auditor", category: "Audit" },
-      { name: "CoreView", category: "M365" },
-      { name: "AdminDroid", category: "M365" },
-      { name: "Syskit Point", category: "M365" },
-      { name: "Specops uReset", category: "SSPR" },
-      { name: "Microsoft Entra ID SSPR (with password writeback)", category: "SSPR" },
-      { name: "Tools4ever Self Service Reset Password Management (SSRPM)", category: "SSPR" },
-      { name: "Quickpass", category: "SSPR" },
-      { name: "PingID (Ping Identity MFA)", category: "MFA" },
-      { name: "Okta MFA + SSO", category: "MFA" },
-      { name: "Cisco Duo", category: "MFA" },
-    ])
-    .onConflictDoNothing();
+  await db.insert(competitors).values(COMPETITORS).onConflictDoNothing();
 
-  await db
-    .insert(complianceDrivers)
-    .values([
-      { name: "SOX" },
-      { name: "HIPAA" },
-      { name: "PCI-DSS" },
-      { name: "GDPR" },
-      { name: "NIS2" },
-      { name: "ISO 27001" },
-      { name: "Ransomware/Recovery" },
-    ])
-    .onConflictDoNothing();
+  await db.insert(complianceDrivers).values(COMPLIANCE_DRIVERS).onConflictDoNothing();
 
-  await db
-    .insert(blockerCategories)
-    .values([
-      { categoryName: "Technical" },
-      { categoryName: "Sales" },
-      { categoryName: "Procurement" },
-      { categoryName: "Legal" },
-      { categoryName: "Executive" },
-    ])
-    .onConflictDoNothing();
+  await db.insert(blockerCategories).values(BLOCKER_CATEGORIES).onConflictDoNothing();
 
-  await db
-    .insert(blockerSeverities)
-    .values([
-      { severityName: "Low", sortOrder: 1 },
-      { severityName: "Medium", sortOrder: 2 },
-      { severityName: "High", sortOrder: 3 },
-    ])
-    .onConflictDoNothing();
+  await db.insert(blockerSeverities).values(BLOCKER_SEVERITIES).onConflictDoNothing();
 
-  await db
-    .insert(lossArchetypes)
-    .values([
-      { archetypeName: "Technical Disqualification" },
-      { archetypeName: "Budget Freeze" },
-      { archetypeName: "Loss to Incumbent" },
-      { archetypeName: "Compliance Gap" },
-      { archetypeName: "Champion Departure" },
-      { archetypeName: "No Decision" },
-    ])
-    .onConflictDoNothing();
+  await db.insert(lossArchetypes).values(LOSS_ARCHETYPES).onConflictDoNothing();
 
-  await db
-    .insert(gateDefinitions)
-    .values([
-      { gateGroup: 1, gateCode: "G1_CRITERIA_LOCKED", label: "Minimum Viable Requirements Locked", description: "Technical success criteria agreed upon and documented with the customer", sortOrder: 1, prerequisiteGateCodes: [] },
-      { gateGroup: 1, gateCode: "G1_EXECUTIVE_AGREED", label: "Executive Champion Agrees on Criteria", description: "Customer executive sponsor has formally signed off on evaluation criteria", sortOrder: 2, prerequisiteGateCodes: ["G1_CRITERIA_LOCKED"] },
-      { gateGroup: 2, gateCode: "G2_WORKFLOW_VERIFIED", label: "Core Workflow Demonstration Verified", description: "Primary use case workflows demonstrated and validated in a controlled environment", sortOrder: 3, prerequisiteGateCodes: ["G1_EXECUTIVE_AGREED"] },
-      { gateGroup: 2, gateCode: "G2_CHAMPION_DEFENSIBLE", label: "Champion Can Defend Internally", description: "Internal champion has the technical ammunition and political capital to advocate", sortOrder: 4, prerequisiteGateCodes: ["G2_WORKFLOW_VERIFIED"] },
-      { gateGroup: 3, gateCode: "G3_PERFORMANCE_PASSED", label: "Load/Performance Stress Passed", description: "Platform performance validated under production-representative load conditions", sortOrder: 5, prerequisiteGateCodes: ["G2_CHAMPION_DEFENSIBLE"] },
-      { gateGroup: 3, gateCode: "G3_INTEGRATIONS_MAPPED", label: "Integration Interfaces Mapped", description: "All required integrations identified, API contracts scoped, and data flows documented", sortOrder: 6, prerequisiteGateCodes: ["G3_PERFORMANCE_PASSED"] },
-      { gateGroup: 4, gateCode: "G4_INFOSEC_CLEARED", label: "InfoSec Review Panel Approved", description: "Customer security team has reviewed and approved the platform architecture", sortOrder: 7, prerequisiteGateCodes: ["G3_INTEGRATIONS_MAPPED"] },
-      { gateGroup: 4, gateCode: "G4_COMPLIANCE_VALIDATED", label: "Compliance Validated", description: "Regulatory and compliance requirements (SOC2, GDPR, HIPAA as applicable) confirmed met", sortOrder: 8, prerequisiteGateCodes: ["G4_INFOSEC_CLEARED"] },
-      { gateGroup: 5, gateCode: "G5_CTO_SIGNED_OFF", label: "CTO/VP Engineering Win Signed-Off", description: "Technical decision-maker has formally approved the platform for procurement", sortOrder: 9, prerequisiteGateCodes: ["G4_COMPLIANCE_VALIDATED"] },
-    ])
-    .onConflictDoNothing();
+  await db.insert(gateDefinitions).values(GATE_DEFINITIONS).onConflictDoNothing();
 
-  await db
-    .insert(interventionChecklists)
-    .values([
-      { triggerPatternCode: "PREMATURE_COMMERCIAL", name: "Premature Commercial Containment", steps: ["Pause quoting", "Schedule CTO sync", "Send architecture whitepaper", "Re-baseline close date after Gate 3"] },
-      { triggerPatternCode: "DISCOUNT_TRAP", name: "Discount Trap Recovery", steps: ["Freeze discount approval", "Build services-attached business case", "Escalate to deal desk"] },
-      { triggerPatternCode: "UNPROTECTED_ELEPHANT", name: "Elephant Protection", steps: ["Draft Professional Services SOW", "Confirm deployment ownership", "Add Premium Support line"] },
-      { triggerPatternCode: "MISSING_STRUCTURAL_ANCHOR", name: "Anchor Reset", steps: ["Convene success-criteria workshop", "Lock Gate 1 criteria", "Obtain executive sign-off"] },
-      { triggerPatternCode: "COMPETITIVE_DISPLACEMENT_STALL", name: "Displacement Acceleration", steps: ["Re-confirm the cost/pain of staying on the incumbent", "Lock a differentiated win-criterion the incumbent cannot meet", "Set a mutual close plan with a hard decision date", "Escalate to the executive sponsor"] },
-    ])
-    .onConflictDoNothing();
+  await db.insert(interventionChecklists).values(INTERVENTION_CHECKLISTS).onConflictDoNothing();
 
   // Competitor battlecards (talking points surfaced in the Next-Best-Action panel).
   const competitorRows = await db.select().from(competitors);
   const competitorIdByName = (name: string) =>
     competitorRows.find((c) => c.name === name)?.id;
-  const battlecardData: { name: string; talkingPoints: string[] }[] = [
-    { name: "Quest", talkingPoints: ["Single integrated AD360 console vs Quest's stitched-together GPOADmin / Change Auditor / Recovery Manager line-up.", "Faster time-to-value and a materially lower TCO at comparable scale.", "Unified AD + M365 + Exchange auditing under one license."] },
-    { name: "Netwrix", talkingPoints: ["ADManager Plus adds delegated management & provisioning — Netwrix Auditor is read-only auditing.", "Real-time alerting and automated remediation, not just after-the-fact reports.", "One vendor for management, auditing, and recovery."] },
-    { name: "Microsoft Entra", talkingPoints: ["Deep on-prem AD management & granular auditing that native Entra tooling leaves thin.", "Works across hybrid AD + M365, not cloud-only.", "Pre-built compliance reports (SOX/HIPAA/PCI) out of the box."] },
-    { name: "Splunk", talkingPoints: ["Predictable per-device licensing vs Splunk's volume-based bill shock.", "Security-first SIEM with built-in compliance packs — no app sprawl to buy.", "Faster deployment and a far lower entry price for mid-market."] },
-    { name: "IBM QRadar", talkingPoints: ["Lower operational overhead and a gentler learning curve.", "Integrated AD threat detection via ADAudit Plus feeding Log360.", "Predictable licensing without QRadar's EPS cliff."] },
-    { name: "Microsoft Sentinel", talkingPoints: ["No metered cloud ingestion costs that scale unpredictably with log volume.", "On-prem and hybrid coverage, not Azure-centric.", "Bundled file-integrity & DLP via Data Security Plus."] },
-  ];
-  const battlecardValues = battlecardData
+  const battlecardValues = COMPETITOR_BATTLECARDS
     .map((b) => {
-      const competitorId = competitorIdByName(b.name);
+      const competitorId = competitorIdByName(b.competitorName);
       return competitorId
         ? { competitorId, talkingPoints: b.talkingPoints }
         : null;
@@ -299,95 +129,24 @@ async function seedLookups() {
     await db.insert(competitorBattlecards).values(battlecardValues).onConflictDoNothing();
   }
 
-  await db
-    .insert(engineThresholds)
-    .values([
-      { parameterKey: "elephant_tcv_threshold", parameterValue: "500000", dataType: "number", description: "TCV above which a deal is classified as an elephant deal" },
-      { parameterKey: "mega_deal_tcv_threshold", parameterValue: "1000000", dataType: "number", description: "TCV above which a deal is classified as a mega deal" },
-      { parameterKey: "stale_stage_days", parameterValue: "21", dataType: "number", description: "Days in current stage before a staleness alert fires" },
-      { parameterKey: "ghost_pipeline_days", parameterValue: "14", dataType: "number", description: "Days without updates before a ghost pipeline alert fires" },
-      { parameterKey: "phantom_champion_days", parameterValue: "30", dataType: "number", description: "Days active without executive agreement before phantom champion alert fires" },
-      { parameterKey: "close_date_warning_days", parameterValue: "30", dataType: "number", description: "Days before expected close date to trigger proximity alert" },
-      { parameterKey: "gate_completion_warn_pct", parameterValue: "50", dataType: "number", description: "Minimum gate completion percentage expected when within close_date_warning_days" },
-      { parameterKey: "reporting_currency", parameterValue: "USD", dataType: "string", description: "Currency used for all portfolio rollups and threshold comparisons" },
-      { parameterKey: "momentum_drop_pct", parameterValue: "50", dataType: "number", description: "Pct drop in the deal's own gate-completion velocity that signals deceleration" },
-      { parameterKey: "momentum_window_days", parameterValue: "30", dataType: "number", description: "Window size in days to split the deal's own history into recent vs earlier rates" },
-      { parameterKey: "momentum_min_gate_pct", parameterValue: "60", dataType: "number", description: "Gate-completion pct below which a decelerating deal nearing close fires SLOW_MOTION_COLLISION" },
-      { parameterKey: "low_attach_rate_threshold", parameterValue: "0.34", dataType: "number", description: "Attach rate at or below which a large deal fires LOW_ATTACH_ELEPHANT" },
-      { parameterKey: "competitive_stall_days", parameterValue: "21", dataType: "number", description: "Days in Validation/Commercial against an incumbent before COMPETITIVE_DISPLACEMENT_STALL fires" },
-      { parameterKey: "suite_bundle_min_components", parameterValue: "3", dataType: "number", description: "À-la-carte components in one suite at or above which a bundle upsell is recommended" },
-      { parameterKey: "poc_max_validation_days", parameterValue: "30", dataType: "number", description: "Days a PoC can sit in Validation without locked criteria before POC_DEATH_MARCH fires" },
-      { parameterKey: "siem_high_volume_log_sources", parameterValue: "500", dataType: "number", description: "Estimated log sources at or above which an undersized Log360 deal fires SIEM_UNDERSCOPED" },
-      { parameterKey: "playbook_overdue_grace_days", parameterValue: "3", dataType: "number", description: "Grace days added to a playbook step's expected-duration deadline before it counts as overdue (feeds PLAYBOOK_EXECUTION_GAP + the playbook_adherence score factor)" },
-      // Deal Revival watch: which Closed-Lost deals are worth re-engaging
-      { parameterKey: "revival_min_win_back", parameterValue: "3", dataType: "number", description: "Minimum win-back potential (1-5) for a Lost deal to be a revival candidate" },
-      { parameterKey: "revival_cooloff_days", parameterValue: "60", dataType: "number", description: "Days a Lost deal must age before it surfaces as a revival candidate" },
-      { parameterKey: "revival_max_age_days", parameterValue: "365", dataType: "number", description: "Days after which a Lost deal is too stale to bother reviving" },
-      // Risk Engine v2.0 dimension weights + level boundaries
-      { parameterKey: "risk_weight_technical", parameterValue: "0.20", dataType: "number", description: "Weight of the technical risk dimension in the composite risk score (Risk Engine v2)" },
-      { parameterKey: "risk_weight_commercial", parameterValue: "0.15", dataType: "number", description: "Weight of the commercial risk dimension in the composite risk score (Risk Engine v2)" },
-      { parameterKey: "risk_weight_stakeholder", parameterValue: "0.15", dataType: "number", description: "Weight of the stakeholder risk dimension in the composite risk score (Risk Engine v2)" },
-      { parameterKey: "risk_weight_temporal", parameterValue: "0.15", dataType: "number", description: "Weight of the temporal risk dimension in the composite risk score (Risk Engine v2)" },
-      { parameterKey: "risk_weight_financial", parameterValue: "0.10", dataType: "number", description: "Weight of the financial risk dimension in the composite risk score (Risk Engine v2)" },
-      { parameterKey: "risk_weight_competitive", parameterValue: "0.10", dataType: "number", description: "Weight of the competitive risk dimension in the composite risk score (Risk Engine v2)" },
-      { parameterKey: "risk_weight_engagement", parameterValue: "0.15", dataType: "number", description: "Weight of the engagement risk dimension in the composite risk score (Risk Engine v2)" },
-      { parameterKey: "risk_level_low_max", parameterValue: "25", dataType: "number", description: "Composite risk score at or below which a deal is classified as Low risk (Risk Engine v2)" },
-      { parameterKey: "risk_level_moderate_max", parameterValue: "50", dataType: "number", description: "Composite risk score at or below which a deal is classified as Moderate risk (Risk Engine v2)" },
-      { parameterKey: "risk_level_elevated_max", parameterValue: "75", dataType: "number", description: "Composite risk score at or below which a deal is classified as Elevated risk; above this is High (Risk Engine v2)" },
-      // Pipeline Flow health-score weights (Settings redesign — previously hardcoded DEFAULT_HEALTH_WEIGHTS)
-      { parameterKey: "health_weight_coverage", parameterValue: "0.1667", dataType: "number", description: "Weight of the coverage component in the pipeline health score" },
-      { parameterKey: "health_weight_velocity", parameterValue: "0.1667", dataType: "number", description: "Weight of the velocity component in the pipeline health score" },
-      { parameterKey: "health_weight_conversion", parameterValue: "0.1667", dataType: "number", description: "Weight of the conversion component in the pipeline health score" },
-      { parameterKey: "health_weight_generation", parameterValue: "0.1667", dataType: "number", description: "Weight of the generation component in the pipeline health score" },
-      { parameterKey: "health_weight_age", parameterValue: "0.1667", dataType: "number", description: "Weight of the age component in the pipeline health score" },
-      { parameterKey: "health_weight_attrition", parameterValue: "0.1665", dataType: "number", description: "Weight of the attrition component in the pipeline health score" },
-      // Portfolio Risk Analysis constants (Settings redesign — previously hardcoded in portfolio-metrics.ts)
-      { parameterKey: "portfolio_health_base_green", parameterValue: "10", dataType: "number", description: "Baseline composite risk score for a GREEN-health deal" },
-      { parameterKey: "portfolio_health_base_yellow", parameterValue: "45", dataType: "number", description: "Baseline composite risk score for a YELLOW-health deal" },
-      { parameterKey: "portfolio_health_base_red", parameterValue: "75", dataType: "number", description: "Baseline composite risk score for a RED-health deal" },
-      { parameterKey: "portfolio_alert_bump_cap", parameterValue: "25", dataType: "number", description: "Maximum bump to a deal's composite risk score from its strongest active alert" },
-      { parameterKey: "portfolio_alert_bump_per_weight", parameterValue: "0.25", dataType: "number", description: "Multiplier applied to the strongest active alert's weight to compute the risk bump" },
-      { parameterKey: "portfolio_min_confidence_deals", parameterValue: "3", dataType: "number", description: "Minimum deals in a heatmap cell before it is flagged low-confidence" },
-      { parameterKey: "portfolio_significant_lift", parameterValue: "1.5", dataType: "number", description: "Minimum lift over baseline for an alert-code correlation to be treated as significant" },
-      { parameterKey: "portfolio_cluster_min_share", parameterValue: "0.5", dataType: "number", description: "Minimum share of a group's deals carrying a code for it to count toward a correlation cluster" },
-      { parameterKey: "portfolio_cluster_min_deals", parameterValue: "3", dataType: "number", description: "Minimum deals in a group before its correlations are considered for clustering" },
-      { parameterKey: "meddpicc_red_max", parameterValue: "40", dataType: "number", description: "MEDDPICC overall % below which the qualification RAG badge shows Red" },
-      { parameterKey: "meddpicc_green_min", parameterValue: "75", dataType: "number", description: "MEDDPICC overall % above which the qualification RAG badge shows Green" },
-    ])
-    .onConflictDoNothing();
+  await db.insert(engineThresholds).values(ENGINE_THRESHOLDS).onConflictDoNothing();
 
   const today = new Date().toISOString().slice(0, 10);
   await db
     .insert(fxRates)
-    .values([
-      { baseCurrency: "EUR", quoteCurrency: "USD", rate: "1.08000000", asOf: today },
-      { baseCurrency: "GBP", quoteCurrency: "USD", rate: "1.27000000", asOf: today },
-      { baseCurrency: "USD", quoteCurrency: "USD", rate: "1.00000000", asOf: today },
-    ])
+    .values(FX_RATES.map((r) => ({ ...r, asOf: today })))
     .onConflictDoNothing();
 
   // Predictive scoring model calibrated weights (Settings redesign)
-  // All weights are stored as fractions of 1.0 (numeric(5,4) constraint) and sum to 1.0000.
   // Task 6 will read these and scale by 100 to preserve the 0-100 scoring convention.
   // Guarded by a presence check (scoring model weights have no unique constraint on featureId,
   // so onConflictDoNothing cannot dedupe by featureId).
-  const scoringWeightDefaults: { featureId: string; calibratedWeight: string }[] = [
-    { featureId: "gate_momentum", calibratedWeight: "0.2200" },
-    { featureId: "stage_velocity", calibratedWeight: "0.1300" },
-    { featureId: "services_attachment", calibratedWeight: "0.1000" },
-    { featureId: "executive_alignment", calibratedWeight: "0.1300" },
-    { featureId: "blocker_load", calibratedWeight: "0.0900" },
-    { featureId: "deal_size_confidence", calibratedWeight: "0.0500" },
-    { featureId: "close_pressure", calibratedWeight: "0.1000" },
-    { featureId: "historical_win_rate", calibratedWeight: "0.0800" },
-    { featureId: "playbook_adherence", calibratedWeight: "0.1000" },
-  ];
   const existingScoringWeights = await db.select({ id: scoringModelWeights.id }).from(scoringModelWeights).limit(1);
   if (existingScoringWeights.length === 0) {
     await db
       .insert(scoringModelWeights)
       .values(
-        scoringWeightDefaults.map((w) => ({
+        SCORING_MODEL_WEIGHTS.map((w) => ({
           featureId: w.featureId,
           calibratedWeight: w.calibratedWeight,
           sampleSize: 0,
@@ -400,24 +159,9 @@ async function seedLookups() {
   }
 
   // Sample segments and deal types (Settings redesign)
-  await db
-    .insert(segments)
-    .values([
-      { name: "Enterprise", sortOrder: 1 },
-      { name: "Mid-Market", sortOrder: 2 },
-      { name: "Commercial", sortOrder: 3 },
-    ])
-    .onConflictDoNothing();
+  await db.insert(segments).values(SEGMENTS).onConflictDoNothing();
 
-  await db
-    .insert(dealTypes)
-    .values([
-      { name: "New Business", sortOrder: 1 },
-      { name: "Expansion", sortOrder: 2 },
-      { name: "Renewal", sortOrder: 3 },
-      { name: "Migration", sortOrder: 4 },
-    ])
-    .onConflictDoNothing();
+  await db.insert(dealTypes).values(DEAL_TYPES).onConflictDoNothing();
 
   // Built-in automation rule template (Settings redesign)
   // Guarded by a presence check (automation rule templates have no unique constraint on name,
@@ -426,27 +170,16 @@ async function seedLookups() {
   if (existingTemplates.length === 0) {
     await db
       .insert(automationRuleTemplates)
-      .values([
-        {
-          name: "Critical anomaly alert",
-          description: "Notify the deal owner when a Critical-severity anomaly is detected on a deal above $50K.",
-          category: "risk",
-          triggerEvent: "health_changed",
-          conditions: [{ field: "toStatus", operator: "eq", value: "RED" }],
-          actions: [{ actionType: "in_app_notify", config: { message: "Deal health changed to RED — review immediately." } }],
-          isBuiltin: true,
-        },
-      ])
+      .values(AUTOMATION_RULE_TEMPLATES)
       .onConflictDoNothing();
   } else {
     logger.info("Automation rule templates already present — skipping seed");
   }
 }
 
-// C4: stage-keyed playbooks with ordered steps. The auto-assign engine keys off
-// playbooks.applicableStage (the pipeline stage *name*) and orders steps by
-// stepOrder. Guarded by a presence check (playbooks have no unique name column,
-// so onConflictDoNothing cannot dedupe by name).
+// C4: stage-keyed playbooks with ordered steps. Guarded by a presence check
+// (playbooks have no unique name column, so onConflictDoNothing cannot dedupe
+// by name).
 async function seedPlaybooks() {
   const existing = await db.select({ id: playbooks.id }).from(playbooks).limit(1);
   if (existing.length > 0) {
@@ -454,86 +187,7 @@ async function seedPlaybooks() {
     return;
   }
 
-  const playbookData: {
-    playbookName: string;
-    description: string;
-    applicableStage: string;
-    steps: {
-      stepOrder: number;
-      stepName: string;
-      recommendedAction: string;
-      expectedDurationDays: number;
-      isCritical: boolean;
-    }[];
-  }[] = [
-    {
-      playbookName: "Discovery / Qualification Playbook",
-      description:
-        "Qualify hard and confirm a champion before investing SE and deal resources.",
-      applicableStage: "Discovery",
-      steps: [
-        { stepOrder: 1, stepName: "MEDDPICC qualification scored", recommendedAction: "Complete a MEDDPICC qualification (metrics, economic buyer, decision criteria/process, paper process, pain, champion, competition) and record the score.", expectedDurationDays: 3, isCritical: true },
-        { stepOrder: 2, stepName: "Champion validated", recommendedAction: "Confirm a named internal advocate with power, access, and willingness to sell on your behalf.", expectedDurationDays: 3, isCritical: true },
-        { stepOrder: 3, stepName: "Economic buyer identified & engaged", recommendedAction: "Identify who controls budget/final authority and confirm direct engagement has occurred.", expectedDurationDays: 4, isCritical: false },
-        { stepOrder: 4, stepName: "Technical decision criteria mapped", recommendedAction: "Document the prospect's technical requirements, evaluation criteria, and scoring rubric.", expectedDurationDays: 4, isCritical: false },
-      ],
-    },
-    {
-      playbookName: "POC / Evaluation Playbook",
-      description:
-        "Drive a proof-of-concept to a clean go/no-go with locked success criteria.",
-      applicableStage: "Validation",
-      steps: [
-        { stepOrder: 1, stepName: "Lock success criteria", recommendedAction: "Run a success-criteria workshop and get written sign-off on the PoC exit criteria (Gate 1).", expectedDurationDays: 3, isCritical: true },
-        { stepOrder: 2, stepName: "Secure executive sponsor", recommendedAction: "Confirm an executive sponsor agrees on the evaluation criteria and timeline.", expectedDurationDays: 5, isCritical: true },
-        { stepOrder: 3, stepName: "Demonstrate core workflow", recommendedAction: "Validate the primary use-case workflows in the customer's environment.", expectedDurationDays: 7, isCritical: false },
-        { stepOrder: 4, stepName: "Demo delivered & feedback captured", recommendedAction: "Deliver a formal demo and capture structured feedback from all stakeholders.", expectedDurationDays: 3, isCritical: false },
-        { stepOrder: 5, stepName: "Architecture review & sign-off", recommendedAction: "Run a technical architecture review with the prospect's infra/DevOps team (deployment design, integrations, data flows, scalability) and capture documented sign-off.", expectedDurationDays: 5, isCritical: false },
-        { stepOrder: 6, stepName: "Run performance / scale test", recommendedAction: "Stress the platform under production-representative load and capture the results.", expectedDurationDays: 5, isCritical: false },
-        { stepOrder: 7, stepName: "Go/no-go decision", recommendedAction: "Hold a decision review against the locked criteria and set the next-stage plan.", expectedDurationDays: 2, isCritical: true },
-      ],
-    },
-    {
-      playbookName: "Negotiation / Commercial Playbook",
-      description:
-        "Protect price integrity and attach services while closing the commercial.",
-      applicableStage: "Commercial",
-      steps: [
-        { stepOrder: 1, stepName: "Confirm technical win", recommendedAction: "Verify Gate 3 (performance) is passed before opening commercial discussions.", expectedDurationDays: 2, isCritical: true },
-        { stepOrder: 2, stepName: "Build services-attached business case", recommendedAction: "Draft a Professional Services / Premium Support SOW to protect the deployment.", expectedDurationDays: 4, isCritical: false },
-        { stepOrder: 3, stepName: "Business case / ROI delivered", recommendedAction: "Deliver a quantified business case showing the prospect's expected return, savings, or revenue impact.", expectedDurationDays: 4, isCritical: false },
-        { stepOrder: 4, stepName: "Present pricing & anchor value", recommendedAction: "Walk the customer through the value-anchored pricing model and ROI.", expectedDurationDays: 3, isCritical: false },
-        { stepOrder: 5, stepName: "Formal proposal / price quote delivered", recommendedAction: "Deliver the official pricing document: SKU breakdown, discount justification, term length, and payment schedule.", expectedDurationDays: 2, isCritical: true },
-        { stepOrder: 6, stepName: "Lock mutual close plan", recommendedAction: "Agree a mutual action plan with a hard decision date and procurement owners.", expectedDurationDays: 3, isCritical: true },
-      ],
-    },
-    {
-      playbookName: "Procurement / Legal Playbook",
-      description: "Clear legal and security review to a signed contract.",
-      applicableStage: "Procurement",
-      steps: [
-        { stepOrder: 1, stepName: "Submit security questionnaire", recommendedAction: "Provide the completed security questionnaire and architecture docs to InfoSec.", expectedDurationDays: 5, isCritical: false },
-        { stepOrder: 2, stepName: "NDA, DPA & compliance evidence provided", recommendedAction: "Ensure NDA and (for personal/regulated data) a DPA are signed, and deliver required compliance evidence (SOC 2, ISO 27001, HIPAA BAA) for InfoSec acceptance.", expectedDurationDays: 4, isCritical: false },
-        { stepOrder: 3, stepName: "Resolve legal redlines", recommendedAction: "Work counsel through liability, data-processing, and SLA redlines.", expectedDurationDays: 7, isCritical: true },
-        { stepOrder: 4, stepName: "Vendor registration / procurement onboarding", recommendedAction: "Complete vendor registration in the buyer's procurement system (Ariba/Coupa/Oracle) so a PO can be issued.", expectedDurationDays: 5, isCritical: false },
-        { stepOrder: 5, stepName: "Purchase order received", recommendedAction: "Confirm a formal PO matching the order form/quote has been received.", expectedDurationDays: 3, isCritical: true },
-        { stepOrder: 6, stepName: "Obtain final sign-off", recommendedAction: "Secure CTO/VP Engineering and procurement sign-off for execution.", expectedDurationDays: 3, isCritical: true },
-      ],
-    },
-    {
-      playbookName: "Onboarding / Handoff Playbook",
-      description:
-        "Convert a signed deal into a clean sales-to-delivery handoff and a confirmed go-live.",
-      applicableStage: "Closed-Won",
-      steps: [
-        { stepOrder: 1, stepName: "Customer success handoff prepared", recommendedAction: "Complete a structured sales-to-CS handoff: deal context, key contacts, technical requirements, promised deliverables.", expectedDurationDays: 3, isCritical: true },
-        { stepOrder: 2, stepName: "Onboarding kickoff scheduled", recommendedAction: "Calendar the implementation kickoff with the right attendees from both sides.", expectedDurationDays: 2, isCritical: false },
-        { stepOrder: 3, stepName: "Go-live date confirmed", recommendedAction: "Confirm the go-live date explicitly with the customer, not just inferred from a timeline.", expectedDurationDays: 3, isCritical: false },
-      ],
-    },
-  ];
-
-  for (const pb of playbookData) {
+  for (const pb of PLAYBOOK_SEEDS) {
     const [inserted] = await db
       .insert(playbooks)
       .values({
@@ -547,7 +201,7 @@ async function seedPlaybooks() {
       pb.steps.map((s) => ({ playbookId: inserted.id, ...s })),
     );
   }
-  logger.info({ count: playbookData.length }, "Seeded stage-keyed playbooks");
+  logger.info({ count: PLAYBOOK_SEEDS.length }, "Seeded stage-keyed playbooks");
 }
 
 async function seedMeddpiccQuestions() {
@@ -651,13 +305,8 @@ async function seedDeals() {
   }
 
   async function insertGates(dealId: string, completed: string[]) {
-    const codes = [
-      "G1_CRITERIA_LOCKED", "G1_EXECUTIVE_AGREED", "G2_WORKFLOW_VERIFIED",
-      "G2_CHAMPION_DEFENSIBLE", "G3_PERFORMANCE_PASSED", "G3_INTEGRATIONS_MAPPED",
-      "G4_INFOSEC_CLEARED", "G4_COMPLIANCE_VALIDATED", "G5_CTO_SIGNED_OFF",
-    ];
     await db.insert(dealTechnicalGates).values(
-      codes.map((gateCode) => ({
+      ALL_GATE_CODES.map((gateCode) => ({
         dealId,
         gateCode,
         isCompleted: completed.includes(gateCode),
@@ -667,289 +316,104 @@ async function seedDeals() {
     );
   }
 
-  // Deal 1: Premature Commercial elephant, low gate completion, no services
-  const [d1] = await db
-    .insert(enterpriseDeals)
-    .values({
-      dealName: "Project Atlas",
-      accountName: "Globex Corporation",
-      crmRecordUrl: "https://crm.example.com/deals/atlas",
-      accountManager: "Sarah Chen",
-      technicalLead: "Marcus Webb",
-      salesStageId: stageId("Commercial"),
-      stageEnteredAt: daysAgo(28),
-      productRevenue: "780000",
-      pricingModelId: pricingId("Annual Subscription"),
-      contractTermYears: 2,
-      dealCurrency: "USD",
-      expectedCloseDate: dateInDays(20),
-      winProbabilityPct: 60,
-      servicesRevenue: "0",
-      servicesTierId: tierId("None"),
-      managerStrategicBlueprint: "Land ADAudit Plus for the SOX audit, expand into the AD360 suite next year.",
-      speakerNotes: "Champion is nervous about the SOX timeline — do not share.",
-      competitorId: competitorId("Quest"),
-      complianceDriverId: driverId("SOX"),
-      complianceDeadline: dateInDays(25),
-    })
-    .returning({ id: enterpriseDeals.id });
-  await insertGates(d1.id, ["G1_CRITERIA_LOCKED"]);
-  await insertInterests(d1.id, ["ADAUDIT_PLUS"]);
-  await db.insert(dealCrossSells).values([
-    { dealId: d1.id, productId: productId("ADMANAGER_PLUS") },
-  ]);
-  await db.insert(dealBlockers).values([
-    { dealId: d1.id, categoryId: catId("Technical"), severityId: sevId("High"), description: "Performance benchmark not yet scheduled with customer infra team." },
-  ]);
-  // Mirror the incumbent competitor into the Competitive Landscape join table,
-  // same as seedIncumbentCompetitor in routes/deals.ts does for real deal
-  // create/update — without this, closing this deal archives an empty
-  // competitorsFaced (post-mortem.ts only reads deal_competitors).
-  await db.insert(dealCompetitors).values({ dealId: d1.id, competitorId: competitorId("Quest"), status: "Active" }).onConflictDoNothing();
-
-  // Deal 2: Healthy validation-stage deal (EUR) with services. EUR is
-  // deliberate, not a stray inconsistency with the other seeded deals' USD:
-  // this is the only seeded deal whose fxRate != 1, so it's the sole
-  // end-to-end exercise of the EUR->USD normalization and MISSING_FX_RATE
-  // paths in lib/engine/src/index.ts (see the seeded fxRates below and
-  // getFxRate in lib/intelligence.ts). Do not flip this to USD.
-  const [d2] = await db
-    .insert(enterpriseDeals)
-    .values({
-      dealName: "Project Beacon",
-      accountName: "Initech Industries",
-      crmRecordUrl: "https://crm.example.com/deals/beacon",
-      accountManager: "David Park",
-      technicalLead: "Priya Natarajan",
-      salesStageId: stageId("Validation"),
-      stageEnteredAt: daysAgo(9),
-      productRevenue: "240000",
-      pricingModelId: pricingId("Multi-Year Committed"),
-      contractTermYears: 3,
-      dealCurrency: "EUR",
-      expectedCloseDate: dateInDays(75),
-      winProbabilityPct: 45,
-      servicesRevenue: "60000",
-      servicesTierId: tierId("Professional Services Pitched"),
-      managerStrategicBlueprint: "Technical win first; commercial follows once Gate 3 passes.",
-      competitorId: competitorId("Splunk"),
-      complianceDriverId: driverId("PCI-DSS"),
-      complianceDeadline: dateInDays(75),
-      estimatedLogSources: 1500,
-    })
-    .returning({ id: enterpriseDeals.id });
-  await insertGates(d2.id, ["G1_CRITERIA_LOCKED", "G1_EXECUTIVE_AGREED", "G2_WORKFLOW_VERIFIED"]);
-  await insertInterests(d2.id, ["EVENTLOG_ANALYZER"]);
-  // Multi-driver demo: Beacon is also driven by GDPR alongside its primary PCI-DSS.
-  await db
-    .insert(dealComplianceDrivers)
-    .values([{ dealId: d2.id, complianceDriverId: driverId("GDPR") }])
-    .onConflictDoNothing();
-  await db.insert(dealCrossSells).values([
-    { dealId: d2.id, productId: productId("EVENTLOG_ANALYZER") },
-    { dealId: d2.id, productId: productId("DATA_SECURITY_PLUS") },
-    { dealId: d2.id, productId: productId("CLOUD_SECURITY_PLUS") },
-  ]);
-  await db.insert(dealCompetitors).values({ dealId: d2.id, competitorId: competitorId("Splunk"), status: "Active" }).onConflictDoNothing();
-
-  // Deal 3: Procurement stage, near close, mega deal, stale
-  const [d3] = await db
-    .insert(enterpriseDeals)
-    .values({
-      dealName: "Project Cobalt",
-      accountName: "Umbrella Holdings",
-      crmRecordUrl: "https://crm.example.com/deals/cobalt",
-      accountManager: "Sarah Chen",
-      technicalLead: "Marcus Webb",
-      salesStageId: stageId("Procurement"),
-      stageEnteredAt: daysAgo(34),
-      productRevenue: "1200000",
-      pricingModelId: pricingId("Multi-Year Committed"),
-      contractTermYears: 3,
-      dealCurrency: "USD",
-      expectedCloseDate: dateInDays(12),
-      winProbabilityPct: 80,
-      servicesRevenue: "180000",
-      servicesTierId: tierId("Combined SOW Shared"),
-      managerStrategicBlueprint: "Close before quarter end; legal redlines are the last gate.",
-      competitorId: competitorId("Microsoft Entra"),
-      complianceDriverId: driverId("ISO 27001"),
-      complianceDeadline: dateInDays(60),
-    })
-    .returning({ id: enterpriseDeals.id });
-  await insertGates(d3.id, [
-    "G1_CRITERIA_LOCKED", "G1_EXECUTIVE_AGREED", "G2_WORKFLOW_VERIFIED",
-    "G2_CHAMPION_DEFENSIBLE", "G3_PERFORMANCE_PASSED",
-  ]);
-  await insertInterests(d3.id, ["ADMANAGER_PLUS"]);
-  await db.insert(dealCrossSells).values([
-    { dealId: d3.id, productId: productId("ADAUDIT_PLUS") },
-    { dealId: d3.id, productId: productId("ADSELFSERVICE_PLUS") },
-    { dealId: d3.id, productId: productId("M365_MANAGER_PLUS") },
-  ]);
-  await db.insert(dealBlockers).values([
-    { dealId: d3.id, categoryId: catId("Legal"), severityId: sevId("Medium"), description: "Liability cap redline pending customer counsel review." },
-  ]);
-  await db.insert(dealCompetitors).values({ dealId: d3.id, competitorId: competitorId("Microsoft Entra"), status: "Active" }).onConflictDoNothing();
-
-  // Deal 4: Closed-Lost with archetype
-  const [d4] = await db
-    .insert(enterpriseDeals)
-    .values({
-      dealName: "Project Delta",
-      accountName: "Soylent Systems",
-      crmRecordUrl: "https://crm.example.com/deals/delta",
-      accountManager: "David Park",
-      technicalLead: "Priya Natarajan",
-      salesStageId: stageId("Closed-Lost"),
-      stageEnteredAt: daysAgo(60),
-      productRevenue: "420000",
-      pricingModelId: pricingId("Annual Subscription"),
-      contractTermYears: 1,
-      dealCurrency: "USD",
-      expectedCloseDate: dateInDays(-30),
-      winProbabilityPct: 0,
-      servicesRevenue: "0",
-      servicesTierId: tierId("None"),
-      managerStrategicBlueprint: "Lost momentum after champion left mid-evaluation.",
-      lossReason: "Customer champion departed; replacement favored incumbent.",
-      lossArchetypeId: archetypeId("Champion Departure"),
-      competitorId: competitorId("Okta"),
-    })
-    .returning({ id: enterpriseDeals.id });
-  await insertGates(d4.id, ["G1_CRITERIA_LOCKED", "G1_EXECUTIVE_AGREED"]);
-  await insertInterests(d4.id, ["ADSELFSERVICE_PLUS"]);
-  await archiveLostDeal({
-    dealId: d4.id,
-    accountName: "Soylent Systems",
-    dealName: "Project Delta",
-    finalTcv: 420000,
-    pricingModel: "Annual Subscription",
-    servicesTier: "None",
-    gatesCompleted: 2,
-    daysActive: 60,
-    competitorName: "Okta",
-    competitorId: competitorId("Okta"),
-  });
-
-  // Deals 5-12: additional Closed-Lost deals spread across the remaining loss
-  // archetypes and several competitors, so the Closed-Lost Autopsy analytics
-  // (archetype breakdown, competitive-loss aggregation, loss-risk lethality map)
-  // have more than a single data point to work with.
-  const lostDealSeeds: {
-    dealName: string;
-    accountName: string;
-    archetype: string;
-    competitor: string | null;
-    tcv: number;
-    servicesTier: string;
-    gates: string[];
-    daysActive: number;
-    productCode: string;
-    lossReason: string;
-  }[] = [
-    {
-      dealName: "Project Sentinel", accountName: "Meridian Health",
-      archetype: "Technical Disqualification", competitor: "Splunk",
-      tcv: 350000, servicesTier: "None", gates: [], daysActive: 45,
-      productCode: "EVENTLOG_ANALYZER",
-      lossReason: "PoC failed the log-ingestion performance benchmark.",
-    },
-    {
-      dealName: "Project Vantage", accountName: "Bluewave Logistics",
-      archetype: "Budget Freeze", competitor: "Netwrix",
-      tcv: 610000, servicesTier: "Professional Services Pitched",
-      gates: ["G1_CRITERIA_LOCKED", "G1_EXECUTIVE_AGREED", "G2_WORKFLOW_VERIFIED"],
-      daysActive: 52, productCode: "ADMANAGER_PLUS",
-      lossReason: "Customer froze all new software spend for the fiscal year.",
-    },
-    {
-      dealName: "Project Halcyon", accountName: "Ferrous Metals Co",
-      archetype: "Loss to Incumbent", competitor: "Microsoft Entra",
-      tcv: 275000, servicesTier: "None", gates: ["G1_CRITERIA_LOCKED"],
-      daysActive: 38, productCode: "ADSELFSERVICE_PLUS",
-      lossReason: "Renewed the incumbent Entra ID contract instead of switching.",
-    },
-    {
-      dealName: "Project Ember", accountName: "Coral Bay Retail",
-      archetype: "Compliance Gap", competitor: "SailPoint",
-      tcv: 190000, servicesTier: "None", gates: [],
-      daysActive: 21, productCode: "ADAUDIT_PLUS",
-      lossReason: "Missing SOC 2 Type II attestation disqualified us in security review.",
-    },
-    {
-      dealName: "Project Wraith", accountName: "Nimbus Cloud Services",
-      archetype: "No Decision", competitor: null,
-      tcv: 500000, servicesTier: "None",
-      gates: ["G1_CRITERIA_LOCKED", "G1_EXECUTIVE_AGREED"],
-      daysActive: 70, productCode: "DATA_SECURITY_PLUS",
-      lossReason: "Customer indefinitely deferred the initiative; no vendor selected.",
-    },
-    {
-      dealName: "Project Solace", accountName: "Ironclad Manufacturing",
-      archetype: "Technical Disqualification", competitor: "IBM QRadar",
-      tcv: 430000, servicesTier: "None", gates: [],
-      daysActive: 33, productCode: "CLOUD_SECURITY_PLUS",
-      lossReason: "Failed to demonstrate required OT-network log coverage.",
-    },
-    {
-      dealName: "Project Meridian Rise", accountName: "Northgate Financial",
-      archetype: "Loss to Incumbent", competitor: "Quest",
-      tcv: 720000, servicesTier: "Combined SOW Shared",
-      gates: ["G1_CRITERIA_LOCKED", "G1_EXECUTIVE_AGREED", "G2_WORKFLOW_VERIFIED", "G2_CHAMPION_DEFENSIBLE"],
-      daysActive: 95, productCode: "ADMANAGER_PLUS",
-      lossReason: "Long-standing Quest relationship made switching too costly to justify.",
-    },
-    {
-      dealName: "Project Tundra", accountName: "Alpine Freight",
-      archetype: "Champion Departure", competitor: "Okta",
-      tcv: 260000, servicesTier: "None", gates: ["G1_CRITERIA_LOCKED"],
-      daysActive: 40, productCode: "ADSELFSERVICE_PLUS",
-      lossReason: "Internal champion left the company; successor restarted the evaluation with Okta.",
-    },
-  ];
-
-  for (const s of lostDealSeeds) {
-    const [d] = await db
+  for (const seed of DEAL_SEEDS) {
+    const [deal] = await db
       .insert(enterpriseDeals)
       .values({
-        dealName: s.dealName,
-        accountName: s.accountName,
-        accountManager: "Sarah Chen",
-        technicalLead: "Marcus Webb",
-        salesStageId: stageId("Closed-Lost"),
-        stageEnteredAt: daysAgo(s.daysActive),
-        productRevenue: String(s.tcv),
-        pricingModelId: pricingId("Annual Subscription"),
-        contractTermYears: 1,
-        dealCurrency: "USD",
-        expectedCloseDate: dateInDays(-s.daysActive + 5),
-        winProbabilityPct: 0,
-        servicesRevenue: "0",
-        servicesTierId: tierId(s.servicesTier),
-        managerStrategicBlueprint: s.lossReason,
-        lossReason: s.lossReason,
-        lossArchetypeId: archetypeId(s.archetype),
-        competitorId: s.competitor ? competitorId(s.competitor) : null,
+        dealName: seed.dealName,
+        accountName: seed.accountName,
+        crmRecordUrl: seed.crmRecordUrl,
+        accountManager: seed.accountManager,
+        technicalLead: seed.technicalLead,
+        salesStageId: stageId(seed.stageName),
+        stageEnteredAt: daysAgo(seed.stageEnteredDaysAgo),
+        productRevenue: seed.productRevenue,
+        pricingModelId: pricingId(seed.pricingModelName),
+        contractTermYears: seed.contractTermYears,
+        dealCurrency: seed.dealCurrency,
+        expectedCloseDate: dateInDays(seed.expectedCloseInDays),
+        winProbabilityPct: seed.winProbabilityPct,
+        servicesRevenue: seed.servicesRevenue,
+        servicesTierId: tierId(seed.servicesTierName),
+        managerStrategicBlueprint: seed.managerStrategicBlueprint,
+        speakerNotes: seed.speakerNotes,
+        lossReason: seed.lossReason,
+        lossArchetypeId: seed.lossArchetypeName
+          ? archetypeId(seed.lossArchetypeName)
+          : undefined,
+        competitorId: seed.competitorName ? competitorId(seed.competitorName) : null,
+        complianceDriverId: seed.complianceDriverName
+          ? driverId(seed.complianceDriverName)
+          : undefined,
+        complianceDeadline:
+          seed.complianceDeadlineInDays === undefined
+            ? undefined
+            : dateInDays(seed.complianceDeadlineInDays),
+        estimatedLogSources: seed.estimatedLogSources,
       })
       .returning({ id: enterpriseDeals.id });
-    await insertGates(d.id, s.gates);
-    await insertInterests(d.id, [s.productCode]);
-    await archiveLostDeal({
-      dealId: d.id,
-      accountName: s.accountName,
-      dealName: s.dealName,
-      finalTcv: s.tcv,
-      pricingModel: "Annual Subscription",
-      servicesTier: s.servicesTier,
-      gatesCompleted: s.gates.length,
-      daysActive: s.daysActive,
-      competitorName: s.competitor,
-      competitorId: s.competitor ? competitorId(s.competitor) : null,
-    });
+
+    await insertGates(deal.id, seed.completedGateCodes);
+    await insertInterests(deal.id, seed.productInterestCodes);
+
+    // Multi-driver deals mirror their secondary drivers into the join table;
+    // the primary one stays on enterprise_deals.compliance_driver_id.
+    if (seed.extraComplianceDriverNames && seed.extraComplianceDriverNames.length > 0) {
+      await db
+        .insert(dealComplianceDrivers)
+        .values(
+          seed.extraComplianceDriverNames.map((name) => ({
+            dealId: deal.id,
+            complianceDriverId: driverId(name),
+          })),
+        )
+        .onConflictDoNothing();
+    }
+
+    if (seed.crossSellCodes && seed.crossSellCodes.length > 0) {
+      await db.insert(dealCrossSells).values(
+        seed.crossSellCodes.map((code) => ({ dealId: deal.id, productId: productId(code) })),
+      );
+    }
+
+    if (seed.blockers && seed.blockers.length > 0) {
+      await db.insert(dealBlockers).values(
+        seed.blockers.map((b) => ({
+          dealId: deal.id,
+          categoryId: catId(b.categoryName),
+          severityId: sevId(b.severityName),
+          description: b.description,
+        })),
+      );
+    }
+
+    if (seed.archiveAsLost) {
+      await archiveLostDeal({
+        dealId: deal.id,
+        accountName: seed.accountName,
+        dealName: seed.dealName,
+        finalTcv: Number(seed.productRevenue),
+        pricingModel: seed.pricingModelName,
+        servicesTier: seed.servicesTierName,
+        gatesCompleted: seed.completedGateCodes.length,
+        daysActive: seed.stageEnteredDaysAgo,
+        competitorName: seed.competitorName,
+        competitorId: seed.competitorName ? competitorId(seed.competitorName) : null,
+      });
+    } else if (seed.competitorName) {
+      // Mirror the incumbent competitor into the Competitive Landscape join table,
+      // same as seedIncumbentCompetitor in routes/deals.ts does for real deal
+      // create/update — without this, closing this deal archives an empty
+      // competitorsFaced (post-mortem.ts only reads deal_competitors). Lost deals
+      // get their own "Lost To" row from archiveLostDeal instead.
+      await db
+        .insert(dealCompetitors)
+        .values({ dealId: deal.id, competitorId: competitorId(seed.competitorName), status: "Active" })
+        .onConflictDoNothing();
+    }
   }
 
-  logger.info({ count: 4 + lostDealSeeds.length }, "Seeded demo deals");
+  logger.info({ count: DEAL_SEEDS.length }, "Seeded demo deals");
 
   async function archiveLostDeal(params: {
     dealId: string;

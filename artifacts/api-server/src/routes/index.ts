@@ -14,6 +14,7 @@ import auditRouter from "./audit";
 import batSignalRouter from "./batsignal";
 import lookupsRouter from "./lookups";
 import settingsAuditRouter from "./settings-audit";
+import adminRouter from "./admin";
 import v2Router from "./v2";
 import { cacheInvalidationMiddleware } from "../lib/cache-middleware";
 import { requireAuth } from "../lib/auth";
@@ -66,6 +67,7 @@ router.use("/v1", auditRouter);
 router.use("/v1", batSignalRouter);
 router.use("/v1", lookupsRouter);
 router.use("/v1", settingsAuditRouter); // now genuinely protected, not accidentally
+router.use("/v1", adminRouter); // POST /admin/seed — admin-only via requireWriteRole
 router.use("/v2", v2Router);
 
 export default router;
