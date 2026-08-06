@@ -60,9 +60,53 @@ function buildInitObject(req: CatalystRequestLike): { headers: Record<string, un
   return { headers: { ...req.headers } };
 }
 
+/**
+ * The request each app was built from, so an admin-scoped sibling can be
+ * re-derived later from the app alone (see `adminAppFor`).
+ *
+ * A WeakMap keyed on the app object, matching how this module already caches
+ * per-request reads — the entry dies with the app, and nothing has to be
+ * threaded through call sites that don't care.
+ */
+const requestByApp = new WeakMap<object, CatalystRequestLike>();
+
 /** Initialize a per-request Catalyst app scoped to the calling user's own permissions. */
 export function initCatalystApp(req: CatalystRequestLike): CatalystApp {
-  return loadSdk().initialize(buildInitObject(req));
+  const app = loadSdk().initialize(buildInitObject(req));
+  requestByApp.set(app as object, { headers: { ...req.headers } });
+  return app;
+}
+
+/**
+ * Re-derive an ADMIN-scoped app from one already built by `initCatalystApp` /
+ * `initCatalystAdminApp`.
+ *
+ * This exists because some Catalyst components refuse a signed-in user's app
+ * even when the SDK's own annotations suggest otherwise — Stratus object
+ * writes are the live example: an Authenticated bucket serves *project users*,
+ * and every human who signs into this app is a Catalyst App Administrator, so
+ * their app is rejected while the application's own identity is accepted.
+ *
+ * The alternative was threading a second app (or the raw headers) through all
+ * 14 `emitDealEvent` call sites so event subscribers could build one. This
+ * keeps it to a single place. It does re-initialize the SDK, so call it only on
+ * the path that actually needs admin scope, never per request.
+ *
+ * NOTE the empty-headers shortcut does NOT work: `initialize({headers: {}},
+ * {scope:"admin"})` fails at runtime with "Failed to parse object". A real
+ * request's headers are required even for admin scope, which is exactly why
+ * this map exists rather than a bare constructor.
+ */
+export function adminAppFor(catalystApp: CatalystApp): CatalystApp {
+  const req = requestByApp.get(catalystApp as object);
+  if (!req) {
+    throw new Error(
+      "adminAppFor() was given an app not built by initCatalystApp — no request " +
+        "headers are recorded for it, and Catalyst cannot initialize an admin " +
+        "scope without them.",
+    );
+  }
+  return initCatalystAdminApp(req);
 }
 
 /**
@@ -72,7 +116,9 @@ export function initCatalystApp(req: CatalystRequestLike): CatalystApp {
  * matching the pattern documented in catalyst-datastore-constraints.md.
  */
 export function initCatalystAdminApp(req: CatalystRequestLike): CatalystApp {
-  return loadSdk().initialize(buildInitObject(req), { scope: "admin" });
+  const app = loadSdk().initialize(buildInitObject(req), { scope: "admin" });
+  requestByApp.set(app as object, { headers: { ...req.headers } });
+  return app;
 }
 
 function getTable(catalystApp: CatalystApp, tableName: string): CatalystTable {

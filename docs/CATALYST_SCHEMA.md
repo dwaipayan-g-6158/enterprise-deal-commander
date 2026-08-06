@@ -214,47 +214,70 @@ Two things worth knowing if this is ever revisited:
     `artifacts/api-server/src/routes/deals.validation.test.ts`, which asserts both the
     rejections and the accepted boundaries.
 
-## Deliberately not built: Stratus offload and durable webhook retry
+## Stratus offload and durable webhook retry — BOTH BUILT (2026-08-07)
 
-Both are **latent**, both were measured rather than guessed, and both have a cheap path to add
-later. Recording the decision here so it is a choice rather than an oversight.
+Previously deferred as latent; both are now shipped and verified live. Kept here because the
+reasoning that shaped them is not obvious from the code.
 
 ### Stratus offload for `v2_deal_snapshots.payload`
 
-`payload_inline` + `payload_key` exist; only `payload_inline` is ever written or read. Largest
-real payload measured in production on 2026-08-07: **4,904 of 10,000 chars** — ~51% headroom.
-EDC has zero Stratus references today, so wiring it is greenfield.
+Bucket **`edc-deal-snapshots`** (Authenticated template, versioning off), created by hand in the
+Console — there is no `Create_Bucket` API or MCP tool.
 
-**Do not "degrade gracefully" by dropping or truncating the payload.** It is not decoration —
-three live features read it: the deal trajectory chart
-(`gatePct`/`playbookPct`/`meddpiccPct`), the vital-signs 7-day baseline RED-alert count (both
-in `routes/v2/analytics.ts`), and `snapshotFingerprint`, which is how the hourly cron decides a
-snapshot is unchanged. Lose the payload and the fingerprint differs on every run, so the
-dedupe inverts into writing a duplicate row per deal per hour.
+**Threshold-triggered, not unconditional.** A payload ≤ `SNAPSHOT_PAYLOAD_LIMIT` (9,800) stays in
+`payload_inline` exactly as before and makes **no Stratus call at all**; only a larger one is
+written to `deal-snapshots/<dealId>/<snapshotId>.json` with `payload_key` set. This is the whole
+design: the vital-signs baseline reads one snapshot *per open deal* on every dashboard load and
+the trajectory reads *every* snapshot for a deal, so offloading everything would turn those into
+N and M object reads to fix a cap that is almost never hit. The cap is the problem; the storage
+location is not. Largest real payload measured 2026-08-07: 4,904 chars.
 
-What exists instead (`repositories/intel-core.ts`, `dealSnapshots.create`): a hard error at
-9,800 chars naming the deal and the size — Data Store's own rejection is an opaque 400 — plus
-a **warning at 7,500** so the revisit trigger is observed rather than remembered.
+Reads hydrate **inside the repository** (`hydratePayloads`), on all three methods that return
+snapshots — not via a helper callers must remember. A caller that forgot would silently read
+`payload: null`, which is the same swallowed-failure shape as the missing `key_lessons` column
+and the deal-list 500.
 
-**Revisit when:** that warning appears in the logs.
+**Still do not "degrade gracefully" by dropping or truncating the payload.** Three live features
+read it: the trajectory chart (`gatePct`/`playbookPct`/`meddpiccPct`), the vital-signs 7-day
+baseline RED-alert count (both `routes/v2/analytics.ts`), and `snapshotFingerprint`, which is how
+the hourly cron decides a snapshot is unchanged — lose it and the dedupe inverts into a duplicate
+row per deal per hour.
+
+**The trap that cost the most time — Stratus needs ADMIN scope here.** The SDK annotates
+`putObject`/`getObject` `@access admin, user`, which reads as "a user-scoped app is fine". It is
+not: an Authenticated bucket serves *project users*, and the docs are explicit that this applies
+"to project users only — **not** Collaborators or **Admins**". Every human who signs into EDC is
+a Catalyst App Administrator, so their app is refused. The symptom was maximally confusing — the
+offload worked from the **cron** (no user session ⇒ the application's own identity) and silently
+failed from the **event-driven** path, both calling the same repository. `adminAppFor()`
+(`lib/db/src/catalyst/sdk.ts`) re-derives an admin app from any app built by `initCatalystApp`,
+via a `WeakMap` of the originating request, so no second app has to be threaded through the 14
+`emitDealEvent` call sites. Note `initCatalystAdminApp({headers: {}})` does **not** work — it
+fails with "Failed to parse object"; real request headers are required even for admin scope.
+
+Second trap: **`getObject` resolves to a `Readable`, not a Buffer.** `Buffer.from(stream)` throws
+"The first argument must be of type string … Received an instance of IncomingMessage", which
+reads like a caller passing the wrong argument rather than a stream needing consumption.
 
 ### Durable webhook retry
 
-Webhooks are a fully shipped feature (Settings panel, event selection, auto-disable at 10
-consecutive failures) with **zero configured** today. Delivery works; only the *retry* is
-non-durable — `webhook-dispatcher.ts` schedules attempts 2 and 3 with an in-memory,
-`.unref()`'d `setTimeout` at 5s and 10s. AppSail's HTTP server normally keeps the loop alive
-long enough, so the loss window is an instance recycle inside ~15s. That is seconds, unlike
-the hour-long window that made the periodic-snapshot timer never fire at all.
+Retries are now **durable-only** — the in-memory `setTimeout` chain is gone. A failed attempt
+writes its own `v2_webhook_delivery_log` row carrying `attempt_count` and `next_attempt_at`, and
+the drain job re-fires it. The row IS the queue; there is no separate table. A row is pending iff
+`success = false AND next_attempt_at <= now`.
 
-A `logger.warn` now fires whenever a retry is scheduled, so one lost to a recycle is
-diagnosable rather than invisible — the delivery-log row is only written once an attempt
-*completes*, so without it there would be no trace.
+- **5 attempts over ~1h50m**, exponential: 10m / 20m / 40m (capped). Auto-disable at 10
+  consecutive failures is unchanged and still applies on top.
+- Drained by `POST /api/v1/jobs/webhook-retries`, cron **`edcWebhookRetries`** (`*/10 * * * *`,
+  job pool `edcjobs`), reusing the plumbing the snapshot job already had.
+- The drain clears `next_attempt_at` **before** re-firing, so a run overlapping the next cron
+  tick cannot hand the same row out twice. A webhook deleted or disabled since queuing is
+  dropped, not resurrected.
+- Rows written before these columns existed have no `next_attempt_at` and are invisible to the
+  drain — correct: the old in-memory scheme had already abandoned them.
 
-**Revisit when:** the first real webhook is configured. **The cheap path:** a `webhook-retries`
-handler on the existing `POST /api/v1/jobs/:jobName` plumbing (secret, job pool and cron all
-already exist), plus `attempt_count` and `next_attempt_at` columns on
-`v2_webhook_delivery_log`, which already carries `payload`, `success` and `webhook_id`.
+Trade accepted deliberately: first-retry latency moved from 5s to ≤10m. A retry that happens late
+beats one that silently never happens.
 
 ## A column this manifest missed: `v2_deal_memory.key_lessons`
 

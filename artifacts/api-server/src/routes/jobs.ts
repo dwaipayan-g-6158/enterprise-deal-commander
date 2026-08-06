@@ -34,6 +34,7 @@ import { HttpError, notFound } from "../lib/http";
 import { logger } from "../lib/logger";
 import { activeDealIds } from "../lib/catalyst/portfolio";
 import { snapshotAllActiveDealsCatalyst } from "../lib/subscribers/snapshot-service";
+import { drainWebhookRetries } from "../lib/subscribers/webhook-dispatcher";
 
 const router: IRouter = Router();
 
@@ -97,6 +98,16 @@ const JOBS: Record<string, JobHandler> = {
     const ids = await activeDealIds(catalystApp);
     const result = await snapshotAllActiveDealsCatalyst(catalystApp, ids);
     return { activeDeals: ids.length, ...result };
+  },
+
+  /**
+   * Every 10 minutes: re-attempt webhook deliveries whose retry has come due.
+   * This is what makes webhook retries durable — the dispatcher no longer owns
+   * an in-memory timer that an instance recycle would silently discard (see
+   * lib/subscribers/webhook-dispatcher.ts).
+   */
+  async "webhook-retries"(req: Request) {
+    return drainWebhookRetries(initCatalystApp(req));
   },
 };
 

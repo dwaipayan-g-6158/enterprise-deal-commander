@@ -82,6 +82,6 @@ export const DATASTORE_COLUMNS: Readonly<Record<string, readonly string[]>> = {
   "v2_stakeholders": ["id", "deal_id", "name", "title", "company", "role_type", "influence_level", "sentiment", "email", "phone", "notes", "reports_to_id", "is_decision_maker", "created_at", "updated_at"],
   "v2_tag_definitions": ["id", "tag_name", "color", "created_at"],
   "v2_velocity_benchmarks": ["stage_name", "p25_days", "median_days", "p75_days", "p90_days", "sample_size", "computed_at"],
-  "v2_webhook_delivery_log": ["id", "webhook_id", "event_type", "payload", "response_status", "response_body", "success", "delivered_at"],
+  "v2_webhook_delivery_log": ["id", "webhook_id", "event_type", "payload", "response_status", "response_body", "success", "delivered_at", "attempt_count", "next_attempt_at"],
   "v2_webhooks": ["id", "webhook_name", "target_url", "secret_key", "events", "is_active", "created_by", "created_at", "last_triggered_at", "failure_count"],
 };

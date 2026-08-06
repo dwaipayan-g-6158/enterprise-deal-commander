@@ -31,6 +31,7 @@
  *  - Errors are thrown as PLAIN OBJECTS, never `Error` instances, matching the
  *    real SDK (see catalystErrorInfo in sdk.ts).
  */
+import { Readable } from "node:stream";
 import { __setCatalystSdkForTests } from "@workspace/db/catalyst";
 import { DATASTORE_COLUMNS } from "./datastore-columns.generated";
 
@@ -72,6 +73,20 @@ export class CatalystTestStore {
   readonly deletedUserIds: string[] = [];
   private nextUserId = 1;
   private inviteFailure: unknown = null;
+
+  /**
+   * Stratus object storage, as a plain key→string map.
+   *
+   * Only the four object operations the app uses are modelled
+   * (`putObject`/`getObject`/`headObject`/`deleteObject`) — bucket management
+   * is admin-only in the real SDK and this app never calls it. `getObject`
+   * returns a **stream**, matching the real signature (`Promise<Readable>`),
+   * because a fake that returned a Buffer would hide the single most
+   * error-prone part of the contract: `Buffer.from(stream)` fails with a
+   * message about the wrong ARGUMENT TYPE, which reads like a caller bug
+   * rather than a stream that needed consuming.
+   */
+  readonly objects = new Map<string, string>();
 
   /** Make the next `registerUser` reject, the way Catalyst does on a bad email. */
   failNextInvite(err: unknown = rejection(400, "INVALID_INPUT", "Email already registered")): void {
@@ -162,6 +177,7 @@ export class CatalystTestStore {
     this.deletedUserIds.length = 0;
     this.nextUserId = 1;
     this.inviteFailure = null;
+    this.objects.clear();
     this.declareFromLiveSchema();
   }
 
@@ -212,6 +228,28 @@ export class CatalystTestStore {
   createApp(): unknown {
     const store = this;
     return {
+      stratus: () => ({
+        bucket: (bucketName: string) => ({
+          async putObject(key: string, body: string | Buffer) {
+            store.objects.set(`${bucketName}/${key}`, body.toString());
+            return true;
+          },
+          async getObject(key: string): Promise<Readable> {
+            const value = store.objects.get(`${bucketName}/${key}`);
+            if (value === undefined) {
+              throw rejection(404, "NOT_FOUND", `No object ${key} in ${bucketName}`);
+            }
+            return Readable.from([Buffer.from(value, "utf8")]);
+          },
+          async headObject(key: string) {
+            return store.objects.has(`${bucketName}/${key}`);
+          },
+          async deleteObject(key: string) {
+            store.objects.delete(`${bucketName}/${key}`);
+            return true;
+          },
+        }),
+      }),
       userManagement: () => ({
         async registerUser(
           config: { platform_type: string; redirect_url: string },

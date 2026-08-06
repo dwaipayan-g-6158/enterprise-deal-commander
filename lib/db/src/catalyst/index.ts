@@ -1,6 +1,7 @@
 // Barrel export for the Catalyst Data Store access layer. See
 // docs/catalyst-datastore-constraints.md and docs/CATALYST_SCHEMA.md.
 export * from "./sdk";
+export * from "./stratus";
 export * from "./auth";
 export * from "./repositories/lookups";
 export * from "./repositories/settings";

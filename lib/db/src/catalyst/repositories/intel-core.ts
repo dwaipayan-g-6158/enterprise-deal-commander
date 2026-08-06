@@ -1,4 +1,4 @@
-// Repository for the subset of edc_v2 / edc_v2_intel tables (schema/edc_v2.ts,
+﻿// Repository for the subset of edc_v2 / edc_v2_intel tables (schema/edc_v2.ts,
 // schema/edc_v2_intel.ts) that the deal-core intelligence engine and its
 // direct dependents (lib/intelligence.ts, lib/competitive.ts,
 // lib/contextual-alerts.ts, lib/playbook-signals.ts, routes/deals.ts search,
@@ -20,6 +20,7 @@ import {
   type CatalystApp,
   type RawRow,
 } from "../sdk";
+import { SNAPSHOT_BUCKET, putJsonObject, getJsonObject } from "../stratus";
 
 const TABLE = {
   dealCompetitors: "v2_deal_competitors",
@@ -60,14 +61,17 @@ function optDate(raw: string | null | undefined): Date | null {
 }
 
 /**
+ * Above this, a snapshot payload is written to Stratus instead of inline.
+ *
  * Data Store caps a `text` column at 10,000 chars. 9,800 leaves the same
  * multi-byte margin Periscope's `INLINE_THRESHOLD` uses
- * (docs/catalyst-datastore-constraints.md) — `.length` counts UTF-16 units,
+ * (docs/catalyst-datastore-constraints.md) â€” `.length` counts UTF-16 units,
  * and the cap is applied to the stored bytes.
+ *
+ * Exported so a test can lower it and exercise the offload without having to
+ * synthesize a 10KB payload.
  */
-const SNAPSHOT_PAYLOAD_LIMIT = 9_800;
-/** Largest real payload measured in production on 2026-08-07 was 4,904. */
-const SNAPSHOT_PAYLOAD_WARN_AT = 7_500;
+export const SNAPSHOT_PAYLOAD_LIMIT = 9_800;
 
 // -------------------------------------------------------------- Deal competitors (F2)
 
@@ -107,7 +111,7 @@ export function createDealCompetitorsRepo(catalystApp: CatalystApp) {
       const row = rows.find((r) => r["id"] === id);
       return row ? rowToDealCompetitorLink(row) : null;
     },
-    /** Insert-if-missing (mirrors the original `onConflictDoNothing` on deal_competitor_uq) — never updates an existing link. */
+    /** Insert-if-missing (mirrors the original `onConflictDoNothing` on deal_competitor_uq) â€” never updates an existing link. */
     async createIfMissing(dealId: string, competitorId: number, status = "Active"): Promise<void> {
       const naturalKey = `${dealId}:${competitorId}`;
       const rows = await fetchAllRows(catalystApp, TABLE.dealCompetitors);
@@ -124,11 +128,11 @@ export function createDealCompetitorsRepo(catalystApp: CatalystApp) {
           natural_key: naturalKey,
         });
       } catch (err) {
-        // Raced insert against the same natural key — matches onConflictDoNothing.
+        // Raced insert against the same natural key â€” matches onConflictDoNothing.
         if (!isDuplicateValueError(err)) throw err;
       }
     },
-    /** The F2 "log a competitor on this deal" form — unlike createIfMissing, this always inserts (the route's own conflict handling, if any, is the caller's job). */
+    /** The F2 "log a competitor on this deal" form â€” unlike createIfMissing, this always inserts (the route's own conflict handling, if any, is the caller's job). */
     async create(input: {
       dealId: string;
       competitorId: number;
@@ -228,7 +232,7 @@ export function createStakeholdersRepo(catalystApp: CatalystApp) {
       const rows = await fetchAllRows(catalystApp, TABLE.stakeholders);
       return rows.filter((r) => r["deal_id"] === dealId).map(rowToStakeholder);
     },
-    /** Every stakeholder across every deal — used only for the deal-roster free-text search. */
+    /** Every stakeholder across every deal â€” used only for the deal-roster free-text search. */
     async listAll(): Promise<StakeholderRow[]> {
       const rows = await fetchAllRows(catalystApp, TABLE.stakeholders);
       return rows.map(rowToStakeholder);
@@ -321,7 +325,7 @@ export function createDealDecisionsRepo(catalystApp: CatalystApp) {
         .map(rowToDealDecision)
         .sort((a, b) => b.decidedAt.getTime() - a.decidedAt.getTime());
     },
-    /** Every decision across every deal — used only for the deal-roster free-text search. */
+    /** Every decision across every deal â€” used only for the deal-roster free-text search. */
     async listAll(): Promise<DealDecisionRow[]> {
       const rows = await fetchAllRows(catalystApp, TABLE.dealDecisions);
       return rows.map(rowToDealDecision);
@@ -533,6 +537,20 @@ export interface WebhookDeliveryRow {
   deliveredAt: Date;
 }
 
+/**
+ * A failed delivery still owed a retry. This is the whole retry queue â€” there is
+ * no separate table: a row is pending iff it failed AND carries a
+ * `next_attempt_at` in the past. Drained by POST /api/v1/jobs/webhook-retries.
+ */
+export interface PendingWebhookRetryRow {
+  id: string;
+  webhookId: string;
+  eventType: string;
+  payload: Record<string, unknown>;
+  attemptCount: number;
+  nextAttemptAt: Date;
+}
+
 export function createWebhookDeliveryLogRepo(catalystApp: CatalystApp) {
   return {
     async listByWebhookId(webhookId: string, limit = 100): Promise<WebhookDeliveryRow[]> {
@@ -549,6 +567,43 @@ export function createWebhookDeliveryLogRepo(catalystApp: CatalystApp) {
         .sort((a, b) => b.deliveredAt.getTime() - a.deliveredAt.getTime())
         .slice(0, limit);
     },
+    /**
+     * Every failed delivery whose retry is due at or before `now`, oldest first.
+     *
+     * Rows written before the retry columns existed have no `next_attempt_at`
+     * and are therefore invisible here â€” correct, not a gap: they were logged
+     * under the old in-memory retry scheme, which had already given up on them
+     * by the time the process that owned the timer went away.
+     */
+    async listDueRetries(now: Date): Promise<PendingWebhookRetryRow[]> {
+      const rows = await fetchAllRows(catalystApp, TABLE.webhookDeliveryLog);
+      return rows
+        .filter((r) => !parseBoolean(r["success"]) && !!r["next_attempt_at"])
+        .map((r) => ({
+          id: r["id"],
+          webhookId: r["webhook_id"],
+          eventType: r["event_type"],
+          payload: fromJson<Record<string, unknown>>(r["payload"], {}),
+          attemptCount: Number(r["attempt_count"]) || 1,
+          nextAttemptAt: parseCatalystDateTime(r["next_attempt_at"]),
+        }))
+        .filter((r) => r.nextAttemptAt.getTime() <= now.getTime())
+        .sort((a, b) => a.nextAttemptAt.getTime() - b.nextAttemptAt.getTime());
+    },
+    /**
+     * Take a row out of the retry queue without touching its outcome â€” the log
+     * stays an honest record of the attempt that failed; it just stops being
+     * owed another try. Called once the drain has spawned the next attempt, so
+     * a slow drain can never hand the same row out twice.
+     */
+    async clearRetry(id: string): Promise<void> {
+      const rows = await fetchAllRows(catalystApp, TABLE.webhookDeliveryLog);
+      const existing = rows.find((r) => r["id"] === id);
+      if (!existing) return;
+      await updateRow(catalystApp, TABLE.webhookDeliveryLog, existing["ROWID"], {
+        next_attempt_at: null,
+      });
+    },
     async create(entry: {
       webhookId: string;
       eventType: string;
@@ -556,6 +611,9 @@ export function createWebhookDeliveryLogRepo(catalystApp: CatalystApp) {
       responseStatus: number | null;
       responseBody: string | null;
       success: boolean;
+      attemptCount: number;
+      /** Null when this attempt succeeded or the retry budget is spent. */
+      nextAttemptAt: Date | null;
     }): Promise<void> {
       await insertRow(catalystApp, TABLE.webhookDeliveryLog, {
         id: crypto.randomUUID(),
@@ -566,6 +624,8 @@ export function createWebhookDeliveryLogRepo(catalystApp: CatalystApp) {
         response_body: entry.responseBody,
         success: formatBoolean(entry.success),
         delivered_at: formatCatalystDateTime(new Date()),
+        attempt_count: entry.attemptCount,
+        next_attempt_at: entry.nextAttemptAt ? formatCatalystDateTime(entry.nextAttemptAt) : null,
       });
     },
   };
@@ -807,7 +867,7 @@ export function createCustomFieldValuesRepo(catalystApp: CatalystApp) {
       const rows = await fetchAllRows(catalystApp, TABLE.customFieldValues);
       return rows.filter((r) => r["deal_id"] === dealId).map(rowToCustomFieldValue);
     },
-    /** Insert-or-update by (dealId, fieldId) — mirrors the original onConflictDoUpdate. */
+    /** Insert-or-update by (dealId, fieldId) â€” mirrors the original onConflictDoUpdate. */
     async upsert(input: {
       dealId: string;
       fieldId: string;
@@ -874,7 +934,7 @@ export function createTagDefinitionsRepo(catalystApp: CatalystApp) {
       });
       return { id: created["id"], tagName: created["tag_name"], color: created["color"] };
     },
-    /** Delete a tag definition. Callers must clear deal_tags associations first — Data Store has no native FK cascade (see createDealTagsRepo.removeAllForTag). */
+    /** Delete a tag definition. Callers must clear deal_tags associations first â€” Data Store has no native FK cascade (see createDealTagsRepo.removeAllForTag). */
     async delete(id: string): Promise<void> {
       const rows = await fetchAllRows(catalystApp, TABLE.tagDefinitions);
       const existing = rows.find((r) => r["id"] === id);
@@ -896,7 +956,7 @@ export function createDealTagsRepo(catalystApp: CatalystApp) {
       const map = await this.listForDeals([dealId]);
       return map.get(dealId) ?? [];
     },
-    /** Tags applied to a set of deals, batched — mirrors the roster's single joined query. */
+    /** Tags applied to a set of deals, batched â€” mirrors the roster's single joined query. */
     async listForDeals(dealIds: string[]): Promise<Map<string, DealTagView[]>> {
       const dealIdSet = new Set(dealIds);
       const [links, defs] = await Promise.all([
@@ -1006,7 +1066,7 @@ export function createPlaybooksRepo(catalystApp: CatalystApp) {
       return rows.filter((r) => parseBoolean(r["is_active"])).map(rowToPlaybook);
     },
     /**
-     * Every playbook, active or not — the original Drizzle join in
+     * Every playbook, active or not â€” the original Drizzle join in
      * `supersedeStalePlaybookAssignments` never filtered on `is_active`, so a
      * since-deactivated playbook's existing assignment can still be superseded.
      */
@@ -1084,7 +1144,7 @@ export function createPlaybookStepsRepo(catalystApp: CatalystApp) {
         }))
         .sort((a, b) => a.stepOrder - b.stepOrder);
     },
-    /** Replace every step of a playbook — mirrors the original delete-all-then-insert semantics. */
+    /** Replace every step of a playbook â€” mirrors the original delete-all-then-insert semantics. */
     async replaceForPlaybook(playbookId: string, steps: PlaybookStepInput[]): Promise<void> {
       const rows = await fetchAllRows(catalystApp, TABLE.playbookSteps);
       for (const row of rows.filter((r) => r["playbook_id"] === playbookId)) {
@@ -1135,12 +1195,12 @@ export function createPlaybookStepCompletionsRepo(catalystApp: CatalystApp) {
           completedAt: optDate(r["completed_at"]),
           // Added for the MEDDPICC playbook-gate sync (lib/catalyst/meddpicc-playbook-gate.ts):
           // it must only reopen a step the SYSTEM_ACTOR itself auto-completed, never a rep's
-          // manual completion — additive field, existing callers are unaffected.
+          // manual completion â€” additive field, existing callers are unaffected.
           completedBy: r["completed_by"] || null,
         }));
     },
     /**
-     * Set a step's action state — mirrors the original delete-then-insert
+     * Set a step's action state â€” mirrors the original delete-then-insert
      * (one ledger row per step, replaced wholesale on every action).
      */
     async upsertForStep(input: {
@@ -1168,7 +1228,7 @@ export function createPlaybookStepCompletionsRepo(catalystApp: CatalystApp) {
         completed_by: input.completedBy,
       });
     },
-    /** Reopen a step — remove its action so it returns to "not started". */
+    /** Reopen a step â€” remove its action so it returns to "not started". */
     async deleteForStep(assignmentId: string, stepId: string): Promise<void> {
       const rows = await fetchAllRows(catalystApp, TABLE.playbookStepCompletions);
       for (const row of rows.filter(
@@ -1210,7 +1270,7 @@ export function createDealPlaybookAssignmentsRepo(catalystApp: CatalystApp) {
       const rows = await fetchAllRows(catalystApp, TABLE.dealPlaybookAssignments);
       return rows.filter((r) => r["deal_id"] === dealId).map(rowToAssignment);
     },
-    /** Every assignment across every deal — used by the next-actions dashboard and the engagement achievement check. */
+    /** Every assignment across every deal â€” used by the next-actions dashboard and the engagement achievement check. */
     async listAll(): Promise<DealPlaybookAssignment[]> {
       const rows = await fetchAllRows(catalystApp, TABLE.dealPlaybookAssignments);
       return rows.map(rowToAssignment);
@@ -1279,7 +1339,7 @@ export function createDealPricingScheduleRepo(catalystApp: CatalystApp) {
         }))
         .sort((a, b) => a.yearNumber - b.yearNumber);
     },
-    /** Replace the full schedule for a deal — mirrors the original delete-all-then-insert semantics. */
+    /** Replace the full schedule for a deal â€” mirrors the original delete-all-then-insert semantics. */
     async replaceSet(
       dealId: string,
       years: { yearNumber: number; productRevenue: number; servicesRevenue: number; discountPct: number; notes?: string | null }[],
@@ -1478,7 +1538,7 @@ export function createCustomPatternConditionsRepo(catalystApp: CatalystApp) {
         }))
         .sort((a, b) => a.sortOrder - b.sortOrder);
     },
-    /** Replace all conditions for a pattern — mirrors the original delete-all-then-insert semantics. */
+    /** Replace all conditions for a pattern â€” mirrors the original delete-all-then-insert semantics. */
     async replaceForPattern(patternId: string, conditions: CustomPatternConditionRow[]): Promise<void> {
       const rows = await fetchAllRows(catalystApp, TABLE.customPatternConditions);
       for (const row of rows.filter((r) => r["pattern_id"] === patternId)) {
@@ -1585,7 +1645,7 @@ export interface ScoringWeightRow {
 
 export function createScoringModelWeightsRepo(catalystApp: CatalystApp) {
   return {
-    /** Every calibration row, newest first — callers dedupe to "latest per featureId" themselves. */
+    /** Every calibration row, newest first â€” callers dedupe to "latest per featureId" themselves. */
     async listAll(): Promise<ScoringWeightRow[]> {
       const rows = await fetchAllRows(catalystApp, TABLE.scoringModelWeights);
       return rows
@@ -1624,7 +1684,7 @@ export function createDealScoresRepo(catalystApp: CatalystApp) {
         computed_at: formatCatalystDateTime(new Date()),
       });
     },
-    /** Every score row across every deal, newest first — callers reduce to "latest per deal" (or "latest at/before a cutoff") themselves. */
+    /** Every score row across every deal, newest first â€” callers reduce to "latest per deal" (or "latest at/before a cutoff") themselves. */
     async listAll(): Promise<{ dealId: string; score: number; computedAt: Date }[]> {
       const rows = await fetchAllRows(catalystApp, TABLE.dealScores);
       return rows
@@ -1637,7 +1697,7 @@ export function createDealScoresRepo(catalystApp: CatalystApp) {
 // -------------------------------------------------------------- Deal memory (F5/F6, full read + autopsy write)
 //
 // Writes here are limited to the F5/F6 "autopsy" fields (PUT /v2/memory/:id)
-// — the auto-populated fields (outcome, finalTcv, stageDurations, etc.) are
+// â€” the auto-populated fields (outcome, finalTcv, stageDurations, etc.) are
 // written only by the post-mortem subscriber, which is not migrated this
 // pass (see lib/subscribers/post-mortem.ts, still Drizzle-backed).
 
@@ -1711,7 +1771,7 @@ function rowToDealMemory(r: RawRow): DealMemoryRow {
 
 export function createDealMemoryRepo(catalystApp: CatalystApp) {
   return {
-    /** Every deal_memory row with one of the given outcomes — used by lib/catalyst/competitive.ts and lib/catalyst/playbook-signals.ts. */
+    /** Every deal_memory row with one of the given outcomes â€” used by lib/catalyst/competitive.ts and lib/catalyst/playbook-signals.ts. */
     async listByOutcomes(outcomes: string[]): Promise<{ dealId: string; outcome: string; finalTcv: number | null; pricingModel: string | null }[]> {
       const rows = await fetchAllRows(catalystApp, TABLE.dealMemory);
       const wanted = new Set(outcomes);
@@ -1724,7 +1784,7 @@ export function createDealMemoryRepo(catalystApp: CatalystApp) {
           pricingModel: r["pricing_model"] || null,
         }));
     },
-    /** Every archived deal record — the F5/F6 routes do their own in-memory filter/sort/search over this (no ZCQL/tsvector; see docs/CATALYST_SCHEMA.md's "Known open items"). */
+    /** Every archived deal record â€” the F5/F6 routes do their own in-memory filter/sort/search over this (no ZCQL/tsvector; see docs/CATALYST_SCHEMA.md's "Known open items"). */
     async listAll(): Promise<DealMemoryRow[]> {
       const rows = await fetchAllRows(catalystApp, TABLE.dealMemory);
       return rows.map(rowToDealMemory);
@@ -1735,11 +1795,11 @@ export function createDealMemoryRepo(catalystApp: CatalystApp) {
       return row ? rowToDealMemory(row) : null;
     },
     /**
-     * Insert-or-update by `deal_id` (natively `is_unique` in Data Store — see
+     * Insert-or-update by `deal_id` (natively `is_unique` in Data Store â€” see
      * docs/CATALYST_SCHEMA.md's natural-key table). Used by the post-mortem
      * subscriber on Closed-Won/Closed-Lost: refreshes every auto-populated
      * field on a re-close, but never touches the hand-curated autopsy fields
-     * (winLossNarrative, tags, primaryLossCategory, ...) — matching the
+     * (winLossNarrative, tags, primaryLossCategory, ...) â€” matching the
      * original Drizzle `onConflictDoUpdate`'s field set exactly. Not built on
      * the shared `upsert()` sdk helper: that helper reuses one `values`
      * object for both branches, but `id` must be freshly generated on INSERT
@@ -1786,7 +1846,7 @@ export function createDealMemoryRepo(catalystApp: CatalystApp) {
           ...shared,
         });
       } catch (err) {
-        // Raced insert against the same deal_id — retry as an update.
+        // Raced insert against the same deal_id â€” retry as an update.
         if (!isDuplicateValueError(err)) throw err;
         const retryRows = await fetchAllRows(catalystApp, TABLE.dealMemory);
         const retryExisting = retryRows.find((r) => r["deal_id"] === input.dealId);
@@ -1885,7 +1945,7 @@ export interface WriteActivityLogEntry {
 
 export function createDealActivityLogRepo(catalystApp: CatalystApp) {
   return {
-    /** Every activity-log row across every deal — callers (the analytics roster, /v2/activity, /v2/deals/:dealId/activity) each do their own filter/join/sort in JS. */
+    /** Every activity-log row across every deal â€” callers (the analytics roster, /v2/activity, /v2/deals/:dealId/activity) each do their own filter/join/sort in JS. */
     async listAll(): Promise<DealActivityLogRow[]> {
       const rows = await fetchAllRows(catalystApp, TABLE.dealActivityLog);
       return rows.map(rowToActivityLogEntry);
@@ -1910,7 +1970,7 @@ export function createDealActivityLogRepo(catalystApp: CatalystApp) {
 //
 // `payload` is split into `payload_inline` (text, <=10,000 chars) + `payload_key`
 // (varchar, a Stratus object key for an offloaded payload too large to inline)
-// — see docs/CATALYST_SCHEMA.md's "Large text fields" section. Wiring the
+// â€” see docs/CATALYST_SCHEMA.md's "Large text fields" section. Wiring the
 // actual Stratus read path is Slice 5 scope; until then this repo only reads
 // `payload_inline`, matching every snapshot this app itself has ever written
 // (Slice 3 doesn't write the offloaded path either).
@@ -1930,7 +1990,7 @@ export interface DealSnapshotRow {
   snapshotAt: Date;
 }
 
-function rowToSnapshot(r: RawRow): DealSnapshotRow {
+function rowToSnapshot(r: RawRow): DealSnapshotRow & { payloadKey: string | null } {
   return {
     id: r["id"],
     dealId: r["deal_id"],
@@ -1942,28 +2002,67 @@ function rowToSnapshot(r: RawRow): DealSnapshotRow {
     calculatedTcv: parseNullableNumber(r["calculated_tcv"]),
     normalizedTcv: parseNullableNumber(r["normalized_tcv"]),
     payload: r["payload_inline"] ? fromJson<Record<string, unknown>>(r["payload_inline"], {}) : null,
+    payloadKey: r["payload_key"] || null,
     createdBy: r["created_by"],
     snapshotAt: parseCatalystDateTime(r["snapshot_at"]),
   };
 }
 
+/**
+ * Fill in payloads that live in Stratus rather than inline.
+ *
+ * This runs INSIDE the repository, on every method that returns snapshots,
+ * rather than being a `hydrate()` helper callers must remember to call. A
+ * caller that forgot would silently read `payload: null` and quietly lose a
+ * trajectory point or undercount the vital-signs baseline â€” the exact
+ * swallowed-failure shape that produced the missing `key_lessons` column, the
+ * deal-list 500, and the portfolio-rollup waste. Correctness here should not
+ * depend on remembering anything.
+ *
+ * Cost on the common path is **zero network calls**: nothing is fetched unless
+ * a row actually carries a `payload_key`, and payloads only exceed
+ * SNAPSHOT_PAYLOAD_LIMIT in the rare case the offload exists for.
+ */
+async function hydratePayloads(
+  catalystApp: CatalystApp,
+  rows: Array<DealSnapshotRow & { payloadKey: string | null }>,
+): Promise<DealSnapshotRow[]> {
+  const offloaded = rows.filter((r) => r.payload === null && r.payloadKey !== null);
+  if (offloaded.length > 0) {
+    await Promise.all(
+      offloaded.map(async (row) => {
+        row.payload = await getJsonObject<Record<string, unknown>>(
+          catalystApp,
+          SNAPSHOT_BUCKET,
+          row.payloadKey as string,
+        );
+      }),
+    );
+  }
+  return rows.map(({ payloadKey: _ignored, ...snapshot }) => snapshot);
+}
+
 export function createDealSnapshotsRepo(catalystApp: CatalystApp) {
   return {
-    /** Every snapshot for one deal, oldest first — feeds the deal trajectory time series; /v2/deals/:dealId/snapshots re-sorts/filters/paginates its own copy. */
+    /** Every snapshot for one deal, oldest first â€” feeds the deal trajectory time series; /v2/deals/:dealId/snapshots re-sorts/filters/paginates its own copy. */
     async listByDealId(dealId: string): Promise<DealSnapshotRow[]> {
       const rows = await fetchAllRows(catalystApp, TABLE.dealSnapshots);
-      return rows
-        .filter((r) => r["deal_id"] === dealId)
-        .map(rowToSnapshot)
-        .sort((a, b) => a.snapshotAt.getTime() - b.snapshotAt.getTime());
+      return hydratePayloads(
+        catalystApp,
+        rows
+          .filter((r) => r["deal_id"] === dealId)
+          .map(rowToSnapshot)
+          .sort((a, b) => a.snapshotAt.getTime() - b.snapshotAt.getTime()),
+      );
     },
     async getById(id: string): Promise<DealSnapshotRow | null> {
       const rows = await fetchAllRows(catalystApp, TABLE.dealSnapshots);
       const row = rows.find((r) => r["id"] === id);
-      return row ? rowToSnapshot(row) : null;
+      if (!row) return null;
+      return (await hydratePayloads(catalystApp, [rowToSnapshot(row)]))[0];
     },
     /**
-     * The newest snapshot at or before `cutoff`, per deal in `dealIds` — the
+     * The newest snapshot at or before `cutoff`, per deal in `dealIds` â€” the
      * in-memory equivalent of the original `SELECT DISTINCT ON (deal_id) ...
      * ORDER BY deal_id, snapshot_at DESC` query, restricted to the same
      * cutoff + deal-id-set filter (see /analytics/vital-signs's baseline).
@@ -1972,7 +2071,7 @@ export function createDealSnapshotsRepo(catalystApp: CatalystApp) {
       if (dealIds.length === 0) return [];
       const wanted = new Set(dealIds);
       const rows = await fetchAllRows(catalystApp, TABLE.dealSnapshots);
-      const latestByDeal = new Map<string, DealSnapshotRow>();
+      const latestByDeal = new Map<string, DealSnapshotRow & { payloadKey: string | null }>();
       for (const raw of rows) {
         if (!wanted.has(raw["deal_id"])) continue;
         const snap = rowToSnapshot(raw);
@@ -1982,35 +2081,41 @@ export function createDealSnapshotsRepo(catalystApp: CatalystApp) {
           latestByDeal.set(snap.dealId, snap);
         }
       }
-      return [...latestByDeal.values()];
+      // Hydrated AFTER the per-deal reduction, not before: only the winning
+      // snapshot per deal is ever fetched, so a deal with a long offloaded
+      // history still costs exactly one object read.
+      return hydratePayloads(catalystApp, [...latestByDeal.values()]);
     },
-    /** The newest snapshot at or before `cutoff` for a single deal — the pipeline-transitions subscriber's tcvAtTransition lookup. */
+    /** The newest snapshot at or before `cutoff` for a single deal â€” the pipeline-transitions subscriber's tcvAtTransition lookup. */
     async latestAtOrBefore(dealId: string, cutoff: Date): Promise<DealSnapshotRow | null> {
       const rows = await this.latestAtOrBeforePerDeal([dealId], cutoff);
       return rows[0] ?? null;
     },
     /**
-     * Insert a new snapshot.
+     * Insert a new snapshot, inline or offloaded depending on payload size.
      *
      * `payload_inline` has the same 10,000-char Data Store `text` cap as every
-     * other Text column (docs/catalyst-datastore-constraints.md). The Stratus
-     * overflow path (`payload_key`) is deliberately NOT wired — see
-     * docs/CATALYST_SCHEMA.md for that decision and its revisit trigger.
+     * other Text column (docs/catalyst-datastore-constraints.md). Over
+     * SNAPSHOT_PAYLOAD_LIMIT the payload goes to Stratus and the row carries a
+     * `payload_key` instead; `hydratePayloads` above puts it back on read.
      *
-     * Until it is, an oversize payload must FAIL rather than be trimmed. It is
-     * tempting to drop or truncate the blob and keep the row, but the payload
-     * is not decoration — three live features read it:
+     * The offload is threshold-triggered, NOT unconditional, and that is the
+     * whole design. Sending every payload to Stratus would turn the vital-signs
+     * baseline (one snapshot per open deal, every dashboard load) and the deal
+     * trajectory (every snapshot for a deal) into N and M object reads, to fix
+     * a cap that is almost never hit. The cap is the problem; the storage
+     * location is not.
+     *
+     * Note what is deliberately NOT done: dropping or truncating an oversize
+     * blob to keep the row. The payload is not decoration â€” three live features
+     * read it:
      *   - the deal trajectory chart (gatePct/playbookPct/meddpiccPct,
      *     routes/v2/analytics.ts),
      *   - the vital-signs 7-day baseline RED-alert count (same file),
      *   - `snapshotFingerprint`, which is how the hourly cron decides a
      *     snapshot is unchanged. Lose the payload and the fingerprint differs
      *     every run, so the dedupe inverts into writing a duplicate row per
-     *     deal per hour — exactly the bloat it exists to prevent.
-     * So the guard below improves the DIAGNOSIS, not the outcome: Data Store's
-     * own rejection here is an opaque 400, and this replaces it with the deal
-     * id and the actual size. The soft warning fires well before the cap so the
-     * "wire Stratus now" trigger is observed rather than remembered.
+     *     deal per hour â€” exactly the bloat it exists to prevent.
      */
     async create(input: {
       dealId: string;
@@ -2024,22 +2129,20 @@ export function createDealSnapshotsRepo(catalystApp: CatalystApp) {
       payload: Record<string, unknown>;
       createdBy: string;
     }): Promise<void> {
+      const id = crypto.randomUUID();
       const serialized = toJson(input.payload);
-      if (serialized.length > SNAPSHOT_PAYLOAD_LIMIT) {
-        throw new Error(
-          `Snapshot payload for deal ${input.dealId} is ${serialized.length} chars, over the ` +
-            `${SNAPSHOT_PAYLOAD_LIMIT}-char Data Store text cap. Wire the Stratus offload ` +
-            `(v2_deal_snapshots.payload_key) — see docs/CATALYST_SCHEMA.md.`,
-        );
+      const offload = serialized.length > SNAPSHOT_PAYLOAD_LIMIT;
+
+      let payloadKey: string | null = null;
+      if (offload) {
+        // Written BEFORE the row, so a Stratus failure aborts the insert rather
+        // than leaving a row pointing at an object that was never stored.
+        payloadKey = `deal-snapshots/${input.dealId}/${id}.json`;
+        await putJsonObject(catalystApp, SNAPSHOT_BUCKET, payloadKey, serialized);
       }
-      if (serialized.length > SNAPSHOT_PAYLOAD_WARN_AT) {
-        console.warn(
-          `[deal-snapshots] payload for deal ${input.dealId} is ${serialized.length} chars, ` +
-            `approaching the ${SNAPSHOT_PAYLOAD_LIMIT}-char cap. Time to wire the Stratus offload.`,
-        );
-      }
+
       await insertRow(catalystApp, TABLE.dealSnapshots, {
-        id: crypto.randomUUID(),
+        id,
         deal_id: input.dealId,
         reason: input.reason,
         trigger_event: input.triggerEvent,
@@ -2048,7 +2151,8 @@ export function createDealSnapshotsRepo(catalystApp: CatalystApp) {
         sales_stage: input.salesStage,
         calculated_tcv: input.calculatedTcv,
         normalized_tcv: input.normalizedTcv,
-        payload_inline: serialized,
+        payload_inline: offload ? null : serialized,
+        payload_key: payloadKey,
         created_by: input.createdBy,
         snapshot_at: formatCatalystDateTime(new Date()),
       });
@@ -2129,7 +2233,7 @@ export interface PipelineTransitionRow {
 
 export function createPipelineTransitionsRepo(catalystApp: CatalystApp) {
   return {
-    /** Every transition across every deal, oldest first — matches the original ORDER BY transitioned_at ASC. Callers join against the live deal set to exclude soft-deleted deals themselves (Data Store has no server-side join). */
+    /** Every transition across every deal, oldest first â€” matches the original ORDER BY transitioned_at ASC. Callers join against the live deal set to exclude soft-deleted deals themselves (Data Store has no server-side join). */
     async listAll(): Promise<PipelineTransitionRow[]> {
       const rows = await fetchAllRows(catalystApp, TABLE.pipelineTransitions);
       return rows
@@ -2145,7 +2249,7 @@ export function createPipelineTransitionsRepo(catalystApp: CatalystApp) {
         .sort((a, b) => a.transitionedAt.getTime() - b.transitionedAt.getTime());
     },
     /**
-     * Insert a transition row, silently no-op'ing on a raced duplicate — the
+     * Insert a transition row, silently no-op'ing on a raced duplicate â€” the
      * original Drizzle `onConflictDoNothing({ target: [dealId, transitionedAt] })`.
      * `natural_key` (`dealId:transitionedAt`) is the synthesized composite
      * unique backing this (see docs/CATALYST_SCHEMA.md's natural-key table).
@@ -2199,7 +2303,7 @@ export function createCommanderAchievementsRepo(catalystApp: CatalystApp) {
       const rows = await fetchAllRows(catalystApp, TABLE.commanderAchievements);
       return rows.map((r) => ({ achievementCode: r["achievement_code"], earnedAt: parseCatalystDateTime(r["earned_at"]) }));
     },
-    /** Insert-if-missing (mirrors the original `onConflictDoNothing` on the achievement_code PK) — an achievement, once earned, is never re-earned or overwritten. */
+    /** Insert-if-missing (mirrors the original `onConflictDoNothing` on the achievement_code PK) â€” an achievement, once earned, is never re-earned or overwritten. */
     async earnIfMissing(achievementCode: string): Promise<void> {
       const rows = await fetchAllRows(catalystApp, TABLE.commanderAchievements);
       if (rows.some((r) => r["achievement_code"] === achievementCode)) return;

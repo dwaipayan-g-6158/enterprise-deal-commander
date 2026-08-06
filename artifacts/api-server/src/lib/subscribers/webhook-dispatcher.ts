@@ -10,14 +10,43 @@ import { logger } from "../logger";
 
 /**
  * Webhook dispatcher (V2 F1). On every domain event, POST a signed payload to
- * each active webhook subscribed to that event type. Fire-and-forget with up to
- * 3 retries (5/10/15s backoff), a 10s per-attempt timeout, HMAC-SHA256
- * signature, delivery logging, and auto-disable after 10 consecutive failures.
+ * each active webhook subscribed to that event type: 10s per-attempt timeout,
+ * HMAC-SHA256 signature, delivery logging, auto-disable after 10 consecutive
+ * failures.
+ *
+ * RETRIES ARE DURABLE, NOT IN-MEMORY.
+ *
+ * This used to schedule its own retries with `setTimeout(...).unref()`. AppSail
+ * recycles an idle instance after five minutes, so any retry still pending in
+ * that window simply never happened — and left no trace, because a delivery-log
+ * row is only written once an attempt completes. A failed attempt now records
+ * `next_attempt_at` on its log row and returns; the drain job
+ * (POST /api/v1/jobs/webhook-retries, cron every 10 min) picks it up. One code
+ * path, and nothing is owned by a process that may not exist a minute later.
+ *
+ * The cost is latency: the first retry lands within ~10 minutes rather than 5
+ * seconds. That is the deliberate trade — a retry that actually happens late
+ * beats one that silently never happens.
  */
-const MAX_ATTEMPTS = 3;
+const MAX_ATTEMPTS = 5;
 const TIMEOUT_MS = 10_000;
 
-async function deliver(
+/**
+ * Backoff before attempt N+1, given that attempt N just failed: 10m, 20m, then
+ * 40m capped. Pure and exported so the schedule is unit-testable without Data
+ * Store or a clock (same reasoning as lib/memory-search.ts).
+ */
+export function retryDelayMs(attempt: number): number {
+  const TEN_MINUTES = 10 * 60_000;
+  return Math.min(TEN_MINUTES * 2 ** (attempt - 1), 40 * 60_000);
+}
+
+/** True when `attempt` was the last one this webhook gets. */
+export function isFinalAttempt(attempt: number): boolean {
+  return attempt >= MAX_ATTEMPTS;
+}
+
+export async function deliver(
   catalystApp: CatalystApp,
   webhook: WebhookRow,
   eventType: string,
@@ -50,6 +79,10 @@ async function deliver(
   }
 
   const webhooksRepo = createWebhooksRepo(catalystApp);
+  const willRetry = !ok && !isFinalAttempt(attempt);
+
+  // The log row IS the retry queue entry — written before anything else, so an
+  // attempt can never fail in a way that loses the record of it being owed.
   await createWebhookDeliveryLogRepo(catalystApp).create({
     webhookId: webhook.id,
     eventType,
@@ -57,6 +90,8 @@ async function deliver(
     responseStatus: status,
     responseBody,
     success: ok,
+    attemptCount: attempt,
+    nextAttemptAt: willRetry ? new Date(Date.now() + retryDelayMs(attempt)) : null,
   });
 
   if (ok) {
@@ -64,36 +99,77 @@ async function deliver(
     return;
   }
 
-  if (attempt < MAX_ATTEMPTS) {
-    const delayMs = attempt * 5000;
-    // This retry is scheduled IN MEMORY and is therefore not durable: AppSail
-    // recycles an idle instance after five minutes, and `.unref()` means the
-    // timer will never hold the process open. If the instance goes away inside
-    // this window the retry simply never happens, and — without this log — no
-    // trace of it would exist anywhere, because the delivery-log row is only
-    // written once an attempt actually completes.
-    //
-    // A durable retry (a drain job on the existing Job Scheduling cron) is
-    // deliberately not built yet; see docs/CATALYST_SCHEMA.md for the decision
-    // and the cheap path to add it. The window is seconds rather than the hour
-    // the periodic-snapshot timer had, which is why this is a log and not a
-    // rebuild.
+  if (willRetry) {
     logger.warn(
-      { webhookId: webhook.id, eventType, attempt, nextAttempt: attempt + 1, delayMs, status },
-      "Webhook delivery failed; retry scheduled in-memory (lost if this instance recycles)",
+      {
+        webhookId: webhook.id,
+        eventType,
+        attempt,
+        nextAttempt: attempt + 1,
+        retryInMs: retryDelayMs(attempt),
+        status,
+      },
+      "Webhook delivery failed; durable retry queued for the drain job",
     );
-    setTimeout(() => void deliver(catalystApp, webhook, eventType, data, attempt + 1), delayMs).unref();
     return;
   }
 
-  // Exhausted retries — bump failure count and auto-disable at 10 consecutive.
+  // Retry budget spent — bump failure count and auto-disable at 10 consecutive.
   const current = await webhooksRepo.getById(webhook.id);
   const nextFailureCount = (current?.failureCount ?? webhook.failureCount) + 1;
   await webhooksRepo.update(webhook.id, { failureCount: nextFailureCount });
+  logger.warn(
+    { webhookId: webhook.id, eventType, attempts: attempt, failureCount: nextFailureCount },
+    "Webhook delivery gave up after exhausting its retry budget",
+  );
   if (nextFailureCount >= 10) {
     await webhooksRepo.update(webhook.id, { isActive: false });
     logger.warn({ webhookId: webhook.id }, "Webhook auto-disabled after 10 failures");
   }
+}
+
+/**
+ * Re-attempt every delivery whose retry has come due. Invoked by the cron
+ * through POST /api/v1/jobs/webhook-retries.
+ *
+ * Each row is cleared from the queue BEFORE its retry runs, so a drain that
+ * overruns into the next cron tick cannot hand the same row out twice; the
+ * retry then writes its own fresh row carrying the next `next_attempt_at`. One
+ * bad row must never abort the sweep, so failures are logged per row — the same
+ * shape as snapshotAllActiveDealsCatalyst.
+ */
+export async function drainWebhookRetries(
+  catalystApp: CatalystApp,
+  now = new Date(),
+): Promise<{ due: number; delivered: number; failed: number; skipped: number }> {
+  const deliveryLog = createWebhookDeliveryLogRepo(catalystApp);
+  const webhooksRepo = createWebhooksRepo(catalystApp);
+  const due = await deliveryLog.listDueRetries(now);
+
+  let delivered = 0;
+  let failed = 0;
+  let skipped = 0;
+
+  for (const row of due) {
+    try {
+      const webhook = await webhooksRepo.getById(row.webhookId);
+      // Deleted or disabled since the attempt was queued — drop it rather than
+      // resurrecting traffic to an endpoint the user has switched off.
+      if (!webhook || !webhook.isActive) {
+        await deliveryLog.clearRetry(row.id);
+        skipped++;
+        continue;
+      }
+      await deliveryLog.clearRetry(row.id);
+      await deliver(catalystApp, webhook, row.eventType, row.payload, row.attemptCount + 1);
+      delivered++;
+    } catch (err) {
+      failed++;
+      logger.error({ err, deliveryId: row.id, webhookId: row.webhookId }, "Webhook retry failed to run");
+    }
+  }
+
+  return { due: due.length, delivered, failed, skipped };
 }
 
 function eventData(event: DealEvent): Record<string, unknown> {

@@ -59,6 +59,12 @@ export const webhookDeliveryLog = edcV2.table(
     responseBody: text("response_body"),
     success: boolean("success").notNull().default(false),
     deliveredAt: timestamp("delivered_at", { withTimezone: true }).notNull().defaultNow(),
+    // Durable retry queue. A row is owed another attempt iff `success` is false
+    // and `nextAttemptAt` is set and in the past; the drain job
+    // (POST /api/v1/jobs/webhook-retries) clears it once it re-fires. Mirrors
+    // the live Data Store columns — this schema is the Postgres-side record.
+    attemptCount: integer("attempt_count").notNull().default(1),
+    nextAttemptAt: timestamp("next_attempt_at", { withTimezone: true }),
   },
   (t) => [index("webhook_delivery_idx").on(t.webhookId, t.deliveredAt.desc())],
 );

@@ -341,10 +341,22 @@ export async function snapshotAllActiveDealsCatalyst(
   catalystApp: CatalystApp,
   dealIds: string[],
   budgetMs = 20_000,
-): Promise<{ written: number; considered: number; remaining: number }> {
+): Promise<{
+  written: number;
+  considered: number;
+  remaining: number;
+  failed: number;
+  errors: Array<{ dealId: string; error: string }>;
+}> {
   const startedAt = Date.now();
   let written = 0;
   let considered = 0;
+  // Returned, not just logged. A run that reports `written: 0` is ambiguous —
+  // it means either "nothing changed" (the healthy steady state) or "every
+  // write threw" — and on AppSail the log console lags several minutes and is
+  // awkward to page through, so the distinction is expensive to recover after
+  // the fact. The cron's own execution history now carries the reason.
+  const errors: Array<{ dealId: string; error: string }> = [];
   for (const dealId of dealIds) {
     if (Date.now() - startedAt > budgetMs) break;
     considered++;
@@ -361,9 +373,24 @@ export async function snapshotAllActiveDealsCatalyst(
     } catch (err) {
       // One bad deal must not abort the run for the rest of the portfolio.
       logger.error({ err, dealId }, "Periodic snapshot failed for deal");
+      errors.push({
+        dealId,
+        // A Data Store / Stratus rejection is a PLAIN OBJECT, not an Error —
+        // `String(err)` on one yields "[object Object]" and loses everything.
+        error:
+          err instanceof Error
+            ? err.message
+            : (JSON.stringify(err) ?? String(err)).slice(0, 400),
+      });
     }
   }
-  return { written, considered, remaining: dealIds.length - considered };
+  return {
+    written,
+    considered,
+    remaining: dealIds.length - considered,
+    failed: errors.length,
+    errors: errors.slice(0, 5),
+  };
 }
 
 /** Events that never warrant a new snapshot: the deal was removed, or shelved
