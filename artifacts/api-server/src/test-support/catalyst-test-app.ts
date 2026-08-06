@@ -310,8 +310,32 @@ export const STAGES = {
   "Closed-Lost": 6,
 } as const;
 
-export const PRICING_MODEL_ID = 1;
-export const SERVICES_TIER_ID = 1;
+/**
+ * The real pricing models and services tiers, ids included. Several tests
+ * select one by NAME — "Multi-Year Committed" in particular, because it is the
+ * one whose TCV is `productRevenue * contractTermYears + servicesRevenue`
+ * rather than a flat sum — so seeding a single made-up row is not enough.
+ */
+export const PRICING_MODELS = {
+  "Annual Subscription": 1,
+  "Multi-Year Committed": 2,
+  "Perpetual License": 3,
+  "Usage-Based": 4,
+} as const;
+
+export const SERVICES_TIERS = {
+  None: 1,
+  "Professional Services Pitched": 2,
+  "Premium Support Pitched": 3,
+  "Combined SOW Shared": 4,
+  "Online Onboarding": 5,
+  "Onsite Onboarding": 6,
+  "Product Training": 7,
+} as const;
+
+/** Convenience defaults for fixtures that don't care which one they get. */
+export const PRICING_MODEL_ID = PRICING_MODELS["Annual Subscription"];
+export const SERVICES_TIER_ID = SERVICES_TIERS.None;
 
 export function seedStandardLookups(store: CatalystTestStore): void {
   store.seedRaw(
@@ -326,12 +350,22 @@ export function seedStandardLookups(store: CatalystTestStore): void {
       is_active: "true",
     })),
   );
-  store.seedRaw("pricing_models", [
-    { id: String(PRICING_MODEL_ID), model_name: "Annual Subscription", is_active: "true" },
-  ]);
-  store.seedRaw("services_tiers", [
-    { id: String(SERVICES_TIER_ID), tier_name: "None", is_active: "true" },
-  ]);
+  store.seedRaw(
+    "pricing_models",
+    Object.entries(PRICING_MODELS).map(([model_name, id]) => ({
+      id: String(id),
+      model_name,
+      is_active: "true",
+    })),
+  );
+  store.seedRaw(
+    "services_tiers",
+    Object.entries(SERVICES_TIERS).map(([tier_name, id]) => ({
+      id: String(id),
+      tier_name,
+      is_active: "true",
+    })),
+  );
 }
 
 export function installCatalystFake(): InstalledCatalystFake {

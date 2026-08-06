@@ -1,22 +1,28 @@
-import { describe, it, expect, afterAll } from "vitest";
+import { describe, it, expect, beforeAll, beforeEach } from "vitest";
 import type { Request, Response } from "express";
-import { eq, inArray } from "drizzle-orm";
 import {
-  db,
-  pool,
-  enterpriseDeals,
-  pricingModels,
-  servicesTiers,
-  pipelineStages,
-  dealAuditLog,
-  dealSnapshots,
-} from "@workspace/db";
+  initCatalystApp,
+  createEnterpriseDealsRepo,
+  createDealAuditLogRepo,
+  formatCatalystDateTime,
+} from "@workspace/db/catalyst";
+import {
+  installCatalystFake,
+  seedStandardLookups,
+  STAGES,
+  PRICING_MODEL_ID,
+  SERVICES_TIER_ID,
+  type CatalystTestStore,
+} from "../test-support/catalyst-test-app";
 import router from "./deals";
 
-// Same technique as routes/v2/analytics.vital-signs.test.ts and
-// routes/v2/config.test.ts — no supertest harness exists in this repo.
-// Generalized over HTTP method since deals.ts registers GET/PUT/PATCH/
-// DELETE/POST all on overlapping paths.
+// The archive/restore/delete lifecycle: restore undoes exactly one level, a
+// delete leaves archivedAt intact, and an archived deal cannot leave its closed
+// stage. Runs against the in-memory Data Store
+// (test-support/catalyst-test-app.ts).
+//
+// Generalized over HTTP method since deals.ts registers GET/PUT/PATCH/DELETE/
+// POST all on overlapping paths.
 function getHandler(method: "get" | "post" | "put" | "delete", path: string) {
   const stack = (router as unknown as {
     stack: Array<{
@@ -33,61 +39,62 @@ function getHandler(method: "get" | "post" | "put" | "delete", path: string) {
 }
 
 const actor = { id: "test-actor", username: "test", displayName: "Test Actor" };
-const createdDealIds: string[] = [];
 
+let store: CatalystTestStore;
+let seq = 0;
+
+const app = () => initCatalystApp({ headers: {} });
+
+/** Created through the real repository, then patched into the archived/deleted state. */
 async function createDeal(
   tag: string,
   stageName: "Discovery" | "Closed-Won" | "Closed-Lost",
   overrides: { archivedAt?: Date; deletedAt?: Date } = {},
 ): Promise<string> {
-  const [pricing] = await db.select().from(pricingModels).limit(1);
-  const [tier] = await db.select().from(servicesTiers).limit(1);
-  const stages = await db.select().from(pipelineStages);
-  const stage = stages.find((s) => s.stageName === stageName);
-  if (!stage) throw new Error(`Seed data missing pipeline stage "${stageName}"`);
-
-  const [deal] = await db
-    .insert(enterpriseDeals)
-    .values({
-      dealName: `Lifecycle Test ${tag} ${Date.now()}`,
-      accountName: `Lifecycle Acct ${tag} ${Date.now()}`,
-      accountManager: "AM",
-      technicalLead: "TL",
-      salesStageId: stage.id,
-      pricingModelId: pricing.id,
-      servicesTierId: tier.id,
-      productRevenue: "1000.00",
-      servicesRevenue: "0",
-      archivedAt: overrides.archivedAt ?? null,
-      deletedAt: overrides.deletedAt ?? null,
-    })
-    .returning({ id: enterpriseDeals.id });
-  createdDealIds.push(deal.id);
+  const deal = await createEnterpriseDealsRepo(app()).create({
+    dealName: `Lifecycle Test ${tag} ${seq}`,
+    accountName: `Lifecycle Acct ${tag} ${seq++}`,
+    accountManager: "AM",
+    technicalLead: "TL",
+    salesStageId: STAGES[stageName],
+    pricingModelId: PRICING_MODEL_ID,
+    servicesTierId: SERVICES_TIER_ID,
+    productRevenue: "1000.00",
+    servicesRevenue: "0",
+    contractTermYears: 1,
+    dealCurrency: "USD",
+  });
+  const patch: Record<string, unknown> = {};
+  if (overrides.archivedAt) patch["archived_at"] = formatCatalystDateTime(overrides.archivedAt);
+  if (overrides.deletedAt) patch["deleted_at"] = formatCatalystDateTime(overrides.deletedAt);
+  if (Object.keys(patch).length > 0) {
+    const touched = store.patchRaw("enterprise_deals", (r) => r["id"] === deal.id, patch);
+    if (touched !== 1) throw new Error(`fixture patch touched ${touched} rows, expected 1`);
+  }
   return deal.id;
 }
 
 async function readFlags(id: string) {
-  const [row] = await db
-    .select({ archivedAt: enterpriseDeals.archivedAt, deletedAt: enterpriseDeals.deletedAt })
-    .from(enterpriseDeals)
-    .where(eq(enterpriseDeals.id, id));
-  return row;
+  const deal = await createEnterpriseDealsRepo(app()).getById(id);
+  if (!deal) throw new Error(`deal ${id} not found`);
+  return { archivedAt: deal.archivedAt, deletedAt: deal.deletedAt };
 }
 
 async function latestAudit(id: string) {
-  const rows = await db
-    .select({ fieldChanged: dealAuditLog.fieldChanged, newValue: dealAuditLog.newValue })
-    .from(dealAuditLog)
-    .where(eq(dealAuditLog.dealId, id))
-    .orderBy(dealAuditLog.changedAt);
-  return rows[rows.length - 1];
+  // The repo returns newest-first; this file's assertions want the newest entry.
+  const rows = await createDealAuditLogRepo(app()).list(id);
+  return rows[0];
+}
+
+function snapshotCount(dealId: string): number {
+  return store.rows("v2_deal_snapshots").filter((r) => r["deal_id"] === dealId).length;
 }
 
 async function callRestore(id: string) {
   const handler = getHandler("post", "/deals/:id/restore");
   let captured: unknown;
   let thrown: (Error & { status?: number; code?: string }) | undefined;
-  const fakeReq = { params: { id }, actor } as unknown as Request;
+  const fakeReq = { params: { id }, body: {}, query: {}, headers: {}, actor } as unknown as Request;
   const fakeRes = { json: (body: unknown) => { captured = body; } } as unknown as Response;
   try {
     await handler(fakeReq, fakeRes);
@@ -97,24 +104,17 @@ async function callRestore(id: string) {
   return { captured, thrown };
 }
 
-afterAll(async () => {
-  if (createdDealIds.length > 0) {
-    await db.delete(enterpriseDeals).where(inArray(enterpriseDeals.id, createdDealIds));
-  }
-  await pool.end();
+beforeAll(() => {
+  ({ store } = installCatalystFake());
 });
 
-// Skipped post-Catalyst-migration (all 5 describe blocks in this file):
-// routes/deals.ts now reads/writes enterprise_deals via Catalyst Data Store,
-// not Drizzle/Postgres. `initCatalystApp(req)` requires real Catalyst
-// session/headers to succeed — a fake `Request` object in a local Vitest run
-// can never provide that (same "Data Store isn't reachable from localhost"
-// limitation already documented for lookups.engine-thresholds.test.ts and the
-// sibling Customer-Insight-Engine project). This file's fixtures also seed via
-// Drizzle directly, which the migrated handlers no longer read. Retire or
-// rewrite as an integration test against the deployed AppSail app once Slice 6
-// seeding lands.
-describe.skip("POST /deals/:id/restore — undoes one level", () => {
+beforeEach(() => {
+  store.reset();
+  seq = 0;
+  seedStandardLookups(store);
+});
+
+describe("POST /deals/:id/restore — undoes one level", () => {
   it("clears only archivedAt for a plain archived deal, and audits archived_at", async () => {
     const id = await createDeal("plain-archived", "Closed-Lost", { archivedAt: new Date() });
 
@@ -166,9 +166,7 @@ describe.skip("POST /deals/:id/restore — undoes one level", () => {
       deletedAt: new Date(),
     });
 
-    const countBefore = (
-      await db.select().from(dealSnapshots).where(eq(dealSnapshots.dealId, id))
-    ).length;
+    const countBefore = snapshotCount(id);
 
     const { thrown } = await callRestore(id);
     expect(thrown).toBeUndefined();
@@ -177,20 +175,18 @@ describe.skip("POST /deals/:id/restore — undoes one level", () => {
     expect(flags.deletedAt).toBeNull();
     expect(flags.archivedAt).not.toBeNull(); // still archived — the no-op case
 
-    const countAfter = (
-      await db.select().from(dealSnapshots).where(eq(dealSnapshots.dealId, id))
-    ).length;
+    const countAfter = snapshotCount(id);
     expect(countAfter).toBe(countBefore);
   });
 });
 
-describe.skip("DELETE /deals/:id — archived → deleted transition", () => {
+describe("DELETE /deals/:id — archived → deleted transition", () => {
   it("deletes an archived deal without clearing archivedAt", async () => {
     const id = await createDeal("archived-then-delete", "Closed-Lost", { archivedAt: new Date() });
 
     const handler = getHandler("delete", "/deals/:id");
     let statusCode: number | undefined;
-    const fakeReq = { params: { id }, actor } as unknown as Request;
+    const fakeReq = { params: { id }, body: {}, query: {}, headers: {}, actor } as unknown as Request;
     const fakeRes = {
       status: (code: number) => { statusCode = code; return { end: () => {} }; },
     } as unknown as Response;
@@ -211,7 +207,7 @@ async function callArchive(id: string) {
   const handler = getHandler("post", "/deals/:id/archive");
   let captured: unknown;
   let thrown: (Error & { status?: number; code?: string }) | undefined;
-  const fakeReq = { params: { id }, actor } as unknown as Request;
+  const fakeReq = { params: { id }, body: {}, query: {}, headers: {}, actor } as unknown as Request;
   const fakeRes = { json: (body: unknown) => { captured = body; } } as unknown as Response;
   try {
     await handler(fakeReq, fakeRes);
@@ -221,7 +217,7 @@ async function callArchive(id: string) {
   return { captured, thrown };
 }
 
-describe.skip("POST /deals/:id/archive — idempotency", () => {
+describe("POST /deals/:id/archive — idempotency", () => {
   it("archives a closed deal and audits archived_at", async () => {
     const id = await createDeal("archive-once", "Closed-Lost");
 
@@ -259,7 +255,7 @@ async function callUpdate(id: string, body: Record<string, unknown>) {
   const handler = getHandler("put", "/deals/:id");
   let captured: unknown;
   let thrown: (Error & { status?: number; code?: string }) | undefined;
-  const fakeReq = { params: { id }, body, actor } as unknown as Request;
+  const fakeReq = { params: { id }, body, query: {}, headers: {}, actor } as unknown as Request;
   const fakeRes = { json: (b: unknown) => { captured = b; } } as unknown as Response;
   try {
     await handler(fakeReq, fakeRes);
@@ -269,31 +265,21 @@ async function callUpdate(id: string, body: Record<string, unknown>) {
   return { captured, thrown };
 }
 
-describe.skip("PUT/PATCH /deals/:id — archived deal can't leave its closed stage", () => {
+describe("PUT/PATCH /deals/:id — archived deal can't leave its closed stage", () => {
   it("409s when moving an archived deal's sales_stage_id to an open stage", async () => {
     const id = await createDeal("archived-stage-move", "Closed-Lost", { archivedAt: new Date() });
-    const stages = await db.select().from(pipelineStages);
-    const discovery = stages.find((s) => s.stageName === "Discovery");
-    if (!discovery) throw new Error('Seed data missing pipeline stage "Discovery"');
+    const stageOf = async () => (await createEnterpriseDealsRepo(app()).getById(id))?.salesStageId;
+    const before = await stageOf();
 
-    const before = await db
-      .select({ salesStageId: enterpriseDeals.salesStageId })
-      .from(enterpriseDeals)
-      .where(eq(enterpriseDeals.id, id));
-
-    const { thrown } = await callUpdate(id, { sales_stage_id: discovery.id });
+    const { thrown } = await callUpdate(id, { sales_stage_id: STAGES.Discovery });
     expect(thrown?.status).toBe(409);
     expect(thrown?.code).toBe("ARCHIVE_GUARDRAIL");
 
-    const after = await db
-      .select({ salesStageId: enterpriseDeals.salesStageId })
-      .from(enterpriseDeals)
-      .where(eq(enterpriseDeals.id, id));
-    expect(after[0].salesStageId).toBe(before[0].salesStageId);
+    expect(await stageOf()).toBe(before);
   });
 });
 
-describe.skip("POST /deals/:id/archive — stage eligibility", () => {
+describe("POST /deals/:id/archive — stage eligibility", () => {
   it("409s when the deal is not in a closed stage", async () => {
     const id = await createDeal("archive-open", "Discovery");
 

@@ -1,19 +1,19 @@
-import { describe, it, expect, afterAll } from "vitest";
+import { describe, it, expect, beforeAll, beforeEach } from "vitest";
 import type { Request, Response } from "express";
-import { asc, eq, inArray } from "drizzle-orm";
 import {
-  db,
-  pool,
-  enterpriseDeals,
-  pricingModels,
-  servicesTiers,
-  pipelineStages,
-  competitors,
-  complianceDrivers,
-  lossArchetypes,
-  dealAuditLog,
-} from "@workspace/db";
+  initCatalystApp,
+  createEnterpriseDealsRepo,
+  createDealAuditLogRepo,
+} from "@workspace/db/catalyst";
 import { UpdateDealBody } from "@workspace/api-zod";
+import {
+  installCatalystFake,
+  seedStandardLookups,
+  STAGES,
+  PRICING_MODELS,
+  SERVICES_TIERS,
+  type CatalystTestStore,
+} from "../test-support/catalyst-test-app";
 import router from "./deals";
 
 // Guards the audit coverage of the deal update handler.
@@ -66,57 +66,43 @@ function getHandler(method: "get" | "post" | "put" | "delete", path: string) {
 }
 
 const actor = { id: "test-actor", username: "test", displayName: "Audit Coverage Test" };
-const createdDealIds: string[] = [];
 
-afterAll(async () => {
-  // deal_audit_log.deal_id is ON DELETE CASCADE, so this clears the rows too.
-  if (createdDealIds.length > 0) {
-    await db.delete(enterpriseDeals).where(inArray(enterpriseDeals.id, createdDealIds));
-  }
-  await pool.end();
-});
+let store: CatalystTestStore;
 
-/** Two distinct rows from each lookup, so "change it to something else" is possible. */
-async function loadSeedFixtures() {
-  const models = await db.select().from(pricingModels).orderBy(asc(pricingModels.id));
-  const tiers = await db.select().from(servicesTiers).orderBy(asc(servicesTiers.id));
-  const stages = await db
-    .select()
-    .from(pipelineStages)
-    .orderBy(asc(pipelineStages.sortOrder));
-  const [competitor] = await db.select().from(competitors).limit(1);
-  const [driver] = await db.select().from(complianceDrivers).limit(1);
-  const [archetype] = await db.select().from(lossArchetypes).limit(1);
+const app = () => initCatalystApp({ headers: {} });
 
-  if (models.length < 2 || tiers.length < 2 || stages.length < 2) {
-    throw new Error(
-      "Seed data needs >=2 pricing models, services tiers and pipeline stages " +
-        "so every field can be changed to a different value — run `pnpm --filter @workspace/api-server run seed`",
-    );
-  }
-  if (!competitor || !driver || !archetype) {
-    throw new Error(
-      "Seed data missing competitors / compliance drivers / loss archetypes — " +
-        "run `pnpm --filter @workspace/api-server run seed`",
-    );
-  }
-  return { models, tiers, stages, competitor, driver, archetype };
+/**
+ * Two distinct rows from each lookup, so "change it to something else" is
+ * possible for every field — track() no-ops on an unchanged value, and a
+ * same-value field would read as a coverage gap.
+ */
+function loadSeedFixtures() {
+  store.seedRaw("competitors", [{ id: "1", name: "Rival Corp", category: "Direct", is_active: "true" }]);
+  store.seedRaw("compliance_drivers", [{ id: "1", name: "SOC 2", is_active: "true" }]);
+  store.seedRaw("loss_archetypes", [{ id: "1", archetype_name: "Lost on price", is_active: "true" }]);
+  return {
+    models: [{ id: PRICING_MODELS["Annual Subscription"] }, { id: PRICING_MODELS["Multi-Year Committed"] }],
+    tiers: [{ id: SERVICES_TIERS.None }, { id: SERVICES_TIERS["Professional Services Pitched"] }],
+    stages: [{ id: STAGES.Discovery }, { id: STAGES["Closed-Lost"] }],
+    competitor: { id: 1 },
+    driver: { id: 1 },
+    archetype: { id: 1 },
+  };
 }
 
-// Skipped post-Catalyst-migration: routes/deals.ts now reads/writes
-// enterprise_deals (and its audit trail) via Catalyst Data Store, not
-// Drizzle/Postgres. `initCatalystApp(req)` requires real Catalyst
-// session/headers to succeed — a fake `Request` object in a local Vitest run
-// can never provide that (same "Data Store isn't reachable from localhost"
-// limitation already documented for lookups.engine-thresholds.test.ts and the
-// sibling Customer-Insight-Engine project). This file's fixtures also seed via
-// Drizzle directly, which the migrated handler no longer reads. Retire or
-// rewrite as an integration test against the deployed AppSail app once Slice 6
-// seeding lands — tracked in the migration plan.
-describe.skip("PUT /deals/:id — audit coverage", () => {
+beforeAll(() => {
+  ({ store } = installCatalystFake());
+});
+
+beforeEach(() => {
+  store.reset();
+  seedStandardLookups(store);
+});
+
+// Runs against the in-memory Data Store (test-support/catalyst-test-app.ts).
+describe("PUT /deals/:id — audit coverage", () => {
   it("writes a deal_audit_log row for every auditable field of DealUpdate", async () => {
-    const { models, tiers, stages, competitor, driver, archetype } =
-      await loadSeedFixtures();
+    const { models, tiers, stages, competitor, driver, archetype } = loadSeedFixtures();
 
     // Created at the LAST stage and moved to the FIRST, so the stage change is
     // backward. Advancing would hit the RED-pattern guardrail and need an
@@ -125,24 +111,20 @@ describe.skip("PUT /deals/:id — audit coverage", () => {
     const lastStage = stages[stages.length - 1];
     const tag = `${Date.now()}`;
 
-    const [deal] = await db
-      .insert(enterpriseDeals)
-      .values({
-        dealName: `Audit Coverage ${tag}`,
-        accountName: `Audit Coverage Acct ${tag}`,
-        accountManager: "Original AM",
-        technicalLead: "Original TL",
-        salesStageId: lastStage.id,
-        pricingModelId: models[0].id,
-        servicesTierId: tiers[0].id,
-        productRevenue: "1000.00",
-        servicesRevenue: "250.00",
-        contractTermYears: 1,
-        dealCurrency: "USD",
-        committed: false,
-      })
-      .returning({ id: enterpriseDeals.id });
-    createdDealIds.push(deal.id);
+    const deal = await createEnterpriseDealsRepo(app()).create({
+      dealName: `Audit Coverage ${tag}`,
+      accountName: `Audit Coverage Acct ${tag}`,
+      accountManager: "Original AM",
+      technicalLead: "Original TL",
+      salesStageId: lastStage.id,
+      pricingModelId: models[0].id,
+      servicesTierId: tiers[0].id,
+      productRevenue: "1000.00",
+      servicesRevenue: "250.00",
+      contractTermYears: 1,
+      dealCurrency: "USD",
+      committed: false,
+    });
 
     // Every value here differs from the row inserted above — track() no-ops on
     // an unchanged value, so a same-value field would look like a coverage gap.
@@ -191,7 +173,7 @@ describe.skip("PUT /deals/:id — audit coverage", () => {
 
     const handler = getHandler("put", "/deals/:id");
     let thrown: (Error & { status?: number }) | undefined;
-    const fakeReq = { params: { id: deal.id }, body, actor } as unknown as Request;
+    const fakeReq = { params: { id: deal.id }, body, query: {}, headers: {}, actor } as unknown as Request;
     const fakeRes = { json: () => {} } as unknown as Response;
     try {
       await handler(fakeReq, fakeRes);
@@ -200,10 +182,7 @@ describe.skip("PUT /deals/:id — audit coverage", () => {
     }
     expect(thrown).toBeUndefined();
 
-    const rows = await db
-      .select({ fieldChanged: dealAuditLog.fieldChanged })
-      .from(dealAuditLog)
-      .where(eq(dealAuditLog.dealId, deal.id));
+    const rows = await createDealAuditLogRepo(app()).list(deal.id);
     const audited = new Set(rows.map((r) => r.fieldChanged));
 
     const missing = expected.filter((f) => !audited.has(f));
@@ -218,23 +197,19 @@ describe.skip("PUT /deals/:id — audit coverage", () => {
     const { models, tiers, stages } = await loadSeedFixtures();
     const tag = `${Date.now()}-noop`;
 
-    const [deal] = await db
-      .insert(enterpriseDeals)
-      .values({
-        dealName: `Audit Noop ${tag}`,
-        accountName: `Audit Noop Acct ${tag}`,
-        accountManager: "AM",
-        technicalLead: "TL",
-        salesStageId: stages[0].id,
-        pricingModelId: models[0].id,
-        servicesTierId: tiers[0].id,
-        productRevenue: "1000.00",
-        servicesRevenue: "0",
-        contractTermYears: 2,
-        dealCurrency: "USD",
-      })
-      .returning({ id: enterpriseDeals.id });
-    createdDealIds.push(deal.id);
+    const deal = await createEnterpriseDealsRepo(app()).create({
+      dealName: `Audit Noop ${tag}`,
+      accountName: `Audit Noop Acct ${tag}`,
+      accountManager: "AM",
+      technicalLead: "TL",
+      salesStageId: stages[0].id,
+      pricingModelId: models[0].id,
+      servicesTierId: tiers[0].id,
+      productRevenue: "1000.00",
+      servicesRevenue: "0",
+      contractTermYears: 2,
+      dealCurrency: "USD",
+    });
 
     // The Edit sheet auto-saves the WHOLE payload every second while open
     // (edit-deal-sheet.tsx), so this is the common case, not an edge case: if
@@ -254,14 +229,13 @@ describe.skip("PUT /deals/:id — audit coverage", () => {
           win_probability_pct: null,
         },
         actor,
+        query: {},
+        headers: {},
       } as unknown as Request,
       { json: () => {} } as unknown as Response,
     );
 
-    const rows = await db
-      .select({ fieldChanged: dealAuditLog.fieldChanged })
-      .from(dealAuditLog)
-      .where(eq(dealAuditLog.dealId, deal.id));
+    const rows = await createDealAuditLogRepo(app()).list(deal.id);
     expect(rows).toEqual([]);
   });
 });
