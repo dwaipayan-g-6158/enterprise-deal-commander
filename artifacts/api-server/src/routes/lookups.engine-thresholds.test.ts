@@ -1,7 +1,7 @@
-import { describe, it, expect, afterAll } from "vitest";
+import { describe, it, expect, beforeAll, beforeEach } from "vitest";
 import type { Request, Response } from "express";
-import { eq } from "drizzle-orm";
-import { db, pool, engineThresholds, settingsChangeLog } from "@workspace/db";
+import { initCatalystApp, createEngineThresholdsRepo } from "@workspace/db/catalyst";
+import { installCatalystFake, type CatalystTestStore } from "../test-support/catalyst-test-app";
 import router from "./lookups";
 
 // F11: PUT /lookups/engine-thresholds used to upsert ANY parameter_key sent,
@@ -30,7 +30,7 @@ function getHandler(method: "get" | "put", path: string) {
 const ACTOR = { id: "eeeeeeee-0000-0000-0000-000000000001", username: "lookups-test-actor", displayName: "Lookups Test Actor", role: "admin" };
 
 function fakeReq(body: unknown): Request {
-  return { body, params: {}, actor: ACTOR } as unknown as Request;
+  return { body, params: {}, query: {}, headers: {}, actor: ACTOR } as unknown as Request;
 }
 
 function fakeRes(): Response {
@@ -48,34 +48,36 @@ async function callExpectingThrow(req: Request): Promise<{ status: number; messa
   throw new Error("Expected the handler to throw, but it resolved");
 }
 
+let store: CatalystTestStore;
+
 const valueOf = async (key: string): Promise<string | undefined> => {
-  const [row] = await db
-    .select({ v: engineThresholds.parameterValue })
-    .from(engineThresholds)
-    .where(eq(engineThresholds.parameterKey, key));
-  return row?.v;
+  const rows = await createEngineThresholdsRepo(initCatalystApp({ headers: {} })).listAll();
+  return rows.find((r) => r.parameterKey === key)?.parameterValue;
 };
 
-afterAll(async () => {
-  // The one test below that reaches a real write logs a settings_change_log
-  // row under this actor — this actor username is unique to this file, so
-  // deleting everything it wrote is safe cleanup for the shared dev DB.
-  await db.delete(settingsChangeLog).where(eq(settingsChangeLog.actor, ACTOR.username));
-  await pool.end();
+beforeAll(() => {
+  ({ store } = installCatalystFake());
 });
 
-// Skipped post-Catalyst-migration: routes/lookups.ts now reads/writes
-// engine_thresholds via Catalyst Data Store (see docs/CATALYST_SCHEMA.md),
-// not Drizzle/Postgres. `initCatalystApp(req)` requires a real Catalyst
-// session/headers to succeed — a fake `Request` object in a local Vitest
-// run can never provide that, matching the same "Data Store isn't reachable
-// from localhost" limitation already documented for the sibling
-// Customer-Insight-Engine project (see [[periscope-cie-server]] in project
-// memory). This file's fixtures (`elephant_tcv_threshold` etc.) also assume
-// Postgres seed data that doesn't exist in Data Store yet (seeding is Slice
-// 6). Retire or rewrite as an integration test against the deployed AppSail
-// app once Slice 6 seeding lands — tracked in the migration plan.
-describe.skip("PUT /lookups/engine-thresholds — unknown parameter_key rejection (F11)", () => {
+beforeEach(() => {
+  store.reset();
+  // Only the one key these tests read. `validateThresholdUpdate` applies its
+  // bounds rules to keys it recognises by fixed name OR that already exist in
+  // `current`, so an existing row is what makes `elephant_tcv_threshold` the
+  // "valid key" half of the unknown-key assertions.
+  store.seedRaw("engine_thresholds", [
+    {
+      id: "1",
+      parameter_key: "elephant_tcv_threshold",
+      parameter_value: "500000",
+      data_type_: "number",
+      description: "Elephant TCV threshold",
+    },
+  ]);
+});
+
+// Runs against the in-memory Data Store (test-support/catalyst-test-app.ts).
+describe("PUT /lookups/engine-thresholds — unknown parameter_key rejection (F11)", () => {
   it("rejects a completely unrecognized parameter_key with a 400, and writes nothing", async () => {
     const bogusKey = "definitely_not_a_real_threshold_key_vitest";
 

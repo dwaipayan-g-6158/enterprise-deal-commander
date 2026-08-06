@@ -1,7 +1,14 @@
-import { describe, it, expect, afterAll } from "vitest";
+import { describe, it, expect, beforeAll, beforeEach } from "vitest";
 import type { Request, Response } from "express";
-import { inArray } from "drizzle-orm";
-import { db, pool, enterpriseDeals, pricingModels, servicesTiers, pipelineStages } from "@workspace/db";
+import { initCatalystApp, createEnterpriseDealsRepo } from "@workspace/db/catalyst";
+import {
+  installCatalystFake,
+  seedStandardLookups,
+  STAGES,
+  PRICING_MODELS,
+  SERVICES_TIER_ID,
+  type CatalystTestStore,
+} from "../../test-support/catalyst-test-app";
 import router from "./config";
 
 // Same handler-extraction technique as routes/v2/config.test.ts and
@@ -45,7 +52,8 @@ async function callTestPattern(comparisonValue: string): Promise<TestPatternResp
   return captured.data;
 }
 
-const createdDealIds: string[] = [];
+let store: CatalystTestStore;
+let seq = 0;
 
 // A Multi-Year Committed deal: correct TCV (calculateFlatTCV) is
 // 1,000,000 x 3 + 200,000 = 3,200,000. The buggy inline sum instead produces
@@ -53,50 +61,34 @@ const createdDealIds: string[] = [];
 // pattern condition distinguishes the two unambiguously without needing a
 // before/after delta (this is a membership check, not an additive total).
 async function createMultiYearDeal(): Promise<string> {
-  const pricingRows = await db.select().from(pricingModels);
-  const pricing = pricingRows.find((p) => p.modelName === "Multi-Year Committed");
-  if (!pricing) throw new Error('Seed data missing pricing model "Multi-Year Committed"');
-  const [tier] = await db.select().from(servicesTiers).limit(1);
-  const stages = await db.select().from(pipelineStages);
-  const stage = stages.find((s) => s.stageName === "Discovery");
-  if (!stage) throw new Error('Seed data missing pipeline stage "Discovery"');
-
-  const [deal] = await db
-    .insert(enterpriseDeals)
-    .values({
-      dealName: `Config TCV Multi-Year Test ${Date.now()}`,
-      accountName: `Config TCV Multi-Year Acct ${Date.now()}`,
-      accountManager: "AM",
-      technicalLead: "TL",
-      salesStageId: stage.id,
-      pricingModelId: pricing.id,
-      servicesTierId: tier.id,
-      contractTermYears: 3,
-      productRevenue: "1000000.00",
-      servicesRevenue: "200000.00",
-    })
-    .returning({ id: enterpriseDeals.id });
-  createdDealIds.push(deal.id);
+  const deal = await createEnterpriseDealsRepo(initCatalystApp({ headers: {} })).create({
+    dealName: `config.tcv Multi-Year Test ${seq}`,
+    accountName: `config.tcv Multi-Year Acct ${seq++}`,
+    accountManager: "AM",
+    technicalLead: "TL",
+    salesStageId: STAGES.Discovery,
+    pricingModelId: PRICING_MODELS["Multi-Year Committed"],
+    servicesTierId: SERVICES_TIER_ID,
+    contractTermYears: 3,
+    productRevenue: "1000000.00",
+    servicesRevenue: "200000.00",
+    dealCurrency: "USD",
+  });
   return deal.id;
 }
 
-afterAll(async () => {
-  if (createdDealIds.length > 0) {
-    await db.delete(enterpriseDeals).where(inArray(enterpriseDeals.id, createdDealIds));
-  }
-  await pool.end();
+beforeAll(() => {
+  ({ store } = installCatalystFake());
 });
 
-// Skipped post-Catalyst-migration: routes/v2/config.ts's POST /custom-patterns/test
-// now reads enterprise_deals via Catalyst Data Store, not Drizzle/Postgres.
-// `initCatalystApp(req)` requires real Catalyst session/headers to succeed — a
-// fake `Request` object in a local Vitest run can never provide that (same
-// "Data Store isn't reachable from localhost" limitation already documented
-// for lookups.engine-thresholds.test.ts). This file's fixtures also seed via
-// Drizzle directly, which the migrated handler no longer reads. Retire or
-// rewrite as an integration test against the deployed AppSail app once Slice 6
-// seeding lands.
-describe.skip("POST /custom-patterns/test — normalizedDeals() TCV honors the term multiplier", () => {
+beforeEach(() => {
+  store.reset();
+  seq = 0;
+  seedStandardLookups(store);
+});
+
+// Runs against the in-memory Data Store (test-support/catalyst-test-app.ts).
+describe("POST /custom-patterns/test — normalizedDeals() TCV honors the term multiplier", () => {
   it("matches a Multi-Year Committed deal against a threshold only the correctly-multiplied TCV clears", async () => {
     const dealId = await createMultiYearDeal();
 

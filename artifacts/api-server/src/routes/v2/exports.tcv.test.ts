@@ -1,7 +1,14 @@
-import { describe, it, expect, afterAll } from "vitest";
+import { describe, it, expect, beforeAll, beforeEach } from "vitest";
 import type { Request, Response } from "express";
-import { inArray } from "drizzle-orm";
-import { db, pool, enterpriseDeals, pricingModels, servicesTiers, pipelineStages } from "@workspace/db";
+import { initCatalystApp, createEnterpriseDealsRepo } from "@workspace/db/catalyst";
+import {
+  installCatalystFake,
+  seedStandardLookups,
+  STAGES,
+  PRICING_MODELS,
+  SERVICES_TIER_ID,
+  type CatalystTestStore,
+} from "../../test-support/catalyst-test-app";
 import router from "./exports";
 
 // Same handler-extraction technique as routes/v2/analytics.vital-signs.test.ts
@@ -26,7 +33,7 @@ function getHandler(path: string) {
 async function callPipelineReport(): Promise<string> {
   const handler = getHandler("/reports/pipeline");
   let captured: string | undefined;
-  const fakeReq = {} as Request;
+  const fakeReq = { headers: {}, query: {}, params: {}, body: {} } as unknown as Request;
   const fakeRes = {
     setHeader: () => {},
     send: (body: string) => {
@@ -48,7 +55,8 @@ function escapeRegExp(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-const createdDealIds: string[] = [];
+let store: CatalystTestStore;
+let seq = 0;
 
 // A Multi-Year Committed deal with a deliberately huge productRevenue so it
 // sorts to the very top of activeDealRows() (ORDER BY productRevenue DESC)
@@ -56,51 +64,39 @@ const createdDealIds: string[] = [];
 // Correct TCV (calculateFlatTCV) = 50,000,000 x 3 + 10,000,000 = 160,000,000;
 // the buggy inline sum instead produces 60,000,000.
 async function createMultiYearDeal(): Promise<{ id: string; dealName: string }> {
-  const pricingRows = await db.select().from(pricingModels);
-  const pricing = pricingRows.find((p) => p.modelName === "Multi-Year Committed");
-  if (!pricing) throw new Error('Seed data missing pricing model "Multi-Year Committed"');
-  const [tier] = await db.select().from(servicesTiers).limit(1);
-  const stages = await db.select().from(pipelineStages);
-  const stage = stages.find((s) => s.stageName === "Discovery");
-  if (!stage) throw new Error('Seed data missing pipeline stage "Discovery"');
-
-  const dealName = `Exports TCV Multi-Year Test ${Date.now()}`;
-  const [deal] = await db
-    .insert(enterpriseDeals)
-    .values({
-      dealName,
-      accountName: `Exports TCV Multi-Year Acct ${Date.now()}`,
-      accountManager: "AM",
-      technicalLead: "TL",
-      salesStageId: stage.id,
-      pricingModelId: pricing.id,
-      servicesTierId: tier.id,
-      contractTermYears: 3,
-      productRevenue: "50000000.00",
-      servicesRevenue: "10000000.00",
-    })
-    .returning({ id: enterpriseDeals.id });
-  createdDealIds.push(deal.id);
+  const dealName = `exports.tcv Multi-Year Test ${seq}`;
+  const deal = await createEnterpriseDealsRepo(initCatalystApp({ headers: {} })).create({
+    dealName,
+    accountName: `exports.tcv Multi-Year Acct ${seq++}`,
+    accountManager: "AM",
+    technicalLead: "TL",
+    salesStageId: STAGES.Discovery,
+    pricingModelId: PRICING_MODELS["Multi-Year Committed"],
+    servicesTierId: SERVICES_TIER_ID,
+    contractTermYears: 3,
+    // Deliberately huge so this deal sorts to the very top of
+    // activeDealRows()'s productRevenue DESC ordering, which is what puts it in
+    // the Top Deals table the assertions read. 50,000,000 x 3 + 10,000,000 =
+    // 160,000,000 under calculateFlatTCV, versus a flat sum of 60,000,000.
+    productRevenue: "50000000.00",
+    servicesRevenue: "10000000.00",
+    dealCurrency: "USD",
+  });
   return { id: deal.id, dealName };
 }
 
-afterAll(async () => {
-  if (createdDealIds.length > 0) {
-    await db.delete(enterpriseDeals).where(inArray(enterpriseDeals.id, createdDealIds));
-  }
-  await pool.end();
+beforeAll(() => {
+  ({ store } = installCatalystFake());
 });
 
-// Skipped post-Catalyst-migration: routes/v2/exports.ts's GET /reports/pipeline
-// now reads enterprise_deals via Catalyst Data Store, not Drizzle/Postgres.
-// `initCatalystApp(req)` requires real Catalyst session/headers to succeed —
-// a fake `Request` object in a local Vitest run can never provide that (same
-// "Data Store isn't reachable from localhost" limitation already documented
-// for lookups.engine-thresholds.test.ts). This file's fixtures also seed via
-// Drizzle directly, which the migrated handler no longer reads. Retire or
-// rewrite as an integration test against the deployed AppSail app once
-// Slice 6 seeding lands.
-describe.skip("GET /reports/pipeline — TCV honors the Multi-Year Committed term multiplier", () => {
+beforeEach(() => {
+  store.reset();
+  seq = 0;
+  seedStandardLookups(store);
+});
+
+// Runs against the in-memory Data Store (test-support/catalyst-test-app.ts).
+describe("GET /reports/pipeline — TCV honors the Multi-Year Committed term multiplier", () => {
   it("KPI Total TCV delta and the Top Deals table both reflect the term multiplier, not a flat sum", async () => {
     const before = totalTcvFromHtml(await callPipelineReport());
     const { dealName } = await createMultiYearDeal();
