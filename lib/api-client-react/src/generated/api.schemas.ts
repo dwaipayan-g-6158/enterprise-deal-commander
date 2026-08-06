@@ -268,7 +268,11 @@ export interface DealInput {
   expected_close_date?: string | null;
   /** @nullable */
   landed_at?: string | null;
-  /** @nullable */
+  /**
+     * @minimum 0
+     * @maximum 100
+     * @nullable
+     */
   win_probability_pct?: number | null;
   committed?: boolean;
   /** @minimum 0 */
@@ -342,7 +346,11 @@ export interface DealUpdate {
   expected_close_date?: string | null;
   /** @nullable */
   landed_at?: string | null;
-  /** @nullable */
+  /**
+     * @minimum 0
+     * @maximum 100
+     * @nullable
+     */
   win_probability_pct?: number | null;
   committed?: boolean;
   /** @minimum 0 */
@@ -1554,6 +1562,7 @@ export interface FxRateListResponse {
 export interface FxRateUpdateItem {
   base_currency: string;
   quote_currency: string;
+  /** @exclusiveMinimum 0 */
   rate: number;
   as_of: string;
 }

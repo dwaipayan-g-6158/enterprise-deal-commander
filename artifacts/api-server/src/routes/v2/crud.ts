@@ -347,7 +347,7 @@ router.post("/webhooks", async (req: Request, res: Response) => {
     isActive: b.is_active ?? true,
     createdBy: actor.username,
   });
-  await logSettingsChange(catalystApp, {
+  await logSettingsChange(req, {
     module: "webhooks",
     settingKey: b.webhook_name,
     entityId: String(row.id),
@@ -380,7 +380,7 @@ router.put("/webhooks/:id", async (req: Request, res: Response) => {
     ...(b.secret_key ? { secretKey: b.secret_key } : {}),
   });
   if (!row) throw notFound("Webhook not found");
-  await logSettingsChange(catalystApp, {
+  await logSettingsChange(req, {
     module: "webhooks",
     settingKey: b.webhook_name,
     entityId: String(id),
@@ -400,7 +400,7 @@ router.delete("/webhooks/:id", async (req: Request, res: Response) => {
   const prior = await webhooksRepo.getById(id);
   await webhooksRepo.delete(id);
   if (prior) {
-    await logSettingsChange(catalystApp, {
+    await logSettingsChange(req, {
       module: "webhooks",
       settingKey: prior.webhookName,
       entityId: String(id),
@@ -457,7 +457,7 @@ router.post("/notification-rules", async (req: Request, res: Response) => {
     channel: b.channel ?? "in_app",
     isActive: b.is_active ?? true,
   });
-  await logSettingsChange(catalystApp, {
+  await logSettingsChange(req, {
     module: "notification_rules",
     settingKey: b.rule_name,
     entityId: String(row.id),
@@ -493,7 +493,7 @@ router.put("/notification-rules/:id", async (req: Request, res: Response) => {
     isActive: b.is_active ?? undefined,
   });
   if (!row) throw notFound("Rule not found");
-  await logSettingsChange(catalystApp, {
+  await logSettingsChange(req, {
     module: "notification_rules",
     settingKey: b.rule_name,
     entityId: String(id),
@@ -522,7 +522,7 @@ router.delete("/notification-rules/:id", async (req: Request, res: Response) => 
   const prior = await rulesRepo.getById(id);
   await rulesRepo.delete(id);
   if (prior) {
-    await logSettingsChange(catalystApp, {
+    await logSettingsChange(req, {
       module: "notification_rules",
       settingKey: prior.ruleName,
       entityId: String(id),

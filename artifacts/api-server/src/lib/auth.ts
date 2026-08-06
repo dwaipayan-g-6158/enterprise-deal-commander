@@ -98,7 +98,7 @@ async function resolveCommander(
   // admin-driven invite (routes/users.ts) — the change log should be a
   // complete record of every account that came to exist, not just the ones
   // created through the Users tab.
-  await logSettingsChange(initCatalystAdminApp(req), {
+  await logSettingsChange(req, {
     module: "users",
     settingKey: created.username,
     entityId: created.id,

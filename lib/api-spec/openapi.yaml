@@ -2163,7 +2163,10 @@ components:
         deal_currency: { type: string, minLength: 3, maxLength: 3 }
         expected_close_date: { type: ["string", "null"] }
         landed_at: { type: ["string", "null"] }
-        win_probability_pct: { type: ["integer", "null"] }
+        # 0-100: mirrors the `win_probability_range` CHECK constraint, which
+        # Data Store cannot enforce. Every write reaches the table through this
+        # schema, so the API boundary is where it belongs.
+        win_probability_pct: { type: ["integer", "null"], minimum: 0, maximum: 100 }
         committed: { type: boolean }
         services_revenue: { type: number, minimum: 0 }
         services_tier_id: { type: integer }
@@ -2210,7 +2213,10 @@ components:
         deal_currency: { type: string, minLength: 3, maxLength: 3 }
         expected_close_date: { type: ["string", "null"] }
         landed_at: { type: ["string", "null"] }
-        win_probability_pct: { type: ["integer", "null"] }
+        # 0-100: mirrors the `win_probability_range` CHECK constraint, which
+        # Data Store cannot enforce. Every write reaches the table through this
+        # schema, so the API boundary is where it belongs.
+        win_probability_pct: { type: ["integer", "null"], minimum: 0, maximum: 100 }
         committed: { type: boolean }
         services_revenue: { type: number, minimum: 0 }
         services_tier_id: { type: integer }
@@ -3588,7 +3594,9 @@ components:
       properties:
         base_currency: { type: string }
         quote_currency: { type: string }
-        rate: { type: number }
+        # > 0: mirrors the `fx_rate_positive` CHECK constraint. A zero or
+        # negative rate would silently zero out or invert every converted TCV.
+        rate: { type: number, exclusiveMinimum: 0 }
         as_of: { type: string }
       required: [base_currency, quote_currency, rate, as_of]
     FxRatesUpdate:

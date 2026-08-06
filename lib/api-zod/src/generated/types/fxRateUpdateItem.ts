@@ -9,6 +9,7 @@
 export interface FxRateUpdateItem {
   base_currency: string;
   quote_currency: string;
+  /** @exclusiveMinimum 0 */
   rate: number;
   as_of: string;
 }

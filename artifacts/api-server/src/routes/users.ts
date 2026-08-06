@@ -99,7 +99,7 @@ router.post("/users", async (req: Request, res: Response) => {
     throw err;
   }
 
-  await logSettingsChange(initCatalystAdminApp(req), {
+  await logSettingsChange(req, {
     module: "users",
     settingKey: created.username,
     entityId: created.id,
@@ -182,7 +182,7 @@ router.patch("/users/:id", async (req: Request, res: Response) => {
   }
 
   const action = body.is_active === false ? "deactivate" : body.is_active === true ? "reactivate" : "update";
-  await logSettingsChange(initCatalystAdminApp(req), {
+  await logSettingsChange(req, {
     module: "users",
     settingKey: updated.username,
     entityId: updated.id,
@@ -245,7 +245,7 @@ router.delete("/users/:id", async (req: Request, res: Response) => {
     }
   }
 
-  await logSettingsChange(initCatalystAdminApp(req), {
+  await logSettingsChange(req, {
     module: "users",
     settingKey: target.username,
     entityId: target.id,

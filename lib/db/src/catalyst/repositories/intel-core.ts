@@ -59,6 +59,16 @@ function optDate(raw: string | null | undefined): Date | null {
   return raw ? parseCatalystDateTime(raw) : null;
 }
 
+/**
+ * Data Store caps a `text` column at 10,000 chars. 9,800 leaves the same
+ * multi-byte margin Periscope's `INLINE_THRESHOLD` uses
+ * (docs/catalyst-datastore-constraints.md) — `.length` counts UTF-16 units,
+ * and the cap is applied to the stored bytes.
+ */
+const SNAPSHOT_PAYLOAD_LIMIT = 9_800;
+/** Largest real payload measured in production on 2026-08-07 was 4,904. */
+const SNAPSHOT_PAYLOAD_WARN_AT = 7_500;
+
 // -------------------------------------------------------------- Deal competitors (F2)
 
 export interface DealCompetitorLink {
@@ -1980,12 +1990,27 @@ export function createDealSnapshotsRepo(catalystApp: CatalystApp) {
       return rows[0] ?? null;
     },
     /**
-     * Insert a new snapshot. `payload_inline` has the same 10,000-char Data
-     * Store `text` cap as every other Text column (see
-     * docs/catalyst-datastore-constraints.md) — wiring the Stratus overflow
-     * path (`payload_key`) is Slice 5 scope, so a payload that large fails
-     * loudly here rather than being silently truncated (which would corrupt
-     * the historical record this table exists to keep).
+     * Insert a new snapshot.
+     *
+     * `payload_inline` has the same 10,000-char Data Store `text` cap as every
+     * other Text column (docs/catalyst-datastore-constraints.md). The Stratus
+     * overflow path (`payload_key`) is deliberately NOT wired — see
+     * docs/CATALYST_SCHEMA.md for that decision and its revisit trigger.
+     *
+     * Until it is, an oversize payload must FAIL rather than be trimmed. It is
+     * tempting to drop or truncate the blob and keep the row, but the payload
+     * is not decoration — three live features read it:
+     *   - the deal trajectory chart (gatePct/playbookPct/meddpiccPct,
+     *     routes/v2/analytics.ts),
+     *   - the vital-signs 7-day baseline RED-alert count (same file),
+     *   - `snapshotFingerprint`, which is how the hourly cron decides a
+     *     snapshot is unchanged. Lose the payload and the fingerprint differs
+     *     every run, so the dedupe inverts into writing a duplicate row per
+     *     deal per hour — exactly the bloat it exists to prevent.
+     * So the guard below improves the DIAGNOSIS, not the outcome: Data Store's
+     * own rejection here is an opaque 400, and this replaces it with the deal
+     * id and the actual size. The soft warning fires well before the cap so the
+     * "wire Stratus now" trigger is observed rather than remembered.
      */
     async create(input: {
       dealId: string;
@@ -1999,6 +2024,20 @@ export function createDealSnapshotsRepo(catalystApp: CatalystApp) {
       payload: Record<string, unknown>;
       createdBy: string;
     }): Promise<void> {
+      const serialized = toJson(input.payload);
+      if (serialized.length > SNAPSHOT_PAYLOAD_LIMIT) {
+        throw new Error(
+          `Snapshot payload for deal ${input.dealId} is ${serialized.length} chars, over the ` +
+            `${SNAPSHOT_PAYLOAD_LIMIT}-char Data Store text cap. Wire the Stratus offload ` +
+            `(v2_deal_snapshots.payload_key) — see docs/CATALYST_SCHEMA.md.`,
+        );
+      }
+      if (serialized.length > SNAPSHOT_PAYLOAD_WARN_AT) {
+        console.warn(
+          `[deal-snapshots] payload for deal ${input.dealId} is ${serialized.length} chars, ` +
+            `approaching the ${SNAPSHOT_PAYLOAD_LIMIT}-char cap. Time to wire the Stratus offload.`,
+        );
+      }
       await insertRow(catalystApp, TABLE.dealSnapshots, {
         id: crypto.randomUUID(),
         deal_id: input.dealId,
@@ -2009,7 +2048,7 @@ export function createDealSnapshotsRepo(catalystApp: CatalystApp) {
         sales_stage: input.salesStage,
         calculated_tcv: input.calculatedTcv,
         normalized_tcv: input.normalizedTcv,
-        payload_inline: toJson(input.payload),
+        payload_inline: serialized,
         created_by: input.createdBy,
         snapshot_at: formatCatalystDateTime(new Date()),
       });

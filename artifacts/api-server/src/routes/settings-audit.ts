@@ -132,7 +132,7 @@ router.post("/settings/change-log/:id/rollback", async (req: Request, res: Respo
 
   await thresholdsRepo.upsertOne(inverse.settingKey, restoreValue);
 
-  await logSettingsChange(catalystApp, {
+  await logSettingsChange(req, {
     module: row.module,
     settingKey: row.settingKey,
     action: "rollback",
@@ -221,7 +221,7 @@ router.post("/settings/config/import", async (req: Request, res: Response) => {
   }
   for (const row of parsed.data.engineThresholds) {
     await thresholdsRepo.upsertOne(row.parameterKey, row.parameterValue);
-    await logSettingsChange(catalystApp, {
+    await logSettingsChange(req, {
       module: "engine_thresholds",
       settingKey: row.parameterKey,
       action: "import",
@@ -247,7 +247,7 @@ router.post("/settings/config/import", async (req: Request, res: Response) => {
   const importedAt = new Date().toISOString().slice(0, 10);
   for (const row of parsed.data.scoringModelWeights) {
     await scoringWeightsRepo.append(row.featureId, row.calibratedWeight, importedAt);
-    await logSettingsChange(catalystApp, {
+    await logSettingsChange(req, {
       module: "scoring_model_weights",
       settingKey: row.featureId,
       action: "import",

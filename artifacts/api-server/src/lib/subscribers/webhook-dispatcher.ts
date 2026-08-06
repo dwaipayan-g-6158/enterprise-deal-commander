@@ -65,7 +65,24 @@ async function deliver(
   }
 
   if (attempt < MAX_ATTEMPTS) {
-    setTimeout(() => void deliver(catalystApp, webhook, eventType, data, attempt + 1), attempt * 5000).unref();
+    const delayMs = attempt * 5000;
+    // This retry is scheduled IN MEMORY and is therefore not durable: AppSail
+    // recycles an idle instance after five minutes, and `.unref()` means the
+    // timer will never hold the process open. If the instance goes away inside
+    // this window the retry simply never happens, and — without this log — no
+    // trace of it would exist anywhere, because the delivery-log row is only
+    // written once an attempt actually completes.
+    //
+    // A durable retry (a drain job on the existing Job Scheduling cron) is
+    // deliberately not built yet; see docs/CATALYST_SCHEMA.md for the decision
+    // and the cheap path to add it. The window is seconds rather than the hour
+    // the periodic-snapshot timer had, which is why this is a log and not a
+    // rebuild.
+    logger.warn(
+      { webhookId: webhook.id, eventType, attempt, nextAttempt: attempt + 1, delayMs, status },
+      "Webhook delivery failed; retry scheduled in-memory (lost if this instance recycles)",
+    );
+    setTimeout(() => void deliver(catalystApp, webhook, eventType, data, attempt + 1), delayMs).unref();
     return;
   }
 

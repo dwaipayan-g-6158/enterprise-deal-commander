@@ -214,6 +214,9 @@ export const createDealBodyContractTermYearsMax = 10;
 export const createDealBodyDealCurrencyMin = 3;
 export const createDealBodyDealCurrencyMax = 3;
 
+export const createDealBodyWinProbabilityPctMin = 0;
+export const createDealBodyWinProbabilityPctMax = 100;
+
 export const createDealBodyServicesRevenueMin = 0;
 
 export const createDealBodyAd360SeatCountMin = 0;
@@ -235,7 +238,7 @@ export const CreateDealBody = zod.object({
   "deal_currency": zod.string().min(createDealBodyDealCurrencyMin).max(createDealBodyDealCurrencyMax).optional(),
   "expected_close_date": zod.string().nullish(),
   "landed_at": zod.string().nullish(),
-  "win_probability_pct": zod.number().nullish(),
+  "win_probability_pct": zod.number().min(createDealBodyWinProbabilityPctMin).max(createDealBodyWinProbabilityPctMax).nullish(),
   "committed": zod.boolean().optional(),
   "services_revenue": zod.number().min(createDealBodyServicesRevenueMin),
   "services_tier_id": zod.number(),
@@ -346,6 +349,9 @@ export const updateDealBodyContractTermYearsMax = 10;
 export const updateDealBodyDealCurrencyMin = 3;
 export const updateDealBodyDealCurrencyMax = 3;
 
+export const updateDealBodyWinProbabilityPctMin = 0;
+export const updateDealBodyWinProbabilityPctMax = 100;
+
 export const updateDealBodyServicesRevenueMin = 0;
 
 export const updateDealBodyLossReasonMax = 2000;
@@ -372,7 +378,7 @@ export const UpdateDealBody = zod.object({
   "deal_currency": zod.string().min(updateDealBodyDealCurrencyMin).max(updateDealBodyDealCurrencyMax).optional(),
   "expected_close_date": zod.string().nullish(),
   "landed_at": zod.string().nullish(),
-  "win_probability_pct": zod.number().nullish(),
+  "win_probability_pct": zod.number().min(updateDealBodyWinProbabilityPctMin).max(updateDealBodyWinProbabilityPctMax).nullish(),
   "committed": zod.boolean().optional(),
   "services_revenue": zod.number().min(updateDealBodyServicesRevenueMin).optional(),
   "services_tier_id": zod.number().optional(),
@@ -1820,11 +1826,15 @@ export const ListFxRatesResponse = zod.object({
 })
 
 
+export const updateFxRatesBodyUpdatesItemRateExclusiveMin = 0;
+
+
+
 export const UpdateFxRatesBody = zod.object({
   "updates": zod.array(zod.object({
   "base_currency": zod.string(),
   "quote_currency": zod.string(),
-  "rate": zod.number(),
+  "rate": zod.number().gt(updateFxRatesBodyUpdatesItemRateExclusiveMin),
   "as_of": zod.string()
 }))
 })

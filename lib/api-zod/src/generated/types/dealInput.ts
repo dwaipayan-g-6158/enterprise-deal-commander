@@ -47,7 +47,11 @@ export interface DealInput {
   expected_close_date?: string | null;
   /** @nullable */
   landed_at?: string | null;
-  /** @nullable */
+  /**
+     * @minimum 0
+     * @maximum 100
+     * @nullable
+     */
   win_probability_pct?: number | null;
   committed?: boolean;
   /** @minimum 0 */

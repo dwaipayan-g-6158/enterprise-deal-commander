@@ -17,9 +17,7 @@ import {
   createInterventionChecklistsRepo,
   createEngineThresholdsRepo,
   createFxRatesRepo,
-  createSettingsChangeLogRepo,
   DuplicateNameError,
-  type SettingsChangeInput,
 } from "@workspace/db/catalyst";
 import {
   ListPipelineStagesResponse,
@@ -50,19 +48,12 @@ import {
 import { getActor } from "../lib/auth";
 import { badRequest, conflict, notFound } from "../lib/http";
 import { validateThresholdUpdate } from "../lib/threshold-validation";
+// Shared, admin-scoped. This file used to carry its own user-scoped copy —
+// see lib/catalyst/settings-audit.ts for why that scope matters.
+import { logSettingsChange } from "../lib/catalyst/settings-audit";
 
 // Auth + write-role enforcement is applied centrally in routes/index.ts.
 const router: IRouter = Router();
-
-// Calls the Catalyst-backed settings-audit repo directly rather than through
-// the shared lib/settings-audit.ts's `logSettingsChange` — that helper is
-// still Drizzle/Postgres-backed for its other ~4 callers (settings-audit.ts
-// route, users.ts, v2/config.ts, v2/crud.ts), which haven't been migrated
-// off Drizzle yet. See the note in lib/settings-audit.ts.
-async function logSettingsChange(req: Request, input: SettingsChangeInput): Promise<void> {
-  const repo = createSettingsChangeLogRepo(initCatalystApp(req));
-  await repo.record(input);
-}
 
 router.get("/lookups/pipeline-stages", async (req: Request, res: Response) => {
   const repo = createPipelineStagesRepo(initCatalystApp(req));

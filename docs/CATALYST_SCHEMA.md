@@ -199,9 +199,62 @@ Two things worth knowing if this is ever revisited:
   lives in `artifacts/api-server/src/lib/memory-search.ts`, which mirrors the tsvector's field
   list and A/B/C/D weights and is unit-tested. Revisit only if a future Catalyst release
   exposes the flag for `text`.
-- **CHECK constraint enforcement**: needs Zod validation added at the Slice 3 repository
-  boundary for every constraint listed in the type-mapping table above — none of them are
-  enforced by Data Store itself.
+- **CHECK constraints — RESOLVED (2026-08-07), and smaller than the plan assumed.** There are
+  **7**, not 10, and the right home for them is the **API boundary**, not the repository
+  boundary: every write reaches Data Store through a Zod-validated route, so a repo-level
+  check would only duplicate that one layer deeper.
+  - Already enforced by `openapi.yaml` before any of this work: `product_revenue_nonneg` and
+    `services_revenue_nonneg` (`minimum: 0`), `contract_term_min` (`minimum: 1`, and the spec
+    is stricter with `maximum: 10`), and `disposition_state`
+    (`enum: [acknowledge, accept, snooze]`).
+  - `gate_group_range` needs no code: `gate_definitions` has **no write route** — it is
+    seed-only.
+  - The two real gaps, now closed in the spec: `win_probability_range`
+    (`minimum: 0, maximum: 100`) and `fx_rate_positive` (`exclusiveMinimum: 0`). Covered by
+    `artifacts/api-server/src/routes/deals.validation.test.ts`, which asserts both the
+    rejections and the accepted boundaries.
+
+## Deliberately not built: Stratus offload and durable webhook retry
+
+Both are **latent**, both were measured rather than guessed, and both have a cheap path to add
+later. Recording the decision here so it is a choice rather than an oversight.
+
+### Stratus offload for `v2_deal_snapshots.payload`
+
+`payload_inline` + `payload_key` exist; only `payload_inline` is ever written or read. Largest
+real payload measured in production on 2026-08-07: **4,904 of 10,000 chars** — ~51% headroom.
+EDC has zero Stratus references today, so wiring it is greenfield.
+
+**Do not "degrade gracefully" by dropping or truncating the payload.** It is not decoration —
+three live features read it: the deal trajectory chart
+(`gatePct`/`playbookPct`/`meddpiccPct`), the vital-signs 7-day baseline RED-alert count (both
+in `routes/v2/analytics.ts`), and `snapshotFingerprint`, which is how the hourly cron decides a
+snapshot is unchanged. Lose the payload and the fingerprint differs on every run, so the
+dedupe inverts into writing a duplicate row per deal per hour.
+
+What exists instead (`repositories/intel-core.ts`, `dealSnapshots.create`): a hard error at
+9,800 chars naming the deal and the size — Data Store's own rejection is an opaque 400 — plus
+a **warning at 7,500** so the revisit trigger is observed rather than remembered.
+
+**Revisit when:** that warning appears in the logs.
+
+### Durable webhook retry
+
+Webhooks are a fully shipped feature (Settings panel, event selection, auto-disable at 10
+consecutive failures) with **zero configured** today. Delivery works; only the *retry* is
+non-durable — `webhook-dispatcher.ts` schedules attempts 2 and 3 with an in-memory,
+`.unref()`'d `setTimeout` at 5s and 10s. AppSail's HTTP server normally keeps the loop alive
+long enough, so the loss window is an instance recycle inside ~15s. That is seconds, unlike
+the hour-long window that made the periodic-snapshot timer never fire at all.
+
+A `logger.warn` now fires whenever a retry is scheduled, so one lost to a recycle is
+diagnosable rather than invisible — the delivery-log row is only written once an attempt
+*completes*, so without it there would be no trace.
+
+**Revisit when:** the first real webhook is configured. **The cheap path:** a `webhook-retries`
+handler on the existing `POST /api/v1/jobs/:jobName` plumbing (secret, job pool and cron all
+already exist), plus `attempt_count` and `next_attempt_at` columns on
+`v2_webhook_delivery_log`, which already carries `payload`, `success` and `webhook_id`.
 
 ## A column this manifest missed: `v2_deal_memory.key_lessons`
 

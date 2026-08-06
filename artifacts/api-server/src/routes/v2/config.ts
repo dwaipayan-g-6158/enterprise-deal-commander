@@ -477,7 +477,7 @@ router.post("/custom-patterns", async (req: Request, res: Response) => {
       })),
     );
   }
-  await logSettingsChange(catalystApp, {
+  await logSettingsChange(req, {
     module: "custom_risk_patterns",
     settingKey: b.pattern_name,
     entityId: String(p.id),
@@ -517,7 +517,7 @@ router.put("/custom-patterns/:id", async (req: Request, res: Response) => {
       sortOrder: c.sort_order,
     })),
   );
-  await logSettingsChange(catalystApp, {
+  await logSettingsChange(req, {
     module: "custom_risk_patterns",
     settingKey: b.pattern_name,
     entityId: String(id),
@@ -539,7 +539,7 @@ router.delete("/custom-patterns/:id", async (req: Request, res: Response) => {
   await createCustomPatternConditionsRepo(catalystApp).replaceForPattern(id, []);
   await createCustomRiskPatternsRepo(catalystApp).delete(id);
   if (prior) {
-    await logSettingsChange(catalystApp, {
+    await logSettingsChange(req, {
       module: "custom_risk_patterns",
       settingKey: prior.patternName,
       entityId: String(id),
@@ -664,7 +664,7 @@ router.put("/config/targets", async (req: Request, res: Response) => {
     periodStartStr,
     body.targetValue,
   );
-  await logSettingsChange(catalystApp, {
+  await logSettingsChange(req, {
     module: "pipeline_targets",
     settingKey: `${periodType}:${periodStartStr}`,
     entityId: String(row.id),
@@ -723,7 +723,7 @@ router.put("/config/scoring-weights", async (req: Request, res: Response) => {
   }
   for (const w of body.weights) {
     await createScoringModelWeightsRepo(catalystApp).append(w.feature_id, w.weight, today);
-    await logSettingsChange(catalystApp, {
+    await logSettingsChange(req, {
       module: "scoring_model_weights",
       settingKey: w.feature_id,
       entityId: w.feature_id,
