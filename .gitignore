@@ -5,6 +5,13 @@ dist
 tmp
 out-tsc
 *.tsbuildinfo
+
+# AppSail deploy zips (built on demand by build-appsail.ts, uploaded by hand
+# via the Catalyst Console — never committed). Both locations: the zip is
+# assembled next to dist/, and a copy is staged at the repo root or in
+# .playwright-mcp/ when uploading through a browser-driven Console session.
+artifacts/api-server/*.zip
+*.zip
 .expo
 .expo-shared
 
@@ -60,6 +67,13 @@ Thumbs.db
 # ...but DO track the example templates (they contain no secrets)
 !.env.example
 !**/.env.example
+
+# Catalyst AppSail startup config — carries a real (if placeholder-strength)
+# SESSION_SECRET and an absolute local build_path; not meant to be shared.
+# The Console deploy ignores its env_variables anyway (real values live in
+# Console > Configuration, per environment) — this file is local convenience
+# + documentation. Track app-config.example.json instead.
+artifacts/api-server/app-config.json
 
 # Playwright MCP scratch artifacts
 .playwright-mcp/
