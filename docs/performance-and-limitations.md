@@ -31,12 +31,15 @@ Phase 2 introduces a server-side cache (`src/lib/cache.ts` + `cache-middleware.t
 
 The API server runs periodic work:
 
-- **Snapshot service** — hourly point-in-time `deal_snapshots`.
-- **Materialized-view refresh** — roughly every 15 minutes.
-- **Portfolio-rollup warm-up** — precomputes `portfolio_rollups`.
+- **Snapshot service** — hourly point-in-time `deal_snapshots`. On Catalyst this runs through Job
+  Scheduling (`POST /api/v1/jobs/snapshots`), not the in-process timer: AppSail recycles an idle
+  instance after five minutes, so a wall-clock `setInterval` never fires there.
 
-These keep expensive aggregate reads fast at the cost of eventual consistency (aggregates can lag
-the underlying data by up to the refresh interval).
+The materialized-view refresh and the portfolio-rollup warm-up were **removed in 2026-08**. The
+aggregates they precomputed (`computeSummary`, `computePortfolioAnalysis`) measure 10ms and 156ms
+respectively, so every read simply computes them live behind the 15s `summary:` cache tier. That
+also removes the eventual-consistency caveat that used to apply here: aggregates no longer lag the
+underlying data by a refresh interval.
 
 ## Scale expectations
 

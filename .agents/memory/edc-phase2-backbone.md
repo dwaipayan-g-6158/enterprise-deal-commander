@@ -54,32 +54,31 @@ prior health and both insert -> duplicate `deal_health_history` rows + duplicate
 `health.changed` cascades (which fan out to activity + snapshot). Serializing per
 deal makes the read-then-insert atomic so the second run no-ops.
 
-## Portfolio/summary rollups are a maintained TABLE, not a SQL materialized view
-**Rule:** The portfolio summary + portfolio-analysis aggregates are precomputed
-into the `edc_v2.portfolio_rollups` table (one row per named rollup, `payload`
-JSONB = the endpoint's `data` body). The read endpoints serve the rollup row
-when present AND fresh, falling back to the live `summary:` cache tier compute
-otherwise — a rollup older than `ROLLUP_MAX_AGE_MS` (~17 min,
-`portfolio-rollup-coordinator.ts`) is treated as a cache MISS even though the
-row is still physically present, not only when the row is absent outright.
-**Why:** Health/alerts come from the in-process intelligence engine (JS), so a
-pure Postgres `REFRESH MATERIALIZED VIEW` can't compute them. The MV registry
-(`lib/materialized-views.ts`) was therefore generalized to accept a custom
-`refresh()` fn; the rollup registers one instead of a SQL view.
-**How to apply:** The shared compute lives in `lib/portfolio.ts`
-(`computeSummary`/`computePortfolioAnalysis`) — used by BOTH the live fallback
-and the rollup refresher so they never diverge. Freshness: the 15-min MV job
-repopulates; any mutation calls `invalidatePortfolioRollups()` (DELETE all rows
-+ debounced ~2s background refresh). Invalidation is wired in lockstep with the
-`summary:` tier — both the event subscriber (`cache-invalidation.ts`) AND the
-`cache-middleware.ts` finish handler. If you add a rollup, register it in
-`registerPortfolioRollupView()` — the startup call in `registerSubscribers()`
-is `purgeAndWarmPortfolioRollups()`, not a plain warm: it DELETEs any row left
-by a previous process before recomputing, because an older binary's row can
-encode a different formula (e.g. the pre-normalization diversification index)
-or a payload shape the current route's Zod parse would reject. The purge is
-load-bearing, not incidental — see the "startup purge" section below for
-exactly how far that guarantee reaches (it's narrower than it sounds).
+## Portfolio/summary rollups — REMOVED (2026-08-07). Do not reinstate.
+**Rule:** There is no rollup precompute any more. `edc_v2.portfolio_rollups` is
+never read and never written; `/intelligence/summary` and
+`/intelligence/portfolio-analysis` always live-compute through
+`lib/catalyst/portfolio.ts` and the 15s `summary:` cache tier.
+**Why:** The read side went first, when `routes/intelligence.ts` moved to Data
+Store — the fast path fronted the same compute and the table is permanently
+empty on Catalyst, so serving from it was unreachable. What was NOT removed
+then was the write side, which kept maintaining a table nobody consulted. On
+Catalyst that meant a Drizzle DELETE + recompute against a Postgres that does
+not exist, fired on **every mutation** (`cache-middleware.ts`'s finish handler
+and the `cache-invalidation.ts` subscriber) and on **every cold start**
+(`purgeAndWarmPortfolioRollups`). All of it caught and logged, so the app
+behaved correctly while quietly failing several times per write — the same
+"swallowed error that looks like nothing" shape as the `key_lessons` bug.
+**How to apply:** Deleted outright: `lib/portfolio-rollups.ts`,
+`lib/portfolio-rollup-coordinator.ts`, `lib/materialized-views.ts`,
+`lib/refresh-cadence.ts` and their tests, plus the MV timer in
+`subscribers/index.ts`. The Drizzle `portfolioRollups` table definition and the
+Data Store `v2_portfolio_rollups` table are both left in place — unused, and
+dropping either buys nothing. **Do not reinstate**: the compute it fronted
+measures 10ms (`computeSummary`) and 156ms (`computePortfolioAnalysis`). If a
+future portfolio ever makes that hurt, the precompute belongs in Catalyst Job
+Scheduling next to the snapshot job (`routes/jobs.ts`), not on a wall-clock
+`setInterval` AppSail never runs.
 
 ## diversificationIndex is normalized, not the PRD's raw Gini-Simpson formula
 **Rule:** `diversificationIndex` = `(1 - Σw²) × n/(n-1)`, a NORMALIZED
@@ -103,31 +102,13 @@ active-only alert basis, further gated to codes that clear
 Exposure (`correlatedExposureTcv`, also active-only) behind it. Two different
 bases on the same page, on purpose — don't "fix" this into one basis.
 
-## Rollup reads enforce a max age; refreshes are single-flighted with an epoch guard
-**Rule:** `readRollup` treats a row older than `ROLLUP_MAX_AGE_MS` (~17 min) as
-a miss (see above). Refreshes go through `RefreshCoordinator`
-(`portfolio-rollup-coordinator.ts`): concurrent callers (the periodic MV job vs.
-a mutation's debounced refresh) join a single in-flight run instead of
-duplicating the compute, and an invalidation bumps an epoch so a refresh that
-started before a mutation can never resurrect pre-mutation numbers after that
-mutation's DELETE — it detects it's superseded and discards its snapshot
-instead of upserting.
-**Why:** Mirrors the existing `cache.wrap` generation-guard pattern in
-`lib/cache.ts` (see "cache.wrap has a generation guard" above): without the
-epoch check, a slow refresh straddling a mutation could write stale data back
-AFTER the invalidating DELETE, making "stale never outlives a write" false for
-rollups even though it's already guaranteed for the cache tier.
-**Caveat — the startup purge is narrower than it sounds:**
-`purgeAndWarmPortfolioRollups()` runs inside the `app.listen` callback in
-`index.ts`, i.e. AFTER the server has already begun accepting HTTP
-connections, and it's fire-and-forget (`void ...catch(...)` in
-`registerSubscribers()`), not awaited. On a normal restart this closes the gap
-within a short (typically sub-second) window — a request landing in that
-window can still read a pre-restart rollup row — but since a rollup HIT
-bypasses the 15s `cache.wrap` tier entirely, that stale read is never cached
-forward: the very next request after the purge lands gets corrected data. It
-self-heals; it just isn't instantaneous. It is NOT a guarantee against a
-previous instance of the process still running concurrently in a
-multi-instance deployment and re-upserting old values after this instance's
-purge completes — that scenario is outside what a single process's startup
-purge can fix.
+## The rollup epoch guard is gone with the rollups — the cache guard is not
+**Rule:** `RefreshCoordinator`, `ROLLUP_MAX_AGE_MS` and the startup-purge
+caveat all died with the rollup subsystem above. The equivalent protection for
+the in-process cache — `cache.wrap`'s generation guard — is untouched and
+still load-bearing (see "cache.wrap has a generation guard" above).
+**Why it's worth recording:** the two were deliberately parallel designs, so a
+future reader finding the cache guard may go looking for the rollup one. It
+was correct, it just has nothing left to protect: with no precomputed row,
+"stale never outlives a write" is trivially true for aggregates — every read
+recomputes.

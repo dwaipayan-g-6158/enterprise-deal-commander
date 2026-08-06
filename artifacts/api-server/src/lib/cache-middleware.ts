@@ -1,6 +1,5 @@
 import type { Request, Response, NextFunction } from "express";
 import { cache, CacheKeys, invalidateDeal } from "./cache";
-import { invalidatePortfolioRollups } from "./portfolio-rollups";
 
 /**
  * Authoritative cache-invalidation guard for the intelligence/summary cache.
@@ -39,7 +38,6 @@ export function cacheInvalidationMiddleware(
     const dealMatch = DEAL_PATH.exec(path);
     if (dealMatch) {
       invalidateDeal(decodeURIComponent(dealMatch[1]));
-      invalidatePortfolioRollups();
       return;
     }
 
@@ -49,7 +47,6 @@ export function cacheInvalidationMiddleware(
       cache.invalidatePrefix(CacheKeys.lookupPrefix);
       cache.invalidatePrefix(CacheKeys.intelligencePrefix);
       cache.invalidatePrefix(CacheKeys.summaryPrefix);
-      invalidatePortfolioRollups();
     }
   });
 

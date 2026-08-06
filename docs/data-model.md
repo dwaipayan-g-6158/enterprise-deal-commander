@@ -108,7 +108,7 @@ erDiagram
 | `deal_activity_log` | Append-only activity stream (written by the activity-logger subscriber). |
 | `deal_snapshots` | Hourly point-in-time snapshots; payload `{deal, gates, governance}`. |
 | `deal_health_history` | Health-color time series (health-tracker subscriber). |
-| `portfolio_rollups` | Precomputed portfolio aggregates. |
+| `portfolio_rollups` | **Unused since 2026-08** — the precompute it backed was removed (aggregates are computed live). The table definition is retained but never read or written. |
 | `pipeline_transitions` | Stage-transition events (pipeline-transitions subscriber) — powers Flow analytics. |
 | `pipeline_targets` | Pipeline/coverage targets. |
 

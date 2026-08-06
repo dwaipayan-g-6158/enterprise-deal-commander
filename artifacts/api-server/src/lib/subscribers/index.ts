@@ -1,14 +1,6 @@
 import { db, enterpriseDeals } from "@workspace/db";
 import { and, isNull } from "drizzle-orm";
 import { logger } from "../logger";
-import {
-  refreshMaterializedViews,
-  MV_REFRESH_INTERVAL_MS,
-} from "../materialized-views";
-import {
-  registerPortfolioRollupView,
-  purgeAndWarmPortfolioRollups,
-} from "../portfolio-rollups";
 import { registerActivityLogger } from "./activity-logger";
 import { registerSnapshotService, snapshotAllActiveDeals } from "./snapshot-service";
 import { registerHealthTracker } from "./health-tracker";
@@ -60,26 +52,20 @@ export function registerSubscribers(): void {
   disposers.push(registerScoring());
   disposers.push(registerPipelineTransitions());
 
-  // Register portfolio rollups with the MV refresh registry, then purge+warm
-  // at startup: a rollup row written by a previous (possibly older) binary may
-  // encode stale compute logic, so we never serve one we didn't compute
-  // ourselves this process. Between purge and warm-completion, reads
-  // live-compute — identical to today's cold-start behavior.
-  // NOTE this call happens HERE, inside app.listen's callback — i.e. AFTER the
-  // server is already accepting connections — and is fire-and-forget (void
-  // ...catch below), so the purge's DELETE has not necessarily landed yet when
-  // the first post-restart request arrives. See purgeAndWarmPortfolioRollups's
-  // docstring (portfolio-rollups.ts) for why that narrow window self-heals.
-  registerPortfolioRollupView();
-  void purgeAndWarmPortfolioRollups().catch((err) =>
-    logger.error({ err }, "Initial portfolio rollup purge+warm failed"),
-  );
+  // The precomputed `edc_v2.portfolio_rollups` table and the materialized-view
+  // registry that refreshed it used to be wired up here. Both are gone: the
+  // rollup's READ path was dropped when routes/intelligence.ts moved to Data
+  // Store, which left the write side maintaining a table nothing consulted —
+  // and on Catalyst every one of those writes was a doomed Postgres call,
+  // swallowed and logged, on the startup path AND on every mutation. The
+  // compute it fronted is 10ms/156ms, so there is nothing to reinstate. See
+  // .agents/memory/edc-phase2-backbone.md.
 
-  // NOTE: on Catalyst these timers never fire — AppSail kills an idle instance
+  // NOTE: on Catalyst this timer never fires — AppSail kills an idle instance
   // after five minutes, so wall-clock intervals registered here are dead code in
   // the deployed app. The periodic snapshot job now runs through Catalyst Job
   // Scheduling instead, which invokes POST /api/v1/jobs/snapshots on a cron (see
-  // routes/jobs.ts). These timers are kept only for local Postgres development,
+  // routes/jobs.ts). This timer is kept only for local Postgres development,
   // where the process does stay alive.
   const snapshotTimer = setInterval(() => {
     void (async () => {
@@ -94,12 +80,6 @@ export function registerSubscribers(): void {
   }, SNAPSHOT_INTERVAL_MS);
   snapshotTimer.unref();
   timers.push(snapshotTimer);
-
-  const mvTimer = setInterval(() => {
-    void refreshMaterializedViews();
-  }, MV_REFRESH_INTERVAL_MS);
-  mvTimer.unref();
-  timers.push(mvTimer);
 
   logger.info("Phase 2 backbone subscribers registered");
 }
