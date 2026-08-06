@@ -3719,7 +3719,15 @@ components:
         accountName: { type: string }
         dealName: { type: string }
         outcome: { type: string }
-        finalTcv: { type: ["string", "null"] }
+        # NUMBER, not string. This said "string" because Postgres `numeric`
+        # arrived from Drizzle as one; the Catalyst repository parses it, so
+        # every /v2/memory endpoint has actually returned a number since the
+        # migration. Nothing caught it because these handlers don't run the
+        # response through its schema — unlike the snapshot endpoints, where the
+        # identical drift produced a hard 400 the moment rows existed.
+        # RevivalCandidate below already declared `number` for the same field,
+        # so this also stops one feature describing one value two ways.
+        finalTcv: { type: ["number", "null"] }
         pricingModel: { type: ["string", "null"] }
         servicesTier: { type: ["string", "null"] }
         totalGatesCompleted: { type: ["integer", "null"] }

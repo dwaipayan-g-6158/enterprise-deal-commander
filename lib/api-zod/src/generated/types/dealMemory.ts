@@ -15,7 +15,7 @@ export interface DealMemory {
   dealName: string;
   outcome: string;
   /** @nullable */
-  finalTcv?: string | null;
+  finalTcv?: number | null;
   /** @nullable */
   pricingModel?: string | null;
   /** @nullable */
