@@ -66,14 +66,42 @@ if (fs.existsSync(publicDir)) {
   // SPA fallback: any non-/api, non-file route serves index.html so
   // client-side routing (wouter) handles it. Express 5 requires named
   // wildcards.
+  //
+  // Catalyst's own AppSail gateway reserves `/accounts/*` (the embedded
+  // sign-in/sign-out iframe's IAM endpoints) and `/__catalyst/*` (the SDK
+  // init script) and is supposed to intercept those requests before they
+  // ever reach this app. When the gateway misses (observed live), the
+  // request used to fall through to this catch-all and get served our own
+  // index.html instead of Zoho's real IAM page/logout handler — which the
+  // Catalyst Web SDK's own onload handler then crashes on (it expects a
+  // `#login_id` field to exist in whatever document the iframe loaded),
+  // producing a blank/inputless sign-in form, and silently no-ops sign-out
+  // since the real logout endpoint never actually runs. Excluding these
+  // prefixes turns a gateway miss into a loud 404 instead of a silent,
+  // hard-to-diagnose recursion of our own SPA inside the login iframe.
   app.get("/{*splat}", (req, res, next) => {
-    if (req.path.startsWith("/api")) {
+    if (
+      req.path.startsWith("/api") ||
+      req.path.startsWith("/accounts") ||
+      req.path.startsWith("/__catalyst")
+    ) {
       next();
       return;
     }
     res.sendFile(path.join(publicDir, "index.html"));
   });
 }
+
+app.use(["/accounts", "/__catalyst"], (req: Request, res: Response) => {
+  sendError(
+    res,
+    new HttpError(
+      404,
+      "NOT_FOUND",
+      `Catalyst gateway did not intercept ${req.method} ${req.path}`,
+    ),
+  );
+});
 
 app.use("/api", (req: Request, res: Response) => {
   sendError(

@@ -3,6 +3,7 @@ import { Switch, Route, Redirect, Router } from "wouter";
 import { RoleProvider } from "@/lib/auth/role-context";
 import { aroundNav } from "@/mobile/lib/view-transitions";
 import { useAuthGuard } from "@/lib/auth/use-auth-guard";
+import { CatalystAuthBounce } from "@/lib/auth/catalyst-auth-bounce";
 import { MobileShell } from "@/mobile/shell/mobile-shell";
 import { MobileShellSkeleton } from "@/mobile/shell/mobile-shell-skeleton";
 import { BootSplash } from "@/mobile/shell/boot-splash";
@@ -162,6 +163,8 @@ export default function MobileApp() {
         {/* transition={false}: <Redirect> navigates from a layout effect,
             where aroundNav's flushSync is not safe to call. */}
         <Route path="/m"><Redirect to="/" transition={false} /></Route>
+        <Route path="/__catalyst/*" component={CatalystAuthBounce} />
+        <Route path="/accounts/*" component={CatalystAuthBounce} />
         <Route>
           <MobileTokens>
             <NotFound />

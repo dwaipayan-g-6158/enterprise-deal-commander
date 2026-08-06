@@ -32,7 +32,23 @@ export default defineConfig({
     react(),
     tailwindcss(),
     VitePWA({
-      registerType: "prompt",
+      // autoUpdate, not "prompt", specifically so a BROKEN worker can be
+      // evicted without the user's cooperation. Under "prompt" a newly
+      // deployed sw.js installs and parks in `waiting` while the OLD worker
+      // keeps controlling every open tab and installed PWA until someone
+      // accepts a toast — unreachable for exactly the person who needs it,
+      // someone stuck on a sign-in form the old worker is hijacking (see
+      // navigateFallbackDenylist below), and useless for sign-out, which the
+      // same bug breaks from pages that are not /login. autoUpdate makes
+      // vite-plugin-pwa set workbox.skipWaiting + clientsClaim, and
+      // skipWaiting() reassigns the active worker for clients ALREADY under
+      // this registration, so the fixed worker takes over on the next visit.
+      //
+      // The update PROMPT is not lost, only re-pointed: PwaUpdatePrompt passes
+      // `onNeedReload`, which suppresses this mode's automatic
+      // window.location.reload() and shows the same toast instead. The worker
+      // swaps silently; the page reloads when the user says so.
+      registerType: "autoUpdate",
       includeAssets: [
         "favicon.svg",
         "apple-touch-icon.png",
@@ -98,7 +114,46 @@ export default defineConfig({
       },
       workbox: {
         navigateFallback: "index.html",
-        navigateFallbackDenylist: [/^\/api\//],
+        // Workbox's NavigationRoute tests each of these against
+        // `url.pathname + url.search`, only for requests whose mode is
+        // "navigate", and defaults to `allowlist: [/./]` — i.e. "serve the
+        // precached index.html for EVERY navigation unless denied here".
+        // That default is what broke Catalyst Native Auth: the sign-in iframe
+        // rendered by `catalyst.auth.signIn()` points at the SAME-ORIGIN path
+        // /accounts/p/{zaid}/signin?…, which is a navigation, so this worker
+        // answered it out of the precache with EDC's own index.html. The
+        // SDK's onload handler then set `.placeholder` on a #login_id that
+        // doesn't exist in our markup, threw, and left a blank inputless box.
+        // Sign-out broke identically: CatalystAuthBounce turns the SDK's
+        // pushState marker into a real navigation to
+        // /accounts/p/{zaid}/logout?…, the worker swallowed that too, the
+        // real logout endpoint never ran, and the session outlived a
+        // "successful" sign-out. A plain fetch() of those URLs always
+        // returned Zoho's real IAM HTML — only NAVIGATIONS were hijacked,
+        // which is why SDK bootstrap (<script src="/__catalyst/sdk/init.js">,
+        // not a navigation) kept working and hid the cause. The sibling
+        // Periscope app has the identical Express catch-all and identical
+        // console auth config, and works purely because it ships no service
+        // worker at all.
+        //
+        // These are namespaces the Catalyst AppSail gateway owns and
+        // intercepts ahead of our container; the app has no route under any
+        // of them. api-server/src/app.ts excludes the same prefixes from its
+        // SPA catch-all — real defense-in-depth for a gateway miss, but it can
+        // never run while the worker answers first, so both layers are needed.
+        //
+        // Anchored at ^ deliberately: the tested string includes the QUERY
+        // STRING, so an unanchored /\/accounts\// would also deny an ordinary
+        // app navigation like /deals?ref=/accounts/p/1/signin. `(?:[/?]|$)`
+        // covers the three ways a reserved prefix can legitimately end
+        // (/accounts/p/…, /accounts?x=1, bare /accounts) while letting
+        // lookalikes such as /accountsettings fall through to the fallback.
+        navigateFallbackDenylist: [
+          /^\/api(?:[/?]|$)/,
+          /^\/accounts(?:[/?]|$)/, // Catalyst IAM: signin, logout, password recovery
+          /^\/__catalyst(?:[/?]|$)/, // SDK init + signin-redirect marker
+          /^\/baas(?:[/?]|$)/, // Catalyst platform API (reserved; XHR today, insurance)
+        ],
         runtimeCaching: [
           // Lookup tables (stages, catalogs, competitors, gate definitions)
           // barely change and are read by nearly every screen. Their own

@@ -4,7 +4,6 @@ import {
   useListUsers,
   useCreateUser,
   useUpdateUser,
-  useResetUserPassword,
   useDeleteUser,
   type User,
 } from "@workspace/api-client-react";
@@ -64,9 +63,9 @@ import { useSession, useCanWrite } from "@/lib/auth/role-context";
 import { AdminOnly, ReadOnlyNotice } from "@/components/auth/write-gate";
 import { relativeTime } from "@/components/dashboard/widgets/_shared";
 import { serverMessage } from "@/lib/server-message";
-import { Plus, MoreHorizontal, KeyRound, Trash2, Users as UsersIcon } from "lucide-react";
+import { Plus, MoreHorizontal, Trash2, Users as UsersIcon } from "lucide-react";
 
-const EMPTY_FORM = { email: "", display_name: "", password: "", role: "reader" as "admin" | "reader" };
+const EMPTY_FORM = { email: "", display_name: "", role: "reader" as "admin" | "reader" };
 
 export function UsersSettings() {
   const { toast } = useToast();
@@ -77,7 +76,6 @@ export function UsersSettings() {
   const list = useListUsers();
   const create = useCreateUser();
   const update = useUpdateUser();
-  const resetPassword = useResetUserPassword();
   const del = useDeleteUser();
 
   const users = list.data?.data ?? [];
@@ -85,8 +83,6 @@ export function UsersSettings() {
 
   const [addOpen, setAddOpen] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
-  const [resetTarget, setResetTarget] = useState<User | null>(null);
-  const [newPassword, setNewPassword] = useState("");
   const [deleteTarget, setDeleteTarget] = useState<User | null>(null);
 
   // These mirror the server's own guards (routes/users.ts) — they only keep
@@ -97,8 +93,8 @@ export function UsersSettings() {
   const isLastAdmin = (u: User) => u.role === "admin" && u.isActive && adminCount <= 1;
 
   const addUser = async () => {
-    if (!form.email.trim() || !form.password) {
-      toast({ title: "Email and password are required", variant: "destructive" });
+    if (!form.email.trim() || !form.display_name.trim()) {
+      toast({ title: "Email and display name are required", variant: "destructive" });
       return;
     }
     try {
@@ -106,11 +102,11 @@ export function UsersSettings() {
       await invalidate();
       setForm(EMPTY_FORM);
       setAddOpen(false);
-      toast({ title: "User created" });
+      toast({ title: "Invite sent", description: "They'll get a Catalyst email to set up sign-in." });
     } catch (err) {
       toast({
-        title: "Could not create user",
-        description: serverMessage(err, "Check the email isn't already in use, and the password is at least 12 characters."),
+        title: "Could not invite user",
+        description: serverMessage(err, "Check the email isn't already in use."),
         variant: "destructive",
       });
     }
@@ -133,24 +129,6 @@ export function UsersSettings() {
       toast({ title: isActive ? "User reactivated" : "User deactivated" });
     } catch (err) {
       toast({ title: "Could not update user", description: serverMessage(err, ""), variant: "destructive" });
-    }
-  };
-
-  const submitReset = async () => {
-    if (!resetTarget || newPassword.length < 12) {
-      toast({ title: "Password must be at least 12 characters", variant: "destructive" });
-      return;
-    }
-    try {
-      await resetPassword.mutateAsync({ id: resetTarget.id, data: { password: newPassword } });
-      setResetTarget(null);
-      setNewPassword("");
-      toast({
-        title: "Password reset",
-        description: "Share it with them over a secure channel — it won't be shown again.",
-      });
-    } catch (err) {
-      toast({ title: "Could not reset password", description: serverMessage(err, ""), variant: "destructive" });
     }
   };
 
@@ -255,9 +233,6 @@ export function UsersSettings() {
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
-                          <DropdownMenuItem onSelect={() => setResetTarget(u)}>
-                            <KeyRound className="mr-2 h-4 w-4" /> Reset password
-                          </DropdownMenuItem>
                           <DropdownMenuItem
                             disabled={locked}
                             className="text-destructive focus:text-destructive"
@@ -288,10 +263,10 @@ export function UsersSettings() {
       <Dialog open={addOpen} onOpenChange={setAddOpen}>
         <DialogContent animation="spotlight">
           <DialogHeader>
-            <DialogTitle>Add user</DialogTitle>
+            <DialogTitle>Invite user</DialogTitle>
             <DialogDescription>
-              They'll sign in with this email and password. Readers can see everything;
-              only admins can make changes.
+              They'll get a Catalyst email to set up sign-in at this address. Readers can see
+              everything; only admins can make changes.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
@@ -314,18 +289,6 @@ export function UsersSettings() {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="new-user-password">Temporary password</Label>
-              <Input
-                id="new-user-password"
-                type="password"
-                autoComplete="new-password"
-                value={form.password}
-                onChange={(e) => setForm({ ...form, password: e.target.value })}
-                className="font-mono"
-              />
-              <p className="text-xs text-muted-foreground">At least 12 characters.</p>
-            </div>
-            <div className="space-y-2">
               <Label>Role</Label>
               <Select
                 value={form.role}
@@ -344,41 +307,7 @@ export function UsersSettings() {
           <DialogFooter>
             <Button variant="outline" onClick={() => setAddOpen(false)}>Cancel</Button>
             <Button onClick={addUser} disabled={create.isPending}>
-              {create.isPending ? "Creating…" : "Create user"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* --- Reset password ---------------------------------------------- */}
-      <Dialog
-        open={resetTarget !== null}
-        onOpenChange={(v) => { if (!v) { setResetTarget(null); setNewPassword(""); } }}
-      >
-        <DialogContent animation="spotlight">
-          <DialogHeader>
-            <DialogTitle>Reset password</DialogTitle>
-            <DialogDescription>
-              Set a new password for {resetTarget?.displayName || resetTarget?.email}.
-              They'll need it next time they sign in.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-2">
-            <Label htmlFor="reset-password">New password</Label>
-            <Input
-              id="reset-password"
-              type="password"
-              autoComplete="new-password"
-              value={newPassword}
-              onChange={(e) => setNewPassword(e.target.value)}
-              className="font-mono"
-            />
-            <p className="text-xs text-muted-foreground">At least 12 characters.</p>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setResetTarget(null)}>Cancel</Button>
-            <Button onClick={submitReset} disabled={resetPassword.isPending}>
-              {resetPassword.isPending ? "Resetting…" : "Reset password"}
+              {create.isPending ? "Inviting…" : "Send invite"}
             </Button>
           </DialogFooter>
         </DialogContent>

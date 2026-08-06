@@ -1,19 +1,17 @@
 import { Router, type IRouter, type Request, type Response } from "express";
-import bcrypt from "bcryptjs";
-import { and, eq, ne, sql } from "drizzle-orm";
-import { db, commanders } from "@workspace/db";
 import {
-  ListUsersResponse,
-  CreateUserBody,
-  UpdateUserParams,
-  UpdateUserBody,
-  DeleteUserParams,
-  ResetUserPasswordParams,
-  ResetUserPasswordBody,
-} from "@workspace/api-zod";
+  initCatalystApp,
+  initCatalystAdminApp,
+  createCommandersRepo,
+  inviteCatalystUser,
+  deleteCatalystUser,
+  type CommanderRow,
+} from "@workspace/db/catalyst";
+import { ListUsersResponse, CreateUserBody, UpdateUserParams, UpdateUserBody, DeleteUserParams } from "@workspace/api-zod";
 import { getActor, type Role } from "../lib/auth";
 import { badRequest, conflict, notFound } from "../lib/http";
-import { logSettingsChange } from "../lib/settings-audit";
+import { logSettingsChange } from "../lib/catalyst/settings-audit";
+import { logger } from "../lib/logger";
 
 /**
  * User account management — the actual "delegation" capability of RBAC.
@@ -24,15 +22,21 @@ import { logSettingsChange } from "../lib/settings-audit";
  * lets GET through to any authenticated caller and refuses every other
  * method to a reader. Do not add a redundant per-route check — it would
  * only create a second place to keep in sync with the real one.
+ *
+ * Post-Catalyst-migration: "create a user" is now "invite a Catalyst project
+ * user" (Catalyst sends its own set-password email; there is no
+ * app-managed password anymore, so POST /users/:id/password is gone
+ * entirely). The invited person's commander row starts with
+ * catalyst_user_id null and is claimed automatically on their first sign-in
+ * (see lib/auth.ts's resolveCommander) — the chosen role sticks because it's
+ * on the pending row, not decided fresh at claim time.
  */
 
 const router: IRouter = Router();
 
-type CommanderRow = typeof commanders.$inferSelect;
-// Derived rather than imported from a specific drizzle-orm transaction type
-// name, so this keeps compiling if the pg-core transaction type is ever
-// renamed upstream.
-type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
+function isDuplicateValueError(err: unknown): boolean {
+  return err instanceof Error && /DUPLICATE_VALUE|Duplicate value/i.test(err.message);
+}
 
 function toUserRow(row: CommanderRow) {
   return {
@@ -42,14 +46,12 @@ function toUserRow(row: CommanderRow) {
     role: row.role as Role,
     isActive: row.isActive,
     createdAt: row.createdAt.toISOString(),
-    lastDashboardVisitAt: row.lastDashboardVisitAt
-      ? row.lastDashboardVisitAt.toISOString()
-      : null,
+    lastDashboardVisitAt: row.lastDashboardVisitAt ? row.lastDashboardVisitAt.toISOString() : null,
   };
 }
 
-router.get("/users", async (_req: Request, res: Response) => {
-  const rows = await db.select().from(commanders).orderBy(commanders.createdAt);
+router.get("/users", async (req: Request, res: Response) => {
+  const rows = await createCommandersRepo(initCatalystApp(req)).listAll();
   res.json(ListUsersResponse.parse({ data: rows.map(toUserRow) }));
 });
 
@@ -59,90 +61,59 @@ router.post("/users", async (req: Request, res: Response) => {
     throw badRequest("Invalid user payload", parsed.error.issues);
   }
   const actor = getActor(req);
-  // Lowercase on the way in pairs with the lower() comparison at login
-  // (routes/auth.ts) — otherwise a user created as "Alice@corp.com" could
-  // only ever sign in by typing that exact casing back.
+  // Lowercase on the way in, matching the case-insensitive lookup every
+  // other username comparison in this file already uses.
   const email = parsed.data.email.trim().toLowerCase();
   const role: Role = parsed.data.role ?? "reader";
+  const displayName = parsed.data.display_name;
 
-  const existing = await db
-    .select({ id: commanders.id })
-    .from(commanders)
-    .where(sql`lower(${commanders.username}) = lower(${email})`)
-    .limit(1);
-  if (existing.length > 0) {
+  const repo = createCommandersRepo(initCatalystApp(req));
+  const existing = await repo.getByUsername(email);
+  if (existing) {
     throw conflict("A user with this email already exists");
   }
 
-  const passwordHash = await bcrypt.hash(parsed.data.password, 10);
+  // Catalyst's invite API wants first/last name separately; EDC only
+  // collects one display-name field, so split on the first space and fall
+  // back to putting the whole thing in first_name.
+  const [firstName, ...rest] = displayName.trim().split(/\s+/);
+  const lastName = rest.join(" ");
+  const appOrigin = (process.env.APP_ORIGIN || `${req.protocol}://${req.get("host")}`).replace(/\/$/, "");
+
   try {
-    const [created] = await db
-      .insert(commanders)
-      .values({
-        username: email,
-        displayName: parsed.data.display_name,
-        passwordHash,
-        role,
-        isActive: true,
-      })
-      .returning();
+    await inviteCatalystUser(req, { firstName: firstName || displayName, lastName, email }, `${appOrigin}/`);
+  } catch (err) {
+    logger.error({ err, email }, "Catalyst registerUser failed");
+    throw conflict("Could not invite this email — it may already be registered with Catalyst, or Catalyst rejected it");
+  }
 
-    await logSettingsChange({
-      module: "users",
-      settingKey: created.username,
-      entityId: created.id,
-      action: "create",
-      oldValue: null,
-      newValue: { username: created.username, displayName: created.displayName, role, isActive: true },
-      actor: actor.username,
-    });
-
-    res.status(201).json({ data: toUserRow(created) });
+  // Admin-scoped: commanders is Select-only for ordinary Catalyst users (see
+  // lib/auth.ts's resolveCommander docstring).
+  const adminRepo = createCommandersRepo(initCatalystAdminApp(req));
+  let created: CommanderRow;
+  try {
+    created = await adminRepo.create({ catalystUserId: null, username: email, displayName, role, isActive: true });
   } catch (err) {
     // Race-safety backstop for the pre-check above — two concurrent creates
-    // of the same email can both pass the SELECT before either INSERTs.
-    if (err instanceof Error && "code" in err && (err as { code?: string }).code === "23505") {
+    // of the same email can both pass the read before either inserts.
+    if (isDuplicateValueError(err)) {
       throw conflict("A user with this email already exists");
     }
     throw err;
   }
+
+  await logSettingsChange(initCatalystAdminApp(req), {
+    module: "users",
+    settingKey: created.username,
+    entityId: created.id,
+    action: "create",
+    oldValue: null,
+    newValue: { username: created.username, displayName: created.displayName, role, isActive: true },
+    actor: actor.username,
+  });
+
+  res.status(201).json({ data: toUserRow(created) });
 });
-
-/**
- * The last-active-admin invariant. Must run inside the SAME transaction as
- * the write, after locking every admin row, or two concurrent demotes can
- * each see the other still admin and the app locks itself out permanently
- * with no recovery path except psql (re-running
- * lib/db/sql/2026-07-28-commander-rbac.sql, which re-promotes whichever row
- * still exists once there are zero admins).
- */
-async function assertAnotherActiveAdminRemains(
-  tx: Tx,
-  targetId: string,
-): Promise<void> {
-  // Locking (`.for("update")`) serializes concurrent admin/is_active writers
-  // against each other — the SELECT below is otherwise just a snapshot read
-  // that two simultaneous demotions could both pass.
-  await tx
-    .select({ id: commanders.id })
-    .from(commanders)
-    .where(eq(commanders.role, "admin"))
-    .for("update");
-
-  const others = await tx
-    .select({ id: commanders.id })
-    .from(commanders)
-    .where(
-      and(
-        eq(commanders.role, "admin"),
-        eq(commanders.isActive, true),
-        ne(commanders.id, targetId),
-      ),
-    );
-  if (others.length === 0) {
-    throw conflict("At least one active admin must remain — promote another user first");
-  }
-}
 
 router.patch("/users/:id", async (req: Request, res: Response) => {
   const { id } = UpdateUserParams.parse(req.params);
@@ -156,141 +127,129 @@ router.patch("/users/:id", async (req: Request, res: Response) => {
   }
   const actor = getActor(req);
 
-  const result = await db.transaction(async (tx) => {
-    const [target] = await tx
-      .select()
-      .from(commanders)
-      .where(eq(commanders.id, id))
-      .for("update");
-    if (!target) throw notFound("User not found");
+  const repo = createCommandersRepo(initCatalystApp(req));
+  const target = await repo.getById(id);
+  if (!target) throw notFound("User not found");
 
-    // Self-guards, checked BEFORE the last-admin check so the message is
-    // specific to what the caller actually tried to do. Changing your own
-    // display name is fine and handled by the generic update path below.
-    if (target.id === actor.id) {
-      if (body.role !== undefined && body.role !== "admin") {
-        throw conflict("You cannot demote yourself");
-      }
-      if (body.is_active === false) {
-        throw conflict("You cannot deactivate your own account");
-      }
+  // Self-guards, checked BEFORE the last-admin check so the message is
+  // specific to what the caller actually tried to do.
+  if (target.id === actor.id) {
+    if (body.role !== undefined && body.role !== "admin") {
+      throw conflict("You cannot demote yourself");
     }
-
-    const willDemote = body.role === "reader" && target.role === "admin";
-    const willDeactivate = body.is_active === false && target.isActive;
-    if (willDemote || willDeactivate) {
-      await assertAnotherActiveAdminRemains(tx, target.id);
+    if (body.is_active === false) {
+      throw conflict("You cannot deactivate your own account");
     }
+  }
 
-    const [updated] = await tx
-      .update(commanders)
-      .set({
-        ...(body.display_name !== undefined ? { displayName: body.display_name } : {}),
-        ...(body.role !== undefined ? { role: body.role } : {}),
-        ...(body.is_active !== undefined ? { isActive: body.is_active } : {}),
-      })
-      .where(eq(commanders.id, id))
-      .returning();
+  const willDemote = body.role === "reader" && target.role === "admin";
+  const willDeactivate = body.is_active === false && target.isActive;
 
-    return { before: target, after: updated };
+  // Data Store has no transactions and no row locks (unlike the original
+  // Drizzle version's `SELECT ... FOR UPDATE`) — this is the plan's accepted
+  // trade-off: pre-check to fail fast in the common case, apply the write,
+  // then re-check the invariant and self-revert if a concurrent request
+  // raced past both pre-checks. Weaker than a real lock under true
+  // concurrency, but self-revert means the failure mode is a rejected
+  // request, never a permanently admin-less app.
+  if (willDemote || willDeactivate) {
+    const others = (await repo.listAll()).filter((u) => u.role === "admin" && u.isActive && u.id !== target.id);
+    if (others.length === 0) {
+      throw conflict("At least one active admin must remain — promote another user first");
+    }
+  }
+
+  const adminRepo = createCommandersRepo(initCatalystAdminApp(req));
+  const updated = await adminRepo.update(id, {
+    displayName: body.display_name,
+    role: body.role,
+    isActive: body.is_active,
   });
+  if (!updated) throw notFound("User not found");
 
-  // Logged AFTER the transaction commits, not inside it — logSettingsChange
-  // writes through the module-level `db` on its own connection, so calling
-  // it inside the transaction callback would leave a permanent audit row
-  // even if a later statement in the same callback rolled everything else
-  // back.
+  if (willDemote || willDeactivate) {
+    const stillOk = (await repo.listAll()).some((u) => u.role === "admin" && u.isActive);
+    if (!stillOk) {
+      await adminRepo.update(id, { role: target.role, isActive: target.isActive });
+      throw conflict("At least one active admin must remain — promote another user first");
+    }
+  }
+
   const action = body.is_active === false ? "deactivate" : body.is_active === true ? "reactivate" : "update";
-  await logSettingsChange({
+  await logSettingsChange(initCatalystAdminApp(req), {
     module: "users",
-    settingKey: result.after.username,
-    entityId: result.after.id,
+    settingKey: updated.username,
+    entityId: updated.id,
     action,
-    oldValue: {
-      displayName: result.before.displayName,
-      role: result.before.role,
-      isActive: result.before.isActive,
-    },
-    newValue: {
-      displayName: result.after.displayName,
-      role: result.after.role,
-      isActive: result.after.isActive,
-    },
+    oldValue: { displayName: target.displayName, role: target.role, isActive: target.isActive },
+    newValue: { displayName: updated.displayName, role: updated.role, isActive: updated.isActive },
     actor: actor.username,
   });
 
-  res.json({ data: toUserRow(result.after) });
+  res.json({ data: toUserRow(updated) });
 });
 
 router.delete("/users/:id", async (req: Request, res: Response) => {
   const { id } = DeleteUserParams.parse(req.params);
   const actor = getActor(req);
 
-  const deleted = await db.transaction(async (tx) => {
-    const [target] = await tx
-      .select()
-      .from(commanders)
-      .where(eq(commanders.id, id))
-      .for("update");
-    if (!target) throw notFound("User not found");
+  const repo = createCommandersRepo(initCatalystApp(req));
+  const target = await repo.getById(id);
+  if (!target) throw notFound("User not found");
 
-    if (target.id === actor.id) {
-      throw conflict("You cannot delete your own account");
+  if (target.id === actor.id) {
+    throw conflict("You cannot delete your own account");
+  }
+  const isLastActiveAdmin = target.role === "admin" && target.isActive;
+  if (isLastActiveAdmin) {
+    const others = (await repo.listAll()).filter((u) => u.role === "admin" && u.isActive && u.id !== target.id);
+    if (others.length === 0) {
+      throw conflict("At least one active admin must remain — promote another user first");
     }
-    if (target.role === "admin" && target.isActive) {
-      await assertAnotherActiveAdminRemains(tx, target.id);
+  }
+
+  const adminRepo = createCommandersRepo(initCatalystAdminApp(req));
+  await adminRepo.delete(id);
+
+  // A delete can't self-revert (the row and its identity are gone) — the
+  // narrow race window this leaves open (two simultaneous deletes of two
+  // different admins when exactly 2 are active) is the same class of
+  // accepted trade-off as PATCH's above. Loudly logging rather than silently
+  // succeeding is the correct response if it ever actually happens.
+  if (isLastActiveAdmin) {
+    const stillOk = (await repo.listAll()).some((u) => u.role === "admin" && u.isActive);
+    if (!stillOk) {
+      logger.error({ deletedId: id }, "Last active admin was deleted in a race — the app may now have zero admins");
     }
+  }
 
-    // Verified safe: no table anywhere holds a foreign key to commanders.id
-    // (every "who did this" column across the schema is a denormalized
-    // varchar holding the display name/username), so this cannot cascade or
-    // orphan anything. Audit rows naming this person survive verbatim —
-    // that's also why the frontend leads with Deactivate and treats this as
-    // a confirm-gated secondary action.
-    await tx.delete(commanders).where(eq(commanders.id, id));
-    return target;
-  });
+  // Best-effort: also remove them from Catalyst's own project user
+  // directory so they can no longer sign in at all. Must not block the
+  // app-level removal on failure — the commanders row is gone either way,
+  // which is the authoritative "no more app access" signal this app itself
+  // enforces regardless of what Catalyst's directory still contains.
+  if (target.catalystUserId) {
+    try {
+      await deleteCatalystUser(req, target.catalystUserId);
+    } catch (err) {
+      logger.error(
+        { err, catalystUserId: target.catalystUserId },
+        "Failed to remove the Catalyst project user after deleting their commander row",
+      );
+    }
+  }
 
-  await logSettingsChange({
+  await logSettingsChange(initCatalystAdminApp(req), {
     module: "users",
-    settingKey: deleted.username,
-    entityId: deleted.id,
+    settingKey: target.username,
+    entityId: target.id,
     action: "delete",
-    oldValue: { username: deleted.username, displayName: deleted.displayName, role: deleted.role, isActive: deleted.isActive },
+    oldValue: { username: target.username, displayName: target.displayName, role: target.role, isActive: target.isActive },
     newValue: null,
     actor: actor.username,
   });
 
   res.json({ message: "User deleted" });
-});
-
-router.post("/users/:id/password", async (req: Request, res: Response) => {
-  const { id } = ResetUserPasswordParams.parse(req.params);
-  const parsed = ResetUserPasswordBody.safeParse(req.body);
-  if (!parsed.success) {
-    throw badRequest("Invalid password payload", parsed.error.issues);
-  }
-  const actor = getActor(req);
-
-  const [target] = await db.select().from(commanders).where(eq(commanders.id, id)).limit(1);
-  if (!target) throw notFound("User not found");
-
-  const passwordHash = await bcrypt.hash(parsed.data.password, 10);
-  await db.update(commanders).set({ passwordHash }).where(eq(commanders.id, id));
-
-  // Never put the hash or the plaintext in oldValue/newValue — they are
-  // jsonb columns rendered directly in the Settings > Change Log UI.
-  await logSettingsChange({
-    module: "users",
-    settingKey: target.username,
-    entityId: target.id,
-    action: "update",
-    oldValue: null,
-    newValue: { passwordChanged: true },
-    actor: actor.username,
-  });
-
-  res.json({ message: "Password reset" });
 });
 
 export default router;
