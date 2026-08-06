@@ -13,6 +13,7 @@ import { ZodError } from "zod";
 import router from "./routes";
 import { logger } from "./lib/logger";
 import { HttpError, badRequest, sendError } from "./lib/http";
+import type { AuthedRequest } from "./lib/auth";
 
 const app: Express = express();
 
@@ -110,6 +111,71 @@ app.use("/api", (req: Request, res: Response) => {
   );
 });
 
+/**
+ * Best-effort structural description of a thrown non-Error. Truncated so a
+ * large rejection payload can't be echoed back wholesale, and tolerant of
+ * circular references (JSON.stringify throws on those, and an error handler
+ * that throws is worse than one that says nothing).
+ */
+function describeNonError(err: unknown): unknown {
+  try {
+    const json = JSON.stringify(err);
+    if (json && json !== "{}") {
+      return json.length > 2000 ? `${json.slice(0, 2000)}…[truncated]` : JSON.parse(json);
+    }
+  } catch {
+    /* circular or non-serializable — fall through to the shallow view */
+  }
+  if (typeof err !== "object" || err === null) return String(err);
+  // A JSON of "{}" means own enumerable properties are absent (getters on the
+  // prototype, non-enumerable fields) — read them off directly instead.
+  const shallow: Record<string, string> = {};
+  for (const key of Object.getOwnPropertyNames(err)) {
+    shallow[key] = String((err as Record<string, unknown>)[key]).slice(0, 500);
+  }
+  shallow["__proto"] = Object.getPrototypeOf(err)?.constructor?.name ?? "unknown";
+  shallow["__string"] = String(err);
+  return shallow;
+}
+
+/**
+ * Diagnostic detail attached to a 500 — but only for a signed-in ADMIN.
+ *
+ * On AppSail there is no practical way to read a stack trace: the DevOps log
+ * console lags several minutes behind and pages so badly it routinely shows a
+ * stale window, which has already cost this migration real debugging time. A
+ * masked "An unexpected error occurred" is then genuinely undiagnosable —
+ * the failure has to be re-derived by bisecting HTTP endpoints from a browser.
+ *
+ * Readers and unauthenticated callers still get the opaque message, so this
+ * widens the disclosure surface only to the operators of an internal tool who
+ * can already read every deal in the system. The `stack` is capped so a deep
+ * async trace can't turn an error response into a payload.
+ */
+function adminErrorDetail(req: Request, err: unknown): unknown {
+  if ((req as AuthedRequest).actor?.role !== "admin") return undefined;
+  // NOT redundant with the Error branch below: the Catalyst SDK rejects with a
+  // PLAIN OBJECT, not an Error instance (confirmed live — `String(err)` on a
+  // Data Store rejection yields "[object Object]"). Anything that reaches this
+  // handler having thrown a non-Error therefore has to be serialized
+  // structurally, or the one detail that identifies the failure is lost.
+  if (!(err instanceof Error)) return { thrownValue: describeNonError(err) };
+  return {
+    name: err.name,
+    message: err.message,
+    stack: err.stack?.split("\n").slice(0, 12).join("\n"),
+    // Catalyst SDK errors carry the platform's own code/status alongside the
+    // message (e.g. a Data Store concurrency rejection) — plain `message`
+    // alone can drop the part that identifies which limit was hit.
+    ...(typeof err === "object" && err !== null
+      ? {
+          code: (err as { code?: unknown }).code,
+          statusCode: (err as { statusCode?: unknown }).statusCode,
+        }
+      : {}),
+  };
+}
+
 app.use(
   (err: unknown, req: Request, res: Response, _next: NextFunction): void => {
     if (err instanceof HttpError) {
@@ -129,7 +195,12 @@ app.use(
     req.log?.error({ err }, "Unhandled error");
     sendError(
       res,
-      new HttpError(500, "INTERNAL_ERROR", "An unexpected error occurred"),
+      new HttpError(
+        500,
+        "INTERNAL_ERROR",
+        "An unexpected error occurred",
+        adminErrorDetail(req, err),
+      ),
     );
   },
 );

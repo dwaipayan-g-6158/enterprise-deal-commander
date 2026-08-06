@@ -20,6 +20,7 @@ import {
   formatCatalystDateTime,
   fromJson,
   toJson,
+  isDuplicateValueError,
   type CatalystApp,
   type RawRow,
 } from "../sdk";
@@ -47,9 +48,6 @@ export class DuplicateDealError extends Error {
   }
 }
 
-function isDuplicateValueError(err: unknown): boolean {
-  return err instanceof Error && /DUPLICATE_VALUE|Duplicate value/i.test(err.message);
-}
 
 function optDate(raw: string | null | undefined): Date | null {
   return raw ? parseCatalystDateTime(raw) : null;

@@ -62,6 +62,179 @@ function getTable(catalystApp: CatalystApp, tableName: string): CatalystTable {
 /** Raw row shape as returned by the Data Store Row API — every value is a string. */
 export type RawRow = Record<string, string>;
 
+// ---------------------------------------------------------------- Error shape
+
+/**
+ * Normalized view of a Data Store rejection.
+ *
+ * The Node SDK rejects with a PLAIN OBJECT — `{statusCode, code, message}` —
+ * not an `Error` instance. Confirmed live against the deployed app: the value
+ * reaching Express's error handler stringifies to "[object Object]" and fails
+ * `instanceof Error`. Every `err instanceof Error && /…/.test(err.message)`
+ * guard written against these rejections is therefore dead code that silently
+ * takes the wrong branch, which is exactly how duplicate-value handling ended
+ * up never firing. Route all inspection of a Data Store failure through here.
+ */
+export interface CatalystErrorInfo {
+  message: string;
+  code: string;
+  statusCode: number | null;
+}
+
+export function catalystErrorInfo(err: unknown): CatalystErrorInfo {
+  const source = (err ?? {}) as Record<string, unknown>;
+  const message =
+    typeof source["message"] === "string"
+      ? source["message"]
+      : err instanceof Error
+        ? err.message
+        : String(err);
+  return {
+    message,
+    code: typeof source["code"] === "string" ? source["code"] : "",
+    statusCode:
+      typeof source["statusCode"] === "number" ? (source["statusCode"] as number) : null,
+  };
+}
+
+/**
+ * A unique-column violation, in either rejection shape. Shared by every repo
+ * that turns a duplicate into a domain error (a 409 rather than a 500) —
+ * previously copy-pasted into four modules, all four `instanceof`-gated and
+ * all four dead.
+ */
+export function isDuplicateValueError(err: unknown): boolean {
+  return /DUPLICATE_VALUE|Duplicate value/i.test(catalystErrorInfo(err).message);
+}
+
+/** The platform's own back-pressure signal — see `withDataStoreSlot` below. */
+function isConcurrencyLimitError(err: unknown): boolean {
+  const { statusCode, code, message } = catalystErrorInfo(err);
+  return (
+    statusCode === 429 ||
+    code === "TOO_MANY_REQUESTS" ||
+    /concurrency limit reached/i.test(message)
+  );
+}
+
+// -------------------------------------------------- Concurrency + retry
+
+/**
+ * Catalyst enforces a Data Store concurrency limit per app and rejects the
+ * overflow outright:
+ *
+ *   {statusCode: 429, code: "TOO_MANY_REQUESTS",
+ *    message: "Concurrency limit reached for the feature COMPONENT"}
+ *
+ * It is a hard rejection, not a queue — the call simply fails, and because the
+ * failure is instant it surfaces as a fast 500 rather than a slow one, which
+ * makes it read like a logic bug instead of back-pressure. Two endpoints hit
+ * this in production (the deal list and the whole dashboard fan-out) once the
+ * store had real data in it.
+ *
+ * So the app does the queueing the platform won't: at most `MAX_INFLIGHT`
+ * Data Store operations are in flight per process, and anything the platform
+ * still rejects is retried with exponential backoff and jitter. The cap is
+ * deliberately below whatever the real ceiling is — AppSail runs up to 5
+ * instances that each get their own limiter but share one platform budget, so
+ * leaving headroom matters more than saturating it from one instance.
+ */
+const MAX_INFLIGHT = Number(process.env["CATALYST_MAX_CONCURRENT_DATASTORE"]) || 6;
+const MAX_RETRIES = 4;
+
+let inFlight = 0;
+const waiting: Array<() => void> = [];
+
+function acquire(): Promise<void> | null {
+  if (inFlight < MAX_INFLIGHT) {
+    inFlight++;
+    return null;
+  }
+  return new Promise<void>((resolve) => waiting.push(resolve));
+}
+
+function release(): void {
+  const next = waiting.shift();
+  if (next) {
+    // Hand the slot straight over rather than decrementing: releasing and
+    // re-acquiring would let a caller that arrives in between jump the queue.
+    // Because the slot is TRANSFERRED, `inFlight` is deliberately left alone
+    // here and the woken caller must not increment it either — counting it on
+    // both sides inflates `inFlight` by one per handoff, which quietly
+    // degrades the limiter to serial execution under sustained load. (That
+    // exact bug shipped once: a 20-endpoint cold fan-out went from 429s to
+    // three 112-second timeouts, which reads like slowness rather than a
+    // counting error. `holds every slot it is given` below pins it.)
+    next();
+    return;
+  }
+  inFlight--;
+}
+
+const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
+
+async function withDataStoreSlot<T>(op: () => Promise<T>): Promise<T> {
+  for (let attempt = 0; ; attempt++) {
+    const queued = acquire();
+    // No `inFlight++` on this path — see `release()`: being woken IS the slot.
+    if (queued) await queued;
+    try {
+      return await op();
+    } catch (err) {
+      if (attempt >= MAX_RETRIES || !isConcurrencyLimitError(err)) throw err;
+    } finally {
+      release();
+    }
+    // Backoff happens OUTSIDE the slot — holding one while sleeping would
+    // starve the very callers whose completion frees up the platform budget.
+    await sleep(100 * 2 ** attempt + Math.floor(Math.random() * 50));
+  }
+}
+
+// -------------------------------------------------- Per-request read cache
+
+/**
+ * Per-request memoization of whole-table reads.
+ *
+ * The Row API has no WHERE clause, so every `repo.list(dealId)` is a full-table
+ * read filtered in memory (see the module docstring). Assembling one deal's
+ * intelligence touches ~25 tables, and the deal list assembles every deal — so
+ * a single request re-read the same lookup tables dozens of times and issued
+ * hundreds of Data Store calls, which is what exhausted the concurrency limit
+ * above. Memoizing per request collapses that to one read per distinct table.
+ *
+ * Keyed on the `catalystApp` object, which `initCatalystApp(req)` mints fresh
+ * per request, so the cache's lifetime is the request's — no cross-request
+ * staleness is possible, and no repository signature has to change. A WeakMap
+ * (not a field on the app) keeps this invisible to the SDK and lets the entry
+ * be collected with the request. Note `initCatalystAdminApp` returns a
+ * different object and so gets its own cache — correct, since the two scopes
+ * can legitimately see different rows.
+ *
+ * The PROMISE is cached, not the result: 8 concurrent workers all wanting the
+ * same table then share one in-flight read instead of stampeding it.
+ */
+const readCache = new WeakMap<object, Map<string, Promise<RawRow[]>>>();
+
+function cacheFor(catalystApp: CatalystApp): Map<string, Promise<RawRow[]>> | null {
+  if (typeof catalystApp !== "object" || catalystApp === null) return null;
+  let byTable = readCache.get(catalystApp as object);
+  if (!byTable) {
+    byTable = new Map();
+    readCache.set(catalystApp as object, byTable);
+  }
+  return byTable;
+}
+
+/**
+ * Drop a table's memoized read after writing to it, so a read-after-write
+ * inside the same request sees the write. Every mutating helper below calls
+ * this; a new one that doesn't would reintroduce stale reads.
+ */
+function invalidateTable(catalystApp: CatalystApp, tableName: string): void {
+  cacheFor(catalystApp)?.delete(tableName);
+}
+
 /**
  * Fetch every row in a table. Uses `getIterableRows()` (an async generator
  * that pages internally) rather than the deprecated `getAllRows()` (silently
@@ -70,12 +243,36 @@ export type RawRow = Record<string, string>;
  * fallback.
  */
 export async function fetchAllRows(catalystApp: CatalystApp, tableName: string): Promise<RawRow[]> {
-  const table = getTable(catalystApp, tableName);
-  const all: RawRow[] = [];
-  for await (const row of table.getIterableRows()) {
-    all.push(row as RawRow);
+  const byTable = cacheFor(catalystApp);
+  if (!byTable) return readAllRows(catalystApp, tableName);
+
+  let pending = byTable.get(tableName);
+  if (!pending) {
+    pending = readAllRows(catalystApp, tableName);
+    byTable.set(tableName, pending);
+    // A failed read must not be memoized — otherwise one transient rejection
+    // poisons the table for the rest of the request. Compare identity before
+    // deleting so a retry that already replaced this entry survives.
+    pending.catch(() => {
+      if (byTable.get(tableName) === pending) byTable.delete(tableName);
+    });
   }
-  return all;
+
+  // Hand each caller its own array. The cached promise is shared, and repos
+  // are free to sort/splice what they get back; without this copy the first
+  // in-place sort would silently reorder every other caller's view.
+  return (await pending).slice();
+}
+
+async function readAllRows(catalystApp: CatalystApp, tableName: string): Promise<RawRow[]> {
+  return withDataStoreSlot(async () => {
+    const table = getTable(catalystApp, tableName);
+    const all: RawRow[] = [];
+    for await (const row of table.getIterableRows()) {
+      all.push(row as RawRow);
+    }
+    return all;
+  });
 }
 
 export async function insertRow(
@@ -83,7 +280,8 @@ export async function insertRow(
   tableName: string,
   values: Record<string, unknown>,
 ): Promise<RawRow> {
-  return getTable(catalystApp, tableName).insertRow(values);
+  invalidateTable(catalystApp, tableName);
+  return withDataStoreSlot(() => getTable(catalystApp, tableName).insertRow(values));
 }
 
 /**
@@ -105,12 +303,15 @@ export async function insertRows(
   rows: Array<Record<string, unknown>>,
 ): Promise<RawRow[]> {
   if (rows.length === 0) return [];
+  invalidateTable(catalystApp, tableName);
   const table = getTable(catalystApp, tableName);
   const CHUNK = 100;
   const inserted: RawRow[] = [];
   for (let i = 0; i < rows.length; i += CHUNK) {
     const chunk = rows.slice(i, i + CHUNK);
-    const result = (await table.insertRows(chunk)) as RawRow[];
+    const result = (await withDataStoreSlot(
+      () => table.insertRows(chunk) as Promise<RawRow[]>,
+    )) as RawRow[];
     inserted.push(...result);
   }
   return inserted;
@@ -122,11 +323,15 @@ export async function updateRow(
   rowId: string,
   values: Record<string, unknown>,
 ): Promise<RawRow> {
-  return getTable(catalystApp, tableName).updateRow({ ROWID: rowId, ...values });
+  invalidateTable(catalystApp, tableName);
+  return withDataStoreSlot(() =>
+    getTable(catalystApp, tableName).updateRow({ ROWID: rowId, ...values }),
+  );
 }
 
 export async function deleteRow(catalystApp: CatalystApp, tableName: string, rowId: string): Promise<void> {
-  await getTable(catalystApp, tableName).deleteRow(rowId);
+  invalidateTable(catalystApp, tableName);
+  await withDataStoreSlot(() => getTable(catalystApp, tableName).deleteRow(rowId));
 }
 
 /**
@@ -157,8 +362,12 @@ export async function upsert(
       ...values,
     });
   } catch (err) {
-    const isDuplicate = err instanceof Error && /DUPLICATE_VALUE|Duplicate value/i.test(err.message);
-    if (!isDuplicate) throw err;
+    if (!isDuplicateValueError(err)) throw err;
+    // Drop the memoized read first: the whole point of this branch is that
+    // somebody else inserted the row after our lookup, so re-reading the
+    // request-cached snapshot would return the same pre-insert view and this
+    // retry would throw for the wrong reason.
+    invalidateTable(catalystApp, tableName);
     const retryRows = await fetchAllRows(catalystApp, tableName);
     const retryExisting = retryRows.find((r) => r[naturalKeyColumn] === naturalKeyValue);
     if (!retryExisting) throw err;

@@ -5,6 +5,7 @@ import {
   createCommandersRepo,
   inviteCatalystUser,
   deleteCatalystUser,
+  isDuplicateValueError,
   type CommanderRow,
 } from "@workspace/db/catalyst";
 import { ListUsersResponse, CreateUserBody, UpdateUserParams, UpdateUserBody, DeleteUserParams } from "@workspace/api-zod";
@@ -33,10 +34,6 @@ import { logger } from "../lib/logger";
  */
 
 const router: IRouter = Router();
-
-function isDuplicateValueError(err: unknown): boolean {
-  return err instanceof Error && /DUPLICATE_VALUE|Duplicate value/i.test(err.message);
-}
 
 function toUserRow(row: CommanderRow) {
   return {

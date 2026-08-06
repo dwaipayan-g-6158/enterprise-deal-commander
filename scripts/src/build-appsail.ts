@@ -23,7 +23,7 @@
 // for the same reason.
 
 import { spawnSync } from "node:child_process";
-import { cpSync, existsSync, rmSync, copyFileSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, rmSync, copyFileSync, writeFileSync, statSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -113,9 +113,39 @@ function main(): void {
     );
   }
 
+  // 5. Zip the bundle, ready to upload.
+  //
+  // This is a build step rather than a documented manual instruction because
+  // getting it wrong is silent: zipping the FOLDER instead of its CONTENTS
+  // produces a deployment that reaches "Completed" and then 500s every
+  // request with `Cannot find module '/catalyst/index.mjs'`, because AppSail
+  // expects the entry file at the zip root. Emitting the zip from here means
+  // that layout is decided once, in code, instead of re-derived by hand on
+  // every deploy.
+  const zipPath = path.join(serverDir, "appsail-deploy.zip");
+  if (existsSync(zipPath)) rmSync(zipPath);
+  // Compress-Archive over `dist/*` (the glob, not `dist`) is what keeps the
+  // contents flat. Run through PowerShell rather than a Node zip dependency
+  // to avoid adding one to the toolchain for a single call.
+  run(
+    "powershell",
+    [
+      "-NoProfile",
+      "-NonInteractive",
+      "-Command",
+      `Compress-Archive -Path '${path.join(serverDistDir, "*")}' -DestinationPath '${zipPath}' -CompressionLevel Optimal`,
+    ],
+    repoRoot,
+    process.env,
+  );
+  const zipMb = (statSync(zipPath).size / (1024 * 1024)).toFixed(2);
+
   console.log(
-    `\nAppSail bundle ready at ${path.relative(repoRoot, serverDistDir)} ` +
-      `— zip its CONTENTS flat (not the folder itself) and deploy via the Catalyst Console.`,
+    `\nAppSail bundle ready: ${path.relative(repoRoot, zipPath)} (${zipMb} MB)` +
+      `\nDeploy it via the Catalyst Console — open the app itself, then` +
+      ` Overview -> Create Deployment. Never \`catalyst deploy appsail\`, and never` +
+      ` the AppSail list's "Deploy from Console" button (that one is` +
+      ` first-time-creation only and errors with "The given AppSail name already exists").`,
   );
 }
 

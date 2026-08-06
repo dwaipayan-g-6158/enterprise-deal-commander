@@ -19,6 +19,7 @@ import {
   formatBoolean,
   formatCatalystDateTime,
   fromJson,
+  isDuplicateValueError,
   type CatalystApp,
   type RawRow,
 } from "../sdk";
@@ -51,9 +52,6 @@ export class DuplicateNameError extends Error {
   }
 }
 
-function isDuplicateValueError(err: unknown): boolean {
-  return err instanceof Error && /DUPLICATE_VALUE|Duplicate value/i.test(err.message);
-}
 
 // ---------------------------------------------------------------- Pipeline stages
 

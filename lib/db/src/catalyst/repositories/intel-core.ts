@@ -16,6 +16,7 @@ import {
   formatCatalystDateTime,
   toJson,
   fromJson,
+  isDuplicateValueError,
   type CatalystApp,
   type RawRow,
 } from "../sdk";
@@ -53,9 +54,6 @@ const TABLE = {
   commanderAchievements: "v2_commander_achievements",
 } as const;
 
-function isDuplicateValueError(err: unknown): boolean {
-  return err instanceof Error && /DUPLICATE_VALUE|Duplicate value/i.test(err.message);
-}
 
 function optDate(raw: string | null | undefined): Date | null {
   return raw ? parseCatalystDateTime(raw) : null;
