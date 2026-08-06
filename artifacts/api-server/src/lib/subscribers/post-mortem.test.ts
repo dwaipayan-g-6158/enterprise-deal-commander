@@ -1,124 +1,161 @@
-import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import { eq, inArray } from "drizzle-orm";
+import { describe, it, expect, beforeAll, afterAll, beforeEach } from "vitest";
 import {
-  db,
-  pool,
-  enterpriseDeals,
-  pipelineStages,
-  pricingModels,
-  servicesTiers,
-  dealMemory,
-} from "@workspace/db";
+  initCatalystApp,
+  createEnterpriseDealsRepo,
+  createDealMemoryRepo,
+} from "@workspace/db/catalyst";
+import {
+  installCatalystFake,
+  seedStandardLookups,
+  STAGES,
+  PRICING_MODELS,
+  SERVICES_TIER_ID,
+  type CatalystTestStore,
+} from "../../test-support/catalyst-test-app";
 import { emitDealEvent } from "../events";
-import { registerSubscribers, unregisterSubscribers } from "./index";
+import { registerPostMortem } from "./post-mortem";
 
-// Same emitDealEvent + registerSubscribers/unregisterSubscribers + poll
-// pattern as ./playbook-engine.test.ts (the closest existing subscriber test
-// in this repo — no dedicated post-mortem.test.ts existed before this).
-//
 // Regression test: registerPostMortem() used to compute dealMemory.finalTcv
 // as a flat productRevenue + servicesRevenue sum, dropping the
 // contractTermYears multiplier for Multi-Year Committed deals. This is the
-// highest-stakes of the TCV consolidation sites — lib/scoring.ts's
-// historicalContext() reads dealMemory.finalTcv directly to compute
-// avgWonTCV, so every deal that closed before this fix wrote a wrong
-// historical TCV into the very number deal-size scoring compares against.
+// highest-stakes of the TCV consolidation sites — historicalContext() reads
+// dealMemory.finalTcv directly to compute avgWonTCV, so every deal that closed
+// before this fix wrote a wrong historical TCV into the very number deal-size
+// scoring compares against.
+//
+// Runs against the in-memory Data Store (test-support/catalyst-test-app.ts).
+// The event must carry `catalystApp`: the subscriber no-ops without it (see
+// lib/events.ts), which is asserted explicitly below.
 
 const ACTOR = "vitest";
-const createdDealIds: string[] = [];
 
-async function poll<T>(
-  fn: () => Promise<T>,
-  predicate: (v: T) => boolean,
-  timeoutMs = 10_000,
-): Promise<T> {
+let store: CatalystTestStore;
+let seq = 0;
+let dispose: () => void;
+
+const app = () => initCatalystApp({ headers: {} });
+
+async function poll<T>(fn: () => Promise<T>, predicate: (v: T) => boolean, timeoutMs = 5_000): Promise<T> {
   const start = Date.now();
   let last = await fn();
   while (!predicate(last)) {
     if (Date.now() - start > timeoutMs) return last;
-    await new Promise((r) => setTimeout(r, 100));
+    await new Promise((r) => setTimeout(r, 10));
     last = await fn();
   }
   return last;
 }
 
-async function createMultiYearDeal(stageId: number): Promise<string> {
-  const pricingRows = await db.select().from(pricingModels);
-  const pricing = pricingRows.find((p) => p.modelName === "Multi-Year Committed");
-  if (!pricing) throw new Error('Seed data missing pricing model "Multi-Year Committed"');
-  const [tier] = await db.select().from(servicesTiers).limit(1);
-  const suffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-  const [row] = await db
-    .insert(enterpriseDeals)
-    .values({
-      dealName: `Post-Mortem TCV Test ${suffix}`,
-      accountName: `Post-Mortem TCV Acct ${suffix}`,
-      accountManager: "AM",
-      technicalLead: "TL",
-      salesStageId: stageId,
-      pricingModelId: pricing.id,
-      servicesTierId: tier.id,
-      contractTermYears: 3,
-      productRevenue: "1000000.00",
-      servicesRevenue: "200000.00",
-    })
-    .returning({ id: enterpriseDeals.id });
-  createdDealIds.push(row.id);
-  return row.id;
+const memoryFor = async (dealId: string) =>
+  (await createDealMemoryRepo(app()).listAll()).filter((r) => r.dealId === dealId);
+
+async function createMultiYearDeal(): Promise<string> {
+  const deal = await createEnterpriseDealsRepo(app()).create({
+    dealName: `Post-Mortem TCV Test ${seq}`,
+    accountName: `Post-Mortem TCV Acct ${seq++}`,
+    accountManager: "AM",
+    technicalLead: "TL",
+    salesStageId: STAGES.Discovery,
+    pricingModelId: PRICING_MODELS["Multi-Year Committed"],
+    servicesTierId: SERVICES_TIER_ID,
+    contractTermYears: 3,
+    productRevenue: "1000000.00",
+    servicesRevenue: "200000.00",
+    dealCurrency: "USD",
+  });
+  return deal.id;
+}
+
+function closeDeal(dealId: string, toStageId: number, withApp = true): void {
+  emitDealEvent("deal.stage_changed", {
+    dealId,
+    actor: ACTOR,
+    fromStageId: STAGES.Discovery,
+    toStageId,
+    overridden: false,
+    ...(withApp ? { catalystApp: app() } : {}),
+  });
 }
 
 beforeAll(() => {
-  registerSubscribers();
+  ({ store } = installCatalystFake());
+  // Registered alone rather than through registerSubscribers(), which also
+  // starts the Drizzle-backed portfolio-rollup warm and two wall-clock timers.
+  dispose = registerPostMortem();
 });
 
-afterAll(async () => {
-  unregisterSubscribers();
-  if (createdDealIds.length > 0) {
-    await db.delete(dealMemory).where(inArray(dealMemory.dealId, createdDealIds));
-    await db.delete(enterpriseDeals).where(inArray(enterpriseDeals.id, createdDealIds));
-  }
-  await pool.end();
+afterAll(() => {
+  dispose();
 });
 
-// Skipped post-Catalyst-migration: the post-mortem subscriber now reads/
-// writes v2_deal_memory (and every table it derives from) via Catalyst Data
-// Store, not Drizzle/Postgres — it reads its Catalyst app handle off
-// `event.catalystApp` (see lib/events.ts), which only a real, migrated route
-// handler can supply. `emitDealEvent(...)` called directly from a plain
-// Vitest test (no real Catalyst session/headers) leaves `catalystApp`
-// undefined, so the migrated subscriber correctly no-ops (matching the event
-// bus's "never break the request path" contract) instead of writing the
-// Drizzle row this file polls for — same "Data Store isn't reachable from
-// localhost" limitation already documented for
-// lookups.engine-thresholds.test.ts. Retire or rewrite as an integration test
-// against the deployed AppSail app once Slice 6 seeding lands.
-describe.skip("post-mortem subscriber — finalTcv honors the Multi-Year Committed term multiplier", () => {
+beforeEach(() => {
+  store.reset();
+  seq = 0;
+  seedStandardLookups(store);
+});
+
+describe("post-mortem subscriber — finalTcv honors the Multi-Year Committed term multiplier", () => {
   it("persists dealMemory.finalTcv as productRevenue * contractTermYears + servicesRevenue on Closed-Won", async () => {
-    const stages = await db.select().from(pipelineStages);
-    const discovery = stages.find((s) => s.stageName === "Discovery");
-    const closedWon = stages.find((s) => s.stageName === "Closed-Won");
-    if (!discovery || !closedWon) throw new Error("Seed data missing Discovery/Closed-Won stages");
+    const dealId = await createMultiYearDeal();
 
-    const dealId = await createMultiYearDeal(discovery.id);
+    closeDeal(dealId, STAGES["Closed-Won"]);
 
-    emitDealEvent("deal.stage_changed", {
-      dealId,
-      actor: ACTOR,
-      fromStageId: discovery.id,
-      toStageId: closedWon.id,
-      overridden: false,
-    });
-
-    const memoryRows = await poll(
-      () => db.select().from(dealMemory).where(eq(dealMemory.dealId, dealId)),
-      (rows) => rows.length >= 1,
-    );
+    const memoryRows = await poll(() => memoryFor(dealId), (rows) => rows.length >= 1);
 
     expect(memoryRows.length).toBe(1);
     expect(memoryRows[0].outcome).toBe("Won");
-    // Fails today: the subscriber computes finalTcv as
-    // productRevenue + servicesRevenue (1,200,000), dropping the x3 term
-    // multiplier that calculateFlatTCV applies.
-    expect(Number(memoryRows[0].finalTcv)).toBe(3_200_000);
+    // The bug: finalTcv was productRevenue + servicesRevenue (1,200,000),
+    // dropping the x3 term multiplier that calculateFlatTCV applies.
+    expect(memoryRows[0].finalTcv).toBe(3_200_000);
+    // The rest of the pre-populated archive, so a regression that writes the
+    // right TCV into an otherwise-empty row still fails.
+    expect(memoryRows[0].pricingModel).toBe("Multi-Year Committed");
+  });
+
+  it("records a Closed-Lost deal as Lost with the same term-aware TCV", async () => {
+    const dealId = await createMultiYearDeal();
+
+    closeDeal(dealId, STAGES["Closed-Lost"]);
+
+    const memoryRows = await poll(() => memoryFor(dealId), (rows) => rows.length >= 1);
+    expect(memoryRows[0].outcome).toBe("Lost");
+    expect(memoryRows[0].finalTcv).toBe(3_200_000);
+  });
+
+  it("archives nothing for a move between two open stages", async () => {
+    const dealId = await createMultiYearDeal();
+
+    closeDeal(dealId, STAGES.Validation);
+
+    await new Promise((r) => setTimeout(r, 200));
+    expect(await memoryFor(dealId)).toHaveLength(0);
+  });
+
+  it("upserts rather than duplicating when a closed deal's stage changes again", async () => {
+    const dealId = await createMultiYearDeal();
+
+    closeDeal(dealId, STAGES["Closed-Won"]);
+    await poll(() => memoryFor(dealId), (rows) => rows.length >= 1);
+    // Corrected after the fact: Won -> Lost must rewrite the one archive row,
+    // not leave two contradictory ones behind for historicalContext to average.
+    emitDealEvent("deal.stage_changed", {
+      dealId,
+      actor: ACTOR,
+      fromStageId: STAGES["Closed-Won"],
+      toStageId: STAGES["Closed-Lost"],
+      overridden: false,
+      catalystApp: app(),
+    });
+    const rows = await poll(() => memoryFor(dealId), (r) => r[0]?.outcome === "Lost");
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0].outcome).toBe("Lost");
+  });
+
+  it("writes nothing when the event carries no catalystApp", async () => {
+    const dealId = await createMultiYearDeal();
+    closeDeal(dealId, STAGES["Closed-Won"], false);
+    await new Promise((r) => setTimeout(r, 200));
+    expect(await memoryFor(dealId)).toHaveLength(0);
   });
 });

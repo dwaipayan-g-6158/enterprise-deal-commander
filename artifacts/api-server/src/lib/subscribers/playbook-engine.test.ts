@@ -1,188 +1,213 @@
-import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import { asc, eq, inArray } from "drizzle-orm";
+import { describe, it, expect, beforeAll, afterAll, beforeEach } from "vitest";
 import {
-  db,
-  pool,
-  enterpriseDeals,
-  pipelineStages,
-  pricingModels,
-  servicesTiers,
-  playbooks,
-  dealPlaybookAssignments,
-} from "@workspace/db";
+  initCatalystApp,
+  createEnterpriseDealsRepo,
+  createDealPlaybookAssignmentsRepo,
+  formatCatalystDateTime,
+} from "@workspace/db/catalyst";
+import {
+  installCatalystFake,
+  seedStandardLookups,
+  STAGES,
+  PRICING_MODEL_ID,
+  SERVICES_TIER_ID,
+  type CatalystTestStore,
+} from "../../test-support/catalyst-test-app";
 import { emitDealEvent } from "../events";
-import { registerSubscribers, unregisterSubscribers } from "./index";
+import { registerPlaybookEngine } from "./playbook-engine";
 
 // Regression test for the "playbook never updates on stage change" bug: the
 // auto-assign guard used to check "does this deal have ANY active assignment",
 // so once a deal picked up its first stage playbook, every later stage change
 // was silently ignored. It now guards per (deal, playbook) — a deal keeps
 // every earlier assignment as it advances through its journey.
+//
+// Runs against the in-memory Data Store (test-support/catalyst-test-app.ts).
+// The event must carry `catalystApp`: the subscriber no-ops without it (see
+// lib/events.ts), which is asserted explicitly at the bottom so the tests above
+// cannot pass vacuously.
 
 const ACTOR = "vitest";
-const createdDealIds: string[] = [];
 
-async function poll<T>(
-  fn: () => Promise<T>,
-  predicate: (v: T) => boolean,
-  timeoutMs = 10_000,
-): Promise<T> {
+const VALIDATION_PLAYBOOK_ID = "11111111-1111-4111-8111-111111111111";
+const COMMERCIAL_PLAYBOOK_ID = "22222222-2222-4222-8222-222222222222";
+
+let store: CatalystTestStore;
+let seq = 0;
+let dispose: () => void;
+
+const app = () => initCatalystApp({ headers: {} });
+
+async function poll<T>(fn: () => Promise<T>, predicate: (v: T) => boolean, timeoutMs = 5_000): Promise<T> {
   const start = Date.now();
   let last = await fn();
   while (!predicate(last)) {
     if (Date.now() - start > timeoutMs) return last;
-    await new Promise((r) => setTimeout(r, 100));
+    await new Promise((r) => setTimeout(r, 10));
     last = await fn();
   }
   return last;
 }
 
+const assignments = (dealId: string) => createDealPlaybookAssignmentsRepo(app()).list(dealId);
+
 async function createDeal(stageId: number): Promise<string> {
-  const [pricing] = await db.select().from(pricingModels).limit(1);
-  const [tier] = await db.select().from(servicesTiers).limit(1);
-  const suffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-  const [row] = await db
-    .insert(enterpriseDeals)
-    .values({
-      dealName: `Playbook Engine ${suffix}`,
-      accountName: `Acct ${suffix}`,
-      accountManager: "AM",
-      technicalLead: "TL",
-      salesStageId: stageId,
-      pricingModelId: pricing.id,
-      servicesTierId: tier.id,
-      productRevenue: "500000",
-      servicesRevenue: "100000",
-    })
-    .returning({ id: enterpriseDeals.id });
-  createdDealIds.push(row.id);
-  return row.id;
+  const deal = await createEnterpriseDealsRepo(app()).create({
+    dealName: `Playbook Engine ${seq}`,
+    accountName: `Acct ${seq++}`,
+    accountManager: "AM",
+    technicalLead: "TL",
+    salesStageId: stageId,
+    pricingModelId: PRICING_MODEL_ID,
+    servicesTierId: SERVICES_TIER_ID,
+    productRevenue: "500000",
+    servicesRevenue: "100000",
+    contractTermYears: 1,
+    dealCurrency: "USD",
+  });
+  return deal.id;
+}
+
+function seedPlaybooks(): void {
+  // Deliberately NOT one per stage: Discovery has none, so the "supersede even
+  // when the new stage has no playbook of its own" path is reachable.
+  store.seedRaw("v2_playbooks", [
+    {
+      id: VALIDATION_PLAYBOOK_ID,
+      playbook_name: "Validation Playbook",
+      applicable_stage: "Validation",
+      is_active: "true",
+      created_by: "seed",
+      created_at: formatCatalystDateTime(new Date()),
+    },
+    {
+      id: COMMERCIAL_PLAYBOOK_ID,
+      playbook_name: "Commercial Playbook",
+      applicable_stage: "Commercial",
+      is_active: "true",
+      created_by: "seed",
+      created_at: formatCatalystDateTime(new Date()),
+    },
+  ]);
+}
+
+function stageChanged(dealId: string, fromStageId: number, toStageId: number, withApp = true): void {
+  emitDealEvent("deal.stage_changed", {
+    dealId,
+    actor: ACTOR,
+    fromStageId,
+    toStageId,
+    overridden: false,
+    ...(withApp ? { catalystApp: app() } : {}),
+  });
 }
 
 beforeAll(() => {
-  registerSubscribers();
+  ({ store } = installCatalystFake());
+  // Registered alone rather than through registerSubscribers(), which also
+  // starts the Drizzle-backed portfolio-rollup warm and two wall-clock timers.
+  dispose = registerPlaybookEngine();
 });
 
-afterAll(async () => {
-  unregisterSubscribers();
-  if (createdDealIds.length > 0) {
-    await db.delete(enterpriseDeals).where(inArray(enterpriseDeals.id, createdDealIds));
-  }
-  await pool.end();
+afterAll(() => {
+  dispose();
 });
 
-// Skipped post-Catalyst-migration: the playbook-engine subscriber now reads/
-// writes v2_playbooks/v2_deal_playbook_assignments via Catalyst Data Store,
-// not Drizzle/Postgres — it reads its Catalyst app handle off
-// `event.catalystApp` (see lib/events.ts), which only a real, migrated route
-// handler can supply. `emitDealEvent(...)` called directly from a plain
-// Vitest test (no real Catalyst session/headers) leaves `catalystApp`
-// undefined, so the migrated subscriber correctly no-ops (matching the event
-// bus's "never break the request path" contract) instead of writing the
-// Drizzle rows this file polls for — same "Data Store isn't reachable from
-// localhost" limitation already documented for
-// lookups.engine-thresholds.test.ts. Retire or rewrite as an integration test
-// against the deployed AppSail app once Slice 6 seeding lands.
-describe.skip("playbook auto-assign on stage change", () => {
+beforeEach(() => {
+  store.reset();
+  seq = 0;
+  seedStandardLookups(store);
+  seedPlaybooks();
+});
+
+describe("playbook auto-assign on stage change", () => {
   it("assigns each new stage's playbook without removing earlier assignments", async () => {
-    const stages = await db.select().from(pipelineStages).orderBy(asc(pipelineStages.sortOrder));
-    const [discovery, validation, commercial] = stages;
-    const dealId = await createDeal(discovery.id);
-
-    const [validationPlaybook] = await db
-      .select()
-      .from(playbooks)
-      .where(eq(playbooks.applicableStage, validation.stageName));
-    const [commercialPlaybook] = await db
-      .select()
-      .from(playbooks)
-      .where(eq(playbooks.applicableStage, commercial.stageName));
+    const dealId = await createDeal(STAGES.Discovery);
 
     // Discovery -> Validation
-    emitDealEvent("deal.stage_changed", {
-      dealId,
-      actor: ACTOR,
-      fromStageId: discovery.id,
-      toStageId: validation.id,
-      overridden: false,
-    });
-    const afterFirst = await poll(
-      () => db.select().from(dealPlaybookAssignments).where(eq(dealPlaybookAssignments.dealId, dealId)),
-      (rows) => rows.length >= 1,
-    );
+    stageChanged(dealId, STAGES.Discovery, STAGES.Validation);
+    const afterFirst = await poll(() => assignments(dealId), (rows) => rows.length >= 1);
     expect(afterFirst.length).toBe(1);
-    expect(afterFirst[0].playbookId).toBe(validationPlaybook.id);
+    expect(afterFirst[0].playbookId).toBe(VALIDATION_PLAYBOOK_ID);
     const validationAssignmentId = afterFirst[0].id;
 
     // Validation -> Commercial
-    emitDealEvent("deal.stage_changed", {
-      dealId,
-      actor: ACTOR,
-      fromStageId: validation.id,
-      toStageId: commercial.id,
-      overridden: false,
-    });
-    const afterSecond = await poll(
-      () => db.select().from(dealPlaybookAssignments).where(eq(dealPlaybookAssignments.dealId, dealId)),
-      (rows) => rows.length >= 2,
-    );
+    stageChanged(dealId, STAGES.Validation, STAGES.Commercial);
+    const afterSecond = await poll(() => assignments(dealId), (rows) => rows.length >= 2);
 
     expect(afterSecond.length).toBe(2);
     const byPlaybookId = new Map(afterSecond.map((a) => [a.playbookId, a]));
-    // The Validation assignment survives untouched (same row, not recreated).
-    expect(byPlaybookId.get(validationPlaybook.id)?.id).toBe(validationAssignmentId);
+    // The Validation assignment survives (same row, not recreated) — superseded
+    // rather than deleted, so its step history stays on the journey.
+    expect(byPlaybookId.get(VALIDATION_PLAYBOOK_ID)?.id).toBe(validationAssignmentId);
+    expect(byPlaybookId.get(VALIDATION_PLAYBOOK_ID)?.status).toBe("Superseded");
     // The Commercial assignment was newly created — this is exactly what the
     // old per-deal guard used to block.
-    expect(byPlaybookId.has(commercialPlaybook.id)).toBe(true);
+    expect(byPlaybookId.has(COMMERCIAL_PLAYBOOK_ID)).toBe(true);
+    expect(byPlaybookId.get(COMMERCIAL_PLAYBOOK_ID)?.status).toBe("Active");
   });
 
   it("does not create a duplicate assignment when the deal re-enters a stage it already has", async () => {
-    const stages = await db.select().from(pipelineStages).orderBy(asc(pipelineStages.sortOrder));
-    const [discovery, validation, commercial] = stages;
-    const dealId = await createDeal(discovery.id);
+    const dealId = await createDeal(STAGES.Discovery);
 
-    emitDealEvent("deal.stage_changed", {
-      dealId,
-      actor: ACTOR,
-      fromStageId: discovery.id,
-      toStageId: validation.id,
-      overridden: false,
-    });
-    const afterFirst = await poll(
-      () => db.select().from(dealPlaybookAssignments).where(eq(dealPlaybookAssignments.dealId, dealId)),
-      (rows) => rows.length >= 1,
-    );
+    stageChanged(dealId, STAGES.Discovery, STAGES.Validation);
+    const afterFirst = await poll(() => assignments(dealId), (rows) => rows.length >= 1);
     expect(afterFirst.length).toBe(1);
 
-    emitDealEvent("deal.stage_changed", {
-      dealId,
-      actor: ACTOR,
-      fromStageId: validation.id,
-      toStageId: commercial.id,
-      overridden: false,
-    });
-    await poll(
-      () => db.select().from(dealPlaybookAssignments).where(eq(dealPlaybookAssignments.dealId, dealId)),
-      (rows) => rows.length >= 2,
-    );
+    stageChanged(dealId, STAGES.Validation, STAGES.Commercial);
+    await poll(() => assignments(dealId), (rows) => rows.length >= 2);
 
     // Bounce back to Validation, which the deal already has an assignment
     // for — this must NOT create a second Validation row.
+    stageChanged(dealId, STAGES.Commercial, STAGES.Validation);
+    // Give the (idempotent, no-op) re-assign attempt time to run.
+    await new Promise((r) => setTimeout(r, 300));
+
+    const rows = await assignments(dealId);
+    expect(rows.length).toBe(2);
+    expect(rows.find((r) => r.playbookId === VALIDATION_PLAYBOOK_ID)?.id).toBe(afterFirst[0].id);
+  });
+
+  it("supersedes a stale assignment even when the new stage has no playbook of its own", async () => {
+    const dealId = await createDeal(STAGES.Discovery);
+
+    stageChanged(dealId, STAGES.Discovery, STAGES.Validation);
+    await poll(() => assignments(dealId), (rows) => rows.length >= 1);
+
+    // Procurement has no playbook configured. The deal has still moved past
+    // Validation, so its open steps must stop accruing overdue/adherence
+    // penalties against a playbook it has left behind.
+    stageChanged(dealId, STAGES.Validation, STAGES.Procurement);
+    const superseded = await poll(
+      () => assignments(dealId),
+      (rows) => rows.every((r) => r.status === "Superseded"),
+    );
+
+    expect(superseded).toHaveLength(1);
+    expect(superseded[0].status).toBe("Superseded");
+  });
+
+  it("writes nothing when the event carries no catalystApp", async () => {
+    const dealId = await createDeal(STAGES.Discovery);
+    stageChanged(dealId, STAGES.Discovery, STAGES.Validation, false);
+    await new Promise((r) => setTimeout(r, 300));
+    expect(await assignments(dealId)).toHaveLength(0);
+  });
+
+  it("ignores an event for a stage id that does not exist", async () => {
+    const dealId = await createDeal(STAGES.Discovery);
     emitDealEvent("deal.stage_changed", {
       dealId,
       actor: ACTOR,
-      fromStageId: commercial.id,
-      toStageId: validation.id,
+      fromStageId: STAGES.Discovery,
+      toStageId: 9999,
       overridden: false,
+      catalystApp: app(),
     });
-    // Give the (idempotent, no-op) re-assign attempt time to run.
-    await new Promise((r) => setTimeout(r, 1500));
-
-    const rows = await db
-      .select()
-      .from(dealPlaybookAssignments)
-      .where(eq(dealPlaybookAssignments.dealId, dealId));
-    expect(rows.length).toBe(2);
-    expect(rows.find((r) => r.playbookId === afterFirst[0].playbookId)?.id).toBe(afterFirst[0].id);
+    await new Promise((r) => setTimeout(r, 200));
+    expect(await assignments(dealId)).toHaveLength(0);
+    // Sanity: the fixture id above really is absent, so this isn't passing for
+    // the wrong reason.
+    expect(store.rows("pipeline_stages").some((s) => s["id"] === "9999")).toBe(false);
   });
 });

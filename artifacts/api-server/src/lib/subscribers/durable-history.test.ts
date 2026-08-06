@@ -1,97 +1,100 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from "vitest";
-import { and, eq, inArray } from "drizzle-orm";
+import { initCatalystApp, createEnterpriseDealsRepo } from "@workspace/db/catalyst";
 import {
-  db,
-  pool,
-  enterpriseDeals,
-  pipelineStages,
-  pricingModels,
-  servicesTiers,
-  dealActivityLog,
-  dealSnapshots,
-  dealHealthHistory,
-} from "@workspace/db";
+  installCatalystFake,
+  seedStandardLookups,
+  STAGES,
+  PRICING_MODEL_ID,
+  SERVICES_TIER_ID,
+  type CatalystTestStore,
+} from "../../test-support/catalyst-test-app";
+import { cache } from "../cache";
 import { emitDealEvent } from "../events";
-import { registerSubscribers, unregisterSubscribers } from "./index";
+import { registerActivityLogger } from "./activity-logger";
+import { registerSnapshotService } from "./snapshot-service";
+import { registerHealthTracker } from "./health-tracker";
 
 /**
- * Integration tests for the Phase 2 durable-history subscribers. They register
- * the real event-bus subscribers and exercise them against the live database,
- * asserting that domain events durably append the expected edc_v2 rows and that
- * per-deal serialization prevents duplicate health-history rows.
+ * Integration tests for the Phase 2 durable-history subscribers: the real
+ * event-bus subscribers are registered and driven against the in-memory Data
+ * Store (test-support/catalyst-test-app.ts), asserting that domain events
+ * durably append the expected v2 rows and that per-deal serialization prevents
+ * duplicate health-history rows.
  *
- * Events are dispatched fire-and-forget through the bus, so assertions poll the
- * database until the expected rows materialize (or a timeout elapses).
+ * Every event carries `catalystApp` explicitly. That is not a test shortcut —
+ * it is the contract: each of these subscribers no-ops when `event.catalystApp`
+ * is absent (see lib/events.ts), so an emitter that forgets it silently loses
+ * all durable history for that action. Emitting without it here would make
+ * these tests pass against a subscriber that never wrote anything.
+ *
+ * Events are dispatched fire-and-forget through the bus, so assertions poll
+ * until the expected rows materialize (or a timeout elapses).
  */
 
 const ACTOR = "vitest";
-const createdDealIds: string[] = [];
+
+let store: CatalystTestStore;
+let seq = 0;
+let disposers: Array<() => void> = [];
+
+const app = () => initCatalystApp({ headers: {} });
 
 async function poll<T>(
-  fn: () => Promise<T>,
+  fn: () => T,
   predicate: (v: T) => boolean,
-  timeoutMs = 10_000,
+  timeoutMs = 5_000,
 ): Promise<T> {
   const start = Date.now();
-  let last = await fn();
+  let last = fn();
   while (!predicate(last)) {
     if (Date.now() - start > timeoutMs) return last;
-    await new Promise((r) => setTimeout(r, 100));
-    last = await fn();
+    await new Promise((r) => setTimeout(r, 10));
+    last = fn();
   }
   return last;
 }
 
+const rowsFor = (table: string, dealId: string) =>
+  store.rows(table).filter((r) => r["deal_id"] === dealId);
+
 async function createDeal(name: string): Promise<string> {
-  const [stage] = await db.select().from(pipelineStages).limit(1);
-  const [pricing] = await db.select().from(pricingModels).limit(1);
-  const [tier] = await db.select().from(servicesTiers).limit(1);
-  const [row] = await db
-    .insert(enterpriseDeals)
-    .values({
-      dealName: `${name} ${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-      accountName: `Acct ${name} ${Math.random().toString(36).slice(2, 8)}`,
-      accountManager: "AM",
-      technicalLead: "TL",
-      salesStageId: stage.id,
-      pricingModelId: pricing.id,
-      servicesTierId: tier.id,
-      productRevenue: "500000",
-      servicesRevenue: "100000",
-    })
-    .returning({ id: enterpriseDeals.id });
-  createdDealIds.push(row.id);
-  return row.id;
+  const deal = await createEnterpriseDealsRepo(app()).create({
+    dealName: `${name} ${seq}`,
+    accountName: `Acct ${name} ${seq++}`,
+    accountManager: "AM",
+    technicalLead: "TL",
+    salesStageId: STAGES.Discovery,
+    pricingModelId: PRICING_MODEL_ID,
+    servicesTierId: SERVICES_TIER_ID,
+    productRevenue: "500000",
+    servicesRevenue: "100000",
+    contractTermYears: 1,
+    dealCurrency: "USD",
+  });
+  return deal.id;
 }
 
 beforeAll(() => {
-  registerSubscribers();
+  ({ store } = installCatalystFake());
+  // Registered individually rather than through registerSubscribers(), which
+  // also kicks off the Drizzle-backed portfolio-rollup purge+warm and two
+  // wall-clock timers — neither of which is this file's subject.
+  disposers = [registerActivityLogger(), registerSnapshotService(), registerHealthTracker()];
 });
 
-afterAll(async () => {
-  unregisterSubscribers();
-  if (createdDealIds.length > 0) {
-    // edc_v2 rows cascade-delete with the parent deal.
-    await db
-      .delete(enterpriseDeals)
-      .where(inArray(enterpriseDeals.id, createdDealIds));
-  }
-  await pool.end();
+afterAll(() => {
+  for (const dispose of disposers) dispose();
+  disposers = [];
 });
 
-// Skipped post-Catalyst-migration: the activity-logger, snapshot-service, and
-// health-tracker subscribers now write to v2_deal_activity_log/v2_deal_snapshots/
-// v2_deal_health_history via Catalyst Data Store, not Drizzle/Postgres — they
-// read their Catalyst app handle off `event.catalystApp` (see lib/events.ts),
-// which only a real, migrated route handler can supply. `emitDealEvent(...)`
-// called directly from a plain Vitest test (no real Catalyst session/headers)
-// leaves `catalystApp` undefined, so the migrated subscribers correctly no-op
-// (matching the event bus's "never break the request path" contract) instead
-// of writing the Drizzle rows this file polls for — same "Data Store isn't
-// reachable from localhost" limitation already documented for
-// lookups.engine-thresholds.test.ts. Retire or rewrite as an integration test
-// against the deployed AppSail app once Slice 6 seeding lands.
-describe.skip("durable history subscribers", () => {
+beforeEach(() => {
+  store.reset();
+  seq = 0;
+  seedStandardLookups(store);
+  cache.clear();
+});
+
+describe("durable history subscribers", () => {
   it("appends activity, snapshot, and health-history rows on a gate toggle", async () => {
     const dealId = await createDeal("Gate Toggle");
 
@@ -100,45 +103,33 @@ describe.skip("durable history subscribers", () => {
       actor: ACTOR,
       gateCode: "G1",
       isCompleted: true,
+      catalystApp: app(),
     });
 
     const activity = await poll(
-      () =>
-        db
-          .select()
-          .from(dealActivityLog)
-          .where(
-            and(
-              eq(dealActivityLog.dealId, dealId),
-              eq(dealActivityLog.eventType, "gate.toggled"),
-            ),
-          ),
+      () => rowsFor("v2_deal_activity_log", dealId).filter((r) => r["event_type"] === "gate.toggled"),
       (rows) => rows.length >= 1,
     );
     expect(activity.length).toBe(1);
-    expect(activity[0].entityType).toBe("gate");
-    expect(activity[0].entityId).toBe("G1");
-    expect(activity[0].summary).toContain("G1");
+    expect(activity[0]["entity_type"]).toBe("gate");
+    expect(activity[0]["entity_id"]).toBe("G1");
+    expect(activity[0]["summary"]).toContain("G1");
 
     const snapshots = await poll(
-      () =>
-        db.select().from(dealSnapshots).where(eq(dealSnapshots.dealId, dealId)),
+      () => rowsFor("v2_deal_snapshots", dealId),
       (rows) => rows.length >= 1,
     );
     expect(snapshots.length).toBeGreaterThanOrEqual(1);
-    expect(snapshots[0].triggerEvent).toBe("gate.toggled");
+    expect(snapshots[0]["trigger_event"]).toBe("gate.toggled");
 
     const health = await poll(
-      () =>
-        db
-          .select()
-          .from(dealHealthHistory)
-          .where(eq(dealHealthHistory.dealId, dealId)),
+      () => rowsFor("v2_deal_health_history", dealId),
       (rows) => rows.length >= 1,
     );
     expect(health.length).toBeGreaterThanOrEqual(1);
-    // First-ever transition for a brand-new deal starts from null.
-    expect(health[0].fromStatus).toBeNull();
+    // First-ever transition for a brand-new deal starts from null — Data Store
+    // omits null columns entirely, so the key is simply absent.
+    expect(health[0]["from_status"]).toBeUndefined();
   });
 
   it("appends an activity row + snapshot when a blocker is created", async () => {
@@ -149,28 +140,19 @@ describe.skip("durable history subscribers", () => {
       actor: ACTOR,
       blockerId: "blk-1",
       description: "Security review pending",
+      catalystApp: app(),
     });
 
     const activity = await poll(
-      () =>
-        db
-          .select()
-          .from(dealActivityLog)
-          .where(
-            and(
-              eq(dealActivityLog.dealId, dealId),
-              eq(dealActivityLog.eventType, "blocker.created"),
-            ),
-          ),
+      () => rowsFor("v2_deal_activity_log", dealId).filter((r) => r["event_type"] === "blocker.created"),
       (rows) => rows.length >= 1,
     );
     expect(activity.length).toBe(1);
-    expect(activity[0].entityType).toBe("blocker");
-    expect(activity[0].entityId).toBe("blk-1");
+    expect(activity[0]["entity_type"]).toBe("blocker");
+    expect(activity[0]["entity_id"]).toBe("blk-1");
 
     const snapshots = await poll(
-      () =>
-        db.select().from(dealSnapshots).where(eq(dealSnapshots.dealId, dealId)),
+      () => rowsFor("v2_deal_snapshots", dealId),
       (rows) => rows.length >= 1,
     );
     expect(snapshots.length).toBeGreaterThanOrEqual(1);
@@ -178,15 +160,11 @@ describe.skip("durable history subscribers", () => {
     // The blocker.created event also drives a health reconciliation; for a
     // brand-new deal this records the first transition (from null).
     const health = await poll(
-      () =>
-        db
-          .select()
-          .from(dealHealthHistory)
-          .where(eq(dealHealthHistory.dealId, dealId)),
+      () => rowsFor("v2_deal_health_history", dealId),
       (rows) => rows.length >= 1,
     );
     expect(health.length).toBeGreaterThanOrEqual(1);
-    expect(health[0].fromStatus).toBeNull();
+    expect(health[0]["from_status"]).toBeUndefined();
   });
 
   it("appends activity, snapshot and health rows on a stage change", async () => {
@@ -195,40 +173,27 @@ describe.skip("durable history subscribers", () => {
     emitDealEvent("deal.stage_changed", {
       dealId,
       actor: ACTOR,
-      fromStageId: 1,
-      toStageId: 2,
+      fromStageId: STAGES.Discovery,
+      toStageId: STAGES.Validation,
       overridden: false,
+      catalystApp: app(),
     });
 
     const activity = await poll(
-      () =>
-        db
-          .select()
-          .from(dealActivityLog)
-          .where(
-            and(
-              eq(dealActivityLog.dealId, dealId),
-              eq(dealActivityLog.eventType, "deal.stage_changed"),
-            ),
-          ),
+      () => rowsFor("v2_deal_activity_log", dealId).filter((r) => r["event_type"] === "deal.stage_changed"),
       (rows) => rows.length >= 1,
     );
     expect(activity.length).toBe(1);
-    expect(activity[0].entityType).toBe("deal");
+    expect(activity[0]["entity_type"]).toBe("deal");
 
     const snapshots = await poll(
-      () =>
-        db.select().from(dealSnapshots).where(eq(dealSnapshots.dealId, dealId)),
+      () => rowsFor("v2_deal_snapshots", dealId),
       (rows) => rows.length >= 1,
     );
     expect(snapshots.length).toBeGreaterThanOrEqual(1);
 
     const health = await poll(
-      () =>
-        db
-          .select()
-          .from(dealHealthHistory)
-          .where(eq(dealHealthHistory.dealId, dealId)),
+      () => rowsFor("v2_deal_health_history", dealId),
       (rows) => rows.length >= 1,
     );
     expect(health.length).toBeGreaterThanOrEqual(1);
@@ -244,31 +209,37 @@ describe.skip("durable history subscribers", () => {
       dealId,
       actor: ACTOR,
       changedFields: ["salesStageId"],
+      catalystApp: app(),
     });
     emitDealEvent("deal.stage_changed", {
       dealId,
       actor: ACTOR,
-      fromStageId: 1,
-      toStageId: 2,
+      fromStageId: STAGES.Discovery,
+      toStageId: STAGES.Validation,
       overridden: false,
+      catalystApp: app(),
     });
 
     // Wait for at least one health row, then give any second reconciliation
     // ample time to (incorrectly) insert a duplicate.
-    await poll(
-      () =>
-        db
-          .select()
-          .from(dealHealthHistory)
-          .where(eq(dealHealthHistory.dealId, dealId)),
-      (rows) => rows.length >= 1,
-    );
-    await new Promise((r) => setTimeout(r, 1500));
+    await poll(() => rowsFor("v2_deal_health_history", dealId), (rows) => rows.length >= 1);
+    await new Promise((r) => setTimeout(r, 500));
 
-    const health = await db
-      .select()
-      .from(dealHealthHistory)
-      .where(eq(dealHealthHistory.dealId, dealId));
-    expect(health.length).toBe(1);
+    expect(rowsFor("v2_deal_health_history", dealId)).toHaveLength(1);
+  });
+
+  it("writes nothing at all when the event carries no catalystApp", async () => {
+    // The no-op contract: a subscriber must not throw when an unmigrated
+    // emitter omits the handle (lib/events.ts), but it must also not silently
+    // look like it succeeded. This is the case that would make every assertion
+    // above vacuous if the handle were left off.
+    const dealId = await createDeal("No Catalyst App");
+
+    emitDealEvent("gate.toggled", { dealId, actor: ACTOR, gateCode: "G1", isCompleted: true });
+
+    await new Promise((r) => setTimeout(r, 300));
+    expect(rowsFor("v2_deal_activity_log", dealId)).toHaveLength(0);
+    expect(rowsFor("v2_deal_snapshots", dealId)).toHaveLength(0);
+    expect(rowsFor("v2_deal_health_history", dealId)).toHaveLength(0);
   });
 });
