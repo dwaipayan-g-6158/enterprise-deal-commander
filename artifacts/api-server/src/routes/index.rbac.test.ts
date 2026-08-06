@@ -7,6 +7,7 @@ import router from "./index";
 import { HttpError, sendError } from "../lib/http";
 import type { AuthedRequest } from "../lib/auth";
 import { READER_WRITE_METHOD_ALLOWLIST } from "../lib/rbac";
+import { installCatalystFake, seedStandardLookups } from "../test-support/catalyst-test-app";
 import { authSessionRouter } from "./auth";
 import usersRouter from "./users";
 import dealsRouter from "./deals";
@@ -174,6 +175,28 @@ const adminHeaders = { [TEST_ACTOR_HEADER]: ADMIN_ID };
 const readerHeaders = { [TEST_ACTOR_HEADER]: READER_ID };
 
 beforeAll(async () => {
+  // Point the Data Store at an in-memory store so the handful of pinned
+  // reader-success assertions below can reach real handlers. The sweep itself
+  // is unaffected: a 403 is returned before any handler runs, so those
+  // hundreds of requests never touch the store either way.
+  const { store } = installCatalystFake();
+  seedStandardLookups(store);
+  // Two commanders, so "never includes a passwordHash" is asserted against
+  // real rows rather than an empty list. password_hash IS a real column on this
+  // table (a mandatory legacy one), which is exactly why the assertion matters.
+  store.seedRaw("commanders", [
+    {
+      id: ADMIN_ID, username: ADMIN_USERNAME, display_name: "RBAC Sweep Admin",
+      role: "admin", is_active: "true", password_hash: "legacy-unused",
+      created_at: "2026-01-01 00:00:00:000",
+    },
+    {
+      id: READER_ID, username: READER_USERNAME, display_name: "RBAC Sweep Reader",
+      role: "reader", is_active: "true", password_hash: "legacy-unused",
+      created_at: "2026-01-01 00:00:00:000",
+    },
+  ]);
+
   await new Promise<void>((resolve) => {
     server = buildTestApp().listen(0, () => resolve());
   });
@@ -233,15 +256,9 @@ describe("public surface — unauthenticated access", () => {
   // exactly like any other unregistered path — see "unknown path with no
   // cookie is 401" below, which already covers the shape.
 
-  // Skipped post-Catalyst-migration: routes/shared.ts now reads bat_signals
-  // via Catalyst Data Store, not Drizzle/Postgres. `initCatalystApp(req)`
-  // requires real Catalyst session/headers (injected by the AppSail
-  // reverse proxy) to succeed — a real Express `req` from this in-process
-  // test server still isn't a real AppSail request, so it 500s the same way
-  // a fake `Request` object does in the other Catalyst-backed route tests
-  // (see deals.sort.test.ts etc.). Retire or rewrite as an integration test
-  // against the deployed AppSail app once Slice 6 seeding lands.
-  it.skip("GET /api/v1/share/:token for a well-formed but unknown token is a 404 from the real handler", async () => {
+  // Runs against the in-memory Data Store installed in beforeAll: bat_signals
+  // is empty, so a well-formed token reaches the handler's own notFound branch.
+  it("GET /api/v1/share/:token for a well-formed but unknown token is a 404 from the real handler", async () => {
     // bat_signals.token is a `uuid` column — a syntactically valid but
     // nonexistent UUID exercises the route's own `if (!signal) throw
     // notFound()` branch. (A malformed token like "does-not-exist" 500s
@@ -273,36 +290,19 @@ describe("public surface — unauthenticated access", () => {
 });
 
 describe("readers read everything", () => {
-  // Skipped post-Catalyst-migration: routes/deals.ts now reads
-  // enterprise_deals via Catalyst Data Store, not Drizzle/Postgres.
-  // `initCatalystApp(req)` requires real Catalyst session/headers (injected
-  // by the AppSail reverse proxy) to succeed — a real Express `req` from
-  // this in-process test server still isn't a real AppSail request, so it
-  // 500s the same way a fake `Request` object does in the other
-  // Catalyst-backed route tests (see deals.sort.test.ts etc.). The
-  // reader-vs-admin 403 gate itself (requireWriteRole, tested exhaustively
-  // above) is unaffected — this only skips the one test asserting the real
-  // deals handler's success-path status code. Retire or rewrite as an
-  // integration test against the deployed AppSail app once Slice 6 seeding
-  // lands.
-  it.skip("GET /api/v1/deals is 200 for a reader", async () => {
+  // The success-path counterpart to the sweep above: proves a reader is not
+  // merely refused writes but is genuinely served reads.
+  it("GET /api/v1/deals is 200 for a reader", async () => {
     const res = await fetch(`${base}/api/v1/deals`, { headers: readerHeaders });
     expect(res.status).toBe(200);
   });
 
-  // Skipped post-Catalyst-migration: routes/settings-audit.ts now reads
-  // engine_thresholds/v2_scoring_model_weights via Catalyst Data Store, not
-  // Drizzle/Postgres — same "not a real AppSail request" limitation as
-  // GET /api/v1/deals above. The reader-vs-admin gate itself is unaffected.
-  it.skip("GET /api/v1/settings/config/export is 200 for a reader", async () => {
+  it("GET /api/v1/settings/config/export is 200 for a reader", async () => {
     const res = await fetch(`${base}/api/v1/settings/config/export`, { headers: readerHeaders });
     expect(res.status).toBe(200);
   });
 
-  // Skipped post-Catalyst-migration (Slice 4): routes/users.ts now reads
-  // `commanders` via Catalyst Data Store, not Drizzle/Postgres — same
-  // "not a real AppSail request" limitation as GET /api/v1/deals above.
-  it.skip("GET /api/v1/users is 200 for a reader and never includes a passwordHash field", async () => {
+  it("GET /api/v1/users is 200 for a reader and never includes a passwordHash field", async () => {
     const res = await fetch(`${base}/api/v1/users`, { headers: readerHeaders });
     expect(res.status).toBe(200);
     const body = (await res.json()) as { data: Array<Record<string, unknown>> };

@@ -1,7 +1,14 @@
 import { describe, it, expect, beforeAll, beforeEach } from "vitest";
 import type { Request, Response } from "express";
 import { initCatalystApp, createEnterpriseDealsRepo, formatCatalystDateTime } from "@workspace/db/catalyst";
-import { installCatalystFake, type CatalystTestStore } from "../test-support/catalyst-test-app";
+import {
+  installCatalystFake,
+  seedStandardLookups,
+  STAGES,
+  PRICING_MODEL_ID,
+  SERVICES_TIER_ID,
+  type CatalystTestStore,
+} from "../test-support/catalyst-test-app";
 import router from "./deals";
 
 // Coverage for GET /deals?state= — the four lifecycle predicates. Per the audit
@@ -40,19 +47,9 @@ async function callList(query: Record<string, string>): Promise<{ id: string }[]
 let store: CatalystTestStore;
 let seq = 0;
 
-const STAGE_ID = 1;
-const PRICING_ID = 1;
-const TIER_ID = 1;
-
-function seedLookups(): void {
-  store.seedRaw("pipeline_stages", [
-    { id: String(STAGE_ID), stage_name: "Closed-Lost", stage_order: "7", is_active: "true" },
-  ]);
-  store.seedRaw("pricing_models", [
-    { id: String(PRICING_ID), model_name: "Annual Subscription", is_active: "true" },
-  ]);
-  store.seedRaw("services_tiers", [{ id: String(TIER_ID), tier_name: "None", is_active: "true" }]);
-}
+const STAGE_ID = STAGES["Closed-Lost"];
+const PRICING_ID = PRICING_MODEL_ID;
+const TIER_ID = SERVICES_TIER_ID;
 
 /**
  * Created through the real repository so the row shape is real, then patched
@@ -93,7 +90,7 @@ beforeAll(() => {
 beforeEach(() => {
   store.reset();
   seq = 0;
-  seedLookups();
+  seedStandardLookups(store);
 });
 
 describe("GET /deals?state=... — all four predicates", () => {

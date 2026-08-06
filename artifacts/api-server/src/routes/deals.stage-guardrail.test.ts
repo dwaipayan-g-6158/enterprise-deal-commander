@@ -1,15 +1,18 @@
-import { describe, it, expect, afterAll } from "vitest";
+import { describe, it, expect, beforeAll, beforeEach } from "vitest";
 import type { Request, Response } from "express";
-import { eq, inArray } from "drizzle-orm";
 import {
-  db,
-  pool,
-  enterpriseDeals,
-  pricingModels,
-  servicesTiers,
-  pipelineStages,
-  stakeholders,
-} from "@workspace/db";
+  initCatalystApp,
+  createEnterpriseDealsRepo,
+  createStakeholdersRepo,
+} from "@workspace/db/catalyst";
+import {
+  installCatalystFake,
+  seedStandardLookups,
+  STAGES,
+  PRICING_MODEL_ID,
+  SERVICES_TIER_ID,
+  type CatalystTestStore,
+} from "../test-support/catalyst-test-app";
 import dealsRouter from "./deals";
 import dispositionsRouter from "./dispositions";
 
@@ -35,35 +38,29 @@ function getHandler(
 }
 
 const actor = { id: "test-actor", username: "test", displayName: "Stage Guardrail Test" };
-const createdDealIds: string[] = [];
 
-async function findStageId(stageName: string): Promise<number> {
-  const stages = await db.select().from(pipelineStages);
-  const stage = stages.find((s) => s.stageName === stageName);
-  if (!stage) throw new Error(`Seed data missing pipeline stage "${stageName}"`);
-  return stage.id;
+let store: CatalystTestStore;
+let seq = 0;
+
+function findStageId(stageName: keyof typeof STAGES): number {
+  return STAGES[stageName];
 }
 
-async function createDeal(tag: string, stageName: string): Promise<string> {
-  const [pricing] = await db.select().from(pricingModels).limit(1);
-  const [tier] = await db.select().from(servicesTiers).limit(1);
-  const stageId = await findStageId(stageName);
-
-  const [deal] = await db
-    .insert(enterpriseDeals)
-    .values({
-      dealName: `Stage Guardrail ${tag} ${Date.now()}`,
-      accountName: `Stage Guardrail Acct ${tag} ${Date.now()}`,
-      accountManager: "AM",
-      technicalLead: "TL",
-      salesStageId: stageId,
-      pricingModelId: pricing.id,
-      servicesTierId: tier.id,
-      productRevenue: "1000.00",
-      servicesRevenue: "0",
-    })
-    .returning({ id: enterpriseDeals.id });
-  createdDealIds.push(deal.id);
+/** Created through the real repository, so the stored row shape is the real one. */
+async function createDeal(tag: string, stageName: keyof typeof STAGES): Promise<string> {
+  const deal = await createEnterpriseDealsRepo(initCatalystApp({ headers: {} })).create({
+    dealName: `Stage Guardrail ${tag} ${seq}`,
+    accountName: `Stage Guardrail Acct ${tag} ${seq++}`,
+    accountManager: "AM",
+    technicalLead: "TL",
+    salesStageId: findStageId(stageName),
+    pricingModelId: PRICING_MODEL_ID,
+    servicesTierId: SERVICES_TIER_ID,
+    productRevenue: "1000.00",
+    servicesRevenue: "0",
+    contractTermYears: 1,
+    dealCurrency: "USD",
+  });
   return deal.id;
 }
 
@@ -73,7 +70,7 @@ async function callUpdate(id: string, body: Record<string, unknown>) {
   let thrown:
     | (Error & { status?: number; code?: string; patternCodes?: string[] })
     | undefined;
-  const fakeReq = { params: { id }, body, actor } as unknown as Request;
+  const fakeReq = { params: { id }, body, actor, headers: {}, query: {} } as unknown as Request;
   const fakeRes = {
     json: (b: unknown) => {
       captured = b;
@@ -103,6 +100,8 @@ async function callDisposition(
     params: { dealId, patternCode },
     body,
     actor,
+    headers: {},
+    query: {},
   } as unknown as Request;
   const fakeRes = {
     json: (b: unknown) => {
@@ -118,31 +117,26 @@ async function callDisposition(
 }
 
 async function currentStage(id: string): Promise<number> {
-  const [row] = await db
-    .select({ salesStageId: enterpriseDeals.salesStageId })
-    .from(enterpriseDeals)
-    .where(eq(enterpriseDeals.id, id));
-  return row.salesStageId;
+  const deal = await createEnterpriseDealsRepo(initCatalystApp({ headers: {} })).getById(id);
+  if (!deal) throw new Error(`deal ${id} vanished`);
+  return deal.salesStageId;
 }
 
-afterAll(async () => {
-  if (createdDealIds.length > 0) {
-    await db.delete(enterpriseDeals).where(inArray(enterpriseDeals.id, createdDealIds));
-  }
-  await pool.end();
+beforeAll(() => {
+  ({ store } = installCatalystFake());
 });
 
-// Skipped post-Catalyst-migration: routes/deals.ts and routes/dispositions.ts
-// now read/write enterprise_deals + deal_alert_dispositions via Catalyst Data
-// Store, not Drizzle/Postgres. `initCatalystApp(req)` requires real Catalyst
-// session/headers to succeed — a fake `Request` object in a local Vitest run
-// can never provide that (same "Data Store isn't reachable from localhost"
-// limitation already documented for lookups.engine-thresholds.test.ts and the
-// sibling Customer-Insight-Engine project). This file's fixtures also seed via
-// Drizzle directly, which the migrated handlers no longer read. Retire or
-// rewrite as an integration test against the deployed AppSail app once Slice 6
-// seeding lands.
-describe.skip("PUT/PATCH /deals/:id — stage-advancement guardrail blocking-alert predicate", () => {
+beforeEach(() => {
+  store.reset();
+  seq = 0;
+  seedStandardLookups(store);
+});
+
+// Runs against the in-memory Data Store (test-support/catalyst-test-app.ts).
+// `engine_thresholds` is deliberately left empty: getThresholds() overlays DB
+// rows onto DEFAULT_THRESHOLDS, so the risk engine here runs on exactly the
+// configuration a fresh install has.
+describe("PUT/PATCH /deals/:id — stage-advancement guardrail blocking-alert predicate", () => {
   it("acknowledging a RED alert does NOT waive the stage-advancement guardrail", async () => {
     // Validation is past Discovery with no gates completed, so
     // MISSING_STRUCTURAL_ANCHOR (RED, weight 90) fires unconditionally.
@@ -169,8 +163,7 @@ describe.skip("PUT/PATCH /deals/:id — stage-advancement guardrail blocking-ale
     // Created in Discovery so MISSING_STRUCTURAL_ANCHOR does not also fire —
     // isolates HOSTILE_STAKEHOLDER as the blocking pattern under test.
     const id = await createDeal("hostile-stakeholder", "Discovery");
-    await db.insert(stakeholders).values({
-      dealId: id,
+    await createStakeholdersRepo(initCatalystApp({ headers: {} })).create(id, {
       name: "Hostile VP",
       roleType: "Economic Buyer",
       influenceLevel: "High",

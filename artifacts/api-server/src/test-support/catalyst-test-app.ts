@@ -108,10 +108,19 @@ export class CatalystTestStore {
     for (const c of columns) t.uniques.add(c);
   }
 
-  /** Insert raw rows exactly as Data Store would hold them. */
+  /**
+   * Insert raw rows exactly as Data Store would hold them.
+   *
+   * Column-checked like a real write. This originally was not, and a fixture
+   * seeding `stage_order` (the column is `sort_order`) sailed through — the
+   * route then read `undefined`, silently skipped its stage-advancement
+   * guardrail, and the test "passed" while asserting nothing. A fake that
+   * validates writes but not fixtures just moves the blind spot.
+   */
   seedRaw(name: string, rows: Array<Record<string, unknown>>): void {
     const t = this.table(name);
     for (const row of rows) {
+      this.assertColumns(name, row);
       const stored = this.toStored(row);
       if (!t.columns) t.columns = new Set([...Object.keys(stored), "ROWID"]);
       stored["ROWID"] ??= String(this.nextRowId++);
@@ -282,6 +291,49 @@ export interface InstalledCatalystFake {
  * Point `initCatalystApp`/`initCatalystAdminApp` at an in-memory store for the
  * rest of the process. Call `store.reset()` between tests.
  */
+/**
+ * The lookup rows almost every route joins against, matching the real seeded
+ * ids and names (verified against the deployed app, 2026-08-07). Most fixtures
+ * want these and nothing else, and getting a stage name or id wrong makes a
+ * test assert something subtly different from production.
+ *
+ * `engine_thresholds` is deliberately NOT seeded: `getThresholds` starts from
+ * DEFAULT_THRESHOLDS and only overlays whatever rows exist, so an empty table
+ * gives a test the same engine configuration a fresh install has.
+ */
+export const STAGES = {
+  Discovery: 1,
+  Validation: 2,
+  Commercial: 3,
+  Procurement: 4,
+  "Closed-Won": 5,
+  "Closed-Lost": 6,
+} as const;
+
+export const PRICING_MODEL_ID = 1;
+export const SERVICES_TIER_ID = 1;
+
+export function seedStandardLookups(store: CatalystTestStore): void {
+  store.seedRaw(
+    "pipeline_stages",
+    // `sort_order`, NOT `stage_order` — the stage-advancement guardrail reads
+    // it, and getting the name wrong makes `isAdvancing` false, which silently
+    // disables the guardrail instead of failing.
+    Object.entries(STAGES).map(([stage_name, id]) => ({
+      id: String(id),
+      stage_name,
+      sort_order: String(id),
+      is_active: "true",
+    })),
+  );
+  store.seedRaw("pricing_models", [
+    { id: String(PRICING_MODEL_ID), model_name: "Annual Subscription", is_active: "true" },
+  ]);
+  store.seedRaw("services_tiers", [
+    { id: String(SERVICES_TIER_ID), tier_name: "None", is_active: "true" },
+  ]);
+}
+
 export function installCatalystFake(): InstalledCatalystFake {
   const store = new CatalystTestStore();
   store.declareFromLiveSchema();

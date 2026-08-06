@@ -1,7 +1,14 @@
 import { describe, it, expect, beforeAll, beforeEach } from "vitest";
 import type { Request, Response } from "express";
 import { initCatalystApp, createEnterpriseDealsRepo } from "@workspace/db/catalyst";
-import { installCatalystFake, type CatalystTestStore } from "../test-support/catalyst-test-app";
+import {
+  installCatalystFake,
+  seedStandardLookups,
+  STAGES,
+  PRICING_MODEL_ID,
+  SERVICES_TIER_ID,
+  type CatalystTestStore,
+} from "../test-support/catalyst-test-app";
 import router from "./deals";
 
 // Regression coverage for the `sort` query param on GET /deals — previously
@@ -49,22 +56,9 @@ async function callList(query: Record<string, string>): Promise<DealSummary[]> {
 
 let store: CatalystTestStore;
 
-const STAGE_ID = 1;
-const PRICING_ID = 1;
-const TIER_ID = 1;
-
-/** The lookup rows the deal list joins against, in raw Data Store shape. */
-function seedLookups(): void {
-  store.seedRaw("pipeline_stages", [
-    { id: String(STAGE_ID), stage_name: "Discovery", stage_order: "1", is_active: "true" },
-  ]);
-  store.seedRaw("pricing_models", [
-    { id: String(PRICING_ID), model_name: "Annual Subscription", is_active: "true" },
-  ]);
-  store.seedRaw("services_tiers", [
-    { id: String(TIER_ID), tier_name: "None", is_active: "true" },
-  ]);
-}
+const STAGE_ID = STAGES.Discovery;
+const PRICING_ID = PRICING_MODEL_ID;
+const TIER_ID = SERVICES_TIER_ID;
 
 /** Created through the real repository, so the stored row shape is the real one. */
 async function createDeal(tag: string, winProbabilityPct: number | null): Promise<string> {
@@ -92,7 +86,7 @@ beforeAll(() => {
 
 beforeEach(() => {
   store.reset();
-  seedLookups();
+  seedStandardLookups(store);
 });
 
 describe("GET /deals?sort=... — allowlist and null-safe numeric ordering", () => {
