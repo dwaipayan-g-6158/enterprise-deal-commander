@@ -395,6 +395,16 @@ export function createDealCrossSellsRepo(catalystApp: CatalystApp) {
           notes: r["notes"] || null,
         }));
     },
+    /** Every (deal, product) cross-sell link across every deal — the product-mix attach/whitespace matrix. */
+    async listAll(): Promise<DealCrossSell[]> {
+      const rows = await fetchAllRows(catalystApp, TABLE.dealCrossSells);
+      return rows.map((r) => ({
+        dealId: r["deal_id"],
+        productId: r["product_id"],
+        isPitched: parseBoolean(r["is_pitched"]),
+        notes: r["notes"] || null,
+      }));
+    },
     /** Replace the full pitched-product set for a deal (matches the Drizzle delete-then-insert semantics). */
     async replaceSet(dealId: string, productIds: string[]): Promise<void> {
       const rows = await fetchAllRows(catalystApp, TABLE.dealCrossSells);

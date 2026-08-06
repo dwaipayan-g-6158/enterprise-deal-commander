@@ -1,15 +1,14 @@
 import { Router, type IRouter, type Request, type Response } from "express";
-import { and, eq, isNull, notInArray } from "drizzle-orm";
 import {
-  db,
-  enterpriseDeals,
-  pipelineStages,
-  pricingModels,
-  productCatalog,
-  dealCrossSells,
-  dealProductInterests,
-  lossArchetypes,
-} from "@workspace/db";
+  initCatalystApp,
+  createEnterpriseDealsRepo,
+  createPipelineStagesRepo,
+  createPricingModelsRepo,
+  createProductCatalogRepo,
+  createDealCrossSellsRepo,
+  createDealProductInterestsRepo,
+  createLossArchetypesRepo,
+} from "@workspace/db/catalyst";
 import {
   GetDealIntelligenceParams,
   GetDealIntelligenceResponse,
@@ -21,7 +20,7 @@ import {
 } from "@workspace/api-zod";
 import { calculateFlatTCV } from "@workspace/engine";
 import { notFound } from "../lib/http";
-import { contextualAlertsFor } from "../lib/contextual-alerts";
+import { contextualAlertsFor } from "../lib/catalyst/contextual-alerts";
 import { cache, CacheKeys, CacheTtl } from "../lib/cache";
 import {
   type Intel,
@@ -30,12 +29,20 @@ import {
   computePortfolioAnalysis,
   mapWithConcurrency,
   INTEL_CONCURRENCY,
-} from "../lib/portfolio";
-import {
-  readSummaryRollup,
-  readPortfolioAnalysisRollup,
-} from "../lib/portfolio-rollups";
-import { notDeletedFilter } from "../lib/deal-filters";
+} from "../lib/catalyst/portfolio";
+import { CLOSED_STAGES } from "../lib/deal-filters";
+
+// The precomputed `portfolio_rollups` fast path that used to front the summary
+// and portfolio-analysis reads is deliberately gone from this file.
+//
+// It was only ever a cache in front of the same compute, filled by the periodic
+// refresh job in lib/subscribers/index.ts — and that job is a wall-clock
+// setInterval, which AppSail never runs, because it kills idle instances after
+// five minutes. So on Catalyst the rollup table is permanently empty and every
+// read fell through to the live compute anyway; keeping the reader would have
+// meant keeping lib/portfolio-rollups.ts's Drizzle dependency for a branch that
+// can never be taken. Restoring it belongs with the Job Scheduling slice, which
+// is what gives those jobs somewhere to actually run.
 
 // Auth + write-role enforcement is applied centrally in routes/index.ts.
 const router: IRouter = Router();
@@ -44,11 +51,12 @@ router.get(
   "/deals/:dealId/intelligence",
   async (req: Request, res: Response) => {
     const { dealId } = GetDealIntelligenceParams.parse(req.params);
-    const data = await cachedIntel(dealId);
+    const catalystApp = initCatalystApp(req);
+    const data = await cachedIntel(catalystApp, dealId);
     if (!data) throw notFound("Deal not found");
     // Merge V2 competitive (F2) + stakeholder (F8) alerts without mutating the
     // cached object: clone governance + alerts before appending.
-    const extra = await contextualAlertsFor(dealId);
+    const extra = await contextualAlertsFor(catalystApp, dealId);
     const merged = extra.length
       ? {
           ...data,
@@ -63,35 +71,33 @@ router.get(
 );
 
 /**
- * Portfolio rollups are precomputed into `edc_v2.portfolio_rollups` by the
- * periodic refresh job and invalidated on any deal mutation. Reads serve the
- * precomputed rollup when present, falling back to a short-TTL live compute
- * (`summary:` cache tier) until the rollup is repopulated.
+ * Portfolio-wide summary. Served from the short-TTL `summary:` cache tier,
+ * which the event bus drops on any deal mutation — see the note at the top of
+ * this file for why the precomputed-rollup fast path is not in the Catalyst
+ * read path.
  */
 router.get(
   "/intelligence/summary",
-  async (_req: Request, res: Response) => {
-    const data =
-      (await readSummaryRollup()) ??
-      (await cache.wrap(
-        `${CacheKeys.summaryPrefix}overview`,
-        CacheTtl.summary,
-        () => computeSummary(),
-      ));
+  async (req: Request, res: Response) => {
+    const catalystApp = initCatalystApp(req);
+    const data = await cache.wrap(
+      `${CacheKeys.summaryPrefix}overview`,
+      CacheTtl.summary,
+      () => computeSummary(catalystApp),
+    );
     res.json(GetIntelligenceSummaryResponse.parse({ data }));
   },
 );
 
 router.get(
   "/intelligence/portfolio-analysis",
-  async (_req: Request, res: Response) => {
-    const data =
-      (await readPortfolioAnalysisRollup()) ??
-      (await cache.wrap(
-        `${CacheKeys.summaryPrefix}portfolio-analysis`,
-        CacheTtl.summary,
-        () => computePortfolioAnalysis(),
-      ));
+  async (req: Request, res: Response) => {
+    const catalystApp = initCatalystApp(req);
+    const data = await cache.wrap(
+      `${CacheKeys.summaryPrefix}portfolio-analysis`,
+      CacheTtl.summary,
+      () => computePortfolioAnalysis(catalystApp),
+    );
     res.json(GetPortfolioAnalysisResponse.parse({ data }));
   },
 );
@@ -101,30 +107,33 @@ router.get(
  * by suite, and per-product attach (pitched/interested) vs the total active
  * deal count. Powers the suite-mix charts and the whitespace heatmap.
  */
-router.get("/intelligence/product-mix", async (_req: Request, res: Response) => {
-  const deals = await db
-    .select({
-      id: enterpriseDeals.id,
-      dealName: enterpriseDeals.dealName,
-      accountName: enterpriseDeals.accountName,
-      salesStage: pipelineStages.stageName,
-      productRevenue: enterpriseDeals.productRevenue,
-      contractTermYears: enterpriseDeals.contractTermYears,
-      servicesRevenue: enterpriseDeals.servicesRevenue,
-      pricingModel: pricingModels.modelName,
-    })
-    .from(enterpriseDeals)
-    .innerJoin(pricingModels, eq(enterpriseDeals.pricingModelId, pricingModels.id))
-    .innerJoin(pipelineStages, eq(enterpriseDeals.salesStageId, pipelineStages.id))
-    .where(
-      and(
-        isNull(enterpriseDeals.deletedAt),
-        isNull(enterpriseDeals.archivedAt),
-        // "Active" pipeline excludes closed deals — a Closed-Lost/Won deal is
-        // no longer open whitespace or live pipeline.
-        notInArray(pipelineStages.stageName, ["Closed-Won", "Closed-Lost"]),
-      ),
-    );
+router.get("/intelligence/product-mix", async (req: Request, res: Response) => {
+  const catalystApp = initCatalystApp(req);
+  const [allDeals, stages, models] = await Promise.all([
+    createEnterpriseDealsRepo(catalystApp).list(),
+    createPipelineStagesRepo(catalystApp).listAll(),
+    createPricingModelsRepo(catalystApp).listAll(),
+  ]);
+  const stageNameById = new Map(stages.map((s) => [s.id, s.stageName]));
+  const modelNameById = new Map(models.map((m) => [m.id, m.modelName]));
+  const deals = allDeals
+    // Both joins in the original were INNER, so a deal whose stage or pricing
+    // model no longer resolves is dropped rather than defaulted.
+    .filter((d) => stageNameById.has(d.salesStageId) && modelNameById.has(d.pricingModelId))
+    .filter((d) => d.deletedAt == null && d.archivedAt == null)
+    // "Active" pipeline excludes closed deals — a Closed-Lost/Won deal is
+    // no longer open whitespace or live pipeline.
+    .filter((d) => !CLOSED_STAGES.includes(stageNameById.get(d.salesStageId)!))
+    .map((d) => ({
+      id: d.id,
+      dealName: d.dealName,
+      accountName: d.accountName,
+      salesStage: stageNameById.get(d.salesStageId)!,
+      productRevenue: d.productRevenue,
+      contractTermYears: d.contractTermYears,
+      servicesRevenue: d.servicesRevenue,
+      pricingModel: modelNameById.get(d.pricingModelId)!,
+    }));
   const activeIds = new Set(deals.map((d) => d.id));
   const totalActiveDeals = activeIds.size;
   const tcvById = new Map(
@@ -151,14 +160,13 @@ router.get("/intelligence/product-mix", async (_req: Request, res: Response) => 
     };
   };
 
-  const catalog = await db
-    .select()
-    .from(productCatalog)
-    .where(eq(productCatalog.isActive, true));
+  const catalog = await createProductCatalogRepo(catalystApp).listActive();
   const productById = new Map(catalog.map((c) => [c.id, c]));
 
-  const pitched = await db.select().from(dealCrossSells);
-  const interests = await db.select().from(dealProductInterests);
+  const [pitched, interests] = await Promise.all([
+    createDealCrossSellsRepo(catalystApp).listAll(),
+    createDealProductInterestsRepo(catalystApp).listAll(),
+  ]);
 
   // Suites each active deal touches (via pitched cross-sells or anchor interests).
   const dealSuites = new Map<string, Set<string>>();
@@ -256,23 +264,35 @@ router.get("/analytics/autopsy", async (req: Request, res: Response) => {
   // being merely client-side-enforced on CloseDealDialog), and an innerJoin
   // silently dropped every such deal from this whole tab. Those deals now
   // land in a synthetic "Unclassified" bucket instead of disappearing.
-  const filters = [eq(pipelineStages.stageName, "Closed-Lost"), notDeletedFilter];
-  if (q.archetypeId != null) {
-    filters.push(eq(enterpriseDeals.lossArchetypeId, q.archetypeId));
-  }
-  const lostRows = await db
-    .select({
-      id: enterpriseDeals.id,
-      dealName: enterpriseDeals.dealName,
-      accountName: enterpriseDeals.accountName,
-      salesStage: pipelineStages.stageName,
-      lossArchetypeId: enterpriseDeals.lossArchetypeId,
-      archetypeName: lossArchetypes.archetypeName,
-    })
-    .from(enterpriseDeals)
-    .innerJoin(pipelineStages, eq(enterpriseDeals.salesStageId, pipelineStages.id))
-    .leftJoin(lossArchetypes, eq(enterpriseDeals.lossArchetypeId, lossArchetypes.id))
-    .where(and(...filters));
+  const catalystApp = initCatalystApp(req);
+  const [allDeals, stages, archetypes] = await Promise.all([
+    createEnterpriseDealsRepo(catalystApp).list(),
+    createPipelineStagesRepo(catalystApp).listAll(),
+    // listAll, not listActive: the original left-joined the table with no
+    // is_active predicate, so a deal still resolves the name of an archetype
+    // that has since been deactivated.
+    createLossArchetypesRepo(catalystApp).listAll(),
+  ]);
+  const stageNameById = new Map(stages.map((s) => [s.id, s.stageName]));
+  const archetypeNameById = new Map(archetypes.map((a) => [a.id, a.archetypeName]));
+  const lostRows = allDeals
+    // innerJoin on pipelineStages: an unresolved stage drops the row.
+    .filter((d) => stageNameById.get(d.salesStageId) === "Closed-Lost")
+    .filter((d) => d.deletedAt == null)
+    .filter((d) => q.archetypeId == null || d.lossArchetypeId === q.archetypeId)
+    .map((d) => ({
+      id: d.id,
+      dealName: d.dealName,
+      accountName: d.accountName,
+      salesStage: stageNameById.get(d.salesStageId)!,
+      lossArchetypeId: d.lossArchetypeId,
+      // leftJoin: a null/dangling archetype id keeps the deal and falls through
+      // to the synthetic "Unclassified" bucket below.
+      archetypeName:
+        d.lossArchetypeId == null
+          ? null
+          : (archetypeNameById.get(d.lossArchetypeId) ?? null),
+    }));
 
   // cachedIntel (not assembleDealIntelligence) so this tab shares the same
   // cache tier the roster/summary already warm, and a concurrent map instead of
@@ -285,7 +305,7 @@ router.get("/analytics/autopsy", async (req: Request, res: Response) => {
   // starves concurrent handlers (see lib/portfolio.ts). Order is preserved,
   // which the index-keyed `lostRows.forEach` zip below depends on.
   const intelResults = await mapWithConcurrency(lostRows, INTEL_CONCURRENCY, (r) =>
-    cachedIntel(r.id),
+    cachedIntel(catalystApp, r.id),
   );
 
   const groups = new Map<

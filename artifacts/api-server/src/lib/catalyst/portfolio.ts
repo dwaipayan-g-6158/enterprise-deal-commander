@@ -13,7 +13,8 @@ import {
   createDealAuditLogRepo,
 } from "@workspace/db/catalyst";
 import { cache, CacheKeys, CacheTtl } from "../cache";
-import { assembleDealIntelligence, getThresholds } from "./intelligence";
+import { assembleDealIntelligence, getThresholds, getPortfolioConfig } from "./intelligence";
+import { buildPortfolioAnalysis, toPortfolioRecords } from "../portfolio-analysis";
 import { CLOSED_STAGES } from "../deal-filters";
 import { mapWithConcurrency, INTEL_CONCURRENCY } from "../portfolio";
 
@@ -89,6 +90,22 @@ async function changeCountsSinceReview(
  * carry. The accompanying `*Total` counts stay exact regardless of this cap.
  */
 const DETAIL_LIST_LIMIT = 50;
+
+/**
+ * Team x Product correlation/heatmap analysis. The arithmetic is shared with
+ * the Drizzle path via `../portfolio-analysis`, so only the loading differs.
+ */
+export async function computePortfolioAnalysis(catalystApp: CatalystApp) {
+  const { thresholds } = await getThresholds(catalystApp);
+  const portfolioConfig = await getPortfolioConfig(catalystApp);
+  const reportingCurrency = String(thresholds.reporting_currency || "USD");
+  const deals = await loadActiveIntel(catalystApp);
+  return buildPortfolioAnalysis(
+    toPortfolioRecords(deals),
+    portfolioConfig,
+    reportingCurrency,
+  );
+}
 
 export async function computeSummary(catalystApp: CatalystApp) {
   const { thresholds } = await getThresholds(catalystApp);
