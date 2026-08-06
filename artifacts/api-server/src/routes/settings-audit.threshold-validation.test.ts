@@ -1,7 +1,11 @@
-import { describe, it, expect, afterAll } from "vitest";
+import { describe, it, expect, beforeAll, beforeEach } from "vitest";
 import type { Request, Response } from "express";
-import { and, eq, inArray } from "drizzle-orm";
-import { db, pool, engineThresholds, settingsChangeLog, scoringModelWeights } from "@workspace/db";
+import {
+  initCatalystApp,
+  createEngineThresholdsRepo,
+  createSettingsChangeLogRepo,
+} from "@workspace/db/catalyst";
+import { installCatalystFake, type CatalystTestStore } from "../test-support/catalyst-test-app";
 import router from "./settings-audit";
 
 // M4 regression cover: `engine_thresholds` is written by THREE routes. Task 12
@@ -10,6 +14,7 @@ import router from "./settings-audit";
 // to exactly the values that gate rejects (a zero risk weight collapses every
 // deal's risk to LOW/GREEN; non-monotonic risk_level_* boundaries make levels
 // unreachable). Handler-extraction technique matches analytics.tcv.test.ts.
+// Runs against the in-memory Data Store (test-support/catalyst-test-app.ts).
 function getPostHandler(path: string) {
   const stack = (router as unknown as {
     stack: Array<{
@@ -28,7 +33,13 @@ function getPostHandler(path: string) {
 const ACTOR = { id: "00000000-0000-0000-0000-000000000000", username: "vitest", displayName: "Vitest", role: "admin" };
 
 function fakeReq(over: { params?: Record<string, string>; body?: unknown }): Request {
-  return { params: over.params ?? {}, body: over.body, actor: ACTOR } as unknown as Request;
+  return {
+    params: over.params ?? {},
+    body: over.body,
+    query: {},
+    headers: {},
+    actor: ACTOR,
+  } as unknown as Request;
 }
 
 async function callHandler(path: string, req: Request): Promise<{ status: number; body: unknown }> {
@@ -54,85 +65,104 @@ async function callExpectingThrow(path: string, req: Request): Promise<{ status:
   throw new Error("Expected the handler to throw, but it resolved");
 }
 
+let store: CatalystTestStore;
+
+const app = () => initCatalystApp({ headers: {} });
+
 const valueOf = async (key: string): Promise<string | undefined> => {
-  const [row] = await db
-    .select({ v: engineThresholds.parameterValue })
-    .from(engineThresholds)
-    .where(eq(engineThresholds.parameterKey, key));
-  return row?.v;
+  const rows = await createEngineThresholdsRepo(app()).listAll();
+  return rows.find((r) => r.parameterKey === key)?.parameterValue;
 };
 
-const importLogIds = async (key: string): Promise<string[]> => {
-  const rows = await db
-    .select({ id: settingsChangeLog.id })
-    .from(settingsChangeLog)
-    .where(and(eq(settingsChangeLog.settingKey, key), eq(settingsChangeLog.action, "import")));
-  return rows.map((r) => r.id);
-};
+const changeLog = async () => createSettingsChangeLogRepo(app()).listAll();
 
-const countImportLogs = async (key: string): Promise<number> => (await importLogIds(key)).length;
+const countImportLogs = async (key: string): Promise<number> =>
+  (await changeLog()).filter((r) => r.settingKey === key && r.action === "import").length;
 
-const createdLogIds: string[] = [];
+/**
+ * Record a real change-log entry through the repository and hand back its id.
+ * `record()` mints the id itself, so the row is found by settingKey afterwards
+ * rather than by an id chosen here — which also keeps the old_value/new_value
+ * JSON round-trip exactly the one production performs.
+ */
+async function seedChangeLogEntry(settingKey: string, oldValue: unknown, newValue: unknown): Promise<string> {
+  await createSettingsChangeLogRepo(app()).record({
+    module: "engine_thresholds",
+    settingKey,
+    action: "update",
+    oldValue,
+    newValue,
+    dataType: "number",
+    actor: "vitest",
+  });
+  const row = (await changeLog()).find((r) => r.settingKey === settingKey && r.action === "update");
+  if (!row) throw new Error(`fixture change-log row for ${settingKey} not found`);
+  return row.id;
+}
 
-afterAll(async () => {
-  if (createdLogIds.length > 0) {
-    await db.delete(settingsChangeLog).where(inArray(settingsChangeLog.id, createdLogIds));
-  }
-  await pool.end();
+beforeAll(() => {
+  ({ store } = installCatalystFake());
 });
 
-// Skipped post-Catalyst-migration: routes/settings-audit.ts now reads/writes
-// v2_settings_change_log, engine_thresholds, and v2_scoring_model_weights via
-// Catalyst Data Store, not Drizzle/Postgres — every handler calls
-// `initCatalystApp(req)`, which needs genuine Catalyst session
-// headers/context that only the real AppSail runtime can supply. The
-// `fakeReq()` helper above builds a plain Express-shaped object with no such
-// headers, so `initCatalystApp` cannot produce a working client — same "Data
-// Store isn't reachable from localhost" limitation already documented for
-// lookups.engine-thresholds.test.ts. This file's setup/assertions are also
-// Drizzle-only (`db.select/insert/update` against the Postgres tables this
-// route no longer touches). Retire or rewrite as an integration test against
-// the deployed AppSail app once Slice 6 seeding lands.
-describe.skip("POST /settings/change-log/:id/rollback — threshold bound validation", () => {
+beforeEach(() => {
+  store.reset();
+  // `validateThresholdUpdate` resolves an unspecified risk_level_* sibling from
+  // whatever is currently stored, so the boundary rule only has something to
+  // compare against if these rows exist. Values are the engine defaults
+  // (deriveRiskBoundaries in lib/engine-config.ts).
+  store.seedRaw("engine_thresholds", [
+    { id: "1", parameter_key: "elephant_tcv_threshold", parameter_value: "500000", data_type_: "number" },
+    { id: "2", parameter_key: "risk_weight_technical", parameter_value: "0.15", data_type_: "number" },
+    { id: "3", parameter_key: "risk_weight_commercial", parameter_value: "0.15", data_type_: "number" },
+    { id: "4", parameter_key: "risk_level_low_max", parameter_value: "25", data_type_: "number" },
+    { id: "5", parameter_key: "risk_level_moderate_max", parameter_value: "50", data_type_: "number" },
+    { id: "6", parameter_key: "risk_level_elevated_max", parameter_value: "75", data_type_: "number" },
+  ]);
+});
+
+describe("POST /settings/change-log/:id/rollback — threshold bound validation", () => {
   it("rejects a rollback that would restore a zero risk weight, and writes nothing", async () => {
     const key = "risk_weight_technical";
     const before = await valueOf(key);
 
     // A prior change-log entry whose *old* value is the out-of-bounds one, so
     // rolling it back is what tries to reintroduce 0.
-    const [logRow] = await db
-      .insert(settingsChangeLog)
-      .values({
-        module: "engine_thresholds",
-        settingKey: key,
-        action: "update",
-        oldValue: "0",
-        newValue: "0.15",
-        dataType: "number",
-        actor: "vitest",
-      })
-      .returning({ id: settingsChangeLog.id });
-    createdLogIds.push(logRow.id);
+    const logId = await seedChangeLogEntry(key, "0", "0.15");
 
     const result = await callExpectingThrow(
       "/settings/change-log/:id/rollback",
-      fakeReq({ params: { id: logRow.id }, body: { reason: "vitest attempt" } }),
+      fakeReq({ params: { id: logId }, body: { reason: "vitest attempt" } }),
     );
     expect(result.status).toBe(400);
     expect(result.message).toContain(key);
 
     // The threshold is untouched — including staying absent if it was absent.
     expect(await valueOf(key)).toBe(before);
-    const rollbackLogs = await db
-      .select()
-      .from(settingsChangeLog)
-      .where(and(eq(settingsChangeLog.rollbackOf, logRow.id), eq(settingsChangeLog.action, "rollback")));
+    const rollbackLogs = (await changeLog()).filter(
+      (r) => r.rollbackOf === logId && r.action === "rollback",
+    );
     expect(rollbackLogs).toHaveLength(0);
+  });
+
+  it("still applies a rollback whose restored value is in bounds (the guard does not over-block)", async () => {
+    const key = "risk_weight_technical";
+    const logId = await seedChangeLogEntry(key, "0.2", "0.15");
+
+    const ok = await callHandler(
+      "/settings/change-log/:id/rollback",
+      fakeReq({ params: { id: logId }, body: { reason: "vitest restore" } }),
+    );
+
+    expect((ok.body as { data: { restored: string } }).data.restored).toBe("0.2");
+    expect(await valueOf(key)).toBe("0.2");
+    const rollbackLogs = (await changeLog()).filter(
+      (r) => r.rollbackOf === logId && r.action === "rollback",
+    );
+    expect(rollbackLogs).toHaveLength(1);
   });
 });
 
-// Skipped post-Catalyst-migration — same reasoning as the describe block above.
-describe.skip("POST /settings/config/import — threshold bound validation", () => {
+describe("POST /settings/config/import — threshold bound validation", () => {
   it("rejects the whole batch when any threshold is invalid, writing none of them", async () => {
     const validKey = "elephant_tcv_threshold";
     const invalidKey = "risk_weight_commercial";
@@ -159,12 +189,14 @@ describe.skip("POST /settings/config/import — threshold bound validation", () 
 
     expect(await valueOf(validKey)).toBe(validBefore);
     expect(await valueOf(invalidKey)).toBe(invalidBefore);
-    // No new audit row either — a delta, since this shared dev DB already holds
-    // legitimate historical "import" entries for this key.
+    // No new audit row either.
     expect(await countImportLogs(validKey)).toBe(importLogsBefore);
   });
 
   it("rejects non-monotonic risk_level_* boundaries in an import payload", async () => {
+    const before = await valueOf("risk_level_low_max");
+    expect(before).toBe("25");
+
     const result = await callExpectingThrow(
       "/settings/config/import",
       fakeReq({
@@ -180,7 +212,7 @@ describe.skip("POST /settings/config/import — threshold bound validation", () 
     );
     expect(result.status).toBe(400);
     expect(result.message).toContain("risk_level boundaries");
-    expect(await valueOf("risk_level_low_max")).not.toBe("80");
+    expect(await valueOf("risk_level_low_max")).toBe(before);
   });
 
   it("still applies a valid import payload (the guard does not over-block)", async () => {
@@ -188,10 +220,6 @@ describe.skip("POST /settings/config/import — threshold bound validation", () 
     const original = await valueOf(key);
     expect(original).toBeDefined();
     const bumped = String(Number(original) + 1);
-    // Snapshot the PRE-EXISTING audit rows for this key so cleanup below removes
-    // only the one this test causes. This dev DB holds real historical "import"
-    // entries; deleting every match would destroy them.
-    const priorLogIds = new Set(await importLogIds(key));
 
     const ok = await callHandler(
       "/settings/config/import",
@@ -204,14 +232,7 @@ describe.skip("POST /settings/config/import — threshold bound validation", () 
     );
     expect((ok.body as { data: { importedThresholds: number } }).data.importedThresholds).toBe(1);
     expect(await valueOf(key)).toBe(bumped);
-
-    // Restore, so this suite leaves the shared dev DB as it found it.
-    await db
-      .update(engineThresholds)
-      .set({ parameterValue: original! })
-      .where(eq(engineThresholds.parameterKey, key));
-    const newLogIds = (await importLogIds(key)).filter((id) => !priorLogIds.has(id));
-    createdLogIds.push(...newLogIds);
+    expect(await countImportLogs(key)).toBe(1);
   });
 });
 
@@ -221,16 +242,10 @@ describe.skip("POST /settings/config/import — threshold bound validation", () 
 // whole-branch review's config-import scoring-weight bound finding. Proves
 // the same bound now also applies to ImportSettingsConfigBody's
 // scoringModelWeights[].calibratedWeight.
-// Skipped post-Catalyst-migration — same reasoning as the describe block above.
-describe.skip("POST /settings/config/import — scoring weight bound validation", () => {
+describe("POST /settings/config/import — scoring weight bound validation", () => {
   const probeFeatureId = "test_import_bound_probe";
 
   it("rejects an out-of-range calibratedWeight with 400, writing nothing", async () => {
-    const before = await db
-      .select()
-      .from(scoringModelWeights)
-      .where(eq(scoringModelWeights.featureId, probeFeatureId));
-
     const result = await callExpectingThrow(
       "/settings/config/import",
       fakeReq({
@@ -241,20 +256,10 @@ describe.skip("POST /settings/config/import — scoring weight bound validation"
       }),
     );
     expect(result.status).toBe(400);
-
-    const after = await db
-      .select()
-      .from(scoringModelWeights)
-      .where(eq(scoringModelWeights.featureId, probeFeatureId));
-    expect(after).toEqual(before);
+    expect(store.count("v2_scoring_model_weights")).toBe(0);
   });
 
   it("rejects a negative calibratedWeight with 400, writing nothing", async () => {
-    const before = await db
-      .select()
-      .from(scoringModelWeights)
-      .where(eq(scoringModelWeights.featureId, probeFeatureId));
-
     const result = await callExpectingThrow(
       "/settings/config/import",
       fakeReq({
@@ -265,11 +270,20 @@ describe.skip("POST /settings/config/import — scoring weight bound validation"
       }),
     );
     expect(result.status).toBe(400);
+    expect(store.count("v2_scoring_model_weights")).toBe(0);
+  });
 
-    const after = await db
-      .select()
-      .from(scoringModelWeights)
-      .where(eq(scoringModelWeights.featureId, probeFeatureId));
-    expect(after).toEqual(before);
+  it("accepts an in-bounds calibratedWeight (the bound does not over-block)", async () => {
+    const ok = await callHandler(
+      "/settings/config/import",
+      fakeReq({
+        body: {
+          engineThresholds: [],
+          scoringModelWeights: [{ featureId: probeFeatureId, calibratedWeight: 0.4 }],
+        },
+      }),
+    );
+    expect((ok.body as { data: { importedWeights: number } }).data.importedWeights).toBe(1);
+    expect(store.count("v2_scoring_model_weights")).toBe(1);
   });
 });

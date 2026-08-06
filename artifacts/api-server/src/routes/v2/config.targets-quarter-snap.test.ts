@@ -1,16 +1,20 @@
-import { describe, it, expect, afterAll } from "vitest";
+import { describe, it, expect, beforeAll, beforeEach } from "vitest";
 import type { Request, Response } from "express";
-import { and, eq } from "drizzle-orm";
-import { db, pool, pipelineTargets, settingsChangeLog } from "@workspace/db";
+import { initCatalystApp, createSettingsChangeLogRepo } from "@workspace/db/catalyst";
 import { quarterStartUTC } from "@workspace/engine";
+import {
+  installCatalystFake,
+  seedStandardLookups,
+  type CatalystTestStore,
+} from "../../test-support/catalyst-test-app";
 import configRouter from "./config";
 import analyticsRouter from "./analytics";
 
-// Same technique as config.test.ts / config.validation.test.ts: no supertest
-// harness exists in this repo, so pull the real handler off each router's
-// stack and call it directly — this exercises the real production PUT
-// upsert AND the real production GET coverage read, proving the fix
-// end-to-end rather than reimplementing either side.
+// Same technique as config.test.ts: no supertest harness exists in this repo,
+// so pull the real handler off each router's stack and call it directly — this
+// exercises the real production PUT upsert AND the real production GET coverage
+// read, proving the fix end-to-end rather than reimplementing either side.
+// Runs against the in-memory Data Store (test-support/catalyst-test-app.ts).
 function getHandler(
   router: typeof configRouter | typeof analyticsRouter,
   method: "get" | "put",
@@ -39,6 +43,9 @@ async function putTarget(body: unknown): Promise<UpsertTargetResponse["data"]> {
   let captured: UpsertTargetResponse | undefined;
   const fakeReq = {
     body,
+    params: {},
+    query: {},
+    headers: {},
     actor: { id: "test-actor", username: "test-actor", displayName: "Test Actor", role: "admin" },
   } as unknown as Request;
   const fakeRes = { json: (b: UpsertTargetResponse) => { captured = b; } } as unknown as Response;
@@ -61,8 +68,9 @@ interface CoverageResponse {
 async function getCoverage(): Promise<CoverageResponse["data"]> {
   const handler = getHandler(analyticsRouter, "get", "/analytics/flow/coverage");
   let captured: CoverageResponse | undefined;
+  const fakeReq = { headers: {}, params: {}, query: {} } as unknown as Request;
   const fakeRes = { json: (b: CoverageResponse) => { captured = b; } } as unknown as Response;
-  await handler({} as Request, fakeRes);
+  await handler(fakeReq, fakeRes);
   if (!captured) throw new Error("Handler did not call res.json");
   return captured.data;
 }
@@ -71,95 +79,50 @@ const NO_TARGET_CAVEAT = "No target set for the active period.";
 const TEST_TARGET_VALUE = 4_242_424.24;
 const DECOY_TARGET_VALUE = 1_111_111.11;
 
-// Skipped post-Catalyst-migration: routes/v2/config.ts's PUT /config/targets
-// now reads/writes pipeline_targets via Catalyst Data Store, not
-// Drizzle/Postgres. `initCatalystApp(req)` requires real Catalyst
-// session/headers to succeed — a fake `Request` object in a local Vitest run
-// can never provide that (same "Data Store isn't reachable from localhost"
-// limitation already documented for lookups.engine-thresholds.test.ts). This
-// file's fixtures also seed via Drizzle directly, which the migrated handler
-// no longer reads. Retire or rewrite as an integration test against the
-// deployed AppSail app once Slice 6 seeding lands.
-describe.skip("PUT /config/targets -> GET /analytics/flow/coverage — quarter-snap round trip (F4)", () => {
-  let quarterStart = "";
-  // Rows THIS test creates, captured by id so cleanup deletes exactly them —
-  // never a pattern match that could sweep up unrelated rows (see below).
-  let createdQuarterRowId: string | undefined;
-  let createdMonthRowId: string | undefined;
-  let createdChangeLogId: string | undefined;
-  // Whatever (if anything) already occupied these exact (periodType, periodStart)
-  // slots before this test ran, so it can be put back afterward — the upsert's
-  // conflict key means this test's writes would otherwise clobber a real row.
-  let priorQuarterRow: (typeof pipelineTargets.$inferSelect) | undefined;
-  let priorMonthRow: (typeof pipelineTargets.$inferSelect) | undefined;
+let store: CatalystTestStore;
 
-  afterAll(async () => {
-    // Delete ONLY the exact rows this test created, by primary key — never by
-    // a settingKey/periodStart pattern match, which could destroy unrelated
-    // history in whatever DB this suite runs against (a genuine data-loss bug
-    // in an earlier version of this test — settings_change_log is an audit
-    // trail, not scratch data, and nothing here restores it once deleted).
-    if (createdQuarterRowId) {
-      await db.delete(pipelineTargets).where(eq(pipelineTargets.id, createdQuarterRowId));
-    }
-    if (createdMonthRowId) {
-      await db.delete(pipelineTargets).where(eq(pipelineTargets.id, createdMonthRowId));
-    }
-    if (createdChangeLogId) {
-      await db.delete(settingsChangeLog).where(eq(settingsChangeLog.id, createdChangeLogId));
-    }
-    // Restore whatever real rows previously occupied these slots.
-    if (priorQuarterRow) await db.insert(pipelineTargets).values(priorQuarterRow);
-    if (priorMonthRow) await db.insert(pipelineTargets).values(priorMonthRow);
-    await pool.end();
-  });
+beforeAll(() => {
+  ({ store } = installCatalystFake());
+});
 
+beforeEach(() => {
+  store.reset();
+  seedStandardLookups(store);
+});
+
+describe("PUT /config/targets -> GET /analytics/flow/coverage — quarter-snap round trip (F4)", () => {
   it("a same-dated 'month' row is NOT read by coverage — only the periodType-filtered 'quarter' row satisfies it", async () => {
     // quarterStartUTC is the exact shared formula both the server's
     // activeQuarterStart() and the browser's quarterStartISO() call (see
     // lib/engine/src/flow.ts) — used here only to build fixture data, not to
     // assert anything about itself (a self-referential assertion would prove
     // nothing about production behavior).
-    quarterStart = quarterStartUTC(new Date());
+    const quarterStart = quarterStartUTC(new Date());
 
-    // Capture + clear any pre-existing row at this exact (periodType,
-    // periodStart) slot so the "before" baseline below starts from a known,
-    // clean absence rather than a leftover from a previous test run or real
-    // admin data.
-    const [existingQuarter] = await db
-      .select()
-      .from(pipelineTargets)
-      .where(and(eq(pipelineTargets.periodType, "quarter"), eq(pipelineTargets.periodStart, quarterStart)));
-    priorQuarterRow = existingQuarter;
-    if (existingQuarter) {
-      await db.delete(pipelineTargets).where(eq(pipelineTargets.id, existingQuarter.id));
-    }
-    const [existingMonth] = await db
-      .select()
-      .from(pipelineTargets)
-      .where(and(eq(pipelineTargets.periodType, "month"), eq(pipelineTargets.periodStart, quarterStart)));
-    priorMonthRow = existingMonth;
-    if (existingMonth) {
-      await db.delete(pipelineTargets).where(eq(pipelineTargets.id, existingMonth.id));
-    }
-
-    // Step 1: insert ONLY a decoy row sharing the exact same periodStart but
-    // a DIFFERENT periodType ("month"). Inserted directly (bypassing the PUT
-    // route, which defaults periodType to "quarter") so this proves the read
-    // side's discrimination independent of how the row got written.
-    const [monthRow] = await db
-      .insert(pipelineTargets)
-      .values({ periodType: "month", periodStart: quarterStart, targetValue: String(DECOY_TARGET_VALUE) })
-      .returning();
-    createdMonthRowId = monthRow.id;
+    // Step 1: seed ONLY a decoy row sharing the exact same periodStart but a
+    // DIFFERENT periodType ("month"). Written straight into the store rather
+    // than through the PUT route (which defaults periodType to "quarter") so
+    // this proves the read side's discrimination independent of how the row
+    // got written. `natural_key` is the upsert's conflict key — the same
+    // "<periodType>:<periodStart>" shape the repository writes.
+    store.seedRaw("v2_pipeline_targets", [
+      {
+        id: "decoy-month-row",
+        period_type: "month",
+        period_start: quarterStart,
+        target_value: String(DECOY_TARGET_VALUE),
+        natural_key: `month:${quarterStart}`,
+        updated_at: "2026-01-01 00:00:00",
+      },
+    ]);
 
     // Baseline: with only the same-dated "month" row present, the
     // "quarter"-scoped coverage read must find no target at all. Before the
-    // periodType filter existed, an unfiltered `eq(periodStart, ...)` read
-    // WOULD have matched this month row (same date) and returned a non-null
-    // total here — this assertion is exactly what falls over on that
-    // pre-fix code, proving the filter actually discriminates rather than
-    // merely being present but never exercised.
+    // periodType filter existed, an unfiltered periodStart match WOULD have
+    // matched this month row (same date) and returned a non-null total here —
+    // this assertion is exactly what falls over on that pre-fix code, proving
+    // the filter actually discriminates rather than merely being present but
+    // never exercised.
     const beforeQuarterRow = await getCoverage();
     expect(beforeQuarterRow.caveats).toContain(NO_TARGET_CAVEAT);
     expect(beforeQuarterRow.total).toBeNull();
@@ -171,25 +134,15 @@ describe.skip("PUT /config/targets -> GET /analytics/flow/coverage — quarter-s
       periodStart: quarterStart,
       targetValue: TEST_TARGET_VALUE,
     });
-    createdQuarterRowId = saved.id;
     expect(saved.periodType).toBe("quarter");
     expect(saved.periodStart).toBe(quarterStart);
 
-    // The change-log row this PUT wrote — captured by its own id (not a
-    // settingKey pattern) so cleanup can delete exactly this row and nothing
-    // else that might share the same "quarter:<periodStart>" key.
-    const [changeLogRow] = await db
-      .select()
-      .from(settingsChangeLog)
-      .where(
-        and(
-          eq(settingsChangeLog.module, "pipeline_targets"),
-          eq(settingsChangeLog.entityId, String(saved.id)),
-        ),
-      )
-      .orderBy(settingsChangeLog.changedAt)
-      .limit(1);
-    createdChangeLogId = changeLogRow?.id;
+    // The PUT is audited, and the decoy is left alone rather than overwritten
+    // (the upsert keys on periodType too, not just the date).
+    const auditRows = (await createSettingsChangeLogRepo(initCatalystApp({ headers: {} })).listAll())
+      .filter((r) => r.module === "pipeline_targets" && r.entityId === String(saved.id));
+    expect(auditRows).toHaveLength(1);
+    expect(store.count("v2_pipeline_targets")).toBe(2);
 
     // With the "quarter" row now present alongside the still-present "month"
     // decoy at the same date, coverage must find the "quarter" row — proving
