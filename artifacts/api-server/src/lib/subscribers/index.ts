@@ -75,6 +75,12 @@ export function registerSubscribers(): void {
     logger.error({ err }, "Initial portfolio rollup purge+warm failed"),
   );
 
+  // NOTE: on Catalyst these timers never fire — AppSail kills an idle instance
+  // after five minutes, so wall-clock intervals registered here are dead code in
+  // the deployed app. The periodic snapshot job now runs through Catalyst Job
+  // Scheduling instead, which invokes POST /api/v1/jobs/snapshots on a cron (see
+  // routes/jobs.ts). These timers are kept only for local Postgres development,
+  // where the process does stay alive.
   const snapshotTimer = setInterval(() => {
     void (async () => {
       try {
