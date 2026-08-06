@@ -178,6 +178,15 @@ router.get(
   },
 );
 
+/**
+ * A snapshot's TCV columns as the API contract declares them: strings.
+ * `null` becomes "0" rather than being passed through, matching what the
+ * Drizzle path produced (the column is NOT NULL there).
+ */
+function tcvString(value: number | null): string {
+  return String(value ?? 0);
+}
+
 router.get(
   "/deals/:dealId/snapshots",
   async (req: Request, res: Response) => {
@@ -210,8 +219,15 @@ router.get(
       healthStatus: r.healthStatus,
       salesStageId: r.salesStageId,
       salesStage: r.salesStage,
-      calculatedTcv: r.calculatedTcv,
-      normalizedTcv: r.normalizedTcv,
+      // The API contract types both of these as STRING, because Postgres
+      // `numeric` arrives from Drizzle as a string. The Catalyst repo parses
+      // them into real numbers (which is what every analytics caller wants),
+      // so they have to be stringified back at this boundary or the response
+      // schema rejects the whole payload with a 400. Invisible until the
+      // periodic snapshot job started producing rows — an empty list validates
+      // trivially. See `tcvString`.
+      calculatedTcv: tcvString(r.calculatedTcv),
+      normalizedTcv: tcvString(r.normalizedTcv),
       createdBy: r.createdBy,
       snapshotAt: toISO(r.snapshotAt) ?? new Date().toISOString(),
     }));
@@ -242,8 +258,8 @@ router.get("/snapshots/:snapshotId", async (req: Request, res: Response) => {
         healthStatus: r.healthStatus,
         salesStageId: r.salesStageId,
         salesStage: r.salesStage,
-        calculatedTcv: r.calculatedTcv,
-        normalizedTcv: r.normalizedTcv,
+        calculatedTcv: tcvString(r.calculatedTcv),
+        normalizedTcv: tcvString(r.normalizedTcv),
         createdBy: r.createdBy,
         snapshotAt: toISO(r.snapshotAt) ?? new Date().toISOString(),
         payload: r.payload,
