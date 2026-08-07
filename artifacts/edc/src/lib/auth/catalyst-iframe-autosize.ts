@@ -25,9 +25,12 @@
  * served by the gateway cannot do.)
  */
 
-// Below the shortest real step (email + Next + "Forgot Password?"); above the
-// SDK's own 150px, which is what produced the clipping.
-const MIN_HEIGHT = 260;
+// A floor for when measurement fails outright, NOT a target. It was 260, which
+// was above the real email step: measured live, that step wants 164 (button
+// bottom 140 + BOTTOM_PADDING), so every frame got clamped UP and the card
+// carried 80px of dead space under the button. Kept above the SDK's own 150px,
+// which is the height that produced the original clipping.
+const MIN_HEIGHT = 170;
 // Guards against a runaway measurement forcing an absurd card.
 const MAX_HEIGHT = 720;
 // Zoho's own page padding stops short of the last link; without a little slack

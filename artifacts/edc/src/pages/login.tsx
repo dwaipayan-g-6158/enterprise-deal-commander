@@ -10,7 +10,10 @@ import { injectCatalystIframeTheme } from "@/lib/auth/catalyst-iframe-link";
 
 const LOGIN_SLOT_ID = "catalyst-login-container";
 // Reserves space for Catalyst's typical email-step form so the card doesn't
-// visibly jump from a short box to the real content on first paint.
+// visibly jump from a short box to the real content on first paint. Released
+// the moment the form is ready: the real email-step frame is ~164px, so holding
+// 340px afterwards stranded a fixed band of dead space under the button that
+// read as the card being mis-sized. Only the pre-paint reservation is wanted.
 const IFRAME_MIN_HEIGHT = 340;
 // How often to check whether the embedded sign-in completed. There is no
 // server callback route for Catalyst embedded auth — this app treats
@@ -267,7 +270,7 @@ export default function Login() {
                 ref={slotRef}
                 id={LOGIN_SLOT_ID}
                 className="relative w-full [&_iframe]:!w-full [&_iframe]:!border-0 [&_iframe]:!bg-transparent"
-                style={{ minHeight: status === "error" ? 0 : IFRAME_MIN_HEIGHT }}
+                style={{ minHeight: status === "loading" ? IFRAME_MIN_HEIGHT : 0 }}
               />
             </div>
 

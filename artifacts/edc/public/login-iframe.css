@@ -85,7 +85,11 @@ html {
   --liw-text-muted: #6B7280;
   --liw-primary: #5F8DF7;           /* --primary         222 90% 67% */
   --liw-primary-hover: #7BA1F9;
-  --liw-danger: #CC3333;            /* --destructive     0 60% 50%   */
+  /* Tracks index.css's dark --destructive, which moved from `0 60% 50%`
+     (#CC3333) to `0 91% 71%` for contrast. Measured live on the tinted error
+     pill over EDC's card: #CC3333 was 3.04:1 — a failing error message, which
+     is the worst possible thing to render illegibly. #F87272 is 5.67:1. */
+  --liw-danger: #F87272;            /* --destructive     0 91% 71%   */
   --liw-on-primary: #17191C;        /* --primary-foreground 220 10% 10% */
 }
 
@@ -102,7 +106,12 @@ body {
   text-size-adjust: 100% !important;
 }
 
-/* Outer wrappers — flatten Catalyst's white card */
+/* Outer wrappers — flatten Catalyst's white card.
+   `margin: 0` matters as much as the background here: measured live, Zoho gives
+   .signin_container a `margin-top: 40px` that centred its own standalone card.
+   Flattened into EDC's card that margin is pure dead space at the top of the
+   panel, and because the frame is auto-sized from the primary button's bottom
+   edge it also inflated the frame by the same 40px. */
 .signin_container,
 .signin_box,
 #signin_flow,
@@ -111,6 +120,7 @@ body {
   background: transparent !important;
   box-shadow: none !important;
   border: none !important;
+  margin: 0 !important;
 }
 
 #signin_flow {
@@ -164,14 +174,14 @@ body {
    with a 0.2s transition; we just restyle and add a soft glow so it reads
    as intentional rather than as a leftover form-validation artifact. */
 .Errormsg {
-  background: rgba(204, 51, 51, 0.1) !important;
+  background: rgba(248, 114, 114, 0.1) !important;
   color: var(--liw-danger) !important;
-  border: 1px solid rgba(204, 51, 51, 0.35) !important;
+  border: 1px solid rgba(248, 114, 114, 0.35) !important;
   border-radius: 8px !important;
   padding: 9px 12px !important;
   font-size: 13px !important;
   font-weight: 500 !important;
-  box-shadow: 0 8px 24px -10px rgba(204, 51, 51, 0.35) !important;
+  box-shadow: 0 8px 24px -10px rgba(248, 114, 114, 0.35) !important;
   transition:
     top 0.22s cubic-bezier(0.2, 0.7, 0.2, 1),
     opacity 0.22s ease !important;
@@ -203,9 +213,9 @@ body {
   left: auto !important;
   right: auto !important;
   bottom: auto !important;
-  background: rgba(204, 51, 51, 0.1) !important;
+  background: rgba(248, 114, 114, 0.1) !important;
   color: var(--liw-danger) !important;
-  border: 1px solid rgba(204, 51, 51, 0.32) !important;
+  border: 1px solid rgba(248, 114, 114, 0.32) !important;
   border-left-width: 3px !important;
   border-radius: 6px !important;
   font-size: 12.5px !important;
