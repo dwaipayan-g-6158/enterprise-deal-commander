@@ -884,16 +884,32 @@ label,
      body index 1, ahead of `.signin_container`, so flow order already puts it
      where it belongs. The frame is auto-sized from the primary button's bottom
      edge, so the extra height is picked up automatically. */
-  position: static !important;
-  inset: auto !important;
+  /* `sticky`, not `static`: static alone fixed the overlap but then the banner
+     scrolled out of sight. Zoho's body is a fixed ~520px inside a frame we size
+     to ~344px, and it scrolls itself to ~123px when the OTP input takes focus —
+     which is the reason the original chose a fixed toast. Sticky keeps both
+     properties at once: it occupies real flow space (so overlap is
+     unrepresentable) AND stays pinned through that auto-scroll. */
+  position: sticky !important;
+  top: 0 !important;
+  left: auto !important;
+  right: auto !important;
+  bottom: auto !important;
   transform: none !important;
   margin: 0 0 12px !important;
   width: auto !important;
   max-width: none !important;
-  z-index: auto !important;
+  z-index: 5 !important;
   opacity: 1 !important;
   max-height: 200px !important;
   overflow: hidden !important;
+  /* One row, not a stack. Zoho ships the banner as a tick icon plus a message
+     span; left to their own layout it measured 104px for a single sentence,
+     which is what made it big enough to swallow the row beneath it. */
+  display: flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+  padding: 9px 12px !important;
   transition:
     opacity 0.3s ease,
     max-height 0.3s ease,
@@ -916,6 +932,21 @@ label,
    reserved a fixed 76px for a banner measured at 104px, which is exactly how
    the overlap arose. Reserving space for an out-of-flow element means keeping
    two numbers in sync forever; letting it take its own space needs none. */
+
+/* Keep the banner to one line. Its own children are what inflated it. */
+.Alert:has(.alert_message:not(:empty)) .tick_icon {
+  flex: 0 0 auto !important;
+  margin: 0 !important;
+}
+.Alert:has(.alert_message:not(:empty)) .alert_message {
+  flex: 1 1 auto !important;
+  min-width: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  font-size: 12.5px !important;
+  line-height: 1.4 !important;
+  color: var(--liw-text) !important;
+}
 .Alert:has(.alert_message:not(:empty)) .topNotificationClose {
   position: relative !important;
   float: right !important;
