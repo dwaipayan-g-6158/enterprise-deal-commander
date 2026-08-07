@@ -61,6 +61,9 @@ Thumbs.db
 # git worktrees (superpowers:using-git-worktrees)
 .worktrees/
 
+# git worktrees (native harness EnterWorktree tool)
+.claude/worktrees/
+
 # Secrets and local env
 .env
 .env.*
