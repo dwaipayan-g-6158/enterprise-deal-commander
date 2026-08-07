@@ -26,7 +26,7 @@ codebase (routes, engine modules, schema, and UI):
 
 | Area | Status | Evidence |
 |---|---|---|
-| Durable history backbone (event bus, activity, health history, snapshots, rollups) | ✅ Shipped | `edc_v2` schema, `events.ts`, subscribers, `/api/v2` history routes |
+| Durable history backbone (event bus, activity, health history, snapshots, rollups) | ✅ Shipped | `v2_`-prefixed Data Store tables, `events.ts`, subscribers, `/api/v2` history routes |
 | **Risk Engine v2** (7-dimension composite, radar, drives health) | ✅ Shipped | `dimensions.ts`, `risk-v2.ts`, `risk/` components |
 | Predictive scoring | ✅ Shipped | `scoring.ts`, `/api/v2/deals/{id}/score`, `scores/recalculate` |
 | **Pipeline Flow Analytics** (funnel, conversion matrix, Sankey, recycle, coverage, health-score) | ✅ Shipped | `flow.ts`, `/api/v2/analytics/flow/*`, Analytics → Flow tab |

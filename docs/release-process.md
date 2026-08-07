@@ -62,6 +62,6 @@ Phase 2 is additive — it does not replace Phase 1:
 ### Postgres/Drizzle → Zoho Catalyst (shipped 2026-08-06/07)
 
 The migration described as "planned" here shipped in August 2026 — see
-[`docs/changes/2026-08-07-catalyst-migration.md`](../changes/2026-08-07-catalyst-migration.md) for
+[`docs/changes/2026-08-07-catalyst-migration.md`](./changes/2026-08-07-catalyst-migration.md) for
 the full record. No further migration guide is needed: the app has run on Catalyst exclusively
 since, and Postgres/Drizzle no longer exist anywhere in the tree.
