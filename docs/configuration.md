@@ -16,12 +16,11 @@ files are git-ignored — copy the provided `.env.example` files.
 
 | Variable | Required | Default | Description |
 |---|---|---|---|
-| `SESSION_SECRET` | ✅ (prod) | dev fallback constant | Secret used to sign the HS256 session JWT. In production the server **requires** this; in dev a constant fallback is used if unset. Generate with `openssl rand -hex 32`. |
-| `NODE_ENV` | — | `development` | `development` or `production`. In production, session cookies are marked `Secure`. |
+| `NODE_ENV` | — | `development` | `development` or `production`. Affects logging only — there is no server-issued session cookie. |
 | `PORT` | — | `5000` | Port the Express server listens on. |
-| `EDC_JOB_SECRET` | ✅ | — | Secret used to authenticate background job callbacks from the Catalyst Job Scheduler. Generate with `openssl rand -hex 32`. |
+| `EDC_JOB_SECRET` | ✅ (deployed app only) | — | Secret used to authenticate background job callbacks from the Catalyst Job Scheduler. Generate with `openssl rand -hex 32`. |
 | `SUPER_ADMIN_EMAIL` | — | — | Email address that receives initial admin grant (optional; the app creates no users on startup). |
-| `APP_ORIGIN` | — | — | The SPA origin for CORS, OAuth redirect URIs, etc. (optional; defaults to the API server's origin). |
+| `APP_ORIGIN` | — | — | Full public origin (scheme + host) for building absolute links: Bat-Signal share links and user-invite emails. In local dev set to the frontend's origin (e.g. `http://localhost:5173`), not the API server's `:5000`. Bat-Signal falls back to a relative `/share/:token` when unset; invite links fall back to the request's own host. |
 | `SMTP_URL` | — | — | SMTP connection string for transactional email (optional; emails are not sent if unset). |
 | `LOG_LEVEL` | — | `info` | Minimum log level: `debug`, `info`, `warn`, `error`. |
 

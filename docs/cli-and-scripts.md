@@ -28,9 +28,8 @@ Invoke with `pnpm --filter <package> run <script>`.
 | Script | Description |
 |---|---|
 | `dev` | Build (esbuild) then start the API server on port 5000. **Re-run after route/schema edits** (workspace deps are inlined at build time). |
-| `build` | `node ./build.mjs` → `dist/index.mjs`, `dist/seed.mjs`. |
+| `build` | `node ./build.mjs` → `dist/index.mjs`. |
 | `start` | `node dist/index.mjs`. |
-| `seed` | Seed the database (`node dist/seed.mjs`). |
 | `test` | Vitest suite. |
 | `typecheck` | `tsc --noEmit`. |
 

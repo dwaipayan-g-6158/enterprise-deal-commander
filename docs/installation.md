@@ -84,7 +84,6 @@ cp artifacts/edc/.env.example        artifacts/edc/.env
 Minimum required for the API server (`artifacts/api-server/.env`):
 
 ```dotenv
-SESSION_SECRET=<a long random string, e.g. `openssl rand -hex 32`>
 NODE_ENV=development
 PORT=5000
 ```

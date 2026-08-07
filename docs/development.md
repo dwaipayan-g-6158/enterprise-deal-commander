@@ -6,7 +6,7 @@
 - [Coding standards](#coding-standards)
 - [Best practices](#best-practices)
 - [Working with the API contract](#working-with-the-api-contract)
-- [Working with the database](#working-with-the-database)
+- [Working with the datastore](#working-with-the-datastore)
 - [Working with the engine](#working-with-the-engine)
 
 ## Setup
@@ -71,7 +71,6 @@ What's worth testing where:
   (`.agents/memory/MEMORY.md`).
 - **Never** weaken the supply-chain guard.
 - **Regenerate, don't hand-edit** generated API code.
-- Prefer additive, reversible schema changes; remember the post-merge sync caveat.
 
 ## Working with the API contract
 
