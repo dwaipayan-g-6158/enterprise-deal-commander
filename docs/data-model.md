@@ -1,14 +1,16 @@
 # Data Model
 
-EDC uses **PostgreSQL 16** via **Drizzle ORM** (`lib/db`). The schema is split across two Postgres
-schemas inside one database:
+EDC uses **Zoho Catalyst Data Store** — a hosted, schemaless Row API, not a SQL database. All 71
+tables live in one flat namespace (Phase 2 tables carry a `v2_` prefix instead of a separate
+schema). See [`docs/CATALYST_SCHEMA.md`](./CATALYST_SCHEMA.md) for the authoritative
+table-by-table manifest and type mapping, and
+[`docs/catalyst-datastore-constraints.md`](./catalyst-datastore-constraints.md) for the Row
+API's real constraints (no `WHERE` clause, no native FK cascade, second-granularity datetimes).
 
-- **`edc`** (public) — the Phase 1 core.
-- **`edc_v2`** — the Phase 2 durable-history, intelligence, and settings backbone
-  (`pgSchema("edc_v2")`).
-
-Schema modules live in `lib/db/src/schema/` and are aggregated by `index.ts`. There is **no formal
-migrations directory** — schema is applied with `drizzle-kit push` in development.
+> **ID fields.** This doc's ER diagram below still shows ID columns as `uuid` for readability —
+> in the real Data Store schema every one of those is a `varchar(36)` populated with
+> `crypto.randomUUID()` at write time, not a database-generated default. See
+> [`docs/CATALYST_SCHEMA.md`](./CATALYST_SCHEMA.md) for the full type mapping.
 
 - [Core entities (ER diagram)](#core-entities-er-diagram)
 - [Phase 1 tables (`edc`)](#phase-1-tables-edc)
@@ -66,9 +68,9 @@ erDiagram
 ### Identity
 | Table | Purpose |
 |---|---|
-| `commanders` | The authenticated user(s). Login `email` maps to `username`; password is a bcrypt hash. |
+| `commanders` | The authenticated user(s). Identity is keyed by Catalyst's own `catalyst_user_id`, filled in on first Catalyst sign-in; `username` stores the lowercased Catalyst account email. `password_hash` is an unused legacy column — no longer read anywhere. |
 
-### Deals & governance (`deals.ts`)
+### Deals & governance
 | Table | Purpose |
 |---|---|
 | `enterprise_deals` | The central entity. Natural key `(account_name, deal_name)`. Holds economics, stage, dates, and soft-delete/archive columns (F14). |
@@ -84,7 +86,7 @@ erDiagram
 | `deal_stage_overrides` | Ledger of typed overrides when a RED guardrail was bypassed (F12). |
 | `bat_signals` | 48-hour signed share tokens (F7). |
 
-### Lookups (`lookups.ts`)
+### Lookups
 | Table | Purpose |
 |---|---|
 | `pipeline_stages` | Commercial stages (Discovery → … → Closed). Stored as rows so new stages are inserts, not schema changes. |
@@ -102,7 +104,7 @@ erDiagram
 
 ## Phase 2 tables (`edc_v2`)
 
-### Durable history (`edc_v2.ts`)
+### Durable history
 | Table | Purpose |
 |---|---|
 | `deal_activity_log` | Append-only activity stream (written by the activity-logger subscriber). |
@@ -112,7 +114,7 @@ erDiagram
 | `pipeline_transitions` | Stage-transition events (pipeline-transitions subscriber) — powers Flow analytics. |
 | `pipeline_targets` | Pipeline/coverage targets. |
 
-### Intelligence (`edc_v2_intel.ts`)
+### Intelligence
 | Domain | Tables |
 |---|---|
 | Scoring | `deal_scores`, `scoring_model_weights`, `velocity_benchmarks` |
@@ -126,7 +128,7 @@ erDiagram
 | Custom fields & tags | `custom_field_definitions`, `custom_field_values`, `tag_definitions`, `deal_tags` |
 | Webhooks | `webhooks`, `webhook_delivery_log` |
 
-## Settings tables (`settings.ts`)
+## Settings tables
 
 | Table | Purpose |
 |---|---|
@@ -137,14 +139,8 @@ erDiagram
 
 ## Conventions & notes
 
-- **Isomorphic input, not ORM entities, feed the engine.** `intelligence.ts` reads these tables
-  and builds the plain-data input the pure engine expects — the engine never touches Drizzle.
+- **Isomorphic input, not repository objects, feed the engine.** `intelligence.ts` reads these
+  tables via the Catalyst repositories and builds the plain-data input the pure engine expects —
+  the engine never touches Data Store directly.
 - **Snapshots reconstruct gates only.** Economics and stage always reflect current values; only
   gate state is rebuilt from the audit log for point-in-time views.
-- **Post-merge schema sync gotcha.** Tables an agent created via direct SQL don't automatically
-  reach the main database on merge; a post-merge `push` is expected (non-fatal), and you must
-  **never** use `push-force` (truncate risk). See `.agents/memory/edc-post-merge-schema-sync.md`.
-- **Applying schema:**
-  ```bash
-  pnpm --filter @workspace/db run push
-  ```
