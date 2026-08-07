@@ -13,9 +13,16 @@
  *
  * The iframe is same-origin — /accounts/… on our own AppSail domain — so its
  * document is directly readable and measurable. Mirrors the approach the
- * sibling Customer-Insight-Engine project uses, minus its theme re-injection
- * and error-copy rewriting: this project has CSS Customization disabled in the
- * Catalyst console, so there is no stylesheet to re-inject.
+ * sibling Customer-Insight-Engine project uses, minus its error-copy
+ * rewriting.
+ *
+ * Theming is not done here but IS driven from here, via the `onDocument` hook:
+ * see catalyst-iframe-theme.ts. It has to run per DOCUMENT rather than per
+ * iframe element, and `onLoad` below is the one place that fires for both the
+ * initial render and the "Forgot Password?" navigation. (EDC deliberately does
+ * not use the Catalyst console's CSS Customization for this — the tokens are
+ * resolved per theme/time-band/shell at runtime, which a static stylesheet
+ * served by the gateway cannot do.)
  */
 
 // Below the shortest real step (email + Next + "Forgot Password?"); above the
@@ -29,6 +36,9 @@ const BOTTOM_PADDING = 24;
 // Re-measure after load: webfonts and the flow's own entry animation settle
 // after `load` fires, and each lands a different final height.
 const SETTLE_DELAYS_MS = [150, 400, 900];
+// Backstop for the anti-flash gate in wireOnce: however theming goes, the frame
+// is visible by now.
+const REVEAL_FALLBACK_MS = 250;
 
 /**
  * Height of the real content, measured as the bottom of the lowest visible
@@ -65,11 +75,24 @@ function measureContent(doc: Document): number {
   );
 }
 
+export interface CatalystIframeAutosizeOptions {
+  /**
+   * Called with the frame's document each time one loads, BEFORE the first
+   * measurement — so anything it changes is reflected in the height. Used to
+   * apply EDC's theme (catalyst-iframe-theme.ts). Must not throw; failures are
+   * swallowed so a styling problem can never break sizing.
+   */
+  onDocument?: (doc: Document, iframe: HTMLIFrameElement) => void;
+}
+
 /**
  * Starts watching `slot` for the SDK's iframe and keeps its height in sync
  * with the content. Returns a cleanup that detaches every observer.
  */
-export function attachCatalystIframeAutosize(slot: HTMLElement): () => void {
+export function attachCatalystIframeAutosize(
+  slot: HTMLElement,
+  options: CatalystIframeAutosizeOptions = {},
+): () => void {
   let stopped = false;
   let frame = 0;
   const timers: number[] = [];
@@ -143,10 +166,52 @@ export function attachCatalystIframeAutosize(slot: HTMLElement): () => void {
     applyHeight(iframe);
   };
 
+  // Undoes the anti-flash gate below. Deliberately `opacity` and not
+  // `visibility`: measureContent reads the child's computed `visibility`, and
+  // opacity also keeps the frame in layout so the first measurement is real.
+  const reveal = (iframe: HTMLIFrameElement): void => {
+    iframe.style.opacity = "";
+  };
+
+  /**
+   * Theme, then measure — in that order, since restyling changes the content
+   * height and the theme goes into <head>, which the body MutationObserver
+   * cannot see.
+   */
+  const themeAndMeasure = (iframe: HTMLIFrameElement): void => {
+    if (stopped) return;
+    let doc: Document | null = null;
+    try {
+      doc = iframe.contentDocument;
+    } catch {
+      // Cross-origin hop (federated/social sign-in): nothing to theme, and
+      // leaving it hidden would strand the user.
+      reveal(iframe);
+      return;
+    }
+    if (doc && options.onDocument) {
+      try {
+        options.onDocument(doc, iframe);
+      } catch {
+        // Cosmetic by definition — never let it stop the sizing below.
+      }
+    }
+    reveal(iframe);
+    applyHeight(iframe);
+    // A webfont swap changes metrics without mutating the DOM, so the observer
+    // is blind to it; this is the only hook that catches the reflow.
+    doc?.fonts?.ready
+      .then(() => applyHeight(iframe))
+      .catch(() => {
+        /* the font never resolved; the settle timers still cover it */
+      });
+  };
+
   const wire = (iframe: HTMLIFrameElement): void => {
-    // "Forgot Password?" navigates this same iframe, so re-measure per load.
+    // "Forgot Password?" navigates this same iframe, so re-theme and re-measure
+    // per load.
     const onLoad = (): void => {
-      applyHeight(iframe);
+      themeAndMeasure(iframe);
       watchDocument(iframe);
       for (const delay of SETTLE_DELAYS_MS) {
         timers.push(window.setTimeout(() => applyHeight(iframe), delay));
@@ -168,6 +233,12 @@ export function attachCatalystIframeAutosize(slot: HTMLElement): () => void {
   const wireOnce = (iframe: HTMLIFrameElement | null): void => {
     if (!iframe || iframe.dataset.edcAutosized) return;
     iframe.dataset.edcAutosized = "1";
+    // Hide Zoho's unstyled white panel for the frame or two before the theme
+    // lands. The unconditional timer is the important half: if theming never
+    // runs — a Zoho rename, a cross-origin hop, an exception — the form must
+    // still become visible. Fail open, always.
+    iframe.style.opacity = "0";
+    timers.push(window.setTimeout(() => reveal(iframe), REVEAL_FALLBACK_MS));
     wire(iframe);
   };
 

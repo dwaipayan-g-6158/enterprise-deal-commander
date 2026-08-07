@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { renderSignInForm } from "@/lib/auth/catalyst-client";
 import { attachCatalystIframeAutosize } from "@/lib/auth/catalyst-iframe-autosize";
+import { themeCatalystIframe } from "@/lib/auth/catalyst-iframe-theme";
 
 const LOGIN_SLOT_ID = "catalyst-login-container";
 // Reserves space for Catalyst's typical email-step form so the card doesn't
@@ -32,10 +33,12 @@ const AUTH_POLL_MS = 3000;
  *
  * The iframe IS auto-resized (catalyst-iframe-autosize.ts) — the SDK hands
  * back a fixed ~150px frame that clips Zoho's form behind an internal
- * scrollbar. The sibling project's other polish (theme injection, error-copy
- * rewriting) is still deliberately not ported: this project has CSS
- * Customization disabled in the Catalyst console, so there is no stylesheet to
- * inject.
+ * scrollbar — and restyled to EDC's tokens (catalyst-iframe-theme.ts), since
+ * Zoho otherwise paints a white panel with its own blue buttons and Roboto
+ * type inside this dark card. Both hang off the same `load` hook so they also
+ * cover the "Forgot Password?" navigation. Only the sibling project's
+ * error-copy rewriting is still not ported (the SDK overwrites the placeholder
+ * it would target).
  *
  * Because every input on this page comes from that iframe, a failure to load
  * it leaves nothing to type into — so this component tracks the render
@@ -85,7 +88,21 @@ export default function Login() {
   useEffect(() => {
     const slot = slotRef.current;
     if (!slot) return;
-    return attachCatalystIframeAutosize(slot);
+    // The theme reads its tokens from `slot`, not :root — custom properties
+    // inherit, so the slot resolves `.dark`, `.m-shell` and `data-time-band`
+    // together and a phone gets the mobile palette instead of the desktop one.
+    return attachCatalystIframeAutosize(slot, {
+      onDocument: (doc) => {
+        const verdict = themeCatalystIframe(slot, doc);
+        slot.dataset.edcIframeTheme = verdict.ok ? "applied" : "partial";
+        if (!verdict.ok) {
+          // A Zoho selector rename is otherwise silent — the form still works,
+          // it just looks foreign again. Leave a greppable trace.
+          slot.dataset.edcIframeThemeMissed = verdict.missed.join(",");
+          console.warn("Catalyst sign-in theme partially applied", verdict.missed);
+        }
+      },
+    });
   }, []);
 
   useEffect(() => {
