@@ -279,6 +279,47 @@ the drain job re-fires it. The row IS the queue; there is no separate table. A r
 Trade accepted deliberately: first-retry latency moved from 5s to ≤10m. A retry that happens late
 beats one that silently never happens.
 
+### The offloaded snapshot rows in production are deliberate — do not "clean them up"
+
+Verifying the offload meant temporarily lowering `SNAPSHOT_PAYLOAD_LIMIT` so real deals wrote
+real objects. Those rows were **kept** after the threshold was restored: they carry a
+`payload_key` with a null `payload_inline`, so every read of that deal's history exercises
+`hydratePayloads` and the Stratus `getObject` path for real.
+
+That matters because the offload is threshold-triggered and the threshold is almost never
+reached — without these rows the entire read half of the feature would run only in tests, and
+the first production exercise of it would be the day a payload finally grew past 9,800 chars.
+They look like test residue. They are the opposite: they are the only continuous coverage that
+path has.
+
+## `v2_pipeline_transitions` had to be reconstructed after the migration
+
+The Flow tab (funnel, conversion matrix, Sankey, recycle, coverage, health-score) reads nothing
+but this table. After the migration it held **one row for twelve deals**, because the only
+backfill that had ever existed was a Drizzle/Postgres CLI script that could never run against
+Data Store — and nobody noticed, because the failure was not an error. Every endpoint returned
+200; `convToNextPct` and `avgDaysInStage` were simply null, and the Sankey drew a single
+nonsensical Closed-Lost → Closed-Won link off that lone row.
+
+Reconstruction now lives at `POST /admin/backfill-transitions`
+(`lib/catalyst/transitions-backfill.ts`) — an endpoint rather than a script for the same reason
+`/admin/seed` is one: it needs a real `catalystApp`, and the only way to get one is from a
+request against the deployed app. Four passes, richest source first: `deal_audit_log`, then
+`deal_snapshots` for deals the audit log did not cover, then synthetic create and exit floors so
+a seed-inserted deal with no history at all still contributes to the value bridge. It is
+idempotent — a second call plans zero rows — which is what makes it safe to leave callable.
+
+Two things about it are Catalyst-specific and were **not** in the Postgres original:
+
+- The original offset the synthetic create from the synthetic exit by **1 millisecond**. Here
+  that offset vanishes: `formatCatalystDateTime` truncates to the second, so both rows
+  synthesize the identical `natural_key` and `create()` silently drops one. The offset is a
+  full second, and a unit test fails if it regresses.
+- Two genuinely distinct transitions for one deal inside the same second collide the same way.
+  The planner shifts the later one forward to the next free second rather than letting it be
+  dropped — losing a real transition is worse than recording it a second late, and count and
+  ordering are all the Flow maths reads.
+
 ## A column this manifest missed: `v2_deal_memory.key_lessons`
 
 Added 2026-08-06, as `text` (10,000), matching how every other array column on this table is

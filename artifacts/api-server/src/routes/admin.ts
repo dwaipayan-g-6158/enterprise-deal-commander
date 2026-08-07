@@ -9,6 +9,7 @@ import {
   seedDealsCatalyst,
   type SeedSummary,
 } from "../lib/catalyst/seed";
+import { runTransitionBackfill } from "../lib/catalyst/transitions-backfill";
 
 // Auth + write-role enforcement is applied centrally in routes/index.ts.
 // POST is a non-safe method and this path is NOT in
@@ -89,6 +90,29 @@ router.post("/admin/seed", async (req: Request, res: Response) => {
   }
 
   res.json({ data: { phase: raw, phases, totalRowsWritten } });
+});
+
+/**
+ * Reconstruct `v2_pipeline_transitions` from the history the app already has
+ * (audit log, then snapshots, then synthetic create/exit floors).
+ *
+ * An endpoint rather than a CLI script for the same reason `/admin/seed` is
+ * one: the reconstruction needs a `catalystApp`, and the only way to get a real
+ * one is from a request against the deployed app.
+ *
+ * Idempotent — a second call plans nothing, because the first call's rows are
+ * now part of what it dedupes against. That is what makes it safe to leave
+ * callable in production.
+ */
+router.post("/admin/backfill-transitions", async (req: Request, res: Response) => {
+  const actor = getActor(req);
+  logger.info({ actor: actor.username }, "Pipeline-transitions backfill requested");
+
+  const started = Date.now();
+  const result = await runTransitionBackfill(initCatalystApp(req));
+  logger.info({ ...result, ms: Date.now() - started }, "Pipeline-transitions backfill complete");
+
+  res.json({ data: { ...result, ms: Date.now() - started } });
 });
 
 export default router;

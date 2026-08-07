@@ -4,7 +4,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Enterprise Deal Commander (EDC) — a "Deal Commander" cockpit for enterprise software deals. It tracks deal economics, technical validation gates, blockers, and cross-sell whitespace, then runs a 12-pattern intelligence engine to surface risk alerts, governance health, and an Executive Briefing Mode. RBAC (admin + read-only reader) lets a team see the whole pipeline; there is still no per-deal ownership or data scoping — the split is verb-level only.
 
-This is a **pnpm workspace monorepo** (Node 24, PostgreSQL 16). Use `pnpm` only — `preinstall` rejects npm/yarn.
+This is a **pnpm workspace monorepo** (Node 24). Use `pnpm` only — `preinstall` rejects npm/yarn.
+
+**The datastore is Zoho Catalyst Data Store, not Postgres.** The app is deployed as a Catalyst
+AppSail app; there is no Drizzle and no `DATABASE_URL` anywhere in the tree. See
+`docs/CATALYST_SCHEMA.md` and `docs/catalyst-datastore-constraints.md` before touching the data
+layer — the Row API has no WHERE clause, and several of its behaviours (second-granularity
+datetimes, plain-object rejections, a hard concurrency limit) will surprise you.
 
 ## Commands
 
@@ -15,12 +21,16 @@ Run from the repo root unless noted:
 - `pnpm run typecheck` — typecheck all packages (`typecheck:libs` via `tsc --build`, then per-artifact `tsc --noEmit`). Run this before claiming work compiles.
 - `pnpm run build` — typecheck + recursive build.
 - `pnpm --filter @workspace/api-spec run codegen` — regenerate Zod schemas + React Query hooks from `lib/api-spec/openapi.yaml` (Orval). Run after any API contract change.
-- `pnpm --filter @workspace/db run push` — push Drizzle schema to the DB (dev only; can hit an interactive TTY prompt — for additive nullable columns apply via direct SQL). **Never** use `push-force` (truncate risk).
-- `pnpm --filter @workspace/api-server run seed` — seed the database.
+- `pnpm --filter @workspace/scripts run build-appsail` — build the deployable AppSail bundle. **Run from PowerShell, not Git-Bash.** Deploy the resulting zip via the Catalyst **Console** (the app → Overview → Create Deployment) — never `catalyst deploy appsail`, and never the AppSail list's "Deploy from Console" button (that one is first-time-creation only).
 
-Tests use **Vitest**. Run a package's suite with `pnpm --filter <pkg> run test`; a single file with `pnpm --filter @workspace/api-server exec vitest run src/lib/cache.test.ts`; one test with `... -t "name"`. Test files live next to source as `*.test.ts`.
+Schema changes are made against the Data Store (Console or the Catalyst MCP tools), not by a
+migration tool. Seeding is `POST /admin/seed` against the deployed app, and reconstructing
+pipeline-transition history is `POST /admin/backfill-transitions` — both need a real request to
+derive a `catalystApp` from, which is why neither is a CLI script.
 
-Required env: `DATABASE_URL` (Postgres), `SESSION_SECRET` (JWT signing).
+Tests use **Vitest**. Run a package's suite with `pnpm --filter <pkg> run test`; a single file with `pnpm --filter @workspace/api-server exec vitest run src/lib/cache.test.ts`; one test with `... -t "name"`. Test files live next to source as `*.test.ts`. The whole suite runs with **no database** — everything is exercised against the in-memory Data Store fake in `artifacts/api-server/src/test-support/catalyst-test-app.ts`.
+
+Required env: `SESSION_SECRET` (JWT signing). On the deployed app, `EDC_JOB_SECRET` additionally gates the scheduled-job routes.
 
 ## Architecture
 
@@ -29,12 +39,12 @@ Packages (`pnpm-workspace.yaml`: `artifacts/*`, `lib/*`, `scripts`) wire togethe
 - **`lib/engine`** (`@workspace/engine`) — the pure, isomorphic intelligence engine (12 risk patterns + momentum). Performs **no DB/network calls**; all inputs (thresholds, fx rate, catalog size, dispositions, momentum context) are passed as arguments. This is deliberate: the *identical* logic runs server-side and in the browser Risk Simulator / historical Briefing replay, so risk results never diverge. Exported directly from `src/index.ts` (no build step).
 - **`lib/api-spec`** (`@workspace/api-spec`) — `openapi.yaml` is the source-of-truth API contract. Orval generates from it. **Do not change `info.title`** — it drives codegen filenames.
 - **`lib/api-zod`** + **`lib/api-client-react`** — *generated* output (Zod validators used by the server; typed React Query hooks used by the client). Don't hand-edit `src/generated/**`; change the spec and re-run codegen.
-- **`lib/db`** (`@workspace/db`) — Drizzle schema + client. Schema in `src/schema/{auth,deals,edc_v2,lookups}.ts`. `edc_v2` holds the Phase 2 durable-history backbone.
+- **`lib/db`** (`@workspace/db`) — the Catalyst Data Store access layer, and nothing else. `src/catalyst/sdk.ts` holds SDK init, the per-request read cache and the concurrency limiter; `src/catalyst/repositories/*.ts` are the per-table repositories every route uses; `src/catalyst/stratus.ts` is the object-storage overflow tier for oversized snapshot payloads. There is no ORM: the Row API has no WHERE clause, so a repository reads its whole table and filters in memory. Uniqueness is enforced by synthesized `natural_key` columns — see `docs/CATALYST_SCHEMA.md`.
 - **`artifacts/api-server`** (`@workspace/api-server`) — Express 5 API. Routes in `src/routes/*.ts` (+ `routes/v2`); `src/lib/intelligence.ts` assembles engine input from the DB. Phase 2 adds an **event bus** (`src/lib/events.ts`) with subscribers (`src/lib/subscribers/*`) for durable history, cache invalidation, activity logging, and health tracking. Bundled with **esbuild** to a single CJS file in `dist/` — workspace deps are inlined, so the dev script always rebuilds before start.
 - **`artifacts/edc`** (`@workspace/edc`) — React 19 + Vite + Tailwind v4 + shadcn/ui frontend. Pages in `src/pages/*`, cockpit features in `src/components/cockpit/*`, generated UI primitives in `src/components/ui/*`. Routing via `wouter`, data via `@tanstack/react-query`.
 - **`artifacts/mockup-sandbox`** — isolated UI mockup playground (not part of the product).
 
-Data flow: client (generated hooks) → `/api/v1` & `/api/v2` Express routes → `intelligence.ts` builds engine input from Drizzle → `@workspace/engine` computes risk → response validated against generated Zod.
+Data flow: client (generated hooks) → `/api/v1` & `/api/v2` Express routes → `lib/catalyst/intelligence.ts` builds engine input from the Data Store repositories → `@workspace/engine` computes risk → response validated against generated Zod.
 
 ### Key behaviors to preserve
 
