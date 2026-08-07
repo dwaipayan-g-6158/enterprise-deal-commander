@@ -11,6 +11,8 @@
 // never defines that route) and always resolves the correct project/zaid/org
 // config for whichever domain actually served the page.
 
+import { isCatalystSdkReady } from "./catalyst-sdk-state";
+
 declare global {
   interface Window {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -37,32 +39,61 @@ function loadScript(src: string): Promise<void> {
     s.src = src;
     s.async = false; // preserve execution order for dynamically-inserted scripts
     s.onload = () => resolve();
-    s.onerror = () => reject(new Error(`Failed to load ${src}`));
+    s.onerror = () => {
+      // Drop the failed tag before rejecting. The early-return above treats a
+      // present tag as already-loaded, so leaving a 404'd one in the head
+      // would make the sign-in page's retry resolve instantly against a
+      // script that never executed, instead of re-requesting it.
+      s.remove();
+      reject(new Error(`Failed to load ${src}`));
+    };
     document.head.appendChild(s);
   });
 }
 
+// How long to wait for init.js to populate `window.catalyst` after both
+// script tags have loaded.
+const SDK_READY_TIMEOUT_MS = 3000;
+
 /**
- * Loads the Web SDK + the platform's own init script exactly once, and
- * waits for `window.catalyst.auth` to become available before resolving.
+ * Loads the Web SDK + the platform's own init script, and waits for the SDK
+ * to become genuinely usable before resolving.
+ *
+ * Rejects — rather than resolving with a half-initialized handle — when
+ * `init.js` doesn't land. That script is served by the Catalyst AppSail
+ * gateway and exists nowhere else, so off the deployed domain (localhost, a
+ * preview host) this is the *expected* path, not a rare edge case. It has to
+ * surface as an error the caller can render, because the CDN script alone
+ * leaves `window.catalyst.auth` present but inert: the previous guard tested
+ * only `!window.catalyst?.auth`, passed on that inert object, and let
+ * `signIn()` run against an uninitialized SDK — which renders nothing at all
+ * and left the sign-in card silently blank. `isCatalystSdkReady` is the same
+ * condition the wait loop below polls on, so the two can no longer disagree.
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function loadCatalystSDK(): Promise<any> {
   if (loadPromise) return loadPromise;
-  loadPromise = (async () => {
+  const attempt = (async () => {
     if (typeof window === "undefined") throw new Error("SSR not supported");
     await loadScript(CDN_URL);
     await loadScript(INIT_URL);
     const start = Date.now();
-    while (
-      (!window.catalyst || typeof window.catalyst.auth?.signIn !== "function") &&
-      Date.now() - start < 3000
-    ) {
+    while (!isCatalystSdkReady(window.catalyst) && Date.now() - start < SDK_READY_TIMEOUT_MS) {
       await new Promise((r) => setTimeout(r, 50));
     }
-    if (!window.catalyst?.auth) throw new Error("Catalyst Web SDK failed to initialize");
+    if (!isCatalystSdkReady(window.catalyst)) {
+      throw new Error("Catalyst Web SDK failed to initialize");
+    }
     return window.catalyst;
   })();
+  // A failed attempt must not be memoized: the sign-in page offers a retry,
+  // and re-awaiting this same rejected promise would fail instantly forever
+  // no matter how the underlying problem (offline, blocked CDN, gateway
+  // hiccup) resolved in the meantime.
+  loadPromise = attempt.catch((err: unknown) => {
+    loadPromise = null;
+    throw err;
+  });
   return loadPromise;
 }
 

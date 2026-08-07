@@ -19,20 +19,36 @@ does **not** pick up edits to routes, the engine, or the schema. **Re-run the de
 pnpm --filter @workspace/api-server run dev
 ```
 
-### `drizzle-kit push` hangs
-`push` can present an **interactive TTY prompt** for certain changes. Run it in an interactive
-terminal. For additive nullable columns, applying via direct SQL is an accepted workaround. Never
-use `push-force`.
-
 ### Frontend can't reach the API / 401 everywhere
 - Confirm the API server is up on port 5000 (`curl http://localhost:5000/api/healthz`).
 - The dev server proxies `/api` to `API_PROXY_TARGET` (default `http://localhost:5000`) — check
   `artifacts/edc/.env`.
-- Auth is cookie-based; make sure cookies aren't blocked and you actually logged in.
+- There's no bearer token or cookie you attach yourself; sign-in is Catalyst embedded auth (see
+  [security.md](./security.md)). Confirm you're actually signed in through the login widget.
 
 ### Can't log in
-The login **email** field maps to `commanders.username`. Enter the seeded username. If none
-exists, re-run `pnpm --filter @workspace/api-server run seed` or inspect `src/seed.ts`.
+Login is Catalyst embedded auth (see [security.md](./security.md)). The sign-in widget needs
+`/__catalyst/sdk/init.js`, which is served **only** by the Catalyst AppSail gateway — so **local
+sign-in cannot work at all off the deployed domain, by construction.** This is not a bug to chase:
+running the frontend on `localhost:5173` (or any non-Catalyst origin) will never be able to load
+the widget, no matter what env vars are set. A Workbox service worker was investigated and ruled
+out as a cause (no worker is active on the login route). `EDC_JOB_SECRET` is unrelated to
+sign-in — it only gates `POST /api/v1/jobs/:jobName`. To actually sign in, use the deployed
+Catalyst app's URL. The login page (`artifacts/edc/src/pages/login.tsx`) now shows an explicit
+error card with a **Retry** action (instead of a permanently blank card) when the widget fails to
+load, so a failed load is visible rather than silent.
+
+### Data Store reads intermittently 429 or a fast 500
+The Row API's concurrency limiter (`lib/db/src/catalyst/sdk.ts`) can reject a burst of whole-table
+reads issued within the same request — a 429 that presents as a *fast* 500 to the caller. New code
+must reuse the existing per-request memoized repository/`fetchAllRows` calls rather than re-fetching
+the same table multiple times per request; see [catalyst-datastore-constraints.md](./catalyst-datastore-constraints.md).
+
+### Scheduled-job routes (`POST /api/v1/jobs/:jobName`) return 503
+This is by design, not a bug: these routes are mounted above `requireAuth` (a cron carries no
+Catalyst session) and instead check `EDC_JOB_SECRET` in constant time. If the secret is unset or
+empty, every job route refuses with `503` rather than running unauthenticated — set
+`EDC_JOB_SECRET` and send it as the `X-EDC-Job-Secret` header.
 
 ### Missing FX rate / TCV looks wrong
 If a deal's currency differs from the reporting currency and no FX rate exists, the engine shows
@@ -45,17 +61,17 @@ Native binaries for platforms other than linux-x64 (and win32-x64) are stripped 
 and `@tailwindcss/oxide` packages for your platform, or build inside a linux-x64 container.
 
 ### Flow analytics look empty for old deals
-`pipeline_transitions` are recorded going forward by an event subscriber. Backfill history:
-```bash
-pnpm --filter @workspace/scripts exec tsx <backfill:transitions script>
-```
+`pipeline_transitions` are recorded going forward by an event subscriber. Backfill history for
+pre-existing deals with `POST /api/v1/admin/backfill-transitions` (admin-only; not a CLI script —
+it needs a real request to derive a Catalyst app handle from, same as `/admin/seed`). It's
+idempotent, so it's safe to call more than once.
 
 ## Error reference
 
 | Status | Code | Cause | Fix |
 |---|---|---|---|
 | `409` | `STAGE_GUARDRAIL` | Advancing a deal's stage past an active RED risk pattern. | Resolve the risk, or resend the stage change with an `override_reason` (it's recorded to `deal_stage_overrides` + audited). |
-| `401` | — | No/invalid `edc_session` cookie. | Log in again. |
+| `401` | — | No/invalid Catalyst-authenticated session. | Sign in again via the login widget. |
 | `404` | — | Unknown route or resource id. | Check the path and id; remember all routes are under `/api`. |
 | `400` | — | Request failed Zod validation. | Match the request body to the OpenAPI schema. |
 | `500` | — | Unhandled server error. | Check server logs (pino). |
@@ -86,8 +102,8 @@ not a user either.
 patterns plus the 7-dimension Risk Engine v2. See [risk-engine.md](./risk-engine.md).
 
 **Where's the migration history?**
-There's no formal migrations directory — schema is applied with `drizzle-kit push`. See
-[data-model.md](./data-model.md).
+There is no migration history — schema changes are made directly against Zoho Catalyst Data Store
+(Console or MCP tools). See [CATALYST_SCHEMA.md](./CATALYST_SCHEMA.md).
 
 **Can I run everything on one port?**
 Yes — build the SPA into the API server (single-origin). See [build-and-deploy.md](./build-and-deploy.md).
@@ -103,10 +119,10 @@ No end-user CLI — only the developer pnpm/maintenance scripts in
 | Note | Area |
 |---|---|
 | `api-server-build.md` | esbuild bundling; restart after edits; run one-off scripts via a dist build. |
-| `edc-auth-client.md` | Login `email` → `commanders.username`; generated hooks; `/api/v1/*`. |
+| `edc-auth-client.md` | Generated hooks (`@workspace/api-zod`/`api-client-react`) and `/api/v1/*` routing are still current; its login-field notes predate Catalyst embedded auth (see [security.md](./security.md)). |
 | `edc-server-gotchas.md` | Express route ordering, deal update on PUT+PATCH, the 409 guardrail, audit `entity_id`. |
 | `edc-client-engine-recompute.md` | Simulator + historical Briefing re-run the pure engine; audit caps at 200 rows; snapshots reconstruct gates only. |
-| `edc-post-merge-schema-sync.md` | Direct-SQL tables don't reach main on merge; post-merge push non-fatal; never `--force`. |
+| `edc-post-merge-schema-sync.md` | Historical, pre-Catalyst-migration — described a Drizzle/direct-SQL post-merge push gotcha; no such push mechanism exists anymore (see the FAQ above). |
 | `edc-phase2-backbone.md` | Event bus + `edc_v2` history + `/api/v2` reads; cache invalidation; generation guard. |
 | `briefing-export-privacy.md` | Two export paths; presenter-private content must be outside the content ref **and** print-hidden. |
 | `edc-snapshot-payload.md` | Snapshot payload shape; the UI must whitelist fields (deal includes speaker notes). |

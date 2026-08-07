@@ -1,18 +1,20 @@
 # Data Model
 
-EDC uses **PostgreSQL 16** via **Drizzle ORM** (`lib/db`). The schema is split across two Postgres
-schemas inside one database:
+EDC uses **Zoho Catalyst Data Store** — a hosted, schemaless Row API, not a SQL database. All 71
+tables live in one flat namespace (Phase 2 tables carry a `v2_` prefix instead of a separate
+schema). See [`docs/CATALYST_SCHEMA.md`](./CATALYST_SCHEMA.md) for the authoritative
+table-by-table manifest and type mapping, and
+[`docs/catalyst-datastore-constraints.md`](./catalyst-datastore-constraints.md) for the Row
+API's real constraints (no `WHERE` clause, no native FK cascade, second-granularity datetimes).
 
-- **`edc`** (public) — the Phase 1 core.
-- **`edc_v2`** — the Phase 2 durable-history, intelligence, and settings backbone
-  (`pgSchema("edc_v2")`).
-
-Schema modules live in `lib/db/src/schema/` and are aggregated by `index.ts`. There is **no formal
-migrations directory** — schema is applied with `drizzle-kit push` in development.
+> **ID fields.** This doc's ER diagram below still shows ID columns as `uuid` for readability —
+> in the real Data Store schema every one of those is a `varchar(36)` populated with
+> `crypto.randomUUID()` at write time, not a database-generated default. See
+> [`docs/CATALYST_SCHEMA.md`](./CATALYST_SCHEMA.md) for the full type mapping.
 
 - [Core entities (ER diagram)](#core-entities-er-diagram)
-- [Phase 1 tables (`edc`)](#phase-1-tables-edc)
-- [Phase 2 tables (`edc_v2`)](#phase-2-tables-edc_v2)
+- [Phase 1 table group](#phase-1-table-group)
+- [Phase 2 table group (`v2_` prefix)](#phase-2-table-group-v2_-prefix)
 - [Settings tables](#settings-tables)
 - [Conventions & notes](#conventions--notes)
 
@@ -61,14 +63,14 @@ erDiagram
     }
 ```
 
-## Phase 1 tables (`edc`)
+## Phase 1 table group
 
 ### Identity
 | Table | Purpose |
 |---|---|
-| `commanders` | The authenticated user(s). Login `email` maps to `username`; password is a bcrypt hash. |
+| `commanders` | The authenticated user(s). Identity is keyed by Catalyst's own `catalyst_user_id`, filled in on first Catalyst sign-in; `username` stores the lowercased Catalyst account email. `password_hash` is an unused legacy column — no longer read anywhere. |
 
-### Deals & governance (`deals.ts`)
+### Deals & governance
 | Table | Purpose |
 |---|---|
 | `enterprise_deals` | The central entity. Natural key `(account_name, deal_name)`. Holds economics, stage, dates, and soft-delete/archive columns (F14). |
@@ -82,9 +84,9 @@ erDiagram
 | `deal_review_markers` | "Reviewed" markers on deals. |
 | `deal_interventions` | Rapid-intervention checklist launches (F7). |
 | `deal_stage_overrides` | Ledger of typed overrides when a RED guardrail was bypassed (F12). |
-| `bat_signals` | 48-hour signed share tokens (F7). |
+| `bat_signals` | 48-hour read-only share tokens (F7). |
 
-### Lookups (`lookups.ts`)
+### Lookups
 | Table | Purpose |
 |---|---|
 | `pipeline_stages` | Commercial stages (Discovery → … → Closed). Stored as rows so new stages are inserts, not schema changes. |
@@ -100,51 +102,45 @@ erDiagram
 > **FX rates** are read/written via `GET|PUT /api/v1/lookups/fx-rates` and feed multi-currency
 > normalization (F1); they are stored in the lookup layer.
 
-## Phase 2 tables (`edc_v2`)
+## Phase 2 table group (`v2_` prefix)
 
-### Durable history (`edc_v2.ts`)
+### Durable history
 | Table | Purpose |
 |---|---|
-| `deal_activity_log` | Append-only activity stream (written by the activity-logger subscriber). |
-| `deal_snapshots` | Hourly point-in-time snapshots; payload `{deal, gates, governance}`. |
-| `deal_health_history` | Health-color time series (health-tracker subscriber). |
-| `portfolio_rollups` | **Unused since 2026-08** — the precompute it backed was removed (aggregates are computed live). The table definition is retained but never read or written. |
-| `pipeline_transitions` | Stage-transition events (pipeline-transitions subscriber) — powers Flow analytics. |
-| `pipeline_targets` | Pipeline/coverage targets. |
+| `v2_deal_activity_log` | Append-only activity stream (written by the activity-logger subscriber). |
+| `v2_deal_snapshots` | Hourly point-in-time snapshots; payload `{deal, gates, governance}`. |
+| `v2_deal_health_history` | Health-color time series (health-tracker subscriber). |
+| `v2_portfolio_rollups` | **Unused since 2026-08** — the precompute it backed was removed (aggregates are computed live). The table definition is retained but never read or written. |
+| `v2_pipeline_transitions` | Stage-transition events (pipeline-transitions subscriber) — powers Flow analytics. |
+| `v2_pipeline_targets` | Pipeline/coverage targets. |
 
-### Intelligence (`edc_v2_intel.ts`)
+### Intelligence
 | Domain | Tables |
 |---|---|
-| Scoring | `deal_scores`, `scoring_model_weights`, `velocity_benchmarks` |
-| Competitive | `deal_competitors` |
-| Deal Memory | `deal_memory` |
-| Stakeholders & decisions | `stakeholders`, `meeting_sessions`, `deal_decisions` |
-| Custom patterns | `custom_risk_patterns`, `custom_pattern_conditions` |
-| Playbooks | `playbooks`, `playbook_steps`, `deal_playbook_assignments`, `playbook_step_completions` |
-| Financial | `deal_pricing_schedule`, `financial_scenarios` |
-| Notifications | `notification_rules`, `notification_log` |
-| Custom fields & tags | `custom_field_definitions`, `custom_field_values`, `tag_definitions`, `deal_tags` |
-| Webhooks | `webhooks`, `webhook_delivery_log` |
+| Scoring | `v2_deal_scores`, `v2_scoring_model_weights`, `v2_velocity_benchmarks` |
+| Competitive | `v2_deal_competitors` |
+| Deal Memory | `v2_deal_memory` |
+| Stakeholders & decisions | `v2_stakeholders`, `v2_meeting_sessions`, `v2_deal_decisions` |
+| Custom patterns | `v2_custom_risk_patterns`, `v2_custom_pattern_conditions` |
+| Playbooks | `v2_playbooks`, `v2_playbook_steps`, `v2_deal_playbook_assignments`, `v2_playbook_step_completions` |
+| Financial | `v2_deal_pricing_schedule`, `v2_financial_scenarios` |
+| Notifications | `v2_notification_rules`, `v2_notification_log` |
+| Custom fields & tags | `v2_custom_field_definitions`, `v2_custom_field_values`, `v2_tag_definitions`, `v2_deal_tags` |
+| Webhooks | `v2_webhooks`, `v2_webhook_delivery_log` |
 
-## Settings tables (`settings.ts`)
+## Settings tables
 
 | Table | Purpose |
 |---|---|
-| `settings_change_log` | Auditable configuration changes (list / get / rollback / export). |
-| `automation_rules`, `automation_actions` | Automation rule engine. |
-| `automation_rule_templates` | Reusable rule templates. |
-| `automation_execution_log` | Automation run history. |
+| `v2_settings_change_log` | Auditable configuration changes (list / get / rollback / export). |
+| `v2_automation_rules`, `v2_automation_actions` | Automation rule engine. |
+| `v2_automation_rule_templates` | Reusable rule templates. |
+| `v2_automation_execution_log` | Automation run history. |
 
 ## Conventions & notes
 
-- **Isomorphic input, not ORM entities, feed the engine.** `intelligence.ts` reads these tables
-  and builds the plain-data input the pure engine expects — the engine never touches Drizzle.
+- **Isomorphic input, not repository objects, feed the engine.** `intelligence.ts` reads these
+  tables via the Catalyst repositories and builds the plain-data input the pure engine expects —
+  the engine never touches Data Store directly.
 - **Snapshots reconstruct gates only.** Economics and stage always reflect current values; only
   gate state is rebuilt from the audit log for point-in-time views.
-- **Post-merge schema sync gotcha.** Tables an agent created via direct SQL don't automatically
-  reach the main database on merge; a post-merge `push` is expected (non-fatal), and you must
-  **never** use `push-force` (truncate risk). See `.agents/memory/edc-post-merge-schema-sync.md`.
-- **Applying schema:**
-  ```bash
-  pnpm --filter @workspace/db run push
-  ```

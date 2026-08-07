@@ -4,9 +4,9 @@
 - [1. Install the toolchain](#1-install-the-toolchain)
 - [2. Clone the repository](#2-clone-the-repository)
 - [3. Install dependencies](#3-install-dependencies)
-- [4. Provision PostgreSQL](#4-provision-postgresql)
+- [4. Catalyst access](#4-catalyst-access)
 - [5. Configure environment variables](#5-configure-environment-variables)
-- [6. Create the schema and seed data](#6-create-the-schema-and-seed-data)
+- [6. Seed data](#6-seed-data)
 - [7. Verify the install](#7-verify-the-install)
 - [Platform notes](#platform-notes)
 
@@ -16,13 +16,9 @@
 |---|---|---|
 | **Node.js** | **24.x** | The monorepo targets Node 24. |
 | **pnpm** | 9+ (10 recommended) | **Required.** `npm` and `yarn` are rejected by a `preinstall` hook. |
-| **PostgreSQL** | **16** | Uses the `edc` and `edc_v2` schemas inside one database. |
 | Git | any recent | To clone. |
 
-There is **no Docker/compose** setup in the repository — you run Postgres and the Node
-processes directly. Deployment historically targets **linux-x64** (native binaries for other
-platforms are stripped in `pnpm-workspace.yaml`, except win32-x64 which is kept for local
-Windows development).
+There is no Docker/compose setup. The datastore is hosted Zoho Catalyst Data Store — there is nothing to provision locally beyond Node and pnpm; local dev talks to the same Catalyst project as the deployed app.
 
 ### Key dependency versions (from the pnpm catalog)
 
@@ -33,7 +29,6 @@ Windows development).
 | Frontend | tailwindcss / @tailwindcss/vite | `^4.1.14` |
 | Frontend | @tanstack/react-query | `^5.90.21` |
 | Frontend | wouter | `^3.3.5` |
-| Data | drizzle-orm | `^0.45.2` |
 | Tooling | typescript | `~5.9.3` |
 | Tooling | tsx | `^4.21.0` |
 | Tooling | zod | `^3.25.76` |
@@ -73,21 +68,9 @@ Notes:
   version to be at least one day old. Do not disable it. This only affects fresh resolution, not
   installs from the committed lockfile.
 
-## 4. Provision PostgreSQL
+## 4. Catalyst access
 
-Create a database and a user. For local development:
-
-```sql
-CREATE DATABASE edc;
-CREATE USER edc WITH PASSWORD 'edc';
-GRANT ALL PRIVILEGES ON DATABASE edc TO edc;
-```
-
-The application creates and uses two schemas inside this database: `edc` (Phase 1) and `edc_v2`
-(Phase 2). You do not need to create the schemas by hand — `drizzle-kit push` does that.
-
-> On this project's Windows dev host, a portable PostgreSQL build is used; any reachable
-> Postgres 16 instance works as long as `DATABASE_URL` points to it.
+Local dev and the deployed app share the same Catalyst project (**EDC**, id `31210000000639013`, org `60066539659`, India DC) — there is no separate local datastore to provision. See [`docs/CATALYST_SCHEMA.md`](./CATALYST_SCHEMA.md) for the schema reference.
 
 ## 5. Configure environment variables
 
@@ -101,8 +84,6 @@ cp artifacts/edc/.env.example        artifacts/edc/.env
 Minimum required for the API server (`artifacts/api-server/.env`):
 
 ```dotenv
-DATABASE_URL=postgres://edc:edc@localhost:5432/edc
-SESSION_SECRET=<a long random string, e.g. `openssl rand -hex 32`>
 NODE_ENV=development
 PORT=5000
 ```
@@ -110,19 +91,9 @@ PORT=5000
 Frontend (`artifacts/edc/.env`): `PORT`, `BASE_PATH=/`, and optionally `API_PROXY_TARGET`
 (defaults to `http://localhost:5000`). Full reference: [configuration.md](./configuration.md).
 
-## 6. Create the schema and seed data
+## 6. Seed data
 
-```bash
-# Push the Drizzle schema into the database (dev)
-pnpm --filter @workspace/db run push
-
-# Seed lookup tables + sample data
-pnpm --filter @workspace/api-server run seed
-```
-
-> `drizzle-kit push` may present an interactive prompt for certain changes. **Never** use
-> `push-force` (it can truncate data). For additive nullable columns, applying via direct SQL is
-> an accepted workaround (see the memory notes).
+Seeding is `POST /api/v1/admin/seed?phase=all` against a running instance (admin-only, RBAC-gated) — not a CLI script, because deriving a Catalyst app handle needs a real request. Sign-in only works against the **deployed** Catalyst app (see the note in step 7 below — a local dev origin can never load the sign-in widget), so sign in there as an admin, then call that endpoint once from the browser devtools console (which carries your active Catalyst session automatically) or via curl. There is no session cookie to pass by hand — Catalyst embedded auth manages the session in the browser, not a cookie this server issues.
 
 ## 7. Verify the install
 
@@ -139,14 +110,25 @@ curl http://localhost:5000/api/healthz
 pnpm --filter @workspace/edc run dev
 ```
 
-Open the Vite URL printed in the terminal and continue with the
-[Quick Start](./quickstart.md).
+Open the Vite URL printed in the terminal.
+
+> **Signing in requires the deployed app.** The Catalyst embedded-auth sign-in widget needs
+> `/__catalyst/sdk/init.js`, which is served **only** by the Catalyst AppSail gateway — a local
+> origin such as `localhost:5173` can never load it, by construction, no matter what env vars are
+> set. To actually sign in and use the app, open the deployed app's URL instead. Local dev is for
+> everything short of exercising a live sign-in session.
+
+Continue with the [User Manual → Getting started](./user-manual.md#getting-started) for what
+happens once you're signed in.
 
 ## Platform notes
 
 - **Windows:** win32-x64 native binaries (rollup, lightningcss, tailwind oxide, esbuild) are
-  intentionally kept enabled so the app runs on a local Windows dev host. Use PowerShell or Git
-  Bash; the pnpm commands are identical.
+  intentionally kept enabled so the app runs on a local Windows dev host. Day-to-day pnpm commands
+  are identical in PowerShell or Git Bash, with one exception:
+  `pnpm --filter @workspace/scripts run build-appsail` must be run from **PowerShell only** — Git
+  Bash's MSYS path conversion mangles `BASE_PATH` and produces a broken build (see
+  [build-and-deploy.md](./build-and-deploy.md)).
 - **linux-x64:** the primary/deploy target. Everything works out of the box.
 - **macOS / other:** native binaries for these platforms are stripped by the `overrides` block
   in `pnpm-workspace.yaml`. You may need to re-enable the relevant `@esbuild/*`, `rollup`, and

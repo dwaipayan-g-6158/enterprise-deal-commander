@@ -1,12 +1,14 @@
 # Architecture
 
 - [Design principles](#design-principles)
+- [Datastore](#datastore)
 - [Monorepo package graph](#monorepo-package-graph)
 - [The packages](#the-packages)
 - [Request → engine data flow](#request--engine-data-flow)
 - [The event bus (Phase 2)](#the-event-bus-phase-2)
 - [Contract-first codegen](#contract-first-codegen)
 - [Authentication & session model](#authentication--session-model)
+- [Authorization (RBAC)](#authorization-rbac)
 - [Key invariants](#key-invariants)
 
 ## Design principles
@@ -27,6 +29,21 @@ EDC is built on three deliberate architectural decisions:
    durable history and invalidate caches — but subscriber failures can never break the request
    path.
 
+## Datastore
+
+The whole stack — API server and frontend alike — deploys as a single **Zoho Catalyst AppSail**
+app; there is no separate database service to provision or connect to. The datastore is
+Catalyst's own **Data Store**: a hosted, schemaless Row API with no migrations — schema changes
+are made directly against Data Store (Console or the Catalyst MCP tools), never via a repo file
+or a `push` command. Authentication is likewise **Catalyst embedded auth** rather than a
+server-issued session (see [Authentication & session model](#authentication--session-model)
+below).
+
+See [`docs/CATALYST_SCHEMA.md`](./CATALYST_SCHEMA.md) for the authoritative table-by-table
+manifest and type mapping, and
+[`docs/catalyst-datastore-constraints.md`](./catalyst-datastore-constraints.md) for the Row
+API's real constraints (no `WHERE` clause, no native FK cascade, second-granularity datetimes).
+
 ## Monorepo package graph
 
 ```mermaid
@@ -38,7 +55,7 @@ graph TD
     end
     subgraph libs["lib/ (shared)"]
         ENGINE["@workspace/engine<br/>pure risk engine"]
-        DB["@workspace/db<br/>Drizzle schema + client"]
+        DB["@workspace/db<br/>Catalyst Data Store SDK + repositories"]
         SPEC["@workspace/api-spec<br/>openapi.yaml"]
         ZOD["@workspace/api-zod<br/>(generated)"]
         HOOKS["@workspace/api-client-react<br/>(generated)"]
@@ -58,31 +75,31 @@ graph TD
 | Package | Path | Responsibility |
 |---|---|---|
 | `@workspace/engine` | `lib/engine` | Pure, isomorphic intelligence engine — risk patterns, Risk Engine v2 dimensions, scoring, simulation, custom patterns, ramp pricing, NLC parsing, flow analytics, loss-risk. No build step; exported from `src/index.ts`. |
-| `@workspace/db` | `lib/db` | Drizzle ORM schema (`src/schema/*`) and the `pg` pool client. Two Postgres schemas: `edc` (Phase 1) and `edc_v2` (Phase 2 durable history + intelligence). |
+| `@workspace/db` | `lib/db` | The Catalyst Data Store access layer. `src/catalyst/sdk.ts` holds SDK init, the per-request read cache, and the concurrency limiter; `src/catalyst/repositories/*.ts` are the per-table repositories every route uses; `src/catalyst/stratus.ts` is the object-storage overflow tier for oversized snapshot payloads. No ORM — the Row API has no `WHERE` clause, so a repository reads its whole table and filters in memory. |
 | `@workspace/api-spec` | `lib/api-spec` | `openapi.yaml` (the API contract) and the Orval codegen config. |
 | `@workspace/api-zod` | `lib/api-zod` | **Generated** Zod validators used server-side. |
 | `@workspace/api-client-react` | `lib/api-client-react` | **Generated** typed React Query hooks used client-side. |
 | `@workspace/api-server` | `artifacts/api-server` | Express 5 API on port 5000. Routes, the DB→engine bridge (`intelligence.ts`), the event bus, and (optionally) serving the built SPA. |
 | `@workspace/edc` | `artifacts/edc` | React 19 + Vite + Tailwind v4 + shadcn/ui frontend — the product UI. |
 | `@workspace/mockup-sandbox` | `artifacts/mockup-sandbox` | Isolated UI mockup playground. **Not part of the product.** |
-| `@workspace/scripts` | `scripts` | Maintenance scripts (backfill, single-bundle build) run with `tsx`. |
+| `@workspace/scripts` | `scripts` | Maintenance scripts (single-bundle build) run with `tsx`. The transition backfill is no longer a CLI script — it's `POST /api/v1/admin/backfill-transitions`. |
 
 Workspace globs (`pnpm-workspace.yaml`): `artifacts/*`, `lib/*`, `lib/integrations/*`, `scripts`.
 
 ## Request → engine data flow
 
 Every read that involves risk follows the same path. The server assembles a plain-data input
-from Drizzle and hands it to the pure engine.
+from the Catalyst repositories and hands it to the pure engine.
 
 ```mermaid
 sequenceDiagram
     participant B as Browser (React Query hook)
     participant R as Express route (/api/v1 or /v2)
     participant I as intelligence.ts
-    participant DB as PostgreSQL (Drizzle)
+    participant DB as Zoho Catalyst Data Store
     participant E as @workspace/engine (pure)
 
-    B->>R: GET /api/v1/deals/{id}/intelligence (cookie: edc_session)
+    B->>R: GET /api/v1/deals/{id}/intelligence (Catalyst-authenticated request)
     R->>R: requireAuth → attach req.actor
     R->>I: build engine input
     I->>DB: load deal, gates, blockers, dispositions, thresholds, fx, catalog
@@ -118,7 +135,7 @@ flowchart TD
     BUS --> PM[post-mortem]
     BUS --> SC[scoring]
     BUS --> PT[pipeline-transitions]
-    A --> V[(edc_v2 durable history)]
+    A --> V[(Data Store<br/>v2_ durable-history tables)]
     S --> V
     H --> V
     PT --> V
@@ -127,8 +144,12 @@ flowchart TD
 Events include `deal.created / updated / stage_changed / deleted / restored / archived`,
 `gate.toggled`, `blocker.created / resolved`, `health.changed`, and `deal.autopsy_captured`.
 `emitDealEvent` **swallows subscriber errors** so a failing subscriber can never break the HTTP
-request. The server also runs periodic jobs: an hourly snapshot service, a ~15-minute
-materialized-view refresh, and a portfolio-rollup warm-up.
+request. **There are no in-process timers any more** — a wall-clock `setInterval` registered at
+startup is dead code on AppSail, which kills an idle instance after five minutes. The snapshot run
+is now a Catalyst cron hitting `POST /api/v1/jobs/snapshots` (Catalyst Job Scheduling). The
+precomputed portfolio-rollup table and the materialized-view refresh that fed it are both gone —
+the rollup's read path was dropped when `routes/intelligence.ts` moved to Data Store, leaving the
+write side maintaining a table nothing consulted, so it was deleted rather than ported.
 
 > Read `.agents/memory/edc-phase2-backbone.md` and `edc-cache-generation-guard.md` before
 > modifying the bus, cache, or history tables.
@@ -154,17 +175,22 @@ spec (it drives the generated filenames).
 
 ## Authentication & session model
 
-- **Cookie session.** On login the server issues an **HS256 JWT** signed with `SESSION_SECRET`,
-  stored in an `edc_session` cookie (`httpOnly`, `sameSite: lax`, `secure` in production, 7-day
-  TTL). Passwords are hashed with **bcrypt**. The token proves identity only (`sub`/`username`/
-  `name`) — it carries no role or active-state claim; see Authorization below for why.
-- **Login quirk:** the login field is named `email` but maps to `commanders.username`
-  (case-insensitively, via `lower()` on both sides).
-- `requireAuth` (`artifacts/api-server/src/lib/auth.ts`) is registered **once**, path-less, in
-  `routes/index.ts` — not per-router. It's async: on every request it resolves `commanders.role`
-  and `commanders.is_active` from the DB and attaches `req.actor`. The public exceptions are
-  `POST /v1/auth/login`, `POST /v1/auth/logout`, `GET /healthz`, and the Bat-Signal share endpoint
-  `GET /v1/share/{token}`.
+- **Catalyst embedded auth.** Login/logout are not server routes at all — the Web SDK widget
+  (`artifacts/edc/src/pages/login.tsx`) talks directly to Zoho's identity servers. There is no
+  server-issued JWT, no `SESSION_SECRET`, and no `edc_session` cookie; Catalyst manages the
+  session itself.
+- `requireAuth` (`artifacts/api-server/src/lib/auth.ts`, registered **once**, path-less, in
+  `routes/index.ts` — not per-router) reads the Catalyst-authenticated identity off the request
+  and maps it to a `commanders` Data Store row (`resolveCommander`), auto-provisioning one on
+  first sign-in (admin if it's the first commander ever, the email matches `SUPER_ADMIN_EMAIL`,
+  or Catalyst's own platform-admin role applies; reader otherwise) or claiming a pending invite
+  by email. `commanders.role`/`is_active` are re-read from Data Store on every request — never
+  trusted from Catalyst's own claims about the signed-in user — so a demotion/deactivation takes
+  effect on the very next request rather than waiting out however long the Catalyst session
+  lives. The public exceptions (registered above this gate in `routes/index.ts`) are `GET
+  /api/healthz`, the Bat-Signal share endpoint `GET /api/v1/share/{token}`, and
+  `POST /api/v1/jobs/{jobName}` / `GET /api/v1/jobs/_status` (Catalyst Job Scheduling, which
+  carries no user session and is instead gated by the `EDC_JOB_SECRET` shared secret).
 
 ## Authorization (RBAC)
 
@@ -178,12 +204,12 @@ non-mutating POSTs (`/auth/dashboard-visit`, `/v2/nlc/parse`, `/v2/scenarios/com
 mutation route added tomorrow is refused to readers the moment it's registered, with no per-route
 opt-in — `routes/index.rbac.test.ts` walks every registered route and asserts this holds.
 
-Role is read from the `commanders` row on every request, **never** from the JWT: the session
-cookie lives 7 days, so a claim would let a demoted or deactivated account keep write access for
-up to a week. Sourcing it from the row means a demotion or `is_active = false` takes effect on the
-very next request. User management (create/promote/demote/deactivate/delete/reset-password) is
+Role is read from the `commanders` row on every request, **never** trusted from Catalyst's own
+claims about the signed-in user: a claim would let a demoted or deactivated account keep write
+access for however long the Catalyst session lives. Sourcing it from the row means a demotion or
+`is_active = false` takes effect on the very next request. User management (create/promote/demote/deactivate/delete/reset-password) is
 `artifacts/api-server/src/routes/users.ts`, itself gated only by the same central rule (`GET
-/v1/users` is the one exception every reader can call — no secrets leave the server). It enforces
+/api/v1/users` is the one exception every reader can call — no secrets leave the server). It enforces
 two invariants server-side regardless of what the UI offers: you cannot act on your own account
 (demote/deactivate/delete yourself), and the last active admin cannot be demoted, deactivated, or
 deleted.

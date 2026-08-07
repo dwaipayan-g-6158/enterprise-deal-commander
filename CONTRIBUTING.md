@@ -23,20 +23,15 @@ and [`docs/architecture.md`](./docs/architecture.md).
 2. **The OpenAPI spec is the source of truth.** Never hand-edit generated code under `lib/api-*/src/generated/**`. Change `lib/api-spec/openapi.yaml` and re-run codegen.
 3. **Keep the engine pure.** `lib/engine` performs no DB/network calls and must stay isomorphic (no `Date.now()`, `new Date()`, or `Math.random()` in scoring paths). All external data arrives as function arguments.
 4. **Never lower the supply-chain guard.** Do not disable or reduce `minimumReleaseAge` in `pnpm-workspace.yaml`.
-5. **Never use `push-force`** on the database (truncate risk).
 
 ## Development setup
 
 ```bash
-# Prerequisites: Node 24, pnpm, PostgreSQL 16
+# Prerequisites: Node 24, pnpm (no local database to provision)
 pnpm install
 
 # API server env
-cp artifacts/api-server/.env.example artifacts/api-server/.env   # set DATABASE_URL, SESSION_SECRET
-
-# Schema + seed
-pnpm --filter @workspace/db run push
-pnpm --filter @workspace/api-server run seed
+cp artifacts/api-server/.env.example artifacts/api-server/.env
 
 # Run (two terminals)
 pnpm --filter @workspace/api-server run dev     # API on :5000
@@ -53,7 +48,7 @@ See [`docs/installation.md`](./docs/installation.md) for OS-specific notes.
   pnpm --filter @workspace/api-spec run codegen
   ```
   This regenerates the server-side Zod validators (`@workspace/api-zod`) and the client-side React Query hooks (`@workspace/api-client-react`). Do **not** change `info.title` in the spec — it drives codegen filenames.
-- **Database:** edit Drizzle schema in `lib/db/src/schema/*.ts`, then apply with `pnpm --filter @workspace/db run push`. Phase 2 durable-history tables live in the `edc_v2` Postgres schema.
+- **Database:** the schema lives in Zoho Catalyst Data Store, not in this repo. Schema changes are made directly against the Data Store (Catalyst Console or the Catalyst MCP tools) — see [`docs/CATALYST_SCHEMA.md`](./docs/CATALYST_SCHEMA.md) for the full 71-table manifest and naming conventions, and [`docs/catalyst-datastore-constraints.md`](./docs/catalyst-datastore-constraints.md) for the Row API's constraints (no `WHERE` clause, second-granularity datetimes, etc.).
 - **API server rebuilds on every start** (esbuild inlines workspace deps), so re-run the dev script after route/schema edits.
 - **Express route ordering:** register literal paths (e.g. `/gates/batch`) *before* param paths (`/gates/:gateCode`).
 - **Read the memory notes.** `.agents/memory/MEMORY.md` indexes hard-won gotchas (esbuild build/run, post-merge schema sync, cache generation guard, briefing export privacy, snapshot payload). Read the relevant note before touching those areas.
@@ -90,7 +85,7 @@ pnpm --filter @workspace/api-server exec vitest run src/lib/cache.test.ts
 pnpm --filter @workspace/api-server exec vitest run src/lib/cache.test.ts -t "generation guard"
 ```
 
-The engine has isomorphic parity tests ensuring server and browser produce identical risk output. API-server tests that need a database expect a reachable `DATABASE_URL`.
+The engine has isomorphic parity tests ensuring server and browser produce identical risk output. The whole suite runs with **no database** — every test exercises the in-memory Data Store fake in `artifacts/api-server/src/test-support/catalyst-test-app.ts`; no `DATABASE_URL` or live Catalyst connection is needed.
 
 ## Commit & PR guidelines
 

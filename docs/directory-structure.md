@@ -29,13 +29,14 @@ Deal-Commander/
 │   │   ├── src/
 │   │   │   ├── index.ts          # Entry: validate PORT, listen, registerSubscribers()
 │   │   │   ├── app.ts            # App assembly: middleware, router mount, SPA fallback, error handler
-│   │   │   ├── seed.ts           # Database seeding
 │   │   │   ├── routes/           # v1 routers: auth, deals, gates, blockers, crosssells,
 │   │   │   │   │                 #   intelligence, dispositions, interventions, audit,
-│   │   │   │   │                 #   batsignal, shared, lookups, settings-audit, health
+│   │   │   │   │                 #   batsignal, shared, lookups, settings-audit, admin, jobs
 │   │   │   │   └── v2/           # v2 routers: index, crud, analytics, config, exports
 │   │   │   └── lib/              # Server logic: intelligence.ts (DB→engine bridge),
-│   │   │       │                 #   auth, events, cache, audit, scoring, advisor, etc.
+│   │   │       │                 #   auth, events, cache, audit, scoring, advisor, etc.,
+│   │   │       │                 #   catalyst/seed.ts (DB seeding, invoked via POST
+│   │   │       │                 #   /api/v1/admin/seed — not a standalone script)
 │   │   │       └── subscribers/  # Event-bus subscribers (activity, snapshot, health, cache, …)
 │   │   ├── build.mjs             # esbuild bundler → dist/*.mjs
 │   │   ├── vitest.config.ts
@@ -77,12 +78,11 @@ Deal-Commander/
 │   │       ├── simulation.ts     # Pipeline simulation
 │   │       ├── custom-patterns.ts, ramp.ts, nlc.ts, flow.ts, loss-risk.ts, contextual-patterns.ts
 │   │
-│   ├── db/                       # @workspace/db (Drizzle)
-│   │   ├── src/
-│   │   │   ├── index.ts          # pg Pool + drizzle(pool, { schema })
-│   │   │   └── schema/           # auth, deals, lookups, edc_v2, edc_v2_intel, settings
-│   │   ├── drizzle.config.ts     # + drizzle.local.config.ts
-│   │   └── sql/                  # Ad-hoc SQL
+│   ├── db/                       # @workspace/db (Catalyst Data Store access layer)
+│   │   └── src/catalyst/
+│   │       ├── sdk.ts            # SDK init, per-request read cache, concurrency limiter
+│   │       ├── repositories/     # Per-table repositories (commanders, deals, lookups, …)
+│   │       └── stratus.ts        # Stratus object-storage overflow tier (oversized snapshots)
 │   │
 │   ├── api-spec/                 # @workspace/api-spec
 │   │   ├── openapi.yaml          # ★ API source of truth (~124 endpoints)
@@ -91,7 +91,10 @@ Deal-Commander/
 │   └── api-client-react/         # @workspace/api-client-react (generated React Query hooks)
 │
 ├── scripts/                      # @workspace/scripts (tsx)
-│   ├── (backfill:transitions, build-single, hello)
+│   ├── (build-appsail, build-single, hello)
+│   │                             #   Pipeline-transition backfill and seeding are HTTP admin routes now
+│   │                             #   (POST /api/v1/admin/backfill-transitions, POST /api/v1/admin/seed),
+│   │                             #   not CLI scripts in this directory.
 │   ├── post-merge.sh
 │   └── sql/
 │
@@ -117,7 +120,7 @@ Deal-Commander/
 | I want to change… | Go to |
 |---|---|
 | A risk pattern or the dimensional model | `lib/engine/src/index.ts`, `dimensions.ts`, `risk-v2.ts` |
-| The database schema | `lib/db/src/schema/*.ts` |
+| The database schema | Not a repo file — made directly against Data Store (Console or the Catalyst MCP tools). See [`docs/CATALYST_SCHEMA.md`](./CATALYST_SCHEMA.md). |
 | An API endpoint | `lib/api-spec/openapi.yaml` → `codegen` → `artifacts/api-server/src/routes/*` |
 | The DB→engine input assembly | `artifacts/api-server/src/lib/intelligence.ts` |
 | A page or UI component | `artifacts/edc/src/pages/*`, `artifacts/edc/src/components/*` |

@@ -13,21 +13,25 @@ hand-edit generated code.**
 
 ## Conventions
 
-- **Base path:** all routes are mounted under `/api`. So `/v1/auth/login` in the spec is served
-  at `POST /api/v1/auth/login`, and the health check is `GET /api/healthz`.
+- **Base path:** all routes are mounted under `/api`. So `/v1/auth/me` in the spec is served
+  at `GET /api/v1/auth/me`, and the health check is `GET /api/healthz`.
 - **Versioning:** `/api/v1/*` is the Phase 1 core; `/api/v2/*` is Phase 2.
 - **Content type:** JSON request/response bodies.
 - **Path parameters** are shown in `{braces}`.
-- There are **~124 documented operations**. Descriptions below are summarized; consult
-  `openapi.yaml` for exact request/response schemas.
+- There are **167 documented operations across 129 paths**. Descriptions below are summarized;
+  consult `openapi.yaml` for exact request/response schemas.
 
 ## Authentication
 
-- Auth is **cookie-session**. `POST /api/v1/auth/login` sets an `edc_session` cookie containing
-  an HS256 JWT (7-day TTL, `httpOnly`, `sameSite: lax`, `Secure` in production).
-- The login body uses an `email` field, which maps to `commanders.username`.
-- Send the cookie on subsequent requests. Nearly all endpoints require it; the public exceptions
-  are `GET /api/healthz`, `POST /api/v1/auth/login`, and `GET /api/v1/share/{token}`.
+- Auth is **Zoho Catalyst embedded auth** — there is no server-issued cookie and no JWT. The Web
+  SDK sign-in widget (`artifacts/edc/src/pages/login.tsx`) talks directly to Zoho's identity
+  servers to establish and end a session; `POST /api/v1/auth/login` and `POST /api/v1/auth/logout`
+  are **retired** and no longer exist on this server.
+- `requireAuth` reads the Catalyst-authenticated identity off the request and maps it to a
+  `commanders` Data Store row (auto-provisioning one on first sign-in), so `commanders.role` and
+  `is_active` — not anything in the Catalyst session — decide access on every request.
+- Nearly all endpoints require a signed-in Catalyst session; the public exceptions are
+  `GET /api/healthz` and `GET /api/v1/share/{token}`.
 
 ## Errors
 
@@ -51,9 +55,8 @@ See [troubleshooting.md](./troubleshooting.md#error-reference) for a fuller erro
 | Method | Path | Description |
 |---|---|---|
 | GET | `/api/healthz` | Health check. |
-| POST | `/api/v1/auth/login` | Authenticate the Commander; sets the session cookie. |
-| POST | `/api/v1/auth/logout` | Log out; clears the session. |
 | GET | `/api/v1/auth/me` | Current authenticated Commander (never cached). |
+| POST | `/api/v1/auth/dashboard-visit` | Record the Commander's dashboard-visit timestamp (drives "welcome back" tracking); returns the previous visit time. |
 
 ### Deals
 
@@ -117,7 +120,7 @@ See [troubleshooting.md](./troubleshooting.md#error-reference) for a fuller erro
 | PUT | `/api/v1/deals/{dealId}/alerts/{patternCode}/disposition` | Acknowledge / Accept / Snooze an alert (rationale required). |
 | DELETE | `/api/v1/deals/{dealId}/alerts/{patternCode}/disposition` | Clear a disposition. |
 | POST | `/api/v1/deals/{dealId}/interventions` | Launch/log a rapid-intervention checklist. |
-| POST | `/api/v1/deals/{dealId}/bat-signal` | Mint a 48-hour signed share link. |
+| POST | `/api/v1/deals/{dealId}/bat-signal` | Mint a 48-hour read-only share link. |
 | GET | `/api/v1/share/{token}` | **Public** read-only risk card for a Bat-Signal token. |
 
 ### Lookups

@@ -28,7 +28,7 @@ intentional — use these exact terms.
 | **War Room / Executive Briefing Mode** | The executive-optimized presentation overlay (a.k.a. "Huddle Mode"). Phase 1's product name is the "Executive War Room Edition". |
 | **Cockpit** | The full day-to-day operational workspace for a single deal. |
 | **Risk Simulator** | A client-side, non-persisted what-if that previews health + alerts using the same pure engine. |
-| **Bat-Signal** | A 48-hour signed, read-only public share link to one deal's risk card. |
+| **Bat-Signal** | A 48-hour, read-only public share link to one deal's risk card. |
 | **Loss Archetype** | The structured categorical reason a deal was Closed-Lost (mandatory on close). |
 | **Cross-Sell Whitespace / Attach Rate** | Catalog products not yet pitched; attach rate = pitched ÷ catalog size. |
 | **Own Momentum** | A deal's recent vs earlier gate-completion rate, computed only from its own audit rows (no cohort data). |

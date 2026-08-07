@@ -8,7 +8,7 @@ not a contract.
 - [Phase 1 — shipped](#phase-1--shipped)
 - [Phase 2 — status](#phase-2--status)
 - [Improvement proposals](#improvement-proposals)
-- [Planned: Zoho Catalyst migration](#planned-zoho-catalyst-migration)
+- [Zoho Catalyst migration — shipped](#zoho-catalyst-migration--shipped)
 
 ## Phase 1 — shipped
 
@@ -16,7 +16,7 @@ Phase 1 ("Executive War Room Edition") is functionally complete: the deal cockpi
 matrix, blockers, cross-sell whitespace, the deterministic risk engine with glass-box
 explanations, risk governance (dispositions), stage guardrails, the ephemeral Risk Simulator,
 Closed-Lost autopsy, portfolio correlation, soft-delete/archive/restore, and the Executive
-Briefing / Bat-Signal surfaces all exist in the codebase. See [overview.md](./overview.md#feature-catalog)
+Briefing / Bat-Signal surfaces all exist in the codebase. See [user-manual.md](./user-manual.md#feature-catalog)
 for the F1–F14 breakdown.
 
 ## Phase 2 — status
@@ -26,7 +26,7 @@ codebase (routes, engine modules, schema, and UI):
 
 | Area | Status | Evidence |
 |---|---|---|
-| Durable history backbone (event bus, activity, health history, snapshots, rollups) | ✅ Shipped | `edc_v2` schema, `events.ts`, subscribers, `/api/v2` history routes |
+| Durable history backbone (event bus, activity, health history, snapshots, rollups) | ✅ Shipped | `v2_`-prefixed Data Store tables, `events.ts`, subscribers, `/api/v2` history routes |
 | **Risk Engine v2** (7-dimension composite, radar, drives health) | ✅ Shipped | `dimensions.ts`, `risk-v2.ts`, `risk/` components |
 | Predictive scoring | ✅ Shipped | `scoring.ts`, `/api/v2/deals/{id}/score`, `scores/recalculate` |
 | **Pipeline Flow Analytics** (funnel, conversion matrix, Sankey, recycle, coverage, health-score) | ✅ Shipped | `flow.ts`, `/api/v2/analytics/flow/*`, Analytics → Flow tab |
@@ -68,10 +68,10 @@ describe *proposed* designs; several have since shipped (cross-reference the tab
 | Pipeline Analytics | Flow dynamics, forecast reliability, bottlenecks | Partial (Flow slice 1) |
 | Settings Engine Tuning, Automation & Integrations | Control panel for 200+ parameters + automation + integrations | Partial (settings backend) |
 
-## Planned: Zoho Catalyst migration
+## Zoho Catalyst migration — shipped
 
-A migration of the full stack to **Zoho Catalyst** (serverless functions + hosted data) is a
-planned future step. No Catalyst configuration exists in the repository yet. New work should favor
-stateless handlers and environment-driven configuration to ease that transition. See
-[build-and-deploy.md](./build-and-deploy.md#planned-zoho-catalyst) and
-[release-process.md](./release-process.md#planned-migration-to-zoho-catalyst).
+The full stack migrated off Postgres/Drizzle onto **Zoho Catalyst** (Data Store + AppSail +
+embedded auth + Job Scheduling) in August 2026. See
+[`docs/changes/2026-08-07-catalyst-migration.md`](./changes/2026-08-07-catalyst-migration.md) for
+the full record, [`build-and-deploy.md`](./build-and-deploy.md) for the current deploy flow, and
+[`release-process.md`](./release-process.md) for how it's reflected in the changelog.

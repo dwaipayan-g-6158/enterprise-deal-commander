@@ -23,13 +23,38 @@ and the project aims to follow [Semantic Versioning](https://semver.org/spec/v2.
 - **Deal Roster & Kanban.** Roster page with a Kanban board (drag-to-move stages with `409` override handling), timeline view, forecast flags, next-best-action, and score-trend arrows.
 - **Deal-revival watch** and a **product-gap register** feeding roster enrichment.
 - Single-origin hosting: the built SPA is served directly from the Express API process.
+- **Zoho Catalyst migration.** The full stack now runs on Zoho Catalyst: **Data Store** (hosted,
+  schemaless Row API) replaces Postgres/Drizzle entirely; **Catalyst embedded auth** replaces the
+  bcrypt/JWT login; the periodic snapshot job and webhook retries run on **Catalyst Job
+  Scheduling** instead of in-process timers; oversized snapshot payloads offload to **Stratus**
+  object storage. See [`docs/changes/2026-08-07-catalyst-migration.md`](./docs/changes/2026-08-07-catalyst-migration.md).
+- `POST /api/v1/admin/seed` and `POST /api/v1/admin/backfill-transitions` (admin-only, RBAC-gated)
+  replace the old CLI seed/backfill scripts — both need a real request to derive a Catalyst app
+  handle from.
 
 ### Changed
 - Engine tuning weights (predictive scoring, portfolio risk, pipeline health, risk dimensions) are now read from configuration instead of hardcoded values.
 - Predictive score now has **9 factors** and the risk engine **16 patterns** (was 8 / 15).
+- The full test suite (1,360 tests) now runs against an in-memory Data Store fake with **no
+  database required at all** — previously it needed a reachable `DATABASE_URL`.
+
+### Removed
+- Drizzle, `pg`, and every Postgres schema/migration file. `DATABASE_URL` and `SESSION_SECRET`
+  are no longer read anywhere in the server.
+- The in-process portfolio-rollup precompute (its write path silently failed against Catalyst on
+  every mutation and every cold start; nothing reads the rollup, so it was deleted rather than
+  ported).
 
 ### Fixed
 - Playbook: a **skipped** step no longer renders the same green checkmark as a **completed** one — completed, skipped, and blocked steps are now visually distinct.
+- **Pipeline transitions were missing for every pre-migration deal**, leaving the Flow tab's value
+  bridge reading effectively $0 — `POST /admin/backfill-transitions` reconstructs them from the
+  audit log and stage history.
+- `routes/intelligence.ts` (the deal Intelligence panel, dashboard summary, Portfolio Overview,
+  product-mix, and Closed-Lost Autopsy) had been silently 500ing since an earlier migration slice
+  missed it.
+- The sign-in page now shows an explicit error with a **Retry** action (and a loading skeleton)
+  instead of a permanently blank card when the Catalyst sign-in widget can't load.
 
 ## [0.6.0] — Settings backend foundation (inferred)
 

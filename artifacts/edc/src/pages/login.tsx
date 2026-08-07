@@ -1,5 +1,9 @@
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { AlertTriangle } from "lucide-react";
 import { EdcLogoMark } from "@/components/edc-logo-mark";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import { renderSignInForm } from "@/lib/auth/catalyst-client";
 import { attachCatalystIframeAutosize } from "@/lib/auth/catalyst-iframe-autosize";
 
@@ -32,16 +36,51 @@ const AUTH_POLL_MS = 3000;
  * rewriting) is still deliberately not ported: this project has CSS
  * Customization disabled in the Catalyst console, so there is no stylesheet to
  * inject.
+ *
+ * Because every input on this page comes from that iframe, a failure to load
+ * it leaves nothing to type into — so this component tracks the render
+ * explicitly (skeleton → ready | error + retry) rather than firing it and
+ * forgetting. Off the deployed AppSail domain the failure is guaranteed, not
+ * hypothetical: the SDK's `/__catalyst/sdk/init.js` is served by the Catalyst
+ * gateway and 404s anywhere else, localhost included.
  */
 export default function Login() {
   const slotRef = useRef<HTMLDivElement>(null);
+  const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
+  // Bumping this re-runs the mount effect below, which is the whole retry
+  // mechanism — loadCatalystSDK() drops its cached promise on failure, so a
+  // second call genuinely re-requests the scripts.
+  const [attempt, setAttempt] = useState(0);
+
+  const retry = useCallback(() => {
+    setStatus("loading");
+    setAttempt((n) => n + 1);
+  }, []);
 
   useEffect(() => {
+    let cancelled = false;
     const t = setTimeout(() => {
-      void renderSignInForm(LOGIN_SLOT_ID);
+      renderSignInForm(LOGIN_SLOT_ID).then(
+        () => {
+          if (!cancelled) setStatus("ready");
+        },
+        (err: unknown) => {
+          if (cancelled) return;
+          // Previously this whole call was fire-and-forget (`void`), so every
+          // failure mode — a blocked CDN, an unreachable gateway, an
+          // uninitialized SDK — produced an identical, permanently blank card
+          // with the reason visible only as an unhandled rejection in the
+          // console. Surface it instead.
+          console.error("Catalyst sign-in form failed to render", err);
+          setStatus("error");
+        },
+      );
     }, 50);
-    return () => clearTimeout(t);
-  }, []);
+    return () => {
+      cancelled = true;
+      clearTimeout(t);
+    };
+  }, [attempt]);
 
   useEffect(() => {
     const slot = slotRef.current;
@@ -105,12 +144,50 @@ export default function Login() {
           <div className="border-t border-border/60" />
 
           <div className="p-6">
-            <div
-              ref={slotRef}
-              id={LOGIN_SLOT_ID}
-              className="relative w-full [&_iframe]:!w-full [&_iframe]:!border-0 [&_iframe]:!bg-transparent"
-              style={{ minHeight: IFRAME_MIN_HEIGHT }}
-            />
+            {status === "error" ? (
+              <div className="space-y-4">
+                <Alert variant="destructive">
+                  <AlertTriangle className="size-4" />
+                  <AlertTitle>Can't load the sign-in form</AlertTitle>
+                  <AlertDescription>
+                    Sign-in is handled by Zoho Catalyst, and its form couldn't be reached. Check
+                    your connection and try again — if it keeps failing, the identity service may
+                    be temporarily unavailable.
+                  </AlertDescription>
+                </Alert>
+                <Button variant="outline" className="w-full" onClick={retry}>
+                  Try again
+                </Button>
+              </div>
+            ) : null}
+
+            {/* The slot stays mounted in every state: the Catalyst SDK looks it
+                up by id, and it must already exist in the DOM when signIn()
+                runs. Only its reserved height collapses on failure, so the
+                error card above isn't trailed by 340px of dead space — which
+                is all this card used to show. */}
+            <div className="relative">
+              {status === "loading" ? (
+                <>
+                  <span role="status" className="sr-only">
+                    Loading sign-in form…
+                  </span>
+                  <div className="absolute inset-x-0 top-0 space-y-3" aria-hidden="true">
+                    <Skeleton className="h-3.5 w-20" />
+                    <Skeleton className="h-10 w-full" />
+                    <Skeleton className="h-3.5 w-16" />
+                    <Skeleton className="h-10 w-full" />
+                    <Skeleton className="mt-2 h-10 w-full" />
+                  </div>
+                </>
+              ) : null}
+              <div
+                ref={slotRef}
+                id={LOGIN_SLOT_ID}
+                className="relative w-full [&_iframe]:!w-full [&_iframe]:!border-0 [&_iframe]:!bg-transparent"
+                style={{ minHeight: status === "error" ? 0 : IFRAME_MIN_HEIGHT }}
+              />
+            </div>
           </div>
         </div>
 

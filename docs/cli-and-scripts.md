@@ -28,9 +28,8 @@ Invoke with `pnpm --filter <package> run <script>`.
 | Script | Description |
 |---|---|
 | `dev` | Build (esbuild) then start the API server on port 5000. **Re-run after route/schema edits** (workspace deps are inlined at build time). |
-| `build` | `node ./build.mjs` → `dist/index.mjs`, `dist/seed.mjs`. |
+| `build` | `node ./build.mjs` → `dist/index.mjs`. |
 | `start` | `node dist/index.mjs`. |
-| `seed` | Seed the database (`node dist/seed.mjs`). |
 | `test` | Vitest suite. |
 | `typecheck` | `tsc --noEmit`. |
 
@@ -48,11 +47,10 @@ Invoke with `pnpm --filter <package> run <script>`.
 |---|---|
 | `codegen` | Orval regenerates Zod validators + React Query hooks from `openapi.yaml`, then re-typechecks libs. Run after any contract change. |
 
-### `@workspace/db`
+### `@workspace/scripts`
 | Script | Description |
 |---|---|
-| `push` | `drizzle-kit push` — apply the schema to the dev database (may prompt on a TTY). |
-| `push-force` | **Do not use** — truncate risk. |
+| `build-appsail` | Builds the deployable AppSail bundle. **Run from PowerShell, not Git Bash.** Deploy the resulting zip via the Catalyst Console (app → Overview → Create Deployment) — never `catalyst deploy appsail` (it nests the entry file and 500s), and never the AppSail list's 'Deploy from Console' button (first-time creation only). |
 
 ### `@workspace/engine`
 | Script | Description |
@@ -61,14 +59,7 @@ Invoke with `pnpm --filter <package> run <script>`.
 
 ## Maintenance scripts
 
-`@workspace/scripts` (run via `tsx`):
-
-| Script | Description |
-|---|---|
-| `backfill:transitions` | Backfill `edc_v2.pipeline_transitions` from historical data (needed for Flow analytics on pre-existing deals). |
-| `build-single` | Produce a single-origin bundle (SPA copied into the API server's `dist/public`). |
-| `hello` | Trivial smoke script. |
-| `scripts/post-merge.sh` | Post-merge helper (schema push, etc.). |
+Seeding (`POST /api/v1/admin/seed?phase=lookups|config|deals|all`) and reconstructing pipeline-transition history (`POST /api/v1/admin/backfill-transitions`) are both HTTP endpoints against a running instance, admin-only via the RBAC gate — not CLI scripts, because deriving a Catalyst app handle needs a real request to come from.
 
 ## Running a single test
 

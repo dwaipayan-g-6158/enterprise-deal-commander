@@ -10,7 +10,6 @@
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.9-3178C6?logo=typescript&logoColor=white)
 ![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=black)
 ![Express](https://img.shields.io/badge/Express-5-000000?logo=express&logoColor=white)
-![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-4169E1?logo=postgresql&logoColor=white)
 
 </div>
 
@@ -66,7 +65,7 @@ The headline goal: cut executive-review prep from *45+ minutes in spreadsheets* 
 - 🚦 **Stage-transition guardrails** — advancing past an active RED risk returns `409 STAGE_GUARDRAIL` unless the Commander supplies a typed override (recorded to an audit ledger).
 - 🗂️ **Risk governance** — acknowledge / accept / snooze any alert with a required rationale; disposed alerts become "Managed Risk."
 - 🎬 **Executive Briefing / War Room mode** — curated agenda, private speaker notes, pacing timer, and a client-side **Risk Simulator** for ephemeral what-if analysis.
-- 🩺 **Closed-Lost autopsy**, **portfolio correlation**, **soft-delete / archive / restore**, and a 48-hour signed **Bat-Signal** share link.
+- 🩺 **Closed-Lost autopsy**, **portfolio correlation**, **soft-delete / archive / restore**, and a 48-hour read-only **Bat-Signal** share link.
 
 **Phase 2 (sovereign intelligence)**
 - 🔮 Predictive deal scoring, velocity & pipeline analytics, Monte-Carlo forecasting.
@@ -75,7 +74,7 @@ The headline goal: cut executive-review prep from *45+ minutes in spreadsheets* 
 - 👥 Multi-commander delegation, stakeholder influence mapping, decision log.
 - 📈 Pipeline **Flow Analytics** (funnel, conversion matrix, Sankey transitions), board-ready reports, and a durable time-series history backbone.
 
-See [`docs/overview.md`](./docs/overview.md) for the full, verified feature catalog.
+See [`docs/user-manual.md`](./docs/user-manual.md#what-edc-is) for the full, verified feature catalog.
 
 ## Architecture at a glance
 
@@ -94,7 +93,7 @@ flowchart LR
         BUS[Event bus + subscribers]
     end
     ENG["@workspace/engine — pure isomorphic risk engine"]
-    DB[("PostgreSQL 16<br/>edc + edc_v2 schemas")]
+    DB[("Zoho Catalyst<br/>Data Store (71 tables)")]
     SPEC["@workspace/api-spec — openapi.yaml (source of truth)"]
 
     UI --> RQ -->|"/api"| R
@@ -115,15 +114,15 @@ Full detail, with data-flow and event-bus diagrams, is in [`docs/architecture.md
 |---|---|
 | Language / tooling | TypeScript 5.9, Node 24, **pnpm** workspace (pnpm-only), Prettier |
 | Frontend | React 19, Vite 7, Tailwind CSS v4, shadcn/ui (Radix), TanStack Query, `wouter`, Recharts, Framer Motion, PWA (Workbox) |
-| Backend | Express 5, `pino` logging, `jsonwebtoken` (HS256) + `bcryptjs`, `express-rate-limit`, esbuild bundling |
-| Data | PostgreSQL 16 via **Drizzle ORM** (`edc` + `edc_v2` schemas), `pg` |
+| Backend | Express 5, `pino` logging, Catalyst embedded auth (no server-side password/JWT), esbuild bundling |
+| Data | **Zoho Catalyst Data Store** — hosted, schemaless Row API (no ORM, no SQL); `@workspace/db`'s Catalyst SDK wrapper (`lib/db/src/catalyst/`) is the only access layer. |
 | Contract & codegen | OpenAPI 3.1 (`openapi.yaml`) → **Orval** → typed React Query hooks + Zod validators |
 | Intelligence | Pure isomorphic `@workspace/engine` (15 risk patterns + 7-dimension Risk Engine v2) |
 | Testing | Vitest |
 
 ## Quick start
 
-> Prerequisites: **Node 24**, **pnpm**, and **PostgreSQL 16**. Full details in [`docs/installation.md`](./docs/installation.md).
+> Prerequisites: **Node 24** and **pnpm**. No local database to provision — the datastore is Zoho Catalyst Data Store (hosted); local dev talks to the same Catalyst project as the deployed app. Full details in [`docs/installation.md`](./docs/installation.md).
 
 ```bash
 # 1. Install dependencies (pnpm only — npm/yarn are rejected)
@@ -131,21 +130,20 @@ pnpm install
 
 # 2. Configure the API server env
 cp artifacts/api-server/.env.example artifacts/api-server/.env
-#   → set DATABASE_URL and SESSION_SECRET
+#   → see the file's comments; PORT is required for local dev, everything else is optional
 
-# 3. Push the schema and seed data
-pnpm --filter @workspace/db run push
-pnpm --filter @workspace/api-server run seed
-
-# 4. Run the API server (port 5000)
+# 3. Run the API server (port 5000)
 pnpm --filter @workspace/api-server run dev
 
-# 5. In a second terminal, run the frontend (Vite)
+# 4. In a second terminal, run the frontend (Vite)
 cp artifacts/edc/.env.example artifacts/edc/.env
 pnpm --filter @workspace/edc run dev
 ```
 
-Then open the Vite URL and log in with the seeded Commander credentials. A step-by-step first run is in [`docs/quickstart.md`](./docs/quickstart.md).
+Then open the Vite URL. There are no seeded Commander credentials — sign-in is Zoho Catalyst's
+embedded auth widget, which needs `/__catalyst/sdk/init.js` (served only by the deployed Catalyst
+AppSail gateway), so it cannot complete on a local dev URL; sign in via the deployed app instead.
+A step-by-step first run is in the [User Manual → Getting started](./docs/user-manual.md#getting-started).
 
 ## Repository structure
 
@@ -157,7 +155,7 @@ Deal-Commander/
 │   └── mockup-sandbox/   # UI playground (not part of the product)
 ├── lib/                  # Shared libraries
 │   ├── engine/           # Pure isomorphic risk engine (@workspace/engine)
-│   ├── db/               # Drizzle schema + client (@workspace/db)
+│   ├── db/               # Catalyst Data Store SDK + repositories (@workspace/db)
 │   ├── api-spec/         # openapi.yaml + Orval config (@workspace/api-spec)
 │   ├── api-zod/          # Generated Zod validators
 │   └── api-client-react/ # Generated React Query hooks
@@ -175,36 +173,37 @@ Start at the **[documentation index → `docs/README.md`](./docs/README.md)**. H
 
 | Topic | Doc |
 |---|---|
-| What EDC is, features, personas | [overview.md](./docs/overview.md) |
+| **User Manual** — what EDC is, getting started, screen-by-screen guide, admin | **[user-manual.md](./docs/user-manual.md)** |
 | System design & data flow | [architecture.md](./docs/architecture.md) |
 | Install & prerequisites | [installation.md](./docs/installation.md) |
-| First run | [quickstart.md](./docs/quickstart.md) |
+| First run | [User Manual → Getting started](./docs/user-manual.md#getting-started) |
 | Config & environment variables | [configuration.md](./docs/configuration.md) |
 | Build & deployment | [build-and-deploy.md](./docs/build-and-deploy.md) |
-| Using the app | [usage.md](./docs/usage.md) |
+| Using the app | [User Manual → Screen-by-screen guide](./docs/user-manual.md#screen-by-screen-guide) |
 | REST API (v1 + v2) | [api-reference.md](./docs/api-reference.md) |
 | The intelligence engine | [risk-engine.md](./docs/risk-engine.md) |
 | Database schema | [data-model.md](./docs/data-model.md) |
 | Troubleshooting & FAQ | [troubleshooting.md](./docs/troubleshooting.md) |
 | Security | [security.md](./docs/security.md) |
-| Contributing & dev setup | [../CONTRIBUTING.md](./CONTRIBUTING.md) · [development.md](./docs/development.md) |
+| Contributing & dev setup | [CONTRIBUTING.md](./CONTRIBUTING.md) · [development.md](./docs/development.md) |
 | Glossary | [glossary.md](./docs/glossary.md) |
 | Roadmap & product docs | [roadmap.md](./docs/roadmap.md) · [product/](./docs/product/) |
 
 ## Screenshots
 
-> 📸 _Screenshot placeholders — replace with real captures once the stack is running (see [`docs/usage.md`](./docs/usage.md))._
+📸 Real captures of every major screen — Dashboard, Deals Roster/Kanban, Deal Cockpit, Risk
+Simulator, Executive Briefing, Portfolio, Autopsy, Analytics, Deal Memory, and Settings/Admin —
+are embedded throughout the **[User Manual](./docs/user-manual.md)**.
 
-| View | Placeholder |
+| View | Screenshot |
 |---|---|
 | Dashboard (Pipeline Vital Signs) | `docs/assets/dashboard.png` |
 | Deal Cockpit (gates + risk) | `docs/assets/deal-cockpit.png` |
 | Executive Briefing / War Room | `docs/assets/briefing-mode.png` |
-| Risk Radar (Risk Engine v2) | `docs/assets/risk-radar.png` |
 
 ## Project status & roadmap
 
-EDC is under active development (no tagged releases yet; version pinned at `0.0.0`). Phase 1 is functionally complete; large parts of Phase 2 (Risk Engine v2, durable history, Deal Memory, Pipeline Flow Analytics, settings backend, Deal Roster/Kanban) have shipped. A migration to **Zoho Catalyst** is a planned future step. See [`docs/roadmap.md`](./docs/roadmap.md) and [`CHANGELOG.md`](./CHANGELOG.md).
+EDC is under active development (no tagged releases yet; version pinned at `0.0.0`). Phase 1 is functionally complete; large parts of Phase 2 (Risk Engine v2, durable history, Deal Memory, Pipeline Flow Analytics, settings backend, Deal Roster/Kanban) have shipped. The full stack runs on **Zoho Catalyst** (Data Store + AppSail + embedded auth + Job Scheduling) — migrated off Postgres/Drizzle in August 2026. See [`docs/changes/2026-08-07-catalyst-migration.md`](./docs/changes/2026-08-07-catalyst-migration.md).
 
 ## Contributing
 
