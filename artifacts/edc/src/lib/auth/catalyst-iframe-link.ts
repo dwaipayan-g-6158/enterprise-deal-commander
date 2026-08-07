@@ -32,6 +32,17 @@ const MARKER = "data-edc-theme";
  */
 export function injectCatalystIframeTheme(doc: Document): boolean {
   if (!doc.head) return false;
+
+  // Set `color-scheme` inline and unconditionally, BEFORE the early return and
+  // before the stylesheet is even requested. The sheet declares it too, but a
+  // <link> is fetched asynchronously, and until it arrives the document's
+  // canvas — which no selector can reach — is painted by the UA using the
+  // `color-scheme` default of `normal`, i.e. WHITE. On the recovery page, where
+  // the injected link is the only delivery path, that is a visible white flash
+  // in a card that is otherwise dark. An inline property applies in the same
+  // frame, so there is no window to flash in.
+  doc.documentElement.style.colorScheme = "dark";
+
   if (doc.querySelector(`link[${MARKER}="1"]`)) return true;
 
   const link = doc.createElement("link");

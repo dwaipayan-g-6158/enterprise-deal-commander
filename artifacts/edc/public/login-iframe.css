@@ -55,6 +55,24 @@ html {
 }
 
 :root {
+  /* THE SINGLE MOST IMPORTANT DECLARATION IN THIS FILE. Without it the panel
+     renders WHITE no matter what `--liw-bg` says, and every "the sign-in box is
+     still a white rectangle" report traces back here.
+     Zoho's document carries no `color-scheme`, so it computes to `normal`
+     (light). A document's canvas is not an element: when the root background is
+     `transparent`, the UA paints the canvas with its own default, and that
+     default is chosen by `color-scheme` — white under light, dark under dark.
+     So `html, body { background: transparent }` below cannot win; it is not
+     fighting a rule, it is fighting the canvas, which no selector reaches.
+     Measured on the deployed app: with this line the canvas composites
+     genuinely transparently (probed by painting the host card magenta and
+     watching it show through), so `--liw-bg: transparent` then works as
+     intended and EDC's own card is the only surface — no colour-matching
+     against `--card`, and no card-in-a-card.
+     It also gives the iframe dark scrollbars and dark UA form controls, which
+     is a free win rather than the reason it is here. */
+  color-scheme: dark;
+
   /* EDC's .dark palette (src/index.css). The sign-in page opts out of the
      theme system and is always dark, which is what lets this single static
      sheet always be correct. Keep these in sync with index.css's .dark block. */
