@@ -27,10 +27,16 @@ pnpm --filter @workspace/api-server run dev
   [security.md](./security.md)). Confirm you're actually signed in through the login widget.
 
 ### Can't log in
-Login is Catalyst embedded auth (see [security.md](./security.md)) — if the sign-in widget
-doesn't load or hangs, check the browser console for service-worker interference (a Workbox
-`navigateFallback` can eat the auth iframe's navigation) and verify `EDC_JOB_SECRET`/Catalyst
-project config aren't blocking the request. There's no local password store to inspect.
+Login is Catalyst embedded auth (see [security.md](./security.md)). The sign-in widget needs
+`/__catalyst/sdk/init.js`, which is served **only** by the Catalyst AppSail gateway — so **local
+sign-in cannot work at all off the deployed domain, by construction.** This is not a bug to chase:
+running the frontend on `localhost:5173` (or any non-Catalyst origin) will never be able to load
+the widget, no matter what env vars are set. A Workbox service worker was investigated and ruled
+out as a cause (no worker is active on the login route). `EDC_JOB_SECRET` is unrelated to
+sign-in — it only gates `POST /api/v1/jobs/:jobName`. To actually sign in, use the deployed
+Catalyst app's URL. The login page (`artifacts/edc/src/pages/login.tsx`) now shows an explicit
+error card with a **Retry** action (instead of a permanently blank card) when the widget fails to
+load, so a failed load is visible rather than silent.
 
 ### Data Store reads intermittently 429 or a fast 500
 The Row API's concurrency limiter (`lib/db/src/catalyst/sdk.ts`) can reject a burst of whole-table

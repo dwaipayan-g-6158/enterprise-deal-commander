@@ -148,7 +148,7 @@ Grouped into six themes:
 - **Executive communication:** board-ready PDF reports, Briefing Mode V2, scheduled email
   digests.
 - **Platform:** custom fields/tags, import/export, webhook & integration framework, mobile PWA,
-  and the durable event-driven backbone (`edc_v2` schema, event bus, caching).
+  and the durable event-driven backbone (`v2_`-prefixed Data Store tables, event bus, caching).
 
 The verified, shipped subset is detailed in [roadmap.md](./roadmap.md).
 

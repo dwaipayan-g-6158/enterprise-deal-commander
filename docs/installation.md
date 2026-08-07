@@ -93,7 +93,7 @@ Frontend (`artifacts/edc/.env`): `PORT`, `BASE_PATH=/`, and optionally `API_PROX
 
 ## 6. Seed data
 
-Seeding is `POST /api/v1/admin/seed?phase=all` against a running instance (admin-only, RBAC-gated) — not a CLI script, because deriving a Catalyst app handle needs a real request. Start the API server, sign in as an admin, then call that endpoint once (e.g. via the browser devtools console or curl with your session cookie).
+Seeding is `POST /api/v1/admin/seed?phase=all` against a running instance (admin-only, RBAC-gated) — not a CLI script, because deriving a Catalyst app handle needs a real request. Sign-in only works against the **deployed** Catalyst app (see the note in step 7 below — a local dev origin can never load the sign-in widget), so sign in there as an admin, then call that endpoint once from the browser devtools console (which carries your active Catalyst session automatically) or via curl. There is no session cookie to pass by hand — Catalyst embedded auth manages the session in the browser, not a cookie this server issues.
 
 ## 7. Verify the install
 
@@ -110,14 +110,25 @@ curl http://localhost:5000/api/healthz
 pnpm --filter @workspace/edc run dev
 ```
 
-Open the Vite URL printed in the terminal and continue with the
-[Quick Start](./quickstart.md).
+Open the Vite URL printed in the terminal.
+
+> **Signing in requires the deployed app.** The Catalyst embedded-auth sign-in widget needs
+> `/__catalyst/sdk/init.js`, which is served **only** by the Catalyst AppSail gateway — a local
+> origin such as `localhost:5173` can never load it, by construction, no matter what env vars are
+> set. To actually sign in and use the app, open the deployed app's URL instead. Local dev is for
+> everything short of exercising a live sign-in session.
+
+Continue with the [User Manual → Getting started](./user-manual.md#getting-started) for what
+happens once you're signed in.
 
 ## Platform notes
 
 - **Windows:** win32-x64 native binaries (rollup, lightningcss, tailwind oxide, esbuild) are
-  intentionally kept enabled so the app runs on a local Windows dev host. Use PowerShell or Git
-  Bash; the pnpm commands are identical.
+  intentionally kept enabled so the app runs on a local Windows dev host. Day-to-day pnpm commands
+  are identical in PowerShell or Git Bash, with one exception:
+  `pnpm --filter @workspace/scripts run build-appsail` must be run from **PowerShell only** — Git
+  Bash's MSYS path conversion mangles `BASE_PATH` and produces a broken build (see
+  [build-and-deploy.md](./build-and-deploy.md)).
 - **linux-x64:** the primary/deploy target. Everything works out of the box.
 - **macOS / other:** native binaries for these platforms are stripped by the `overrides` block
   in `pnpm-workspace.yaml`. You may need to re-enable the relevant `@esbuild/*`, `rollup`, and

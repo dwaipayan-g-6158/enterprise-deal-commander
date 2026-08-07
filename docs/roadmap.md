@@ -16,7 +16,7 @@ Phase 1 ("Executive War Room Edition") is functionally complete: the deal cockpi
 matrix, blockers, cross-sell whitespace, the deterministic risk engine with glass-box
 explanations, risk governance (dispositions), stage guardrails, the ephemeral Risk Simulator,
 Closed-Lost autopsy, portfolio correlation, soft-delete/archive/restore, and the Executive
-Briefing / Bat-Signal surfaces all exist in the codebase. See [overview.md](./overview.md#feature-catalog)
+Briefing / Bat-Signal surfaces all exist in the codebase. See [user-manual.md](./user-manual.md#feature-catalog)
 for the F1–F14 breakdown.
 
 ## Phase 2 — status

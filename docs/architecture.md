@@ -8,6 +8,7 @@
 - [The event bus (Phase 2)](#the-event-bus-phase-2)
 - [Contract-first codegen](#contract-first-codegen)
 - [Authentication & session model](#authentication--session-model)
+- [Authorization (RBAC)](#authorization-rbac)
 - [Key invariants](#key-invariants)
 
 ## Design principles
@@ -81,7 +82,7 @@ graph TD
 | `@workspace/api-server` | `artifacts/api-server` | Express 5 API on port 5000. Routes, the DB→engine bridge (`intelligence.ts`), the event bus, and (optionally) serving the built SPA. |
 | `@workspace/edc` | `artifacts/edc` | React 19 + Vite + Tailwind v4 + shadcn/ui frontend — the product UI. |
 | `@workspace/mockup-sandbox` | `artifacts/mockup-sandbox` | Isolated UI mockup playground. **Not part of the product.** |
-| `@workspace/scripts` | `scripts` | Maintenance scripts (backfill, single-bundle build) run with `tsx`. |
+| `@workspace/scripts` | `scripts` | Maintenance scripts (single-bundle build) run with `tsx`. The transition backfill is no longer a CLI script — it's `POST /api/v1/admin/backfill-transitions`. |
 
 Workspace globs (`pnpm-workspace.yaml`): `artifacts/*`, `lib/*`, `lib/integrations/*`, `scripts`.
 
@@ -143,8 +144,12 @@ flowchart TD
 Events include `deal.created / updated / stage_changed / deleted / restored / archived`,
 `gate.toggled`, `blocker.created / resolved`, `health.changed`, and `deal.autopsy_captured`.
 `emitDealEvent` **swallows subscriber errors** so a failing subscriber can never break the HTTP
-request. The server also runs periodic jobs: an hourly snapshot service, a ~15-minute
-materialized-view refresh, and a portfolio-rollup warm-up.
+request. **There are no in-process timers any more** — a wall-clock `setInterval` registered at
+startup is dead code on AppSail, which kills an idle instance after five minutes. The snapshot run
+is now a Catalyst cron hitting `POST /api/v1/jobs/snapshots` (Catalyst Job Scheduling). The
+precomputed portfolio-rollup table and the materialized-view refresh that fed it are both gone —
+the rollup's read path was dropped when `routes/intelligence.ts` moved to Data Store, leaving the
+write side maintaining a table nothing consulted, so it was deleted rather than ported.
 
 > Read `.agents/memory/edc-phase2-backbone.md` and `edc-cache-generation-guard.md` before
 > modifying the bus, cache, or history tables.
@@ -183,9 +188,9 @@ spec (it drives the generated filenames).
   trusted from Catalyst's own claims about the signed-in user — so a demotion/deactivation takes
   effect on the very next request rather than waiting out however long the Catalyst session
   lives. The public exceptions (registered above this gate in `routes/index.ts`) are `GET
-  /api/healthz`, the Bat-Signal share endpoint `GET /api/v1/share/{token}`, and `POST
-  /api/v1/jobs/{jobName}` (Catalyst Job Scheduling, which carries no user session and is instead
-  gated by the `EDC_JOB_SECRET` shared secret).
+  /api/healthz`, the Bat-Signal share endpoint `GET /api/v1/share/{token}`, and
+  `POST /api/v1/jobs/{jobName}` / `GET /api/v1/jobs/_status` (Catalyst Job Scheduling, which
+  carries no user session and is instead gated by the `EDC_JOB_SECRET` shared secret).
 
 ## Authorization (RBAC)
 
