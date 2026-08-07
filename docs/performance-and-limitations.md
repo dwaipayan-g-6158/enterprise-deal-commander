@@ -52,18 +52,19 @@ that envelope, performance is dominated by database round-trips, not the engine.
 
 - **Single-user core.** Phase 1 assumes one Commander; true multi-actor access, delegation, and
   territory scoping are Phase 2 features (partially shipped — see [roadmap.md](./roadmap.md)).
-- **No formal migrations.** Schema changes are applied with `drizzle-kit push`, not versioned
-  migration files — fine for this project's workflow, but something to plan around for strict
-  production change control.
-- **No Docker/compose or committed deploy pipeline.** You wire up Postgres and process management
-  yourself (historically Replit). The included CI is starter scaffolding.
+- **No formal migrations.** Schema changes are made directly against Zoho Catalyst Data Store
+  (Console or MCP tools), not versioned migration files — fine for this project's workflow, but
+  something to plan around for strict production change control. See
+  [CATALYST_SCHEMA.md](./CATALYST_SCHEMA.md).
+- **No CI-driven deploy pipeline.** Deploys are manually triggered from the Catalyst Console. The
+  app runs as a single AppSail instance; see [build-and-deploy.md](./build-and-deploy.md).
 - **Platform-specific native binaries.** Only linux-x64 and win32-x64 are enabled out of the box.
 - **Dimensional risk degrades gracefully but partially.** Competitive Exposure is `assessable: false`
   when no competitors are tracked, so it contributes nothing to the composite (Stakeholder Coverage
   scores an empty roster as a real finding instead); some spec signals (ramp backloading,
   decision-log activity) are intentionally dropped where the data isn't available.
-- **DB-dependent tests need a database.** The API-server suite expects a reachable `DATABASE_URL`;
-  the pure engine suite does not.
+- **No test needs a database.** The whole suite runs against the in-memory Data Store fake
+  (`artifacts/api-server/src/test-support/catalyst-test-app.ts`).
 
 ## Known issues & doc-vs-code notes
 
@@ -74,10 +75,9 @@ code before relying on either side:
    defines **15** named patterns plus Risk Engine v2. This docs set follows the code.
 2. **Health source.** Governance health is derived from the Risk Engine v2 **composite level**,
    not the older pattern-weight roll-up. RED patterns still gate stage advancement independently.
-3. **Post-merge schema drift.** Tables created via direct SQL by an agent may not reach the main
-   database on merge; a post-merge `push` is expected. Never `push-force`.
-4. **Pending working-tree edit.** At the time this documentation was authored, one component
+3. **Pending working-tree edit.** At the time this documentation was authored, one component
    (`deal-trajectory.tsx`) had an in-progress edit; it was committed as part of publishing.
 
 If you find a discrepancy, treat the **source of truth** as authoritative: `openapi.yaml` for the
-API, `lib/engine` for risk logic, and `lib/db/src/schema` for the data model.
+API, `lib/engine` for risk logic, and [CATALYST_SCHEMA.md](./CATALYST_SCHEMA.md) for the data model
+(there is no schema file in the repo — Data Store is the schema).

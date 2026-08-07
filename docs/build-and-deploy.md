@@ -8,7 +8,6 @@
 - [Code generation (Orval)](#code-generation-orval)
 - [Single-origin bundle](#single-origin-bundle)
 - [Deployment](#deployment)
-- [Planned: Zoho Catalyst](#planned-zoho-catalyst)
 
 ## Build overview
 
@@ -98,24 +97,15 @@ In that mode you set the frontend `BASE_PATH` to the sub-path the app is mounted
 
 ## Deployment
 
-There is **no Dockerfile or CI-driven deploy** committed to the repo. Historically the app was
-built and hosted on **Replit** (each artifact has a `.replit-artifact/` directory). A generic
-production deployment looks like:
+The app deploys as a single **Zoho Catalyst AppSail** app (`catalyst.json` declares it). To deploy:
 
-1. Provision **PostgreSQL 16** and set `DATABASE_URL`.
-2. Set `SESSION_SECRET` (required) and `NODE_ENV=production`.
-3. `pnpm install --frozen-lockfile`
-4. Apply the schema (`pnpm --filter @workspace/db run push`, or your migration mechanism) and
-   seed lookups.
-5. Build: `pnpm run build` (and the single-origin bundle if you want one port).
-6. Run the API server (`node artifacts/api-server/dist/index.mjs`) behind a reverse proxy with
-   TLS. In production, session cookies are `Secure`, so serve over HTTPS.
+1. `pnpm --filter @workspace/scripts run build-appsail` — **run from PowerShell, not Git Bash**
+   (Git Bash mangles `BASE_PATH` via MSYS path conversion, producing a broken build).
+2. Deploy the resulting zip via the Catalyst **Console** — the app → Overview → **Create
+   Deployment**. Never `catalyst deploy appsail` (the CLI nests the entry file and 500s), and
+   never the AppSail list's "Deploy from Console" button (that one is first-time-creation only).
+3. Set `EDC_JOB_SECRET` (required) and any optional env vars (see
+   [configuration.md](./configuration.md)) in the Console's environment-variables panel before or
+   after the first deploy.
 
-A starter GitHub Actions CI (`.github/workflows/ci.yml`) runs install → typecheck → build →
-tests; it is scaffolding you can extend into a deploy pipeline.
-
-## Planned: Zoho Catalyst
-
-A migration to **Zoho Catalyst** (serverless functions + hosted data) is a planned future step.
-No Catalyst deployment configuration exists in the repo yet. Favor port-friendly, stateless
-choices in new code to keep that migration smooth. See [roadmap.md](./roadmap.md).
+There is still no CI-driven deploy pipeline — deploys are manually triggered from the Console.
