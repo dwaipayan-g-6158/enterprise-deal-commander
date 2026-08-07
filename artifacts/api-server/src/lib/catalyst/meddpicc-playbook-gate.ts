@@ -1,10 +1,12 @@
-// Catalyst-backed reimplementation of ../meddpicc-playbook-gate.ts — see the
-// module docstring in ./intelligence.ts for why this is a parallel file
-// rather than an in-place rewrite: the original is still called from
-// ../meddpicc.ts's `computeMeddpiccScoreForDeal`, which lib/subscribers/
-// snapshot-service.ts's Drizzle-based `captureSnapshot` calls transitively
-// (via `getLatestMeddpiccScore`) for the periodic hourly snapshot timer — a
-// caller with no per-request `req` at all, so it cannot migrate in this pass.
+// Keeps the "MEDDPICC qualification scored" playbook step in sync with the
+// deal's current MEDDPICC score, in both directions, but only ever undoing what
+// the system itself granted.
+//
+// This began as a parallel Catalyst twin of a Drizzle
+// `../meddpicc-playbook-gate.ts` that could not be retired while the periodic
+// snapshot job ran off an in-process timer with no request to derive an app
+// from. Catalyst Job Scheduling removed that constraint and the Drizzle
+// original is gone; this is now the only implementation.
 import { emitDealEvent } from "../events";
 import {
   type CatalystApp,

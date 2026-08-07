@@ -1684,12 +1684,30 @@ export function createDealScoresRepo(catalystApp: CatalystApp) {
         computed_at: formatCatalystDateTime(new Date()),
       });
     },
-    /** Every score row across every deal, newest first â€” callers reduce to "latest per deal" (or "latest at/before a cutoff") themselves. */
+    /**
+     * Every score row across every deal, newest first â€” callers reduce to
+     * "latest per deal" (or "latest at/before a cutoff") themselves, and
+     * `pickLatestPerDeal` does that by taking the FIRST row it sees per deal.
+     * That makes the tie-break here load-bearing rather than cosmetic.
+     *
+     * Data Store datetimes are second-granularity (`formatCatalystDateTime`
+     * emits no milliseconds), so two scores computed a few hundred ms apart
+     * carry the IDENTICAL `computed_at`. `Array.sort` is stable, so a plain
+     * descending comparator would leave those ties in ROWID (insertion) order
+     * and hand the caller the OLDEST row of that second. Breaking ties on the
+     * original index, descending, puts the most recent write first.
+     */
     async listAll(): Promise<{ dealId: string; score: number; computedAt: Date }[]> {
       const rows = await fetchAllRows(catalystApp, TABLE.dealScores);
       return rows
-        .map((r) => ({ dealId: r["deal_id"], score: Number(r["score"]), computedAt: parseCatalystDateTime(r["computed_at"]) }))
-        .sort((a, b) => b.computedAt.getTime() - a.computedAt.getTime());
+        .map((r, index) => ({
+          dealId: r["deal_id"],
+          score: Number(r["score"]),
+          computedAt: parseCatalystDateTime(r["computed_at"]),
+          index,
+        }))
+        .sort((a, b) => b.computedAt.getTime() - a.computedAt.getTime() || b.index - a.index)
+        .map(({ dealId, score, computedAt }) => ({ dealId, score, computedAt }));
     },
   };
 }
@@ -2077,7 +2095,15 @@ export function createDealSnapshotsRepo(catalystApp: CatalystApp) {
         const snap = rowToSnapshot(raw);
         if (snap.snapshotAt.getTime() > cutoff.getTime()) continue;
         const existing = latestByDeal.get(snap.dealId);
-        if (!existing || snap.snapshotAt.getTime() > existing.snapshotAt.getTime()) {
+        // `>=`, not `>`. Data Store datetimes are second-granularity
+        // (`formatCatalystDateTime` emits no milliseconds), so two snapshots
+        // written in the same second carry the IDENTICAL `snapshot_at` — and
+        // with a strict `>` the FIRST one seen would win, i.e. the older row.
+        // `fetchAllRows` yields rows in ROWID order, so on a tie the later
+        // iteration is the more recent write. This is load-bearing twice over:
+        // `captureSnapshotCatalyst`'s unchanged-skip fingerprints against this
+        // row, and the vital-signs 7-day baseline reads it per deal.
+        if (!existing || snap.snapshotAt.getTime() >= existing.snapshotAt.getTime()) {
           latestByDeal.set(snap.dealId, snap);
         }
       }

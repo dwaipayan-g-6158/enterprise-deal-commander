@@ -1,5 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { computeRollback } from "./settings-audit";
+import { computeRollback } from "./settings-rollback";
+
+// Ported from the deleted `lib/settings-audit.test.ts`, which imported
+// `computeRollback` through the Drizzle `settings-audit.ts` re-export. The
+// function itself never moved and never touched a database — it lives in
+// settings-rollback.ts and is what POST /settings-audit/:id/rollback calls.
 
 describe("computeRollback", () => {
   it("an 'update' rolls back to another 'update' restoring the old value", () => {
@@ -67,6 +72,24 @@ describe("computeRollback", () => {
         action: "rollback",
         oldValue: null,
         newValue: null,
+      }),
+    ).toThrow(/Cannot compute rollback/);
+  });
+
+  it("refuses a 'reactivate' — the inverse pair is deliberately one-way", () => {
+    // deactivate→reactivate is invertible; reactivate is NOT. That asymmetry is
+    // intentional rather than an oversight, and worth pinning because
+    // routes/users.ts really does write "reactivate" rows to the change log.
+    // The route guards these first (`action !== "update"` → 409), so this throw
+    // is the backstop behind that guard, not the user-facing error.
+    expect(() =>
+      computeRollback({
+        module: "team_members",
+        settingKey: "name",
+        entityId: "7",
+        action: "reactivate",
+        oldValue: { isActive: false },
+        newValue: { isActive: true },
       }),
     ).toThrow(/Cannot compute rollback/);
   });

@@ -1,10 +1,8 @@
-// Catalyst-backed `cachedIntel` + `computeSummary` for the routes migrated off
-// Drizzle. `mapWithConcurrency`/`INTEL_CONCURRENCY` are pure concurrency
-// helpers with no DB access of their own, so they're re-exported unchanged
-// from ../portfolio.ts rather than duplicated — see the module docstring in
-// ./intelligence.ts for why the rest of that file (computePortfolioAnalysis,
-// still Drizzle-based, not read by any migrated route yet) is not migrated
-// here.
+// Catalyst-backed `cachedIntel`, `computeSummary` and `computePortfolioAnalysis`
+// — the whole of what the old Drizzle `../portfolio.ts` used to serve. That file
+// is gone; its pure concurrency helpers moved to ../concurrency.ts and are
+// re-exported here for the callers that reach for them alongside the portfolio
+// loop itself.
 import {
   type CatalystApp,
   createEnterpriseDealsRepo,
@@ -16,7 +14,7 @@ import { cache, CacheKeys, CacheTtl } from "../cache";
 import { assembleDealIntelligence, getThresholds, getPortfolioConfig } from "./intelligence";
 import { buildPortfolioAnalysis, toPortfolioRecords } from "../portfolio-analysis";
 import { CLOSED_STAGES } from "../deal-filters";
-import { mapWithConcurrency, INTEL_CONCURRENCY } from "../portfolio";
+import { mapWithConcurrency, INTEL_CONCURRENCY } from "../concurrency";
 
 export { mapWithConcurrency, INTEL_CONCURRENCY };
 

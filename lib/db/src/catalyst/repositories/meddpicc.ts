@@ -171,10 +171,25 @@ export function createDealMeddpiccScoresRepo(catalystApp: CatalystApp) {
       const rows = await fetchAllRows(catalystApp, TABLE.dealMeddpiccScores);
       const forDeal = rows.filter((r) => r["deal_id"] === dealId);
       if (forDeal.length === 0) return null;
-      forDeal.sort(
-        (a, b) => parseCatalystDateTime(b["computed_at"]).getTime() - parseCatalystDateTime(a["computed_at"]).getTime(),
-      );
-      const latest = forDeal[0];
+      // Ties must resolve to the LATER row, and they are common: Data Store
+      // datetimes are second-granularity (`formatCatalystDateTime` emits no
+      // milliseconds), so two recomputes a few hundred ms apart carry the
+      // IDENTICAL `computed_at`. A plain descending sort is stable, which would
+      // then hand back the first-inserted — i.e. the OLDEST — row. The Drizzle
+      // original could not hit this: its `orderBy(desc(computedAt))` ran on a
+      // sub-second Postgres timestamp.
+      //
+      // `fetchAllRows` yields rows in ROWID order, so "last among the newest
+      // timestamp" is the most recently written row.
+      let latest = forDeal[0];
+      let latestAt = parseCatalystDateTime(latest["computed_at"]).getTime();
+      for (const row of forDeal.slice(1)) {
+        const at = parseCatalystDateTime(row["computed_at"]).getTime();
+        if (at >= latestAt) {
+          latest = row;
+          latestAt = at;
+        }
+      }
       return {
         overallPct: Number(latest["overall_pct"]),
         stagePct: latest["stage_pct"] != null && latest["stage_pct"] !== "" ? Number(latest["stage_pct"]) : 0,

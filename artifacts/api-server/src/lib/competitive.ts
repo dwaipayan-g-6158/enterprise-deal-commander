@@ -1,6 +1,8 @@
-import { eq } from "drizzle-orm";
-import { db, dealCompetitors, competitors } from "@workspace/db";
-import { cache, CacheKeys, CacheTtl } from "./cache";
+// Pure competitive win-rate math. No DB import — the query that feeds it lives
+// in lib/catalyst/competitive.ts, which reads the deal↔competitor links out of
+// the Data Store and hands the rows here. Keeping the reducer separate from the
+// fetch is what lets it be unit-tested without a database at all
+// (competitive.test.ts).
 
 /** Our historical win rate (0–1) against one competitor, derived from closed-deal outcomes. */
 export interface CompetitorWinRate {
@@ -53,31 +55,4 @@ export function reduceWinRates(
     });
   }
   return out;
-}
-
-/**
- * Our global historical win rate per competitor, computed once from every
- * deal↔competitor link and cached under the short-TTL `summary:` tier so the
- * portfolio loop (which calls `assembleDealIntelligence` per active deal) does
- * not recompute the full tally N times. Invalidated with the rest of the
- * `summary:` prefix whenever a deal mutates (see `invalidateDeal`).
- */
-export async function competitorWinRates(): Promise<
-  Map<number, CompetitorWinRate>
-> {
-  return cache.wrap(
-    `${CacheKeys.summaryPrefix}competitor-win-rates`,
-    CacheTtl.summary,
-    async () => {
-      const rows = await db
-        .select({
-          competitorId: dealCompetitors.competitorId,
-          name: competitors.name,
-          status: dealCompetitors.status,
-        })
-        .from(dealCompetitors)
-        .leftJoin(competitors, eq(dealCompetitors.competitorId, competitors.id));
-      return reduceWinRates(rows);
-    },
-  );
 }

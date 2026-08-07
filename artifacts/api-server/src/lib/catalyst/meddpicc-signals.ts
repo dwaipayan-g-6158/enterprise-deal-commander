@@ -1,10 +1,12 @@
-// Catalyst-backed reimplementation of ../meddpicc-signals.ts — see the module
-// docstring in ./intelligence.ts for why this is a parallel file rather than
-// an in-place rewrite: ../meddpicc.ts's `getLatestMeddpiccScore` (which this
-// file's Drizzle original feeds into via ../meddpicc.ts) is still called
-// directly by lib/subscribers/snapshot-service.ts's Drizzle-based
-// `captureSnapshot`, which serves the periodic hourly snapshot timer — a
-// caller with no per-request `req` at all, so it cannot migrate in this pass.
+// Auto-computed MEDDPICC answers, derived from signals the deal already
+// carries (stakeholders, gates, competitors, memory, playbook progress) rather
+// than asked of the user.
+//
+// This began as a parallel Catalyst twin of a Drizzle `../meddpicc-signals.ts`
+// that could not be retired while the periodic snapshot job ran off an
+// in-process timer with no request to derive an app from. Catalyst Job
+// Scheduling removed that constraint and the Drizzle original is gone; this is
+// now the only implementation.
 import {
   type CatalystApp,
   createStakeholdersRepo,
@@ -17,9 +19,14 @@ import {
   createDealPlaybookAssignmentsRepo,
 } from "@workspace/db/catalyst";
 import { competitorWinRates } from "./competitive";
-import type { MeddpiccComputedAnswer } from "../meddpicc-signals";
 
-export type { MeddpiccComputedAnswer };
+/** One auto-computed answer: which question it satisfies, the score it earns,
+ *  and the human-readable evidence for that score. */
+export interface MeddpiccComputedAnswer {
+  questionOrder: number;
+  score: number;
+  reason: string;
+}
 
 async function computeEconomicBuyer(catalystApp: CatalystApp, dealId: string): Promise<MeddpiccComputedAnswer> {
   const [stakeholders, gates] = await Promise.all([

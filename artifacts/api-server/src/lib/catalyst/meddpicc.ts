@@ -1,9 +1,12 @@
-// Catalyst-backed reimplementation of ../meddpicc.ts — see the module
-// docstring in ./intelligence.ts for why this is a parallel file rather than
-// an in-place rewrite: the original's `getLatestMeddpiccScore` is called
-// directly by lib/subscribers/snapshot-service.ts's Drizzle-based
-// `captureSnapshot`, which serves the periodic hourly snapshot timer — a
-// caller with no per-request `req` at all, so it cannot migrate in this pass.
+// The MEDDPICC assessment: the question catalog, each question's effective
+// answer (manual if given, else auto-computed, else unanswered), and the score
+// that falls out of them.
+//
+// This began as a parallel Catalyst twin of a Drizzle `../meddpicc.ts` that
+// could not be retired while the periodic snapshot job ran off an in-process
+// timer with no request to derive an app from. Catalyst Job Scheduling removed
+// that constraint and the Drizzle original is gone; this is now the only
+// implementation.
 import {
   type CatalystApp,
   createEnterpriseDealsRepo,
@@ -24,9 +27,26 @@ import {
 import { getMeddpiccComputedAnswers } from "./meddpicc-signals";
 import { syncMeddpiccPlaybookGate } from "./meddpicc-playbook-gate";
 import { notFound, badRequest } from "../http";
-import type { MeddpiccAnswerView, MeddpiccAssessment } from "../meddpicc";
 
-export type { MeddpiccAnswerView, MeddpiccAssessment };
+/**
+ * One question's effective answer. `source` is the whole point: a manual answer
+ * always wins over a computed one, and "unanswered" is distinct from a computed
+ * score of 0 — the UI colours them differently and the score treats them
+ * differently.
+ */
+export interface MeddpiccAnswerView {
+  questionOrder: number;
+  score: number | null;
+  note: string | null;
+  source: "manual" | "computed" | "unanswered";
+  reason: string | null;
+}
+
+export interface MeddpiccAssessment {
+  questions: typeof QUESTION_CATALOG;
+  answers: MeddpiccAnswerView[];
+  score: MeddpiccScoreResult;
+}
 
 async function loadThresholds(catalystApp: CatalystApp): Promise<MeddpiccThresholds> {
   const rows = await createEngineThresholdsRepo(catalystApp).listAll();

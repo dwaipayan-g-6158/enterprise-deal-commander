@@ -1,21 +1,12 @@
-import { desc, eq } from "drizzle-orm";
-import { db, dealSnapshots } from "@workspace/db";
 import { type CatalystApp, createDealSnapshotsRepo } from "@workspace/db/catalyst";
 import { dealEvents, type DealEventType } from "../events";
 import {
   serializeDeal,
   getDealGates,
   assembleDealIntelligence,
-} from "../intelligence";
-import {
-  serializeDeal as serializeDealCatalyst,
-  getDealGates as getDealGatesCatalyst,
-  assembleDealIntelligence as assembleDealIntelligenceCatalyst,
 } from "../catalyst/intelligence";
-import { getPlaybookSignals } from "../playbook-signals";
-import { getPlaybookSignals as getPlaybookSignalsCatalyst } from "../catalyst/playbook-signals";
-import { getLatestMeddpiccScore } from "../meddpicc";
-import { getLatestMeddpiccScore as getLatestMeddpiccScoreCatalyst } from "../catalyst/meddpicc";
+import { getPlaybookSignals } from "../catalyst/playbook-signals";
+import { getLatestMeddpiccScore } from "../catalyst/meddpicc";
 import { logger } from "../logger";
 
 /**
@@ -130,105 +121,20 @@ export function snapshotFingerprint(input: FingerprintInput): string {
   ].join("||");
 }
 
-export async function captureSnapshot(
-  opts: CaptureSnapshotOptions,
-): Promise<boolean> {
-  const { dealId, reason, triggerEvent, actor, force, skipIfUnchanged } = opts;
-  const now = Date.now();
-  if (!force) {
-    const last = lastSnapshotAt.get(dealId);
-    if (last !== undefined && now - last < DEBOUNCE_MS) return false;
-  }
-  lastSnapshotAt.set(dealId, now);
-
-  const deal = await serializeDeal(dealId);
-  if (!deal) {
-    lastSnapshotAt.delete(dealId);
-    return false;
-  }
-  const gates = await getDealGates(dealId);
-  const intel = await assembleDealIntelligence(dealId);
-  const playbook = await getPlaybookSignals(dealId);
-  const meddpicc = await getLatestMeddpiccScore(dealId);
-
-  const governance = intel
-    ? {
-        healthStatus: intel.governance.healthStatus,
-        alerts: intel.governance.alerts.map((a) => ({
-          code: a.code,
-          severity: a.severity,
-        })),
-      }
-    : { healthStatus: deal.healthStatus, alerts: [] as unknown[] };
-
-  const payload = {
-    deal,
-    gates,
-    governance,
-    playbook: {
-      adherencePct: playbook.adherencePct,
-      progressPct: playbook.progressPct,
-      criticalGaps: playbook.criticalGaps,
-      overdueCount: playbook.overdueCount,
-    },
-    meddpicc: meddpicc
-      ? { overallPct: meddpicc.overallPct, stagePct: meddpicc.stagePct, ragStatus: meddpicc.ragStatus }
-      : null,
-  };
-
-  const row = {
-    dealId,
-    reason,
-    triggerEvent: triggerEvent ?? null,
-    healthStatus: deal.healthStatus,
-    salesStageId: deal.salesStageId,
-    salesStage: deal.salesStage,
-    calculatedTcv: String(deal.calculatedTCV ?? 0),
-    normalizedTcv: String(deal.normalizedTCV ?? 0),
-    payload,
-    createdBy: actor,
-  };
-
-  // The hourly job would otherwise write one row per active deal per hour
-  // whether or not anything moved, which both bloats the table and drowns the
-  // event-driven restore points in the History UI (a real deal reached ~91
-  // periodic rows against 29 real ones, and the newest page was 100% periodic).
-  if (skipIfUnchanged) {
-    const prev = await db
-      .select({
-        healthStatus: dealSnapshots.healthStatus,
-        salesStageId: dealSnapshots.salesStageId,
-        calculatedTcv: dealSnapshots.calculatedTcv,
-        normalizedTcv: dealSnapshots.normalizedTcv,
-        payload: dealSnapshots.payload,
-      })
-      .from(dealSnapshots)
-      .where(eq(dealSnapshots.dealId, dealId))
-      .orderBy(desc(dealSnapshots.snapshotAt))
-      .limit(1);
-
-    if (prev.length > 0 && snapshotFingerprint(prev[0]) === snapshotFingerprint(row)) {
-      return false;
-    }
-  }
-
-  await db.insert(dealSnapshots).values(row);
-  return true;
-}
-
 /**
- * Catalyst-backed capture, used only by the event-driven subscriber below.
- * `captureSnapshot` above stays Drizzle-backed and untouched — it also serves
- * `snapshotAllActiveDeals`'s periodic job (index.ts's hourly timer), which
- * has no per-request `req` to derive a `catalystApp` from at all (Slice 5 /
- * Job Scheduling territory, same as `portfolio-rollups.ts`'s background
- * refresh — not fixable by a data-layer change alone). The event-driven path
- * never sets `skipIfUnchanged` (see the module docstring: "event-driven
- * captures always write"), so this omits the fingerprint-comparison branch
- * `captureSnapshot` needs for its periodic caller. The debounce map is
- * shared with `captureSnapshot` — same intent (avoid a burst of near-
- * simultaneous events over-snapshotting one deal) regardless of which
- * backend actually ends up writing.
+ * Capture one snapshot. Serves BOTH callers: the event-driven subscriber below
+ * and the periodic cron job (`snapshotAllActiveDealsCatalyst`).
+ *
+ * There used to be a second, Drizzle-backed `captureSnapshot` beside this one,
+ * because the periodic job ran off an in-process timer with no request to
+ * derive a `catalystApp` from. Catalyst Job Scheduling dissolved that: a job
+ * run arrives as an ordinary HTTP request (see routes/jobs.ts), so the periodic
+ * path now has an app like any other and the two implementations collapsed into
+ * this one.
+ *
+ * `skipIfUnchanged` is set by the periodic caller only — event-driven captures
+ * always write, because an event firing means something happened and the row is
+ * the record of that moment.
  */
 export async function captureSnapshotCatalyst(
   catalystApp: CatalystApp,
@@ -242,15 +148,15 @@ export async function captureSnapshotCatalyst(
   }
   lastSnapshotAt.set(dealId, now);
 
-  const deal = await serializeDealCatalyst(catalystApp, dealId);
+  const deal = await serializeDeal(catalystApp, dealId);
   if (!deal) {
     lastSnapshotAt.delete(dealId);
     return false;
   }
-  const gates = await getDealGatesCatalyst(catalystApp, dealId);
-  const intel = await assembleDealIntelligenceCatalyst(catalystApp, dealId);
-  const playbook = await getPlaybookSignalsCatalyst(catalystApp, dealId);
-  const meddpicc = await getLatestMeddpiccScoreCatalyst(catalystApp, dealId);
+  const gates = await getDealGates(catalystApp, dealId);
+  const intel = await assembleDealIntelligence(catalystApp, dealId);
+  const playbook = await getPlaybookSignals(catalystApp, dealId);
+  const meddpicc = await getLatestMeddpiccScore(catalystApp, dealId);
 
   const governance = intel
     ? {
@@ -279,14 +185,15 @@ export async function captureSnapshotCatalyst(
 
   const snapshotsRepo = createDealSnapshotsRepo(catalystApp);
 
-  // Same guard as the Drizzle path, and load-bearing for the same reason: the
-  // hourly job would otherwise write one row per active deal per hour whether
-  // or not anything moved, bloating the table and drowning the event-driven
-  // restore points in the History UI. Fingerprinting both sides through the
-  // shared `snapshotFingerprint` keeps the comparison symmetric — note the
-  // stored row's numeric columns come back as numbers here where Drizzle hands
-  // back strings, which is exactly why the fingerprint stringifies everything
-  // rather than comparing raw values.
+  // Load-bearing: the hourly job would otherwise write one row per active deal
+  // per hour whether or not anything moved, bloating the table and drowning the
+  // event-driven restore points in the History UI (a real deal reached ~91
+  // periodic rows against 29 real ones, and the newest page was 100% periodic).
+  // Fingerprinting both sides through the shared `snapshotFingerprint` keeps the
+  // comparison symmetric — the stored row's numeric columns come back as numbers
+  // while the freshly-computed side carries them as whatever the engine produced,
+  // which is why the fingerprint stringifies everything rather than comparing
+  // raw values.
   if (skipIfUnchanged) {
     const prev = await snapshotsRepo.latestAtOrBefore(dealId, new Date());
     if (
@@ -413,33 +320,4 @@ export function registerSnapshotService(): () => void {
       actor: event.actor,
     });
   });
-}
-
-/**
- * Periodic job: snapshot every active deal regardless of recent activity, but
- * only where the deal's content actually changed since its last snapshot.
- *
- * `force` bypasses the per-deal debounce so a long-idle deal is still
- * considered; `skipIfUnchanged` then decides whether there is anything new
- * worth recording. The returned count is captures actually written, so the
- * caller's log line reports the real number rather than the deal count.
- */
-export async function snapshotAllActiveDeals(dealIds: string[]): Promise<number> {
-  let count = 0;
-  for (const dealId of dealIds) {
-    try {
-      const ok = await captureSnapshot({
-        dealId,
-        reason: "periodic",
-        triggerEvent: null,
-        actor: "system",
-        force: true,
-        skipIfUnchanged: true,
-      });
-      if (ok) count++;
-    } catch (err) {
-      logger.error({ err, dealId }, "Periodic snapshot failed for deal");
-    }
-  }
-  return count;
 }

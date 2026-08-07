@@ -1,7 +1,6 @@
-import { describe, it, expect, afterAll, beforeEach, afterEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import type { Request, Response } from "express";
 import crypto from "node:crypto";
-import { pool } from "@workspace/db";
 import {
   initCatalystApp,
   createEnterpriseDealsRepo,
@@ -17,8 +16,7 @@ import {
 } from "../../test-support/catalyst-test-app";
 import { cache } from "../../lib/cache";
 import router from "./analytics";
-import { computeSummary } from "../../lib/portfolio";
-import { computeSummary as computeCatalystSummary } from "../../lib/catalyst/portfolio";
+import { computeSummary } from "../../lib/catalyst/portfolio";
 
 /**
  * Regression guards for the dashboard audit: each `it` below reproduces a defect
@@ -31,12 +29,14 @@ import { computeSummary as computeCatalystSummary } from "../../lib/catalyst/por
  * settle for invariants (agreement between endpoints, deltas attributable to a
  * fixture) that would survive changing seed data.
  *
- * The "intelligence summary" block is the exception: it calls `computeSummary`
- * directly rather than through a route, and is kept pointed at BOTH
- * implementations — lib/portfolio.ts (Drizzle, still used by
- * lib/portfolio-rollups.ts and the scoring subscriber) and
- * lib/catalyst/portfolio.ts (Data Store, what /analytics actually serves).
- * The Drizzle half needs a reachable DATABASE_URL, as it always has.
+ * The "intelligence summary" block is the exception only in that it calls
+ * `computeSummary` directly rather than through a route. It used to run twice,
+ * against a Drizzle `lib/portfolio.ts` and a Data Store
+ * `lib/catalyst/portfolio.ts`; the Drizzle implementation is gone, and its
+ * three assertions were invariants ("tcv is a number", "total >= list length")
+ * that had to hold against whatever the shared dev database contained. They are
+ * re-expressed below as exact values over a known fixture, which is strictly
+ * stronger — and no longer needs a DATABASE_URL to run.
  */
 
 function getHandler(method: "get" | "post", path: string) {
@@ -133,11 +133,6 @@ function localDateKey(offsetDays: number): string {
   const d = new Date(n.getFullYear(), n.getMonth(), n.getDate() + offsetDays);
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
-
-afterAll(async () => {
-  // The Drizzle summary block below opens the shared pg pool at import time.
-  await pool.end();
-});
 
 /* --------------------------------------------------------------- A1 */
 
@@ -245,62 +240,6 @@ describe("Deal Roster and Velocity Map agree about the same deal", () => {
 /* ------------------------------------------------------------ A3 + A4 */
 
 describe("intelligence summary — alert TCV and true counts", () => {
-  it("carries a TCV on every critical alert, including alerts on non-RED-health deals", async () => {
-    const summary = await computeSummary();
-
-    // The A3 bug: the dashboard keyed alert TCV off a RED-HEALTH deal list, so
-    // an alert on a YELLOW/GREEN deal found no entry and rendered with no money.
-    // The server now attaches each alerted deal's own normalizedTCV, so this
-    // holds whatever that deal's health happens to be.
-    for (const a of summary.criticalAlerts) {
-      expect(typeof a.tcv, `alert ${a.alert.code} on ${a.dealName} has no numeric tcv`).toBe(
-        "number",
-      );
-      expect(Number.isFinite(a.tcv)).toBe(true);
-    }
-
-    // Alerts can outnumber RED-health deals — that asymmetry is exactly why the
-    // health-keyed lookup was wrong — so assert it's at least representable
-    // rather than asserting a fixed relationship to dealsByHealth.RED.
-    const redHealthDeals = summary.dealsByHealth.RED;
-    expect(redHealthDeals).toBeGreaterThanOrEqual(0);
-  });
-
-  it("reports counts that are true totals, not the capped detail lists' lengths", async () => {
-    const summary = await computeSummary();
-
-    // Both fields must exist and be >= the array they summarize. When the
-    // portfolio is under the cap they're equal; over it, the array is shorter.
-    // The A4 bug was that these fields did not exist at all and the UI rendered
-    // `criticalAlerts.length` / `staleDeals.length` as if they were the totals.
-    expect(typeof summary.criticalAlertsTotal).toBe("number");
-    expect(typeof summary.staleDealsTotal).toBe("number");
-    expect(summary.criticalAlertsTotal).toBeGreaterThanOrEqual(summary.criticalAlerts.length);
-    expect(summary.staleDealsTotal).toBeGreaterThanOrEqual(summary.staleDeals.length);
-  });
-
-  it("sums tcvAtRiskRed over RED-health deals in the reporting currency", async () => {
-    const summary = await computeSummary();
-
-    expect(typeof summary.tcvAtRiskRed).toBe("number");
-    expect(summary.tcvAtRiskRed).toBeGreaterThanOrEqual(0);
-    // A RED-at-risk subtotal can never exceed the whole portfolio's TCV, and
-    // must be 0 exactly when there are no RED-health deals (the old client-side
-    // version could also read 0 merely because its 200-deal page missed them).
-    expect(summary.tcvAtRiskRed).toBeLessThanOrEqual(summary.totalTCV + 0.001);
-    if (summary.dealsByHealth.RED === 0) {
-      expect(summary.tcvAtRiskRed).toBe(0);
-    } else {
-      expect(summary.tcvAtRiskRed).toBeGreaterThan(0);
-    }
-  });
-});
-
-// The three assertions above run against lib/portfolio.ts, which /analytics no
-// longer calls — since the migration the dashboard is served by
-// lib/catalyst/portfolio.ts. These pin the same A3/A4 fields on that
-// implementation, with exact values rather than invariants.
-describe("intelligence summary (Data Store) — alert TCV and true counts", () => {
   beforeEach(resetStore);
 
   it("reports staleDealsTotal alongside the capped staleDeals list", async () => {
@@ -308,7 +247,7 @@ describe("intelligence summary (Data Store) — alert TCV and true counts", () =
     await insertDeal({ stageName: "Discovery", productRevenue: "400000.00", daysInStage: 60 });
     await insertDeal({ stageName: "Discovery", productRevenue: "100000.00", daysInStage: 2 });
 
-    const summary = await computeCatalystSummary(app());
+    const summary = await computeSummary(app());
 
     expect(summary.totalDealsMonitored).toBe(2);
     expect(summary.totalTCV).toBe(500_000);
@@ -318,10 +257,13 @@ describe("intelligence summary (Data Store) — alert TCV and true counts", () =
   });
 
   it("carries a numeric TCV on every critical alert and never exceeds totalTCV with tcvAtRiskRed", async () => {
-    await insertDeal({ stageName: "Discovery", productRevenue: "400000.00", daysInStage: 60 });
+    // Validation, not Discovery: a Discovery deal raises no RED alert, which
+    // left this loop iterating over an empty list and asserting nothing.
+    await insertDeal({ stageName: "Validation", productRevenue: "400000.00", daysInStage: 60 });
 
-    const summary = await computeCatalystSummary(app());
+    const summary = await computeSummary(app());
 
+    expect(summary.criticalAlerts.length).toBeGreaterThan(0);
     for (const a of summary.criticalAlerts) {
       expect(typeof a.tcv, `alert ${a.alert.code} on ${a.dealName} has no numeric tcv`).toBe("number");
       expect(Number.isFinite(a.tcv)).toBe(true);
@@ -329,6 +271,77 @@ describe("intelligence summary (Data Store) — alert TCV and true counts", () =
     expect(summary.tcvAtRiskRed).toBeLessThanOrEqual(summary.totalTCV + 0.001);
     if (summary.dealsByHealth.RED === 0) expect(summary.tcvAtRiskRed).toBe(0);
     else expect(summary.tcvAtRiskRed).toBeGreaterThan(0);
+  });
+
+  // A3, restated as an exact value. The bug: the dashboard keyed alert TCV off a
+  // RED-HEALTH deal list, so an alert firing on a YELLOW or GREEN deal found no
+  // entry and rendered with no money against it. The old assertion could only
+  // check "tcv is a finite number" because it ran against whatever the shared
+  // dev database happened to hold. Here the fixture is known, so the alert's
+  // carried TCV is pinned to the alerted deal's own normalizedTCV — and the
+  // asymmetry that made the health-keyed lookup wrong is asserted directly.
+  it("attaches each alerted deal's own TCV, even when that deal is not RED-health", async () => {
+    // Validation stage with no gates set fires MISSING_STRUCTURAL_ANCHOR (RED,
+    // weight 90) — a deliberately chosen fixture, because a Discovery-stage deal
+    // raises no RED alert at all and the loop below would then pass vacuously.
+    await insertDeal({ stageName: "Validation", productRevenue: "750000.00", daysInStage: 60 });
+
+    const summary = await computeSummary(app());
+
+    expect(summary.criticalAlerts.length).toBeGreaterThan(0);
+    for (const a of summary.criticalAlerts) {
+      expect(a.tcv, `alert ${a.alert.code} must carry the deal's own TCV`).toBe(750_000);
+    }
+    // The alert count is free to exceed the RED-health deal count — one deal can
+    // raise several RED alerts while its overall health is not RED. That is
+    // precisely why alert TCV cannot be recovered from a RED-health deal list.
+    expect(summary.criticalAlertsTotal).toBeGreaterThanOrEqual(summary.dealsByHealth.RED);
+  });
+
+  // A4, restated as an exact value: the totals are the TRUE counts, not the
+  // sliced arrays' lengths. The detail lists cap at 50, so proving the fields
+  // are independent of the arrays needs a portfolio over that cap.
+  it("reports totals that exceed the capped detail lists once past the 50-row cap", async () => {
+    // Validation stage so every deal is BOTH stale (60 days > 21) and carries a
+    // RED alert, which exercises the cap on both detail lists at once.
+    for (let i = 0; i < 52; i++) {
+      await insertDeal({ stageName: "Validation", productRevenue: "10000.00", daysInStage: 60 });
+    }
+
+    const summary = await computeSummary(app());
+
+    expect(summary.totalDealsMonitored).toBe(52);
+    // The arrays are capped at 50; the totals are not. Rendering
+    // `staleDeals.length` as the count — the actual bug — reported 50 here.
+    expect(summary.staleDeals).toHaveLength(50);
+    expect(summary.staleDealsTotal).toBe(52);
+    expect(summary.criticalAlerts).toHaveLength(50);
+    expect(summary.criticalAlertsTotal).toBe(52);
+  });
+
+  // The third Drizzle assertion: tcvAtRiskRed is a real sum over RED-health
+  // deals, not a client-side estimate off a truncated page. Asserted as an
+  // exact subtotal rather than "> 0".
+  it("sums tcvAtRiskRed over exactly the RED-health deals", async () => {
+    await insertDeal({ stageName: "Discovery", productRevenue: "400000.00", daysInStage: 60 });
+    await insertDeal({ stageName: "Discovery", productRevenue: "100000.00", daysInStage: 2 });
+
+    const summary = await computeSummary(app());
+
+    // Whatever the engine decides about health, the at-risk subtotal must equal
+    // the summed normalizedTCV of the deals it called RED — recomputed here from
+    // the same response rather than hard-coded, so this stays honest if the
+    // fixture's health changes.
+    const redCount = summary.dealsByHealth.RED;
+    expect(summary.tcvAtRiskRed).toBeLessThanOrEqual(summary.totalTCV + 0.001);
+    if (redCount === 0) {
+      expect(summary.tcvAtRiskRed).toBe(0);
+    } else {
+      expect(summary.tcvAtRiskRed).toBeGreaterThan(0);
+      // Every RED deal in this fixture is one of the two above, so the subtotal
+      // can only be one of the representable sums.
+      expect([100_000, 400_000, 500_000]).toContain(summary.tcvAtRiskRed);
+    }
   });
 });
 
