@@ -65,6 +65,12 @@ and the project aims to follow [Semantic Versioning](https://semver.org/spec/v2.
   missed it.
 - The sign-in page now shows an explicit error with a **Retry** action (and a loading skeleton)
   instead of a permanently blank card when the Catalyst sign-in widget can't load.
+- **The white sign-in panel.** Flattening Catalyst's wrappers to `transparent` did not remove it,
+  because nothing on the page was white: the *document's canvas* was. A canvas is not an element,
+  so when the root background is transparent the browser paints it using a default chosen by
+  `color-scheme` — and Zoho's document declares none, so it computes to light. No selector can
+  reach it. `color-scheme: dark` fixes it, and is also set inline by the stylesheet injector so
+  the recovery page (reached via *Forgot Password?*) can't flash white while the `<link>` loads.
 - **Accent tokens failed WCAG AA on every screen.** Light `--primary` put white button labels and
   `text-primary` links at 3.18:1, and dark `text-destructive` read 3.60:1. Light `--primary` moves
   to 55% lightness (fixing fill and text together, hue unchanged), light `--destructive` to 47%,
