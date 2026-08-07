@@ -132,6 +132,21 @@ body {
   margin: 0 !important;
 }
 
+/* Collapse Zoho's fixed 520px shell to its actual content. This is the root of
+   the whole scrolling family of bugs: measured live, `.signin_container` and
+   `#signin_flow` both compute `height: 520px; min-height: 520px` no matter how
+   little the current step contains. The frame is auto-sized to the visible
+   content (~176-280px), so a 520px shell always overflows it, and Catalyst then
+   scrolls the document when a field takes focus — which is what pushed the
+   banner and the "<email> / Change" row up out of view, and what made a pinned
+   banner necessary in the first place. With the shell sized to its content there
+   is nothing taller than the frame, so nothing scrolls and nothing is clipped. */
+.signin_container,
+#signin_flow {
+  height: auto !important;
+  min-height: 0 !important;
+}
+
 #signin_flow {
   padding: 10px 18px 14px !important;
   width: 100% !important;
