@@ -23,7 +23,8 @@ export const GetMeResponse = zod.object({
   "id": zod.string(),
   "email": zod.string(),
   "role": zod.enum(['admin', 'reader']),
-  "displayName": zod.string()
+  "displayName": zod.string(),
+  "allowedEmailDomains": zod.array(zod.string()).optional()
 })
 
 
@@ -46,7 +47,8 @@ export const ListUsersResponse = zod.object({
   "role": zod.enum(['admin', 'reader']),
   "isActive": zod.boolean(),
   "createdAt": zod.string(),
-  "lastDashboardVisitAt": zod.string().nullable()
+  "lastDashboardVisitAt": zod.string().nullable(),
+  "isPending": zod.boolean()
 }))
 })
 
@@ -60,7 +62,7 @@ export const createUserBodyDisplayNameMax = 255;
 
 
 export const CreateUserBody = zod.object({
-  "email": zod.string().min(1),
+  "email": zod.string().email().min(1),
   "display_name": zod.string().min(1).max(createUserBodyDisplayNameMax),
   "role": zod.enum(['admin', 'reader']).optional()
 })
@@ -91,7 +93,8 @@ export const UpdateUserResponse = zod.object({
   "role": zod.enum(['admin', 'reader']),
   "isActive": zod.boolean(),
   "createdAt": zod.string(),
-  "lastDashboardVisitAt": zod.string().nullable()
+  "lastDashboardVisitAt": zod.string().nullable(),
+  "isPending": zod.boolean()
 })
 })
 

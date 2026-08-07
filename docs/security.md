@@ -33,6 +33,15 @@ formal security audit.
 - **Auto-provisioning:** the first commander ever, or an email matching `SUPER_ADMIN_EMAIL`, or a
   Catalyst platform-admin, becomes an EDC admin automatically on first sign-in; everyone else
   becomes a reader unless an admin's pending invite (matched by email) claims a specific role.
+- **Corporate email allowlist:** only addresses on `ALLOWED_EMAIL_DOMAINS` (default
+  `zohocorp.com`, exact match — subdomains are not implied) may hold an account. Enforced at
+  *both* places a `commanders` row can be created: `POST /v1/users` refuses an off-domain invite
+  with a 400 before it reaches Catalyst's user directory, and `resolveCommander` refuses to
+  auto-provision or claim an invite for one. Enforcing only the former would be cosmetic —
+  anyone able to authenticate against the Catalyst project would still be handed a reader row.
+  `SUPER_ADMIN_EMAIL` is **not** exempt. Already-claimed rows are not re-checked, so tightening
+  the list revokes nobody's existing access; removing an off-domain account stays an explicit
+  admin action.
 
 ## Authorization (RBAC)
 

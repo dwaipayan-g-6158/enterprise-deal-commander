@@ -172,12 +172,16 @@ EDC's login is Zoho Catalyst's **embedded authentication** widget on `/login` �
 directly against Zoho's identity servers, there's no separate EDC password to set and no
 signup form to fill out.
 
-There is no self-serve signup. Either:
+There is no self-serve signup, and your address must be on an allowed corporate domain
+(**@zohocorp.com** by default). Either:
 
 - an admin has already invited your email address (see [Admin → User management &
   RBAC](#admin)), and your account activates the first time you sign in through that widget, or
 - you're the very first person to ever sign in to a fresh EDC instance, in which case you become
   its first admin automatically.
+
+Signing in with an address outside the allowed domains is refused — no account is created for
+it, invited or not.
 
 Once you're signed in, you land on the [Dashboard](#dashboard) — the portfolio's landing
 decision surface — and everything below in the [Screen-by-screen guide](#screen-by-screen-guide)
@@ -344,17 +348,28 @@ each setting controls.
 EDC has two roles: **admin** (full access) and **reader** (every read, zero writes, no
 per-deal scoping — a reader sees the entire portfolio, not a subset assigned to them).
 
-Admins invite new users by email (`POST /v1/users`); the invited person claims the pending
-invite the first time they sign in through Catalyst embedded auth — there's no separate signup
-step.
+Admins invite new users from **Settings → Users → Add user**: enter the email address, a display
+name, and the role to grant. The invited person gets a Catalyst email to set up sign-in, and
+claims the pending invite the first time they sign in — there's no separate signup step. Until
+they do, they show in the list as **Invited**, so a pending invite is never mistaken for someone
+who is actually using EDC.
 
-The server independently enforces two safety rules, regardless of what the UI allows you to
+Only **@zohocorp.com** addresses can be invited (configurable via `ALLOWED_EMAIL_DOMAINS` — see
+[configuration.md](./configuration.md)). This is a real boundary, not just form validation: an
+address outside the list is also refused if it tries to sign in directly, rather than being
+given a reader account automatically.
+
+The server independently enforces these safety rules, regardless of what the UI allows you to
 click:
 
 - **You cannot act on your own account** — a self-demote, self-deactivate, or self-delete
   request is rejected.
 - **The last active admin can never be demoted, deactivated, or deleted** — there is always at
-  least one admin left standing.
+  least one admin left standing. An admin who was invited but has never signed in does *not*
+  count toward this, so a pending invite can't be mistaken for cover while you demote the only
+  real admin.
+- **Only allowed email domains can be invited** — an outside address is rejected before it ever
+  reaches Catalyst's user directory.
 
 See [security.md#authorization-rbac](./security.md#authorization-rbac) for the full
 authorization model.

@@ -67,6 +67,24 @@ import { Plus, MoreHorizontal, Trash2, Users as UsersIcon } from "lucide-react";
 
 const EMPTY_FORM = { email: "", display_name: "", role: "reader" as "admin" | "reader" };
 
+/**
+ * UX-only mirror of the server's corporate-domain rule
+ * (api-server's lib/email-domain.ts), so a rejected address is obvious while
+ * typing instead of after a round trip. The allowlist is env-configurable and
+ * therefore cannot be hardcoded here — it arrives on the session from
+ * /auth/me. When it is absent (an older server, or offline), this returns true
+ * and the server's 400 is the only check, which is the correct fallback: this
+ * one is advisory and the server's is the real control.
+ *
+ * Exact domain match, never endsWith — same reasoning as the server's.
+ */
+function isAllowedEmail(email: string, allowedDomains: string[] | undefined): boolean {
+  if (!allowedDomains?.length) return true;
+  const at = email.lastIndexOf("@");
+  if (at < 1 || at === email.length - 1) return false;
+  return allowedDomains.includes(email.slice(at + 1).trim().toLowerCase());
+}
+
 export function UsersSettings() {
   const { toast } = useToast();
   const qc = useQueryClient();
@@ -88,17 +106,28 @@ export function UsersSettings() {
   // These mirror the server's own guards (routes/users.ts) — they only keep
   // the UI from offering a click that is guaranteed to fail with a 409. The
   // server enforces them independently; this is UX, not the real control.
-  const adminCount = users.filter((u) => u.role === "admin" && u.isActive).length;
+  // `!u.isPending` matches the server's isEffectiveAdmin: an admin who was
+  // invited but has never signed in does not count as an admin.
+  const adminCount = users.filter((u) => u.role === "admin" && u.isActive && !u.isPending).length;
   const isSelf = (u: User) => u.id === me?.id;
-  const isLastAdmin = (u: User) => u.role === "admin" && u.isActive && adminCount <= 1;
+  const isLastAdmin = (u: User) => u.role === "admin" && u.isActive && !u.isPending && adminCount <= 1;
+
+  const allowedDomains = me?.allowedEmailDomains;
+  const domainHint = allowedDomains?.length ? allowedDomains.map((d) => `@${d}`).join(", ") : null;
+  const emailTyped = form.email.trim();
+  const emailRejected = emailTyped.length > 0 && !isAllowedEmail(emailTyped, allowedDomains);
 
   const addUser = async () => {
-    if (!form.email.trim() || !form.display_name.trim()) {
+    if (!emailTyped || !form.display_name.trim()) {
       toast({ title: "Email and display name are required", variant: "destructive" });
       return;
     }
+    if (emailRejected) {
+      toast({ title: `Only ${domainHint} email addresses can be invited`, variant: "destructive" });
+      return;
+    }
     try {
-      await create.mutateAsync({ data: { ...form, email: form.email.trim() } });
+      await create.mutateAsync({ data: { ...form, email: emailTyped } });
       await invalidate();
       setForm(EMPTY_FORM);
       setAddOpen(false);
@@ -208,7 +237,14 @@ export function UsersSettings() {
                   </TableCell>
 
                   <TableCell>
-                    {canWrite && !locked ? (
+                    {/* An invite nobody has accepted yet is neither active nor
+                        deactivated — showing "Active" made it indistinguishable
+                        from someone who actually signs in. Deactivating a
+                        never-claimed invite would mean nothing, so there is no
+                        switch here; cancel it with Delete instead. */}
+                    {u.isPending ? (
+                      <Badge variant="secondary">Invited</Badge>
+                    ) : canWrite && !locked ? (
                       <label className="flex items-center gap-2 text-sm">
                         <Switch checked={u.isActive} onCheckedChange={(v) => toggleActive(u, v)} />
                         {u.isActive ? "Active" : "Off"}
@@ -221,7 +257,11 @@ export function UsersSettings() {
                   </TableCell>
 
                   <TableCell className="text-sm text-muted-foreground">
-                    {u.lastDashboardVisitAt ? relativeTime(u.lastDashboardVisitAt) : "Never"}
+                    {u.isPending
+                      ? "Invite pending"
+                      : u.lastDashboardVisitAt
+                        ? relativeTime(u.lastDashboardVisitAt)
+                        : "Never"}
                   </TableCell>
 
                   <TableCell>
@@ -278,7 +318,19 @@ export function UsersSettings() {
                 value={form.email}
                 onChange={(e) => setForm({ ...form, email: e.target.value })}
                 className="font-mono"
+                aria-invalid={emailRejected || undefined}
+                aria-describedby="new-user-email-hint"
               />
+              {domainHint && (
+                <p
+                  id="new-user-email-hint"
+                  className={emailRejected ? "text-xs text-destructive" : "text-xs text-muted-foreground"}
+                >
+                  {emailRejected
+                    ? `Only ${domainHint} addresses can be invited.`
+                    : `Must be a ${domainHint} address.`}
+                </p>
+              )}
             </div>
             <div className="space-y-2">
               <Label htmlFor="new-user-name">Display name</Label>
@@ -306,7 +358,7 @@ export function UsersSettings() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setAddOpen(false)}>Cancel</Button>
-            <Button onClick={addUser} disabled={create.isPending}>
+            <Button onClick={addUser} disabled={create.isPending || emailRejected}>
               {create.isPending ? "Inviting…" : "Send invite"}
             </Button>
           </DialogFooter>

@@ -56,6 +56,14 @@ export interface RecordedInvite {
   redirectUrl: string;
 }
 
+interface SignedInCatalystUser {
+  userId: string;
+  email: string;
+  firstName: string;
+  lastName: string;
+  isPlatformAdmin: boolean;
+}
+
 export class CatalystTestStore {
   private tables = new Map<string, FakeTable>();
   private nextRowId = 1;
@@ -73,6 +81,7 @@ export class CatalystTestStore {
   readonly deletedUserIds: string[] = [];
   private nextUserId = 1;
   private inviteFailure: unknown = null;
+  private currentUser: SignedInCatalystUser | null = null;
 
   /**
    * Stratus object storage, as a plain key→string map.
@@ -91,6 +100,37 @@ export class CatalystTestStore {
   /** Make the next `registerUser` reject, the way Catalyst does on a bad email. */
   failNextInvite(err: unknown = rejection(400, "INVALID_INPUT", "Email already registered")): void {
     this.inviteFailure = err;
+  }
+
+  /**
+   * Establish the Catalyst session `getCurrentUser()` will report, which is
+   * what makes requireAuth/resolveCommander (lib/auth.ts) testable at all.
+   *
+   * This models an *identity* signing in, not an app account: whether that
+   * identity resolves to a commanders row — claimed, invited, auto-provisioned,
+   * or refused for being off-domain — is exactly the logic under test.
+   * With no call to this, `getCurrentUser()` rejects the way Catalyst does for
+   * an unauthenticated request.
+   */
+  signInAs(user: {
+    userId?: string;
+    email: string;
+    firstName?: string;
+    lastName?: string;
+    isPlatformAdmin?: boolean;
+  }): void {
+    this.currentUser = {
+      userId: user.userId ?? `cat-session-${this.nextUserId++}`,
+      email: user.email,
+      firstName: user.firstName ?? "",
+      lastName: user.lastName ?? "",
+      isPlatformAdmin: user.isPlatformAdmin ?? false,
+    };
+  }
+
+  /** Drop the Catalyst session, so `getCurrentUser()` rejects again. */
+  signOut(): void {
+    this.currentUser = null;
   }
 
   private table(name: string): FakeTable {
@@ -177,6 +217,7 @@ export class CatalystTestStore {
     this.deletedUserIds.length = 0;
     this.nextUserId = 1;
     this.inviteFailure = null;
+    this.currentUser = null;
     this.objects.clear();
     this.declareFromLiveSchema();
   }
@@ -251,6 +292,25 @@ export class CatalystTestStore {
         }),
       }),
       userManagement: () => ({
+        /**
+         * The raw Catalyst shape, not the mapped one: lib/db's
+         * getCurrentCatalystUser derives `isPlatformAdmin` by regex over
+         * `role_details.role_name`, so returning a pre-mapped boolean would
+         * skip the very mapping most likely to be wrong.
+         */
+        async getCurrentUser() {
+          if (!store.currentUser) {
+            throw rejection(401, "INVALID_CREDENTIALS", "User is not authenticated");
+          }
+          const u = store.currentUser;
+          return {
+            user_id: u.userId,
+            email_id: u.email,
+            first_name: u.firstName,
+            last_name: u.lastName,
+            role_details: { role_name: u.isPlatformAdmin ? "App Administrator" : "App User" },
+          };
+        },
         async registerUser(
           config: { platform_type: string; redirect_url: string },
           details: { first_name: string; last_name: string; email_id: string },

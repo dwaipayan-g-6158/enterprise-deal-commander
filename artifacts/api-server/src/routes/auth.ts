@@ -2,6 +2,7 @@ import { Router, type IRouter, type Request, type Response } from "express";
 import { initCatalystAdminApp, createCommandersRepo } from "@workspace/db/catalyst";
 import { GetMeResponse, DashboardVisitResponse } from "@workspace/api-zod";
 import { getActor } from "../lib/auth";
+import { allowedEmailDomains } from "../lib/email-domain";
 
 /**
  * Sign-in and sign-out no longer have server routes at all: Catalyst
@@ -24,6 +25,10 @@ authSessionRouter.get("/auth/me", (req: Request, res: Response) => {
       email: actor.username,
       role: actor.role,
       displayName: actor.displayName,
+      // Lets the Users tab validate an invite address inline against a list it
+      // cannot hardcode (it is env-configurable). Advisory only — the real
+      // check is routes/users.ts's, and lib/auth.ts's on top of that.
+      allowedEmailDomains: allowedEmailDomains(),
     }),
   );
 });

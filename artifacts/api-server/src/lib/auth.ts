@@ -1,6 +1,7 @@
 import type { Request, Response, NextFunction } from "express";
 import { initCatalystApp, initCatalystAdminApp, getCurrentCatalystUser, createCommandersRepo } from "@workspace/db/catalyst";
 import { logSettingsChange } from "./catalyst/settings-audit";
+import { isAllowedEmailDomain } from "./email-domain";
 import { unauthorized } from "./http";
 import { logger } from "./logger";
 
@@ -44,21 +45,35 @@ function isSuperAdminEmail(email: string): boolean {
  * Resolve (and, on first sight of this Catalyst identity, provision) the
  * commander row for the current request's authenticated Catalyst user.
  *
- * Three cases, in order:
+ * Four cases, in order:
  *  1. A commander row already claimed by this exact catalyst_user_id — use
  *     it (and its live role/isActive) directly.
- *  2. An outstanding invite for this email (routes/users.ts's POST /users)
+ *  2. The email is outside the corporate allowlist (lib/email-domain.ts) and
+ *     case 1 did not apply — refuse, creating nothing.
+ *  3. An outstanding invite for this email (routes/users.ts's POST /users)
  *     with no catalyst_user_id yet — claim it now, adopting whatever role
  *     the inviting admin chose.
- *  3. Neither — this Catalyst identity has never been seen and was never
+ *  4. Neither — this Catalyst identity has never been seen and was never
  *     invited. Auto-provision a new commander row: admin if this is the
  *     very first commander ever, or the email matches SUPER_ADMIN_EMAIL, or
  *     Catalyst's own project role for this user is already an "admin" type
  *     role; reader otherwise. Mirrors Customer-Insight-Engine's
  *     `resolveRole` bootstrap.
  *
- * Returns null only when an existing row is deactivated — the one case that
- * revokes access outright rather than resolving to a role.
+ * The ordering of 1 before 2 is deliberate and load-bearing: the domain check
+ * gates row CREATION, not every request. Re-checking an already-claimed row
+ * would mean tightening ALLOWED_EMAIL_DOMAINS instantly locks out everyone it
+ * no longer covers — including, quite possibly, the last admin, leaving nobody
+ * able to fix it. Removing an off-domain account stays a deliberate admin
+ * action in the Users tab.
+ *
+ * Because case 4 is what turns a bare Catalyst sign-in into an account, case 2
+ * is the real boundary: without it, restricting POST /users would be cosmetic,
+ * since anyone who can authenticate against the Catalyst project would still
+ * land a reader row here.
+ *
+ * Returns null when access is refused outright rather than resolved to a role:
+ * a deactivated existing row, or an off-domain email with no row to begin with.
  */
 async function resolveCommander(
   req: Request,
@@ -79,6 +94,16 @@ async function resolveCommander(
   // server, using the admin-scoped SDK init, can write this table.
   const adminRepo = createCommandersRepo(initCatalystAdminApp(req));
   const username = catalystUser.email.trim().toLowerCase();
+
+  // Case 2 — see the docstring. Everything below this line CREATES a row, so
+  // this is the last point at which an off-domain identity can be turned away
+  // without leaving a trace of an account behind. The reason is logged here
+  // and deliberately not returned to the caller: the 401 they get is the same
+  // one a deactivated account gets.
+  if (!isAllowedEmailDomain(username)) {
+    logger.warn({ username }, "Refused to provision a commander: email is outside the allowed domains");
+    return null;
+  }
 
   const pending = await adminRepo.getPendingInviteByUsername(username);
   if (pending) {
@@ -134,7 +159,11 @@ export async function requireAuth(req: Request, _res: Response, next: NextFuncti
     const catalystUser = await getCurrentCatalystUser(req);
     const actor = await resolveCommander(req, catalystUser);
     if (!actor) {
-      next(unauthorized("Session is no longer valid"));
+      // Covers both refusals resolveCommander can return: a deactivated
+      // account, and an email outside the allowed domains. Deliberately one
+      // message for both — which of the two applies is in the server log, not
+      // in the response.
+      next(unauthorized("This account does not have access to this app"));
       return;
     }
     (req as AuthedRequest).actor = actor;

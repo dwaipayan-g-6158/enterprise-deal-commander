@@ -184,7 +184,12 @@ spec (it drives the generated filenames).
   and maps it to a `commanders` Data Store row (`resolveCommander`), auto-provisioning one on
   first sign-in (admin if it's the first commander ever, the email matches `SUPER_ADMIN_EMAIL`,
   or Catalyst's own platform-admin role applies; reader otherwise) or claiming a pending invite
-  by email. `commanders.role`/`is_active` are re-read from Data Store on every request — never
+  by email. Provisioning is gated by the corporate email allowlist
+  (`ALLOWED_EMAIL_DOMAINS`, `lib/email-domain.ts`): an off-domain identity is refused rather than
+  given a reader row, which is what makes the same check on `POST /v1/users` a real boundary
+  instead of form validation. The check deliberately runs *after* the already-claimed lookup, so
+  it gates account creation only and tightening the list cannot lock out existing users.
+  `commanders.role`/`is_active` are re-read from Data Store on every request — never
   trusted from Catalyst's own claims about the signed-in user — so a demotion/deactivation takes
   effect on the very next request rather than waiting out however long the Catalyst session
   lives. The public exceptions (registered above this gate in `routes/index.ts`) are `GET

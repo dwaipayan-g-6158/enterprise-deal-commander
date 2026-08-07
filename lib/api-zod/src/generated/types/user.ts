@@ -16,4 +16,5 @@ export interface User {
   createdAt: string;
   /** @nullable */
   lastDashboardVisitAt: string | null;
+  isPending: boolean;
 }

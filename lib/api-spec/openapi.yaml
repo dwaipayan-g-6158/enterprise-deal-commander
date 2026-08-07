@@ -2020,6 +2020,15 @@ components:
         email: { type: string }
         role: { type: string, enum: [admin, reader] }
         displayName: { type: string }
+        # Which email domains may be invited (api-server's ALLOWED_EMAIL_DOMAINS,
+        # default @zohocorp.com). Served here so the Users tab can validate inline
+        # against a list it cannot hardcode. Deliberately NOT required: a frontend
+        # deploy landing ahead of the server should degrade to server-side-only
+        # validation, not break the session read — same posture as the WRITE_ROLES
+        # fallback in the client's role-context.tsx.
+        allowedEmailDomains:
+          type: array
+          items: { type: string }
       required: [id, email, role, displayName]
     DashboardVisitResponse:
       type: object
@@ -2037,7 +2046,10 @@ components:
         isActive: { type: boolean }
         createdAt: { type: string }
         lastDashboardVisitAt: { type: ["string", "null"] }
-      required: [id, email, displayName, role, isActive, createdAt, lastDashboardVisitAt]
+        # Invited but never signed in — the commanders row has no catalyst_user_id
+        # yet. Exposed as a boolean only; the Catalyst user id itself stays withheld.
+        isPending: { type: boolean }
+      required: [id, email, displayName, role, isActive, createdAt, lastDashboardVisitAt, isPending]
     UserListResponse:
       type: object
       properties:
@@ -2053,7 +2065,9 @@ components:
     CreateUserInput:
       type: object
       properties:
-        email: { type: string, minLength: 1 }
+        # The corporate-domain restriction itself is NOT expressible here (the
+        # allowlist is env-configurable) and is enforced in routes/users.ts.
+        email: { type: string, minLength: 1, format: email }
         display_name: { type: string, minLength: 1, maxLength: 255 }
         role: { type: string, enum: [admin, reader] }
       required: [email, display_name]
