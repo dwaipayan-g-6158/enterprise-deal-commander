@@ -22,8 +22,9 @@ files are git-ignored — copy the provided `.env.example` files.
 | `EDC_JOB_SECRET` | ✅ (deployed app only) | — | Secret used to authenticate background job callbacks from the Catalyst Job Scheduler. Generate with `openssl rand -hex 32`. |
 | `SUPER_ADMIN_EMAIL` | — | — | Email address that receives initial admin grant (optional; the app creates no users on startup). |
 | `APP_ORIGIN` | — | — | Full public origin (scheme + host) for building absolute links: Bat-Signal share links and user-invite emails. In local dev set to the frontend's origin (e.g. `http://localhost:5173`), not the API server's `:5000`. Bat-Signal falls back to a relative `/share/:token` when unset; invite links fall back to the request's own host. |
-| `SMTP_URL` | — | — | SMTP connection string for transactional email (optional; emails are not sent if unset). |
+| `SMTP_URL` | — | — | SMTP connection string for transactional email. **No transport is implemented yet** (`lib/mail.ts`) — mail is logged and treated as sent whether or not this is set, so setting it does not currently deliver email. |
 | `LOG_LEVEL` | — | `info` | Minimum log level: `debug`, `info`, `warn`, `error`. |
+| `CATALYST_MAX_CONCURRENT_DATASTORE` | — | `6` | Caps how many Data Store requests this process has in flight at once (`lib/db/src/catalyst/sdk.ts`). AppSail runs multiple instances that each get their own limiter but share one platform budget, so raise with headroom in mind. |
 
 ### Frontend (`artifacts/edc/.env`)
 

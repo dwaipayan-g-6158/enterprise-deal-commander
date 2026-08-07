@@ -37,7 +37,7 @@ never trusted from the auth layer — `commanders.role`/`is_active` are re-read 
 every request, exactly the same anti-staleness principle as the old JWT-claim design, just with a
 different identity source.
 
-_Files:_ `artifacts/api-server/src/lib/auth.ts`, `src/routes/auth.ts`, `artifacts/edc/src/pages/login.tsx`
+_Files:_ `artifacts/api-server/src/lib/auth.ts`, `artifacts/api-server/src/routes/auth.ts`, `artifacts/edc/src/pages/login.tsx`
 
 ## 3. Job Scheduling
 
@@ -48,7 +48,7 @@ secret, mounted above `requireAuth`) just works. Webhook retry is now durable: a
 writes its own `next_attempt_at` on the `v2_webhook_delivery_log` row — the row IS the queue — and
 a `*/10` cron drains it.
 
-_Files:_ `artifacts/api-server/src/routes/jobs.ts`, `lib/subscribers/webhook-dispatcher.ts`, `lib/catalyst/snapshot-service.ts`
+_Files:_ `artifacts/api-server/src/routes/jobs.ts`, `artifacts/api-server/src/lib/subscribers/webhook-dispatcher.ts`, `artifacts/api-server/src/lib/subscribers/snapshot-service.ts`
 
 ## 4. Stratus offload
 
@@ -56,13 +56,13 @@ Snapshot payloads over 9,800 characters offload to a Stratus bucket (`edc-deal-s
 Authenticated) instead of failing the write; hydration lives inside the repository's read methods,
 not a helper callers must remember. Threshold-triggered only — inline storage is the default path.
 
-_Files:_ `lib/db/src/catalyst/stratus.ts`, `lib/catalyst/repositories/intel-core.ts`
+_Files:_ `lib/db/src/catalyst/stratus.ts`, `lib/db/src/catalyst/repositories/intel-core.ts`
 
 ## 5. Test suite
 
 All 30 previously "Data Store isn't reachable from localhost"-skipped test files were converted to
 run against a new in-memory Data Store fake (`artifacts/api-server/src/test-support/catalyst-test-app.ts`).
-**0 skipped, 1,360 tests passing** (engine 232, frontend 622, api-server 506) — no database
+**0 skipped, 1,356 tests passing** (engine 232, frontend 618, api-server 506) — no database
 required to run the suite at all.
 
 _Files:_ `artifacts/api-server/src/test-support/catalyst-test-app.ts`
@@ -90,6 +90,6 @@ _Files:_ `artifacts/api-server/src/test-support/catalyst-test-app.ts`
 - Seeding and transition backfill are both admin-only HTTP endpoints
   (`POST /api/v1/admin/seed?phase=...`, `POST /api/v1/admin/backfill-transitions`), not CLI
   scripts — both need a real request to derive a Catalyst app handle from.
-- Verified: clean typecheck; 1,360 tests passing, 0 skipped; RBAC verified live as both admin and
+- Verified: clean typecheck; 1,356 tests passing, 0 skipped; RBAC verified live as both admin and
   reader on the deployed app; a full click-through of every page and every deal-detail tab against
   real Data Store data.

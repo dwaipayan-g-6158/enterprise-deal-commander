@@ -53,6 +53,8 @@ and the project aims to follow [Semantic Versioning](https://semver.org/spec/v2.
 - `routes/intelligence.ts` (the deal Intelligence panel, dashboard summary, Portfolio Overview,
   product-mix, and Closed-Lost Autopsy) had been silently 500ing since an earlier migration slice
   missed it.
+- The sign-in page now shows an explicit error with a **Retry** action (and a loading skeleton)
+  instead of a permanently blank card when the Catalyst sign-in widget can't load.
 
 ## [0.6.0] — Settings backend foundation (inferred)
 

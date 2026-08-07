@@ -93,8 +93,11 @@ Express process:
 
 - `app.ts` optionally serves the built SPA from `dist/public` with an Express-5 `/{*splat}`
   fallback (so client-side routes resolve).
-- `scripts/build-single.ts` and `scripts/post-merge.sh` support producing the single bundle
-  (the built SPA is copied into the API server's `dist/public`).
+- `scripts/build-single.ts` copies the built SPA into the API server's `dist/public` to produce
+  the single bundle. `scripts/post-merge.sh` does **not** do this — it runs
+  `pnpm --filter @workspace/db run push`, a script that no longer exists (it was the Drizzle
+  schema-push step, retired with the rest of that layer); treat that script as stale until it's
+  updated or removed.
 
 In that mode you set the frontend `BASE_PATH` to the sub-path the app is mounted at.
 
