@@ -41,14 +41,17 @@ Always run this before claiming a change compiles. It is the fastest full-repo c
 | Package | Command | Output |
 |---|---|---|
 | `@workspace/engine` | (none) | Pure TS, consumed directly — no build step. |
-| `@workspace/api-server` | `pnpm --filter @workspace/api-server run build` | `dist/index.mjs`, `dist/seed.mjs` (esbuild) |
+| `@workspace/api-server` | `pnpm --filter @workspace/api-server run build` | `dist/index.mjs` (esbuild) |
 | `@workspace/edc` | `pnpm --filter @workspace/edc run build` | `dist/` static SPA (Vite) |
 | `@workspace/api-zod`, `@workspace/api-client-react` | via codegen | `src/generated/**` |
 
 ## API server build (esbuild)
 
-`artifacts/api-server/build.mjs` bundles `src/index.ts` and `src/seed.ts` into a single ESM file
-each under `dist/` (`.mjs`). Key characteristics:
+`artifacts/api-server/build.mjs` bundles `src/index.ts` — the server's only entry point — into a
+single ESM file under `dist/` (`.mjs`). `src/seed.ts` used to sit beside it as a second entry
+point; it was Drizzle-only and went with the rest of that layer — seeding is
+`POST /api/v1/admin/seed` now (see [cli-and-scripts.md](./cli-and-scripts.md)), not a built
+script. Key characteristics:
 
 - **Workspace dependencies are inlined** into the bundle. This is why the `dev` script rebuilds
   on every start and why you must re-run it after editing routes, the engine, or the schema.

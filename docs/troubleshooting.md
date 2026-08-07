@@ -55,10 +55,10 @@ Native binaries for platforms other than linux-x64 (and win32-x64) are stripped 
 and `@tailwindcss/oxide` packages for your platform, or build inside a linux-x64 container.
 
 ### Flow analytics look empty for old deals
-`pipeline_transitions` are recorded going forward by an event subscriber. Backfill history:
-```bash
-pnpm --filter @workspace/scripts exec tsx <backfill:transitions script>
-```
+`pipeline_transitions` are recorded going forward by an event subscriber. Backfill history for
+pre-existing deals with `POST /api/v1/admin/backfill-transitions` (admin-only; not a CLI script —
+it needs a real request to derive a Catalyst app handle from, same as `/admin/seed`). It's
+idempotent, so it's safe to call more than once.
 
 ## Error reference
 
