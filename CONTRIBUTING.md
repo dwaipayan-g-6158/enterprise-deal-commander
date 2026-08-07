@@ -23,7 +23,6 @@ and [`docs/architecture.md`](./docs/architecture.md).
 2. **The OpenAPI spec is the source of truth.** Never hand-edit generated code under `lib/api-*/src/generated/**`. Change `lib/api-spec/openapi.yaml` and re-run codegen.
 3. **Keep the engine pure.** `lib/engine` performs no DB/network calls and must stay isomorphic (no `Date.now()`, `new Date()`, or `Math.random()` in scoring paths). All external data arrives as function arguments.
 4. **Never lower the supply-chain guard.** Do not disable or reduce `minimumReleaseAge` in `pnpm-workspace.yaml`.
-5. **Never use `push-force`** on the database (truncate risk).
 
 ## Development setup
 

@@ -114,7 +114,7 @@ Full detail, with data-flow and event-bus diagrams, is in [`docs/architecture.md
 |---|---|
 | Language / tooling | TypeScript 5.9, Node 24, **pnpm** workspace (pnpm-only), Prettier |
 | Frontend | React 19, Vite 7, Tailwind CSS v4, shadcn/ui (Radix), TanStack Query, `wouter`, Recharts, Framer Motion, PWA (Workbox) |
-| Backend | Express 5, `pino` logging, `jsonwebtoken` (HS256) + `bcryptjs`, `express-rate-limit`, esbuild bundling |
+| Backend | Express 5, `pino` logging, Catalyst embedded auth (no server-side password/JWT), esbuild bundling |
 | Data | **Zoho Catalyst Data Store** — hosted, schemaless Row API (no ORM, no SQL); `@workspace/db`'s Catalyst SDK wrapper (`lib/db/src/catalyst/`) is the only access layer. |
 | Contract & codegen | OpenAPI 3.1 (`openapi.yaml`) → **Orval** → typed React Query hooks + Zod validators |
 | Intelligence | Pure isomorphic `@workspace/engine` (15 risk patterns + 7-dimension Risk Engine v2) |
@@ -132,13 +132,10 @@ pnpm install
 cp artifacts/api-server/.env.example artifacts/api-server/.env
 #   → see the file's comments; nothing is required for local dev
 
-# 3. Push the schema and seed data
-pnpm --filter @workspace/api-server run seed
-
-# 4. Run the API server (port 5000)
+# 3. Run the API server (port 5000)
 pnpm --filter @workspace/api-server run dev
 
-# 5. In a second terminal, run the frontend (Vite)
+# 4. In a second terminal, run the frontend (Vite)
 cp artifacts/edc/.env.example artifacts/edc/.env
 pnpm --filter @workspace/edc run dev
 ```
