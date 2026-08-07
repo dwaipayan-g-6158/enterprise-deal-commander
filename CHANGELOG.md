@@ -35,7 +35,7 @@ and the project aims to follow [Semantic Versioning](https://semver.org/spec/v2.
 ### Changed
 - Engine tuning weights (predictive scoring, portfolio risk, pipeline health, risk dimensions) are now read from configuration instead of hardcoded values.
 - Predictive score now has **9 factors** and the risk engine **16 patterns** (was 8 / 15).
-- The full test suite (1,339 tests) now runs against an in-memory Data Store fake with **no
+- The full test suite (1,360 tests) now runs against an in-memory Data Store fake with **no
   database required at all** — previously it needed a reachable `DATABASE_URL`.
 
 ### Removed

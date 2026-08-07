@@ -62,7 +62,7 @@ _Files:_ `lib/db/src/catalyst/stratus.ts`, `lib/catalyst/repositories/intel-core
 
 All 30 previously "Data Store isn't reachable from localhost"-skipped test files were converted to
 run against a new in-memory Data Store fake (`artifacts/api-server/src/test-support/catalyst-test-app.ts`).
-**0 skipped, 1,339 tests passing** (engine 232, frontend 618, api-server 489) — no database
+**0 skipped, 1,360 tests passing** (engine 232, frontend 622, api-server 506) — no database
 required to run the suite at all.
 
 _Files:_ `artifacts/api-server/src/test-support/catalyst-test-app.ts`
@@ -90,6 +90,6 @@ _Files:_ `artifacts/api-server/src/test-support/catalyst-test-app.ts`
 - Seeding and transition backfill are both admin-only HTTP endpoints
   (`POST /api/v1/admin/seed?phase=...`, `POST /api/v1/admin/backfill-transitions`), not CLI
   scripts — both need a real request to derive a Catalyst app handle from.
-- Verified: clean typecheck; 1,339 tests passing, 0 skipped; RBAC verified live as both admin and
+- Verified: clean typecheck; 1,360 tests passing, 0 skipped; RBAC verified live as both admin and
   reader on the deployed app; a full click-through of every page and every deal-detail tab against
   real Data Store data.
