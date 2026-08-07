@@ -10,7 +10,6 @@
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.9-3178C6?logo=typescript&logoColor=white)
 ![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=black)
 ![Express](https://img.shields.io/badge/Express-5-000000?logo=express&logoColor=white)
-![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-4169E1?logo=postgresql&logoColor=white)
 
 </div>
 
@@ -94,7 +93,7 @@ flowchart LR
         BUS[Event bus + subscribers]
     end
     ENG["@workspace/engine — pure isomorphic risk engine"]
-    DB[("PostgreSQL 16<br/>edc + edc_v2 schemas")]
+    DB[("Zoho Catalyst<br/>Data Store (71 tables)")]
     SPEC["@workspace/api-spec — openapi.yaml (source of truth)"]
 
     UI --> RQ -->|"/api"| R
@@ -116,14 +115,14 @@ Full detail, with data-flow and event-bus diagrams, is in [`docs/architecture.md
 | Language / tooling | TypeScript 5.9, Node 24, **pnpm** workspace (pnpm-only), Prettier |
 | Frontend | React 19, Vite 7, Tailwind CSS v4, shadcn/ui (Radix), TanStack Query, `wouter`, Recharts, Framer Motion, PWA (Workbox) |
 | Backend | Express 5, `pino` logging, `jsonwebtoken` (HS256) + `bcryptjs`, `express-rate-limit`, esbuild bundling |
-| Data | PostgreSQL 16 via **Drizzle ORM** (`edc` + `edc_v2` schemas), `pg` |
+| Data | **Zoho Catalyst Data Store** — hosted, schemaless Row API (no ORM, no SQL); `@workspace/db`'s Catalyst SDK wrapper (`lib/db/src/catalyst/`) is the only access layer. |
 | Contract & codegen | OpenAPI 3.1 (`openapi.yaml`) → **Orval** → typed React Query hooks + Zod validators |
 | Intelligence | Pure isomorphic `@workspace/engine` (15 risk patterns + 7-dimension Risk Engine v2) |
 | Testing | Vitest |
 
 ## Quick start
 
-> Prerequisites: **Node 24**, **pnpm**, and **PostgreSQL 16**. Full details in [`docs/installation.md`](./docs/installation.md).
+> Prerequisites: **Node 24** and **pnpm**. No local database to provision — the datastore is Zoho Catalyst Data Store (hosted); local dev talks to the same Catalyst project as the deployed app. Full details in [`docs/installation.md`](./docs/installation.md).
 
 ```bash
 # 1. Install dependencies (pnpm only — npm/yarn are rejected)
@@ -131,10 +130,9 @@ pnpm install
 
 # 2. Configure the API server env
 cp artifacts/api-server/.env.example artifacts/api-server/.env
-#   → set DATABASE_URL and SESSION_SECRET
+#   → see the file's comments; nothing is required for local dev
 
 # 3. Push the schema and seed data
-pnpm --filter @workspace/db run push
 pnpm --filter @workspace/api-server run seed
 
 # 4. Run the API server (port 5000)
@@ -157,7 +155,7 @@ Deal-Commander/
 │   └── mockup-sandbox/   # UI playground (not part of the product)
 ├── lib/                  # Shared libraries
 │   ├── engine/           # Pure isomorphic risk engine (@workspace/engine)
-│   ├── db/               # Drizzle schema + client (@workspace/db)
+│   ├── db/               # Catalyst Data Store SDK + repositories (@workspace/db)
 │   ├── api-spec/         # openapi.yaml + Orval config (@workspace/api-spec)
 │   ├── api-zod/          # Generated Zod validators
 │   └── api-client-react/ # Generated React Query hooks
@@ -204,7 +202,7 @@ Start at the **[documentation index → `docs/README.md`](./docs/README.md)**. H
 
 ## Project status & roadmap
 
-EDC is under active development (no tagged releases yet; version pinned at `0.0.0`). Phase 1 is functionally complete; large parts of Phase 2 (Risk Engine v2, durable history, Deal Memory, Pipeline Flow Analytics, settings backend, Deal Roster/Kanban) have shipped. A migration to **Zoho Catalyst** is a planned future step. See [`docs/roadmap.md`](./docs/roadmap.md) and [`CHANGELOG.md`](./CHANGELOG.md).
+EDC is under active development (no tagged releases yet; version pinned at `0.0.0`). Phase 1 is functionally complete; large parts of Phase 2 (Risk Engine v2, durable history, Deal Memory, Pipeline Flow Analytics, settings backend, Deal Roster/Kanban) have shipped. The full stack runs on **Zoho Catalyst** (Data Store + AppSail + embedded auth + Job Scheduling) — migrated off Postgres/Drizzle in August 2026. See [`docs/changes/2026-08-07-catalyst-migration.md`](./docs/changes/2026-08-07-catalyst-migration.md).
 
 ## Contributing
 
