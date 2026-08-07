@@ -53,6 +53,17 @@ if (fs.existsSync(publicDir)) {
   app.use(
     express.static(publicDir, {
       setHeaders(res, filePath) {
+        // login-iframe.css themes the Catalyst sign-in iframe and is fetched by
+        // URL, so — unlike everything under assets/ — it can never be
+        // content-hashed: the URL is baked into the css_url we hand Zoho. Under
+        // the hour-long default a deployed theme change stayed invisible to
+        // anyone who had already loaded it, which is indistinguishable from a
+        // deploy that did not happen and cost real debugging time. Revalidate
+        // instead; it is one ~50KB request per sign-in and usually a 304.
+        if (path.basename(filePath) === "login-iframe.css") {
+          res.setHeader("Cache-Control", "no-cache");
+          return;
+        }
         // Vite content-hashes filenames under assets/ (e.g. index-BD1Hl3s0.css)
         // — safe to cache forever, since a new build produces new hashes.
         res.setHeader(
