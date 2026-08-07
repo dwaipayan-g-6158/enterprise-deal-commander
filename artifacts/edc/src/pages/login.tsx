@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AlertTriangle } from "lucide-react";
+import { AlertTriangle, Gauge, Layers, Presentation } from "lucide-react";
 import { EdcLogoMark } from "@/components/edc-logo-mark";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { renderSignInForm } from "@/lib/auth/catalyst-client";
 import { attachCatalystIframeAutosize } from "@/lib/auth/catalyst-iframe-autosize";
-import { themeCatalystIframe } from "@/lib/auth/catalyst-iframe-theme";
+import { injectCatalystIframeTheme } from "@/lib/auth/catalyst-iframe-link";
 
 const LOGIN_SLOT_ID = "catalyst-login-container";
 // Reserves space for Catalyst's typical email-step form so the card doesn't
@@ -19,33 +19,63 @@ const IFRAME_MIN_HEIGHT = 340;
 // Web SDK's own client-side session helpers.
 const AUTH_POLL_MS = 3000;
 
+// EDC's .dark palette, inlined. This page deliberately opts OUT of the theme
+// system (see the docstring below), so it cannot use the `bg-card`/`text-
+// foreground` utilities — those would follow a light-mode preference and leave
+// a dark Zoho form on a white card. Keep in sync with index.css's .dark block.
+const SHELL_BG = "hsl(220 10% 8%)";
+const RAIL_BORDER = "hsl(220 10% 20%)"; // --border
+const CARD_BG = "hsl(220 10% 12%)"; // --card
+const CARD_BORDER = "hsl(220 10% 20%)";
+const ACCENT = "hsl(222 90% 67%)"; // --primary
+
+// Each names something the product actually does, in the vocabulary
+// docs/glossary.md insists on (technical gate, pattern alert, Executive
+// Briefing). No pattern count: the docs state 12, 15 and 16 in different
+// places. No "AI"/"predictive": Phase 1 is deterministic by charter, and
+// "deterministic" is the documented differentiator.
+const HIGHLIGHTS = [
+  { icon: Layers, text: "Nine technical gates, reconciled against every commercial stage." },
+  { icon: Gauge, text: "A deterministic risk engine — each alert shows the thresholds it fired on." },
+  { icon: Presentation, text: "Any deal review projected boardroom-ready, without reformatting." },
+];
+
 /**
  * Sign-in — the first screen anyone sees, on a phone as much as a laptop.
  *
- * Post-Catalyst-migration: this used to be a hand-rolled email/password form
- * posting to /auth/login. Catalyst's embedded Web SDK now renders its own
- * sign-in iframe into the slot below (mounted shortly after first paint —
- * the small delay matches the sibling Customer-Insight-Engine project's
- * reference implementation, giving the slot time to exist in the DOM); a
- * poll against /auth/me detects a completed sign-in and does a FULL page
- * navigation (not client-side routing) to "/", so every auth-dependent hook
- * re-runs its check fresh on the new page load.
+ * Post-Catalyst-migration this is not our form: Catalyst's embedded Web SDK
+ * renders its own sign-in iframe into the slot below (mounted shortly after
+ * first paint — the small delay matches the sibling Customer-Insight-Engine
+ * "Periscope" project's reference implementation, giving the slot time to exist
+ * in the DOM). A poll against /auth/me detects a completed sign-in and does a
+ * FULL page navigation (not client-side routing) to "/", so every auth-dependent
+ * hook re-runs its check fresh on the new page load.
  *
- * The iframe IS auto-resized (catalyst-iframe-autosize.ts) — the SDK hands
+ * Layout and iframe theming both follow Periscope, which has run this pattern in
+ * production for months: a two-column split with a branding rail, and the Zoho
+ * widget flattened into our card by public/login-iframe.css.
+ *
+ * **This page is always dark and does not participate in the theme system.**
+ * The palette above is inlined for that reason. It is what lets the iframe be
+ * themed by a single STATIC stylesheet — Zoho fetches that sheet itself via the
+ * SDK's `css_url`, before the frame's first paint, and a static file cannot
+ * know which of EDC's light/dark × time-band × mobile palettes is active. A
+ * previous attempt resolved tokens at runtime and injected a <style> after
+ * load; it flashed an unstyled white panel and had to fight Zoho's own sheets
+ * with !important on every declaration.
+ *
+ * The iframe is also auto-resized (catalyst-iframe-autosize.ts) — the SDK hands
  * back a fixed ~150px frame that clips Zoho's form behind an internal
- * scrollbar — and restyled to EDC's tokens (catalyst-iframe-theme.ts), since
- * Zoho otherwise paints a white panel with its own blue buttons and Roboto
- * type inside this dark card. Both hang off the same `load` hook so they also
- * cover the "Forgot Password?" navigation. Only the sibling project's
- * error-copy rewriting is still not ported (the SDK overwrites the placeholder
- * it would target).
+ * scrollbar. Theming re-applies through that module's `onDocument` hook, which
+ * fires on both `load` and a `src` mutation: "Forgot Password?" navigates the
+ * same iframe to a page that ignores `css_url` and ships its own light reset.
  *
- * Because every input on this page comes from that iframe, a failure to load
- * it leaves nothing to type into — so this component tracks the render
- * explicitly (skeleton → ready | error + retry) rather than firing it and
- * forgetting. Off the deployed AppSail domain the failure is guaranteed, not
- * hypothetical: the SDK's `/__catalyst/sdk/init.js` is served by the Catalyst
- * gateway and 404s anywhere else, localhost included.
+ * Because every input here comes from that iframe, a failure to load it leaves
+ * nothing to type into — so this component tracks the render explicitly
+ * (skeleton → ready | error + retry) rather than firing it and forgetting. Off
+ * the deployed AppSail domain that failure is guaranteed, not hypothetical: the
+ * SDK's `/__catalyst/sdk/init.js` is served by the Catalyst gateway and 404s
+ * anywhere else, localhost included.
  */
 export default function Login() {
   const slotRef = useRef<HTMLDivElement>(null);
@@ -69,11 +99,10 @@ export default function Login() {
         },
         (err: unknown) => {
           if (cancelled) return;
-          // Previously this whole call was fire-and-forget (`void`), so every
-          // failure mode — a blocked CDN, an unreachable gateway, an
-          // uninitialized SDK — produced an identical, permanently blank card
-          // with the reason visible only as an unhandled rejection in the
-          // console. Surface it instead.
+          // Fire-and-forget here would turn every failure mode — a blocked CDN,
+          // an unreachable gateway, an uninitialized SDK — into an identical,
+          // permanently blank card, with the reason visible only as an unhandled
+          // rejection in the console. Surface it instead.
           console.error("Catalyst sign-in form failed to render", err);
           setStatus("error");
         },
@@ -88,19 +117,11 @@ export default function Login() {
   useEffect(() => {
     const slot = slotRef.current;
     if (!slot) return;
-    // The theme reads its tokens from `slot`, not :root — custom properties
-    // inherit, so the slot resolves `.dark`, `.m-shell` and `data-time-band`
-    // together and a phone gets the mobile palette instead of the desktop one.
     return attachCatalystIframeAutosize(slot, {
+      // `css_url` already themed the sign-in document before it painted; this
+      // covers the documents it doesn't reach, notably the recovery page.
       onDocument: (doc) => {
-        const verdict = themeCatalystIframe(slot, doc);
-        slot.dataset.edcIframeTheme = verdict.ok ? "applied" : "partial";
-        if (!verdict.ok) {
-          // A Zoho selector rename is otherwise silent — the form still works,
-          // it just looks foreign again. Leave a greppable trace.
-          slot.dataset.edcIframeThemeMissed = verdict.missed.join(",");
-          console.warn("Catalyst sign-in theme partially applied", verdict.missed);
-        }
+        slot.dataset.edcIframeTheme = injectCatalystIframeTheme(doc) ? "applied" : "failed";
       },
     });
   }, []);
@@ -125,42 +146,89 @@ export default function Login() {
   }, []);
 
   return (
-    <div
-      className="relative flex min-h-[100dvh] flex-col items-center justify-center overflow-hidden bg-background p-4"
-      style={{
-        paddingTop: "max(1rem, env(safe-area-inset-top))",
-        paddingBottom: "max(1rem, env(safe-area-inset-bottom))",
-        paddingLeft: "max(1rem, env(safe-area-inset-left))",
-        paddingRight: "max(1rem, env(safe-area-inset-right))",
-      }}
-    >
-      {/* Ambient background glow */}
-      <div className="pointer-events-none absolute inset-0 overflow-hidden">
-        <div className="absolute -top-[20%] left-1/2 h-[55%] w-[60%] -translate-x-1/2 rounded-full bg-primary/15 blur-[130px]" />
-        <div className="absolute -right-[10%] top-[55%] h-[40%] w-[40%] rounded-full bg-primary/10 blur-[120px]" />
-      </div>
+    <div className="flex min-h-[100dvh]" style={{ background: SHELL_BG }}>
+      {/* Branding rail. Hidden below lg, where the viewport belongs to the form. */}
+      <aside
+        className="relative hidden flex-col justify-between overflow-hidden border-r px-12 py-12 lg:flex lg:w-[44%]"
+        style={{ borderColor: RAIL_BORDER }}
+      >
+        {/* Accent bleed, off the top-left corner. */}
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute -left-40 -top-40 h-[560px] w-[560px] rounded-full opacity-20"
+          style={{ background: `radial-gradient(circle, ${ACCENT} 0%, transparent 70%)` }}
+        />
+        {/* Dot grid — the only texture on the page; keeps the rail from reading
+            as an empty panel without competing with the type. */}
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0 opacity-[0.05]"
+          style={{
+            backgroundImage: "radial-gradient(rgba(255,255,255,0.6) 1px, transparent 1px)",
+            backgroundSize: "22px 22px",
+          }}
+        />
 
-      <div className="relative z-10 flex w-full max-w-md flex-col items-center">
-        {/* The lockup. Uppercase here is a logotype, not a UI label. */}
-        <div className="mb-8 flex flex-col items-center text-center">
-          <EdcLogoMark size={72} animated={false} />
-          <h2 className="mt-4 text-base font-bold uppercase leading-snug tracking-[0.15em] text-foreground sm:text-lg sm:tracking-[0.18em]">
-            Enterprise Deal Commander
-          </h2>
-          <p className="mt-1.5 text-[11px] font-medium uppercase tracking-[0.2em] text-muted-foreground">
-            Commander Console
-          </p>
+        <div className="relative flex items-center gap-3 text-white">
+          <EdcLogoMark size={40} animated={false} />
+          {/* Uppercase here is the logotype, not a UI label. */}
+          <span className="text-sm font-bold uppercase tracking-[0.14em]">Enterprise Deal Commander</span>
         </div>
 
-        <div className="w-full overflow-hidden rounded-xl border border-border/60 bg-card/60 shadow-2xl backdrop-blur-xl">
-          <div className="p-6">
-            <h1 className="text-xl font-bold tracking-tight text-foreground">Welcome back</h1>
-            <p className="mt-1 text-sm text-muted-foreground">Sign in to your workspace to continue.</p>
+        <div className="relative max-w-sm">
+          <p className="mb-4 text-[11px] font-bold uppercase tracking-[0.14em] text-white/40">
+            Presales Command Cockpit
+          </p>
+          <h1 className="mb-4 text-pretty text-4xl font-bold leading-[1.15] tracking-tight text-white">
+            Technical reality, tracked as rigorously as revenue.
+          </h1>
+          <p className="text-sm leading-relaxed text-white/60">
+            Large TCV pipelines fail from a disconnect between commercial progression and technical
+            validation — not from a lack of activity.
+          </p>
+          <ul className="mt-7 space-y-4">
+            {HIGHLIGHTS.map(({ icon: Icon, text }) => (
+              <li key={text} className="flex items-start gap-3 text-sm text-white/70">
+                <Icon className="mt-0.5 h-4 w-4 shrink-0" style={{ color: ACCENT }} aria-hidden="true" />
+                <span>{text}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+
+        <p className="relative text-[10.5px] uppercase tracking-wider text-white/30">
+          Internal use only &middot; ManageEngine Enterprise Deal Commander
+        </p>
+      </aside>
+
+      {/* Form column */}
+      <div
+        className="flex flex-1 items-center justify-center px-4 py-12"
+        style={{
+          paddingTop: "max(3rem, env(safe-area-inset-top))",
+          paddingBottom: "max(3rem, env(safe-area-inset-bottom))",
+          paddingLeft: "max(1rem, env(safe-area-inset-left))",
+          paddingRight: "max(1rem, env(safe-area-inset-right))",
+        }}
+      >
+        <div className="w-full max-w-[400px]">
+          {/* The rail's lockup is gone below lg, so restate it above the card. */}
+          <div className="mb-8 flex flex-col items-center gap-3 text-center text-white lg:hidden">
+            <EdcLogoMark size={56} animated={false} />
+            <span className="text-xs font-bold uppercase leading-snug tracking-[0.16em]">
+              Enterprise Deal Commander
+            </span>
           </div>
 
-          <div className="border-t border-border/60" />
+          <div
+            className="rounded-2xl border px-7 py-7 shadow-2xl"
+            style={{ background: CARD_BG, borderColor: CARD_BORDER }}
+          >
+            <div className="mb-6">
+              <h2 className="mb-1 text-[19px] font-bold text-white">Welcome back</h2>
+              <p className="text-[12.5px] text-white/50">Sign in to continue.</p>
+            </div>
 
-          <div className="p-6">
             {status === "error" ? (
               <div className="space-y-4">
                 <Alert variant="destructive">
@@ -181,8 +249,7 @@ export default function Login() {
             {/* The slot stays mounted in every state: the Catalyst SDK looks it
                 up by id, and it must already exist in the DOM when signIn()
                 runs. Only its reserved height collapses on failure, so the
-                error card above isn't trailed by 340px of dead space — which
-                is all this card used to show. */}
+                error card isn't trailed by 340px of dead space. */}
             <div className="relative">
               {status === "loading" ? (
                 <>
@@ -190,11 +257,9 @@ export default function Login() {
                     Loading sign-in form…
                   </span>
                   <div className="absolute inset-x-0 top-0 space-y-3" aria-hidden="true">
-                    <Skeleton className="h-3.5 w-20" />
-                    <Skeleton className="h-10 w-full" />
-                    <Skeleton className="h-3.5 w-16" />
-                    <Skeleton className="h-10 w-full" />
-                    <Skeleton className="mt-2 h-10 w-full" />
+                    <Skeleton className="h-3.5 w-20 bg-white/10" />
+                    <Skeleton className="h-11 w-full bg-white/10" />
+                    <Skeleton className="mt-2 h-11 w-full bg-white/10" />
                   </div>
                 </>
               ) : null}
@@ -205,12 +270,12 @@ export default function Login() {
                 style={{ minHeight: status === "error" ? 0 : IFRAME_MIN_HEIGHT }}
               />
             </div>
+
+            <p className="mt-5 text-center text-[11px] leading-relaxed text-white/40">
+              Access is invite-only. Contact an admin if you need an account. Sessions are audited.
+            </p>
           </div>
         </div>
-
-        <p className="mt-5 text-center text-xs text-muted-foreground">
-          Access is invite-only. Contact an admin if you need an account. Sessions are audited.
-        </p>
       </div>
     </div>
   );

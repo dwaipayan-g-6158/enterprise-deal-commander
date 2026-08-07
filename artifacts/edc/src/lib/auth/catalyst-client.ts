@@ -130,7 +130,16 @@ export function loadCatalystSDK(): Promise<any> {
  */
 export async function renderSignInForm(elementId: string): Promise<void> {
   const sdk = await loadCatalystSDK();
-  await sdk.auth.signIn(elementId, {});
+  // `css_url` is the primary theming path (public/login-iframe.css): Zoho
+  // fetches it itself, so it lands before the frame's first paint instead of
+  // flashing an unstyled white panel. Note the SDK treats it as a REPLACEMENT
+  // for its own embedded_signin.css, which is why that sheet is @imported at
+  // the top of ours — without it the form loses Zoho's step toggles.
+  //
+  // Absolute URL because the frame resolves it against its own origin.
+  // Still NO `service_url` — see the three live-tested failures above.
+  const css_url = `${window.location.origin}/login-iframe.css`;
+  await sdk.auth.signIn(elementId, { css_url });
 }
 
 /**

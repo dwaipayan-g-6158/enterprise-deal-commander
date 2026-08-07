@@ -40,9 +40,50 @@ const SETTLE_DELAYS_MS = [150, 400, 900];
 // is visible by now.
 const REVEAL_FALLBACK_MS = 250;
 
+// A rect smaller than this is a hidden or decorative control, not the step's
+// primary button.
+const MIN_BUTTON_WIDTH = 40;
+const MIN_BUTTON_HEIGHT = 20;
+
+/** One candidate control, reduced to the geometry the choice depends on. */
+export interface ButtonAnchorCandidate {
+  /** Bottom edge in BODY-relative coords — `rect.bottom + body.scrollTop`. */
+  bottom: number;
+  width: number;
+  height: number;
+  /** False when the element isn't laid out (`offsetParent === null`). */
+  rendered: boolean;
+}
+
 /**
- * Height of the real content, measured as the bottom of the lowest visible
- * LEAF element.
+ * Lowest plausible primary-button bottom edge, or null if none qualifies.
+ *
+ * Split out as pure geometry so the selection rules are unit-testable without a
+ * DOM (this package's Vitest runs in a `node` environment).
+ *
+ * Body-relative, not viewport-relative, and that distinction is load-bearing:
+ * Zoho auto-scrolls its own body on OTP focus, so a viewport-relative bottom
+ * shrinks as the body scrolls, which feeds back into a smaller frame and
+ * eventually clips the form.
+ */
+export function pickButtonAnchor(candidates: readonly ButtonAnchorCandidate[]): number | null {
+  let lowest: number | null = null;
+  for (const c of candidates) {
+    if (!c.rendered) continue;
+    if (c.width < MIN_BUTTON_WIDTH || c.height < MIN_BUTTON_HEIGHT) continue;
+    if (!(c.bottom > 0)) continue;
+    if (lowest === null || c.bottom > lowest) lowest = c.bottom;
+  }
+  return lowest;
+}
+
+/**
+ * Height of the real content.
+ *
+ * Anchored on the step's primary button, matching the sibling
+ * Customer-Insight-Engine project: every Catalyst step ends in one, so its
+ * bottom edge tracks email → password → OTP → recovery correctly, and the
+ * resulting clip is deliberate — it is what hides Zoho's orphan tail elements.
  *
  * Not `scrollHeight`: Zoho's `#signin_flow` wrapper is `height: 100%`, so the
  * document just echoes back whatever height we last gave the frame. Measuring
@@ -52,14 +93,27 @@ const REVEAL_FALLBACK_MS = 250;
  * `iframe.style.height` does not synchronously re-lay-out the CHILD document,
  * so the collapsed read returns the same stale number (also confirmed live).
  *
- * Leaf elements — the heading, the input, the button, the "Forgot Password?"
- * link — are the actual content and never stretch to fill their container, so
- * the lowest one is a stable measure that does not move when the frame grows
- * (Zoho's flow is top-anchored, not vertically centred). Falls back to
- * scrollHeight only if the document has no leaves yet.
+ * Falls back to the lowest visible LEAF element (the previous strategy, proven
+ * on the email step) when no button qualifies — e.g. an interstitial that
+ * renders only text — and to scrollHeight if the document is still empty.
  */
 function measureContent(doc: Document): number {
   const view = doc.defaultView;
+  const scrollTop = doc.body ? doc.body.scrollTop : 0;
+
+  const candidates: ButtonAnchorCandidate[] = [];
+  for (const el of doc.querySelectorAll<HTMLElement>('button, input[type="submit"], .btn')) {
+    const rect = el.getBoundingClientRect();
+    candidates.push({
+      bottom: rect.bottom + scrollTop,
+      width: rect.width,
+      height: rect.height,
+      rendered: el.offsetParent !== null,
+    });
+  }
+  const anchored = pickButtonAnchor(candidates);
+  if (anchored !== null) return anchored;
+
   let lowest = 0;
   for (const el of doc.querySelectorAll("body *")) {
     if (el.childElementCount > 0) continue;
@@ -133,7 +187,12 @@ export function attachCatalystIframeAutosize(
     }
 
     if (Math.abs(next - iframe.getBoundingClientRect().height) <= 2) return;
-    iframe.style.height = `${next}px`;
+    // Animated so a step change reads as the panel breathing rather than
+    // snapping. Timed to match the stylesheet's own 0.22s step cross-fade;
+    // `setProperty(..., "important")` because the Tailwind arbitrary variants on
+    // the slot set !important on the iframe's own box properties.
+    iframe.style.setProperty("transition", "height 0.2s cubic-bezier(0.4, 0, 0.2, 1)", "important");
+    iframe.style.setProperty("height", `${next}px`, "important");
   };
 
   const scheduleApply = (iframe: HTMLIFrameElement): void => {
@@ -219,6 +278,19 @@ export function attachCatalystIframeAutosize(
     };
     iframe.addEventListener("load", onLoad);
     cleanups.push(() => iframe.removeEventListener("load", onLoad));
+
+    // "Forgot Password?" navigates the frame's inner document by script rather
+    // than by setting `src` in a way that reliably re-fires `load` in every
+    // browser (established in the sibling Customer-Insight-Engine project).
+    // Watching the attribute directly is what guarantees the recovery page gets
+    // themed and measured too — on `load` alone it renders with Zoho's own
+    // light reset, which is black-on-dark and unreadable.
+    const srcObserver = new MutationObserver(() => {
+      // Next tick: the attribute changes before the new document is swapped in.
+      timers.push(window.setTimeout(() => onLoad(), 0));
+    });
+    srcObserver.observe(iframe, { attributes: true, attributeFilter: ["src"] });
+    cleanups.push(() => srcObserver.disconnect());
 
     let ready = false;
     try {
