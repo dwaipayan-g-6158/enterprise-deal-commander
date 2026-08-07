@@ -17,7 +17,8 @@ files are git-ignored — copy the provided `.env.example` files.
 | Variable | Required | Default | Description |
 |---|---|---|---|
 | `NODE_ENV` | — | `development` | `development` or `production`. Affects logging only — there is no server-issued session cookie. |
-| `PORT` | — | `5000` | Port the Express server listens on. |
+| `PORT` | ✅ (local dev) | — | Port the Express server listens on. Required for local runs (the server exits if unset). On a deployed Catalyst AppSail app, `X_ZOHO_CATALYST_LISTEN_PORT` is injected and takes precedence. |
+| `X_ZOHO_CATALYST_LISTEN_PORT` | ✅ (deployed app only) | — | Injected automatically by Catalyst AppSail; specifies the port the server must bind to. Takes precedence over `PORT`. |
 | `EDC_JOB_SECRET` | ✅ (deployed app only) | — | Secret used to authenticate background job callbacks from the Catalyst Job Scheduler. Generate with `openssl rand -hex 32`. |
 | `SUPER_ADMIN_EMAIL` | — | — | Email address that receives initial admin grant (optional; the app creates no users on startup). |
 | `APP_ORIGIN` | — | — | Full public origin (scheme + host) for building absolute links: Bat-Signal share links and user-invite emails. In local dev set to the frontend's origin (e.g. `http://localhost:5173`), not the API server's `:5000`. Bat-Signal falls back to a relative `/share/:token` when unset; invite links fall back to the request's own host. |
