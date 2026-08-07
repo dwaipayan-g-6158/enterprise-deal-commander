@@ -358,32 +358,69 @@ describe("planTransitionBackfill — natural-key collisions within one second", 
 });
 
 describe("planTransitionBackfill — idempotency", () => {
-  it("plans nothing on a second pass over its own output", () => {
-    const open = deal({ createdAt: at(0), salesStageId: STAGES.Commercial });
-    const closed = deal({ createdAt: at(0), salesStageId: STAGES["Closed-Won"], stageEnteredAt: at(0) });
-    const withHistory = deal({ createdAt: at(0), salesStageId: STAGES.Validation });
-    const auditRows: BackfillAuditRow[] = [
-      {
-        dealId: withHistory.id,
-        oldValue: String(STAGES.Discovery),
-        newValue: String(STAGES.Validation),
-        changedAt: at(6),
-      },
-    ];
-    const deals = [open, closed, withHistory];
+  // Every pass must be represented here. The first version of this test omitted
+  // a snapshot-only deal, so Pass B never ran in it — and Pass B was in fact
+  // NOT idempotent (it lacked the already-recorded check, so `freeSlot` shifted
+  // each re-planned row a second forward and inserted a duplicate). The live
+  // re-run caught it; this fixture is what should have.
+  const open = deal({ createdAt: at(0), salesStageId: STAGES.Commercial });
+  const closed = deal({ createdAt: at(0), salesStageId: STAGES["Closed-Won"], stageEnteredAt: at(0) });
+  const fromAudit = deal({ createdAt: at(0), salesStageId: STAGES.Validation });
+  const fromSnapshots = deal({ createdAt: at(0), salesStageId: STAGES.Commercial });
+  const deals = [open, closed, fromAudit, fromSnapshots];
 
-    const first = plan({ deals, auditRows });
-    expect(first.length).toBeGreaterThan(0);
+  const auditRows: BackfillAuditRow[] = [
+    {
+      dealId: fromAudit.id,
+      oldValue: String(STAGES.Discovery),
+      newValue: String(STAGES.Validation),
+      changedAt: at(6),
+    },
+  ];
+  const snapshotsByDeal = new Map<string, BackfillSnapshot[]>([
+    [
+      fromSnapshots.id,
+      [
+        { salesStageId: STAGES.Discovery, normalizedTcv: 1000, snapshotAt: at(2), createdBy: "system" },
+        { salesStageId: STAGES.Validation, normalizedTcv: 1000, snapshotAt: at(8), createdBy: "system" },
+        { salesStageId: STAGES.Commercial, normalizedTcv: 1000, snapshotAt: at(15), createdBy: "system" },
+      ],
+    ],
+  ]);
 
-    const asExisting: ExistingTransition[] = first.map((r) => ({
+  const toExisting = (rows: ReturnType<typeof plan>): ExistingTransition[] =>
+    rows.map((r) => ({
       dealId: r.dealId,
       fromStageId: r.fromStageId,
       toStageId: r.toStageId,
       transitionType: r.transitionType,
       transitionedAt: r.transitionedAt,
     }));
-    const second = plan({ deals, auditRows, existing: asExisting });
+
+  it("exercises all four passes in this fixture", () => {
+    const first = plan({ deals, auditRows, snapshotsByDeal });
+    const passes = new Set(first.map((r) => r.pass));
+    expect([...passes].sort()).toEqual(["A", "B", "C", "D"]);
+  });
+
+  it("plans nothing on a second pass over its own output", () => {
+    const first = plan({ deals, auditRows, snapshotsByDeal });
+    expect(first.length).toBeGreaterThan(0);
+
+    const second = plan({ deals, auditRows, snapshotsByDeal, existing: toExisting(first) });
     expect(second).toEqual([]);
+  });
+
+  it("stays empty on a THIRD pass — a pass that duplicates would compound", () => {
+    const first = plan({ deals, auditRows, snapshotsByDeal });
+    const second = plan({ deals, auditRows, snapshotsByDeal, existing: toExisting(first) });
+    const third = plan({
+      deals,
+      auditRows,
+      snapshotsByDeal,
+      existing: toExisting([...first, ...second]),
+    });
+    expect(third).toEqual([]);
   });
 });
 

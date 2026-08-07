@@ -330,6 +330,29 @@ export function planTransitionBackfill(input: PlanInput): PlannedTransition[] {
       if (!toStage) continue;
 
       const fromSortOrder = prevStageId != null ? (sortOrderById.get(prevStageId) ?? null) : null;
+      const isCreate = prevStageId === null;
+
+      // The same already-recorded check Pass A does, and for a sharper reason
+      // here: without it this pass is not idempotent. `freeSlot` SHIFTS a
+      // colliding row rather than skipping it, so a re-plan of a transition
+      // already written by an earlier run would be nudged a second forward and
+      // inserted again — every run adding another copy. Pass A never showed
+      // this because it checks first. (Caught on the live re-run, not in
+      // tests: the idempotency test's fixture had no snapshot-only deal, so
+      // this pass never executed in it.)
+      const already = findExistingNearby(
+        deal.id,
+        prevStageId,
+        snap.salesStageId,
+        snap.snapshotAt,
+        isCreate,
+      );
+      if (already) {
+        prevStageId = snap.salesStageId;
+        prevAt = already.transitionedAt;
+        continue;
+      }
+
       const at = emit({
         dealId: deal.id,
         fromStageId: prevStageId,
