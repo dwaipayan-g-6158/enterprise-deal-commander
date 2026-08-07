@@ -30,7 +30,7 @@ derive a `catalystApp` from, which is why neither is a CLI script.
 
 Tests use **Vitest**. Run a package's suite with `pnpm --filter <pkg> run test`; a single file with `pnpm --filter @workspace/api-server exec vitest run src/lib/cache.test.ts`; one test with `... -t "name"`. Test files live next to source as `*.test.ts`. The whole suite runs with **no database** — everything is exercised against the in-memory Data Store fake in `artifacts/api-server/src/test-support/catalyst-test-app.ts`.
 
-Required env: `EDC_JOB_SECRET` on the deployed app (gates the scheduled-job routes; fails closed if unset). Everything else (`SUPER_ADMIN_EMAIL`, `APP_ORIGIN`, `SMTP_URL`, `LOG_LEVEL`, `NODE_ENV`, `PORT`) is optional — see `artifacts/api-server/.env.example` for what each one does. There is no `DATABASE_URL` or `SESSION_SECRET` — both are dead, unused by any source file.
+Required env: `EDC_JOB_SECRET` on the deployed app (gates the scheduled-job routes; fails closed if unset). `PORT` is required for local runs — the server throws at startup if unset — but not needed on the deployed app, where AppSail injects `X_ZOHO_CATALYST_LISTEN_PORT` and that takes precedence. Everything else (`SUPER_ADMIN_EMAIL`, `APP_ORIGIN`, `SMTP_URL`, `LOG_LEVEL`, `NODE_ENV`) is optional — see `artifacts/api-server/.env.example` for what each one does. There is no `DATABASE_URL` or `SESSION_SECRET` — both are dead, unused by any source file.
 
 ## Architecture
 

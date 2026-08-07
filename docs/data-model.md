@@ -13,8 +13,8 @@ API's real constraints (no `WHERE` clause, no native FK cascade, second-granular
 > [`docs/CATALYST_SCHEMA.md`](./CATALYST_SCHEMA.md) for the full type mapping.
 
 - [Core entities (ER diagram)](#core-entities-er-diagram)
-- [Phase 1 tables (`edc`)](#phase-1-tables-edc)
-- [Phase 2 tables (`edc_v2`)](#phase-2-tables-edc_v2)
+- [Phase 1 table group](#phase-1-table-group)
+- [Phase 2 table group (`v2_` prefix)](#phase-2-table-group-v2_-prefix)
 - [Settings tables](#settings-tables)
 - [Conventions & notes](#conventions--notes)
 
@@ -63,7 +63,7 @@ erDiagram
     }
 ```
 
-## Phase 1 tables (`edc`)
+## Phase 1 table group
 
 ### Identity
 | Table | Purpose |
@@ -84,7 +84,7 @@ erDiagram
 | `deal_review_markers` | "Reviewed" markers on deals. |
 | `deal_interventions` | Rapid-intervention checklist launches (F7). |
 | `deal_stage_overrides` | Ledger of typed overrides when a RED guardrail was bypassed (F12). |
-| `bat_signals` | 48-hour signed share tokens (F7). |
+| `bat_signals` | 48-hour read-only share tokens (F7). |
 
 ### Lookups
 | Table | Purpose |
@@ -102,7 +102,7 @@ erDiagram
 > **FX rates** are read/written via `GET|PUT /api/v1/lookups/fx-rates` and feed multi-currency
 > normalization (F1); they are stored in the lookup layer.
 
-## Phase 2 tables (`edc_v2`)
+## Phase 2 table group (`v2_` prefix)
 
 ### Durable history
 | Table | Purpose |

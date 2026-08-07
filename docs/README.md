@@ -25,29 +25,32 @@ follow the links, or jump to what you need.
 | 6 | [Architecture](./architecture.md) | System design, package graph, data flow, event bus |
 | 7 | [Directory & file structure](./directory-structure.md) | Annotated tree of the repository |
 | 8 | [The intelligence / risk engine](./risk-engine.md) | 15 risk patterns + the 7-dimension Risk Engine v2 |
-| 9 | [Data model](./data-model.md) | Database schema (`edc` + `edc_v2`), tables, relationships |
+| 9 | [Data model](./data-model.md) | Data Store tables (Phase 1 + `v2_`-prefixed Phase 2), relationships |
+| 10 | [CATALYST_SCHEMA.md](./CATALYST_SCHEMA.md) | The authoritative table-by-table Data Store manifest and type mapping — cited as source of truth by most other docs |
+| 11 | [catalyst-datastore-constraints.md](./catalyst-datastore-constraints.md) | The Row API's real constraints (no `WHERE` clause, no FK cascade, concurrency limit, second-granularity datetimes) |
 
 ## Reference
 
 | # | Doc | What it covers |
 |---|---|---|
-| 10 | [Configuration](./configuration.md) | Config files, environment variables, engine thresholds |
-| 11 | [API reference](./api-reference.md) | Every REST endpoint (v1 + v2), auth, error format |
-| 12 | [CLI & scripts](./cli-and-scripts.md) | All pnpm scripts and maintenance scripts |
-| 13 | [Build & deployment](./build-and-deploy.md) | Build pipeline and deployment options |
-| 14 | [Glossary](./glossary.md) | Canonical domain vocabulary |
+| 12 | [Configuration](./configuration.md) | Config files, environment variables, engine thresholds |
+| 13 | [API reference](./api-reference.md) | Every REST endpoint (v1 + v2), auth, error format |
+| 14 | [CLI & scripts](./cli-and-scripts.md) | All pnpm scripts and maintenance scripts |
+| 15 | [Build & deployment](./build-and-deploy.md) | Build pipeline and deployment options |
+| 16 | [Glossary](./glossary.md) | Canonical domain vocabulary |
 
 ## Operating & extending
 
 | # | Doc | What it covers |
 |---|---|---|
-| 15 | [Troubleshooting & FAQ](./troubleshooting.md) | Common errors, logging, debugging, FAQ |
-| 16 | [Security](./security.md) | Auth, secrets, supply-chain policy, share links |
-| 17 | [Performance & limitations](./performance-and-limitations.md) | Caching, scale, known issues, limits |
-| 18 | [Development](./development.md) | Dev setup, testing, coding standards, best practices |
-| 19 | [Release process](./release-process.md) | Versioning, releases, migration guides |
-| 20 | [Roadmap](./roadmap.md) | Phase 2 status and the improvement proposals |
-| 21 | [Credits](./credits.md) | Acknowledgements and license |
+| 17 | [Troubleshooting & FAQ](./troubleshooting.md) | Common errors, logging, debugging, FAQ |
+| 18 | [Security](./security.md) | Auth, secrets, supply-chain policy, share links |
+| 19 | [Performance & limitations](./performance-and-limitations.md) | Caching, scale, known issues, limits |
+| 20 | [Development](./development.md) | Dev setup, testing, coding standards, best practices |
+| 21 | [Release process](./release-process.md) | Versioning, releases, migration guides |
+| 22 | [Roadmap](./roadmap.md) | Phase 2 status and the improvement proposals |
+| 23 | [Credits](./credits.md) | Acknowledgements and license |
+| 24 | [changes/](./changes/) | Dated technical change records (migrations and major feature slices), e.g. the Catalyst migration |
 
 ## Product source documents
 

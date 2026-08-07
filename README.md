@@ -65,7 +65,7 @@ The headline goal: cut executive-review prep from *45+ minutes in spreadsheets* 
 - 🚦 **Stage-transition guardrails** — advancing past an active RED risk returns `409 STAGE_GUARDRAIL` unless the Commander supplies a typed override (recorded to an audit ledger).
 - 🗂️ **Risk governance** — acknowledge / accept / snooze any alert with a required rationale; disposed alerts become "Managed Risk."
 - 🎬 **Executive Briefing / War Room mode** — curated agenda, private speaker notes, pacing timer, and a client-side **Risk Simulator** for ephemeral what-if analysis.
-- 🩺 **Closed-Lost autopsy**, **portfolio correlation**, **soft-delete / archive / restore**, and a 48-hour signed **Bat-Signal** share link.
+- 🩺 **Closed-Lost autopsy**, **portfolio correlation**, **soft-delete / archive / restore**, and a 48-hour read-only **Bat-Signal** share link.
 
 **Phase 2 (sovereign intelligence)**
 - 🔮 Predictive deal scoring, velocity & pipeline analytics, Monte-Carlo forecasting.
@@ -130,7 +130,7 @@ pnpm install
 
 # 2. Configure the API server env
 cp artifacts/api-server/.env.example artifacts/api-server/.env
-#   → see the file's comments; nothing is required for local dev
+#   → see the file's comments; PORT is required for local dev, everything else is optional
 
 # 3. Run the API server (port 5000)
 pnpm --filter @workspace/api-server run dev
@@ -140,7 +140,10 @@ cp artifacts/edc/.env.example artifacts/edc/.env
 pnpm --filter @workspace/edc run dev
 ```
 
-Then open the Vite URL and log in with the seeded Commander credentials. A step-by-step first run is in [`docs/quickstart.md`](./docs/quickstart.md).
+Then open the Vite URL. There are no seeded Commander credentials — sign-in is Zoho Catalyst's
+embedded auth widget, which needs `/__catalyst/sdk/init.js` (served only by the deployed Catalyst
+AppSail gateway), so it cannot complete on a local dev URL; sign in via the deployed app instead.
+A step-by-step first run is in the [User Manual → Getting started](./docs/user-manual.md#getting-started).
 
 ## Repository structure
 
@@ -170,32 +173,33 @@ Start at the **[documentation index → `docs/README.md`](./docs/README.md)**. H
 
 | Topic | Doc |
 |---|---|
-| What EDC is, features, personas | [overview.md](./docs/overview.md) |
+| **User Manual** — what EDC is, getting started, screen-by-screen guide, admin | **[user-manual.md](./docs/user-manual.md)** |
 | System design & data flow | [architecture.md](./docs/architecture.md) |
 | Install & prerequisites | [installation.md](./docs/installation.md) |
-| First run | [quickstart.md](./docs/quickstart.md) |
+| First run | [User Manual → Getting started](./docs/user-manual.md#getting-started) |
 | Config & environment variables | [configuration.md](./docs/configuration.md) |
 | Build & deployment | [build-and-deploy.md](./docs/build-and-deploy.md) |
-| Using the app | [usage.md](./docs/usage.md) |
+| Using the app | [User Manual → Screen-by-screen guide](./docs/user-manual.md#screen-by-screen-guide) |
 | REST API (v1 + v2) | [api-reference.md](./docs/api-reference.md) |
 | The intelligence engine | [risk-engine.md](./docs/risk-engine.md) |
 | Database schema | [data-model.md](./docs/data-model.md) |
 | Troubleshooting & FAQ | [troubleshooting.md](./docs/troubleshooting.md) |
 | Security | [security.md](./docs/security.md) |
-| Contributing & dev setup | [../CONTRIBUTING.md](./CONTRIBUTING.md) · [development.md](./docs/development.md) |
+| Contributing & dev setup | [CONTRIBUTING.md](./CONTRIBUTING.md) · [development.md](./docs/development.md) |
 | Glossary | [glossary.md](./docs/glossary.md) |
 | Roadmap & product docs | [roadmap.md](./docs/roadmap.md) · [product/](./docs/product/) |
 
 ## Screenshots
 
-> 📸 _Screenshot placeholders — replace with real captures once the stack is running (see [`docs/usage.md`](./docs/usage.md))._
+📸 Real captures of every major screen — Dashboard, Deals Roster/Kanban, Deal Cockpit, Risk
+Simulator, Executive Briefing, Portfolio, Autopsy, Analytics, Deal Memory, and Settings/Admin —
+are embedded throughout the **[User Manual](./docs/user-manual.md)**.
 
-| View | Placeholder |
+| View | Screenshot |
 |---|---|
 | Dashboard (Pipeline Vital Signs) | `docs/assets/dashboard.png` |
 | Deal Cockpit (gates + risk) | `docs/assets/deal-cockpit.png` |
 | Executive Briefing / War Room | `docs/assets/briefing-mode.png` |
-| Risk Radar (Risk Engine v2) | `docs/assets/risk-radar.png` |
 
 ## Project status & roadmap
 

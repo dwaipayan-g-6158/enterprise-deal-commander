@@ -24,6 +24,9 @@ formal security audit.
   Catalyst-authenticated identity off the request (`getCurrentCatalystUser`) and maps it to a
   `commanders` Data Store row (`resolveCommander`), auto-provisioning one on first sign-in.
 - **Public endpoints (no auth):** `GET /api/healthz` and `GET /api/v1/share/{token}` (Bat-Signal).
+  `POST /api/v1/jobs/:jobName` and `GET /api/v1/jobs/_status` are also mounted above `requireAuth`
+  (a cron carries no Catalyst session), but they are not "open" — they carry their own
+  constant-time `EDC_JOB_SECRET` check and refuse outright when it's unconfigured.
 - **Role is never trusted from the Catalyst session.** `commanders.role`/`is_active` are re-read
   from Data Store on every request, so demoting or deactivating an account takes effect on that
   account's *next* request — not after however long the Catalyst session itself lives.
@@ -51,8 +54,13 @@ formal security audit.
   (`GET /v1/users` is the one call every reader may also make — no secrets in the response). The
   server independently enforces two invariants no matter what the UI shows: you cannot act on your
   own account (demote/deactivate/delete self is rejected), and the last active admin cannot be
-  demoted, deactivated, or deleted — this is checked transactionally with a row lock to close the
-  race between two concurrent demotions.
+  demoted, deactivated, or deleted. **This guard is best-effort, not a hard lock:** Data Store has
+  no transactions and no row locks (unlike the original Drizzle version's `SELECT ... FOR UPDATE`),
+  so it works by pre-checking, applying the write, then re-checking and self-reverting a PATCH if a
+  concurrent request raced past both checks. A DELETE can't self-revert (the row is gone), so that
+  path only logs loudly if the race is ever actually hit — the app could theoretically end up with
+  zero admins from two simultaneous deletes of two different admins when exactly two are active.
+  Weaker than a real lock under true concurrency, but the common case fails safely.
 - **Frontend gating is UX, not the boundary.** `role-context.tsx` / `write-gate.tsx` hide or
   disable controls a reader shouldn't see; a `MutationCache` backstop toasts a plain "read-only"
   message if any surface is missed. The server enforces independently of what the client renders.
@@ -115,10 +123,11 @@ an unguessable-token credential — as part of hardening.
 
 Every mutation is recorded to the immutable `deal_audit_log` (with `entity_id` for point-in-time
 reconstruction). Risk dispositions, stage overrides, interventions, and configuration changes
-(`settings_change_log`, with rollback) are all auditable — providing accountability for who
-changed what and why. User-management actions (create/role-change/deactivate/reactivate/delete)
-land in `settings_change_log` under `module: "users"` and show up in the same Settings → Change
-Log viewer. There is no app-managed password to reset or audit anymore — "create a user" invites a
+(`v2_settings_change_log`, with rollback) are all auditable — providing accountability for who
+changed what and why. User-management actions land in `v2_settings_change_log` under
+`module: "users"` with action `create`, `update` (also used for a role-only change), `deactivate`,
+`reactivate`, or `delete`, and show up in the same Settings → Change Log viewer. There is no
+app-managed password to reset or audit anymore — "create a user" invites a
 Catalyst project user, and Catalyst itself sends the set-password email. Deleting a user is a hard
 delete — no table references `commanders.id` by foreign key, so it can never orphan or cascade,
 but pre-existing audit rows that name that person (a plain string, not a reference) are unaffected
