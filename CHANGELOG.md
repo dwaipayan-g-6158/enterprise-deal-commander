@@ -65,6 +65,23 @@ and the project aims to follow [Semantic Versioning](https://semver.org/spec/v2.
   missed it.
 - The sign-in page now shows an explicit error with a **Retry** action (and a loading skeleton)
   instead of a permanently blank card when the Catalyst sign-in widget can't load.
+- **The sign-in font was never Geist.** A single stray `0x01` control byte sat in front of
+  `'Geist'` in the theme stylesheet. CSS error recovery discards the offending *declaration* and
+  keeps its neighbours, so the rule still applied its colours and spacing — just no font — and
+  Zoho's `body { font-family: Roboto }` won unopposed. Nothing errored; the font was simply wrong.
+  A test now asserts the file has no control characters, along with its other load-bearing
+  invariants (Catalyst's stylesheet imported first, both `@import`s ahead of any rule,
+  `color-scheme: dark`, 16px inputs).
+- **The sign-in card was half empty** — 529px of card for ~330px of content, from three causes
+  measured on the deployed app: Zoho's `.signin_container` carries a `margin-top: 40px` meant to
+  centre its own standalone card (which also inflated the auto-sized frame by the same 40px); the
+  frame's `MIN_HEIGHT` floor was *above* the real email step, so every frame was clamped upward;
+  and the host's first-paint height reservation was never released. Card is now 359px.
+- **Sign-in error text was the least legible thing on the page** at 3.04:1 — the theme sheet still
+  used EDC's pre-fix dark `--destructive`. Now tracks `index.css` at 5.26:1 measured.
+- `login-iframe.css` is served `no-cache` instead of `max-age=3600`. It is fetched by URL and so
+  cannot be content-hashed, which meant a deployed theme change stayed invisible for up to an hour
+  — indistinguishable from a deploy that never happened.
 - **The white sign-in panel.** Flattening Catalyst's wrappers to `transparent` did not remove it,
   because nothing on the page was white: the *document's canvas* was. A canvas is not an element,
   so when the root background is transparent the browser paints it using a default chosen by

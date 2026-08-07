@@ -79,21 +79,48 @@ is no `DATABASE_URL` and no `SESSION_SECRET`; both are dead and unused by any so
 **https://edc-50044704196.development.catalystappsail.in** — the Catalyst *Development*
 environment, which **is** production for this app. Treat writes accordingly.
 
-Deploying is manual and Console-only:
+Deploying is Console-only, but **you can drive the Console yourself with browser MCP** — this
+was done end-to-end four times on 2026-08-08. It is not a human-only step. There is no
+programmatic alternative: the Catalyst MCP server has no AppSail deploy tool, and
+`List_All_Pipelines` for the EDC project returns `[]`.
 
 1. `pnpm --filter @workspace/scripts run build-appsail` — **from PowerShell**, same
    `BASE_PATH` reason as above.
-2. Upload `artifacts/api-server/appsail-deploy.zip` via the Catalyst Console: open the
-   **`edc` app itself** → Overview → **Create Deployment**. Never `catalyst deploy appsail`
-   (it nests the entry file and 500s), and never the AppSail list's "Deploy from Console"
-   button (first-time creation only).
-3. Never let `EDC_JOB_SECRET` into the zip's `app-config.json`, even empty — a deploy landing
-   after a Console edit resets the value to `""`.
+2. Console → project **EDC** (`31210000000639013`) → Serverless → AppSail → click the **`edc`
+   row itself** → Overview → **Create Deployment**. Never `catalyst deploy appsail` (it nests
+   the entry file and 500s), and never the AppSail list's "Deploy from Console" button
+   (first-time creation only — it errors "The given AppSail name already exists").
+3. In the dialog: **Stack must be set every time** — it opens on "Select the Runtime" and the
+   deploy is rejected without it. Pick **Node 24**. The Lyte dropdown's `lyte-drop-body` IDs are
+   **regenerated on every open**, so never hard-code `Lyte_Drop_Body_0`; find the body that
+   contains a `lyte-drop-item[data-value="node24"]` and dispatch a real `MouseEvent` at it.
+   Startup command is pre-filled correctly (`node --enable-source-maps ./index.mjs`).
+4. **Check the env-var rows before clicking Create.** They pre-populate from the live config, and
+   `EDC_JOB_SECRET` must show a non-empty value (32 chars) or the scheduled-job routes fail
+   closed. The inputs sometimes lose their `name` attributes on re-render, so read the text inputs
+   positionally: the first is the startup command, the rest are key/value pairs. Read *lengths*,
+   never values — these are live secrets.
+5. Never let `EDC_JOB_SECRET` into the zip's `app-config.json`, even empty — a deploy landing
+   after a Console edit resets the value to `""`. (`JOB_SECRET`, empty, and `SESSION_SECRET` are
+   dead leftovers in the Console; nothing reads them.)
+6. Deployment lands in ~10s. Confirm **Status: Success** in the Deployments tab, then verify the
+   served asset hash actually changed — a Success row is not proof your build is live.
 
-**Signing in is a human step.** It is real Zoho identity auth against live servers; no
-password is scriptable. Open the sign-in page in the browser you're driving and ask the user
-to sign in, then confirm with `fetch('/api/v1/auth/me')` returning 200 before continuing.
-Signing in elsewhere doesn't help — the session must live in the browser under automation.
+**Signing in is a human step** (deploying is not — see above). It is real Zoho identity auth
+against live servers; no password is scriptable. Open the sign-in page in the browser you're
+driving and ask the user to sign in, then confirm with `fetch('/api/v1/auth/me')` returning 200
+before continuing. Signing in elsewhere doesn't help — the session must live in the browser
+under automation.
+
+You can still verify the sign-in *form* end-to-end without an account: type a bogus address to
+exercise the field-error state, and reach the recovery page by reading the `recoveryurl` query
+param off the iframe's `src` and assigning it to `iframe.src`. That is exactly the navigation
+"Forgot Password?" performs, so it exercises the `src` MutationObserver and the theme
+re-injection, without sending a password reset to a real account. **Don't submit that form.**
+
+**Use a fresh `isolatedContext` when verifying a deploy, not a hard reload.** A hard reload does
+not reliably re-fetch subresources of an iframe the SDK navigates itself, so a stale cached
+stylesheet made a correctly-deployed fix look broken for several minutes.
 
 A change is not verified until it is deployed. A commit plus a built zip proves nothing about
 the running app; check the deployed bundle actually contains your change (grep the built
