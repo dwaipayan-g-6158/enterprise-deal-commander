@@ -49,22 +49,19 @@ Every user-visible change gets a line.
 
 Phase 2 is additive — it does not replace Phase 1:
 
-- **Schema:** Phase 2 tables live in the separate `edc_v2` Postgres schema; Phase 1 (`edc`) tables
-  are unchanged. Apply with `pnpm --filter @workspace/db run push`.
+- **Schema:** Phase 2 tables carry a `v2_` prefix in the same flat Data Store namespace as Phase 1
+  tables (no separate schema — Data Store has no schema concept). Applied directly against Data
+  Store via Console/MCP tools; see `docs/CATALYST_SCHEMA.md`.
 - **API:** Phase 2 endpoints are under `/api/v2`; `/api/v1` is untouched.
-- **Backfill:** to get Flow analytics on pre-existing deals, run the `backfill:transitions` script
-  to populate `edc_v2.pipeline_transitions`.
+- **Backfill:** to get Flow analytics on pre-existing deals, call
+  `POST /api/v1/admin/backfill-transitions` (admin-only) to reconstruct `v2_pipeline_transitions`
+  from the audit log and stage history — not a CLI script.
 - **Behavioral change:** governance health moved from the pattern-weight roll-up to the Risk
   Engine v2 composite level. RED patterns still gate stage advancement.
 
-### Planned: migration to Zoho Catalyst
+### Postgres/Drizzle → Zoho Catalyst (shipped 2026-08-06/07)
 
-A future migration targets **Zoho Catalyst** (serverless functions + hosted data). No Catalyst
-configuration exists in the repo yet. To keep that migration smooth, prefer:
-
-- Stateless request handlers (the event bus is in-process today; a Catalyst move would likely
-  externalize it).
-- Port-agnostic configuration via environment variables.
-- Keeping the pure engine free of runtime/platform dependencies (it already is).
-
-Track this in [roadmap.md](./roadmap.md).
+The migration described as "planned" here shipped in August 2026 — see
+[`docs/changes/2026-08-07-catalyst-migration.md`](../changes/2026-08-07-catalyst-migration.md) for
+the full record. No further migration guide is needed: the app has run on Catalyst exclusively
+since, and Postgres/Drizzle no longer exist anywhere in the tree.

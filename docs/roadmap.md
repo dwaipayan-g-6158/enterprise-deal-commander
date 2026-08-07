@@ -8,7 +8,7 @@ not a contract.
 - [Phase 1 — shipped](#phase-1--shipped)
 - [Phase 2 — status](#phase-2--status)
 - [Improvement proposals](#improvement-proposals)
-- [Planned: Zoho Catalyst migration](#planned-zoho-catalyst-migration)
+- [Zoho Catalyst migration — shipped](#zoho-catalyst-migration--shipped)
 
 ## Phase 1 — shipped
 
@@ -68,10 +68,10 @@ describe *proposed* designs; several have since shipped (cross-reference the tab
 | Pipeline Analytics | Flow dynamics, forecast reliability, bottlenecks | Partial (Flow slice 1) |
 | Settings Engine Tuning, Automation & Integrations | Control panel for 200+ parameters + automation + integrations | Partial (settings backend) |
 
-## Planned: Zoho Catalyst migration
+## Zoho Catalyst migration — shipped
 
-A migration of the full stack to **Zoho Catalyst** (serverless functions + hosted data) is a
-planned future step. No Catalyst configuration exists in the repository yet. New work should favor
-stateless handlers and environment-driven configuration to ease that transition. See
-[build-and-deploy.md](./build-and-deploy.md#planned-zoho-catalyst) and
-[release-process.md](./release-process.md#planned-migration-to-zoho-catalyst).
+The full stack migrated off Postgres/Drizzle onto **Zoho Catalyst** (Data Store + AppSail +
+embedded auth + Job Scheduling) in August 2026. See
+[`docs/changes/2026-08-07-catalyst-migration.md`](./changes/2026-08-07-catalyst-migration.md) for
+the full record, [`build-and-deploy.md`](./build-and-deploy.md) for the current deploy flow, and
+[`release-process.md`](./release-process.md) for how it's reflected in the changelog.
