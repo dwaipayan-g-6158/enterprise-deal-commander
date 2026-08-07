@@ -29,13 +29,14 @@ Deal-Commander/
 │   │   ├── src/
 │   │   │   ├── index.ts          # Entry: validate PORT, listen, registerSubscribers()
 │   │   │   ├── app.ts            # App assembly: middleware, router mount, SPA fallback, error handler
-│   │   │   ├── seed.ts           # Database seeding
 │   │   │   ├── routes/           # v1 routers: auth, deals, gates, blockers, crosssells,
 │   │   │   │   │                 #   intelligence, dispositions, interventions, audit,
-│   │   │   │   │                 #   batsignal, shared, lookups, settings-audit, health
+│   │   │   │   │                 #   batsignal, shared, lookups, settings-audit, admin, jobs
 │   │   │   │   └── v2/           # v2 routers: index, crud, analytics, config, exports
 │   │   │   └── lib/              # Server logic: intelligence.ts (DB→engine bridge),
-│   │   │       │                 #   auth, events, cache, audit, scoring, advisor, etc.
+│   │   │       │                 #   auth, events, cache, audit, scoring, advisor, etc.,
+│   │   │       │                 #   catalyst/seed.ts (DB seeding, invoked via POST
+│   │   │       │                 #   /api/v1/admin/seed — not a standalone script)
 │   │   │       └── subscribers/  # Event-bus subscribers (activity, snapshot, health, cache, …)
 │   │   ├── build.mjs             # esbuild bundler → dist/*.mjs
 │   │   ├── vitest.config.ts
@@ -90,7 +91,10 @@ Deal-Commander/
 │   └── api-client-react/         # @workspace/api-client-react (generated React Query hooks)
 │
 ├── scripts/                      # @workspace/scripts (tsx)
-│   ├── (backfill:transitions, build-single, hello)
+│   ├── (build-appsail, build-single, hello)
+│   │                             #   Pipeline-transition backfill and seeding are HTTP admin routes now
+│   │                             #   (POST /api/v1/admin/backfill-transitions, POST /api/v1/admin/seed),
+│   │                             #   not CLI scripts in this directory.
 │   ├── post-merge.sh
 │   └── sql/
 │

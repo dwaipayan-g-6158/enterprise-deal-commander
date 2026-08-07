@@ -134,7 +134,7 @@ flowchart TD
     BUS --> PM[post-mortem]
     BUS --> SC[scoring]
     BUS --> PT[pipeline-transitions]
-    A --> V[(edc_v2 durable history)]
+    A --> V[(Data Store<br/>v2_ durable-history tables)]
     S --> V
     H --> V
     PT --> V
@@ -183,8 +183,8 @@ spec (it drives the generated filenames).
   trusted from Catalyst's own claims about the signed-in user — so a demotion/deactivation takes
   effect on the very next request rather than waiting out however long the Catalyst session
   lives. The public exceptions (registered above this gate in `routes/index.ts`) are `GET
-  /api/healthz`, the Bat-Signal share endpoint `GET /v1/share/{token}`, and `POST
-  /v1/jobs/{jobName}` (Catalyst Job Scheduling, which carries no user session and is instead
+  /api/healthz`, the Bat-Signal share endpoint `GET /api/v1/share/{token}`, and `POST
+  /api/v1/jobs/{jobName}` (Catalyst Job Scheduling, which carries no user session and is instead
   gated by the `EDC_JOB_SECRET` shared secret).
 
 ## Authorization (RBAC)
@@ -204,7 +204,7 @@ claims about the signed-in user: a claim would let a demoted or deactivated acco
 access for however long the Catalyst session lives. Sourcing it from the row means a demotion or
 `is_active = false` takes effect on the very next request. User management (create/promote/demote/deactivate/delete/reset-password) is
 `artifacts/api-server/src/routes/users.ts`, itself gated only by the same central rule (`GET
-/v1/users` is the one exception every reader can call — no secrets leave the server). It enforces
+/api/v1/users` is the one exception every reader can call — no secrets leave the server). It enforces
 two invariants server-side regardless of what the UI offers: you cannot act on your own account
 (demote/deactivate/delete yourself), and the last active admin cannot be demoted, deactivated, or
 deleted.

@@ -107,35 +107,35 @@ erDiagram
 ### Durable history
 | Table | Purpose |
 |---|---|
-| `deal_activity_log` | Append-only activity stream (written by the activity-logger subscriber). |
-| `deal_snapshots` | Hourly point-in-time snapshots; payload `{deal, gates, governance}`. |
-| `deal_health_history` | Health-color time series (health-tracker subscriber). |
-| `portfolio_rollups` | **Unused since 2026-08** — the precompute it backed was removed (aggregates are computed live). The table definition is retained but never read or written. |
-| `pipeline_transitions` | Stage-transition events (pipeline-transitions subscriber) — powers Flow analytics. |
-| `pipeline_targets` | Pipeline/coverage targets. |
+| `v2_deal_activity_log` | Append-only activity stream (written by the activity-logger subscriber). |
+| `v2_deal_snapshots` | Hourly point-in-time snapshots; payload `{deal, gates, governance}`. |
+| `v2_deal_health_history` | Health-color time series (health-tracker subscriber). |
+| `v2_portfolio_rollups` | **Unused since 2026-08** — the precompute it backed was removed (aggregates are computed live). The table definition is retained but never read or written. |
+| `v2_pipeline_transitions` | Stage-transition events (pipeline-transitions subscriber) — powers Flow analytics. |
+| `v2_pipeline_targets` | Pipeline/coverage targets. |
 
 ### Intelligence
 | Domain | Tables |
 |---|---|
-| Scoring | `deal_scores`, `scoring_model_weights`, `velocity_benchmarks` |
-| Competitive | `deal_competitors` |
-| Deal Memory | `deal_memory` |
-| Stakeholders & decisions | `stakeholders`, `meeting_sessions`, `deal_decisions` |
-| Custom patterns | `custom_risk_patterns`, `custom_pattern_conditions` |
-| Playbooks | `playbooks`, `playbook_steps`, `deal_playbook_assignments`, `playbook_step_completions` |
-| Financial | `deal_pricing_schedule`, `financial_scenarios` |
-| Notifications | `notification_rules`, `notification_log` |
-| Custom fields & tags | `custom_field_definitions`, `custom_field_values`, `tag_definitions`, `deal_tags` |
-| Webhooks | `webhooks`, `webhook_delivery_log` |
+| Scoring | `v2_deal_scores`, `v2_scoring_model_weights`, `v2_velocity_benchmarks` |
+| Competitive | `v2_deal_competitors` |
+| Deal Memory | `v2_deal_memory` |
+| Stakeholders & decisions | `v2_stakeholders`, `v2_meeting_sessions`, `v2_deal_decisions` |
+| Custom patterns | `v2_custom_risk_patterns`, `v2_custom_pattern_conditions` |
+| Playbooks | `v2_playbooks`, `v2_playbook_steps`, `v2_deal_playbook_assignments`, `v2_playbook_step_completions` |
+| Financial | `v2_deal_pricing_schedule`, `v2_financial_scenarios` |
+| Notifications | `v2_notification_rules`, `v2_notification_log` |
+| Custom fields & tags | `v2_custom_field_definitions`, `v2_custom_field_values`, `v2_tag_definitions`, `v2_deal_tags` |
+| Webhooks | `v2_webhooks`, `v2_webhook_delivery_log` |
 
 ## Settings tables
 
 | Table | Purpose |
 |---|---|
-| `settings_change_log` | Auditable configuration changes (list / get / rollback / export). |
-| `automation_rules`, `automation_actions` | Automation rule engine. |
-| `automation_rule_templates` | Reusable rule templates. |
-| `automation_execution_log` | Automation run history. |
+| `v2_settings_change_log` | Auditable configuration changes (list / get / rollback / export). |
+| `v2_automation_rules`, `v2_automation_actions` | Automation rule engine. |
+| `v2_automation_rule_templates` | Reusable rule templates. |
+| `v2_automation_execution_log` | Automation run history. |
 
 ## Conventions & notes
 
