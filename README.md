@@ -74,7 +74,7 @@ The headline goal: cut executive-review prep from *45+ minutes in spreadsheets* 
 - 👥 Multi-commander delegation, stakeholder influence mapping, decision log.
 - 📈 Pipeline **Flow Analytics** (funnel, conversion matrix, Sankey transitions), board-ready reports, and a durable time-series history backbone.
 
-See [`docs/overview.md`](./docs/overview.md) for the full, verified feature catalog.
+See [`docs/user-manual.md`](./docs/user-manual.md#what-edc-is) for the full, verified feature catalog.
 
 ## Architecture at a glance
 
