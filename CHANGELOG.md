@@ -65,6 +65,19 @@ and the project aims to follow [Semantic Versioning](https://semver.org/spec/v2.
   missed it.
 - The sign-in page now shows an explicit error with a **Retry** action (and a loading skeleton)
   instead of a permanently blank card when the Catalyst sign-in widget can't load.
+- **The email-OTP step.** Three defects, all reproduced by running the real flow on the deployed
+  app. The "OTP sent to…" banner was drawn *on top of* the "*email* / Change" row — two
+  superimposed strings, which is why the message looked scrambled. That traced to a broken port:
+  the sheet renders the banner as a fixed toast cleared by a hand-tuned `body { padding-top: 76px }`
+  and collapsed by a class that **Periscope's `AuthGate.tsx`** adds — a file EDC does not have, so
+  nothing ever collapsed it, and 76px never covered a banner that measures 104px. Underneath both
+  sat the real cause: `.signin_container` computes a fixed `height: 520px` whatever the step holds,
+  so it always overflowed a frame auto-sized to ~280px and Catalyst scrolled the document on field
+  focus, pushing the banner and the Change row out of view. Separately, Zoho nests the helper links
+  (`Forgot Password?`, `Resend OTP`) *inside* the input's `.textbox_div`, so they rendered within
+  the field's border and focus ring on both the password and OTP steps. Now: the shell sizes to its
+  content so nothing scrolls, the banner is an in-flow single line, the links sit below the field,
+  and **Change** is an explicit underlined action in a bordered identity row.
 - **The sign-in font was never Geist.** A single stray `0x01` control byte sat in front of
   `'Geist'` in the theme stylesheet. CSS error recovery discards the offending *declaration* and
   keeps its neighbours, so the rule still applied its colours and spacing — just no font — and
