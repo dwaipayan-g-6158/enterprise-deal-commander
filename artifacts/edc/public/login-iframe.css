@@ -445,6 +445,87 @@ input.textbox::placeholder,
   color: var(--liw-primary) !important;
 }
 
+/* --- Helper links belong BELOW the field, not inside it ------------------
+   Zoho nests `.textbox_actions` as a CHILD of the same `.textbox_div` that this
+   sheet gives the input frame to (`.textbox_div` carries the border, radius and
+   surface; the <input> inside it is deliberately bare). So on every step that
+   has helper links — password ("Sign in using email OTP" / "Forgot Password?")
+   and email-OTP ("Sign in using password" / "Resend OTP") — the links rendered
+   INSIDE the input's border and focus ring. Measured: frame 64→130, links
+   109→129. It reads as a broken control.
+
+   Fix: for those wrappers only, hand the frame to the <input> itself so the
+   links fall outside it in normal flow. Focus styling moves with the frame,
+   otherwise the ring would still be drawn around the links too. */
+.textbox_div:has(> .textbox_actions) {
+  background: transparent !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+}
+.textbox_div:has(> .textbox_actions) > input.textbox {
+  background: var(--liw-surface) !important;
+  border: 1px solid var(--liw-border) !important;
+  border-radius: 8px !important;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease !important;
+}
+.textbox_div:has(> .textbox_actions) > input.textbox:focus {
+  border-color: var(--liw-primary) !important;
+  box-shadow: 0 0 0 3px rgba(95, 141, 247, 0.18) !important;
+  outline: none !important;
+}
+/* The row no longer sits inside a padded box, so it needs its own spacing. */
+.textbox_div:has(> .textbox_actions) > .textbox_actions {
+  padding: 10px 2px 0 !important;
+}
+/* The show/hide eye is positioned against the wrapper; keep it over the input
+   now that the wrapper is no longer the visual field. */
+.textbox_div:has(> .textbox_actions) > .icon-show,
+.textbox_div:has(> .textbox_actions) > .showhide_icon {
+  top: 12px !important;
+}
+
+/* --- "Signed in as <email> — Change" ------------------------------------
+   `.hellouser` had no layout rule, so `.username` (block) and `.Notyou`
+   (inline-block) stacked into an ambiguous two-line blob and users could not
+   find the way back to edit the address. Make it one explicit row: address on
+   the left, Change as a right-aligned underlined action. Underlined because
+   colour alone is a weak affordance here — it sits among other coloured helper
+   links, and this is the only one that navigates backwards. */
+.hellouser {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: 10px !important;
+  margin: 0 0 12px !important;
+  padding: 9px 12px !important;
+  background: rgba(255, 255, 255, 0.03) !important;
+  border: 1px solid var(--liw-border) !important;
+  border-radius: 8px !important;
+}
+.hellouser .username {
+  flex: 1 1 auto !important;
+  min-width: 0 !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+  /* 13px, not the 16px the standalone rule sets: in this row it is a
+     read-only label, not a field, so the iOS-zoom floor does not apply. */
+  font-size: 13px !important;
+  color: var(--liw-text-dim) !important;
+}
+.hellouser .Notyou,
+.hellouser .notyou,
+.hellouser .bluetext {
+  flex: 0 0 auto !important;
+  font-size: 12px !important;
+  font-weight: 600 !important;
+  text-decoration: underline !important;
+  text-underline-offset: 2px !important;
+}
+
 /* --- Password-recovery description text ---------------------------------
    Zoho hard-codes near-black (rgba(0,0,0,0.9)) on recovery description
    copy -- e.g. `.head_info` ("Enter the last password you remember with
@@ -782,28 +863,34 @@ label,
 }
 .Alert:has(.alert_message:not(:empty)) {
   display: block !important;
-  /* v18 — Fixed-position toast anchored to iframe-viewport top so
-     Catalyst's body auto-scroll (which fires on focus of OTP input,
-     setting body.scrollTop ≈ 100 px) doesn't push the banner out of
-     view. We give body a matching padding-top via the :has() rule
-     below so the form CONTENT shifts down by banner height — banner
-     visible on top, form rows below, no overlap.
+  /* IN FLOW, not a fixed toast. The ported version pinned this at
+     `top: 8px` and cleared it with a hand-tuned `body { padding-top: 76px }`.
+     Two things broke that, and together they produced the "OTP sent to…"
+     banner rendering ON TOP OF the email/Change row — overlapping glyphs
+     that read as scrambled text:
 
-     Auto-dismiss is driven by AuthGate.tsx (setTimeout adds the
-     `.liw-alert-dismissed` class 4 s after the message text appears).
-     The opacity + max-height + padding transition collapses the banner
-     smoothly; the body-level :has() rule simultaneously removes the
-     padding-top so form snaps back. */
-  position: fixed !important;
-  top: 8px !important;
-  left: 8px !important;
-  right: 8px !important;
-  bottom: auto !important;
+       1. The reserved 76px is a guess. Measured live on the OTP step the
+          banner is 104px tall (it occupies 8→112 because the masked address
+          wraps), so it overran the reservation by ~36px every time.
+       2. The collapse depends on a `.liw-alert-dismissed` class that
+          Periscope's AuthGate.tsx adds after 4s. **EDC has no AuthGate.tsx**
+          — nothing added it here, so the banner never went away, and our own
+          `top: 8px !important` also defeated Zoho's own dismissal (it sets
+          inline `top: -150px`, which a fixed element obeys and a static one
+          ignores).
+
+     As a normal block it occupies real space above the form, so no
+     reservation is needed and no overlap is representable. `.Alert` sits at
+     body index 1, ahead of `.signin_container`, so flow order already puts it
+     where it belongs. The frame is auto-sized from the primary button's bottom
+     edge, so the extra height is picked up automatically. */
+  position: static !important;
+  inset: auto !important;
   transform: none !important;
-  margin: 0 !important;
+  margin: 0 0 12px !important;
   width: auto !important;
   max-width: none !important;
-  z-index: 10 !important;
+  z-index: auto !important;
   opacity: 1 !important;
   max-height: 200px !important;
   overflow: hidden !important;
@@ -824,17 +911,11 @@ label,
   border-width: 0 !important;
   pointer-events: none !important;
 }
-/* Push form content down by banner height when the banner is visible
-   (alert has a non-empty message AND has not been dismissed yet). The
-   transition runs in lock-step with the .Alert collapse above so the
-   form rows shift smoothly. */
-body:has(.Alert:not(.liw-alert-dismissed) .alert_message:not(:empty)) {
-  padding-top: 76px !important;
-  transition: padding-top 0.3s ease !important;
-}
-body {
-  transition: padding-top 0.3s ease !important;
-}
+/* The banner is in flow now (see above), so there is deliberately NO
+   body padding reservation here. The rule that used to live at this spot
+   reserved a fixed 76px for a banner measured at 104px, which is exactly how
+   the overlap arose. Reserving space for an out-of-flow element means keeping
+   two numbers in sync forever; letting it take its own space needs none. */
 .Alert:has(.alert_message:not(:empty)) .topNotificationClose {
   position: relative !important;
   float: right !important;
