@@ -15,11 +15,11 @@ async function buildAll() {
   await rm(distDir, { recursive: true, force: true });
 
   await esbuild({
-    entryPoints: [
-      path.resolve(artifactDir, "src/index.ts"),
-      path.resolve(artifactDir, "src/seed.ts"),
-      path.resolve(artifactDir, "src/scripts/backfill-incumbent-competitors.ts"),
-    ],
+    // The server is the only entry point. `src/seed.ts` and
+    // `src/scripts/backfill-incumbent-competitors.ts` used to sit beside it;
+    // both were Drizzle-only and went with the rest of that layer — seeding is
+    // `POST /admin/seed` now, and the backfill has already run.
+    entryPoints: [path.resolve(artifactDir, "src/index.ts")],
     platform: "node",
     bundle: true,
     format: "esm",
