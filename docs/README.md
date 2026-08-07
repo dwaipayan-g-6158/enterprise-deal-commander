@@ -5,7 +5,7 @@ It is written for someone who has never seen the project before — start at the
 follow the links, or jump to what you need.
 
 > Every factual claim here was verified against the source (the OpenAPI contract, the
-> engine source, the Drizzle schema, and the build scripts). Where something is an
+> engine source, the Catalyst Data Store schema, and the build scripts). Where something is an
 > inference rather than a verified fact, it is called out explicitly.
 
 ## Getting started
