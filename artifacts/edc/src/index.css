@@ -83,7 +83,14 @@
   --border: 210 20% 88%;
   --input: 210 20% 88%;
 
-  --primary: 222 90% 67%;
+  /* 55%, not the 67% this ran at until now. White-on-primary is the label on
+     every filled button, and `text-primary` is the link colour on white —
+     both measured 3.18:1 at 67%, under the 4.5:1 AA floor. Darkening the
+     accent fixes the fill and the text in one move (5.04:1 each) and keeps
+     the hue exactly; the mobile shell already runs its light accent at 55%
+     for this same reason. Dark mode needs no equivalent change — it inverts,
+     pairing this accent with a dark label (see the .dark block). */
+  --primary: 222 90% 55%;
   --primary-foreground: 0 0% 100%;
 
   --secondary: 210 20% 92%;
@@ -92,21 +99,36 @@
   --accent: 210 20% 92%;
   --accent-foreground: 220 10% 10%;
 
-  --destructive: 0 80% 50%;
+  /* 47%, not 50%: at 50% this cleared AA on pure white (4.66:1) but not on the
+     tinted `data-time-band` canvases, where `225 22% 96%` dropped
+     `text-destructive` to 4.23:1. The canvas is the thing to measure against,
+     not the card. 47% holds both the text (4.70:1) and the button (5.18:1). */
+  --destructive: 0 80% 47%;
   --destructive-foreground: 0 0% 100%;
 
-  --ring: 222 90% 67%;
+  --ring: 222 90% 55%;
 
   --sidebar: 0 0% 100%;
   --sidebar-foreground: 220 10% 10%;
   --sidebar-border: 210 20% 88%;
-  --sidebar-primary: 222 90% 67%;
+  --sidebar-primary: 222 90% 55%;
   --sidebar-primary-foreground: 0 0% 100%;
   --sidebar-accent: 210 20% 92%;
   --sidebar-accent-foreground: 220 10% 10%;
-  --sidebar-ring: 222 90% 67%;
+  --sidebar-ring: 222 90% 55%;
 
-  --chart-1: 222 90% 67%;   /* indigo accent — primary series */
+  /* KNOWN GAP — this light-mode series is the dark palette reused, and it was
+     never rebalanced for light surfaces. Measured against the worst canvas
+     (`night`, 225 22% 96%), four of the five fail the 3:1 floor that WCAG
+     1.4.11 sets for graphical objects: emerald 1.74:1, amber 1.94:1, sky
+     2.19:1, indigo 2.88:1; only violet passes at 3.04:1. Dark mode is fine
+     (4.85:1 and up). Fixing it means rebalancing all five at once so they stay
+     mutually distinguishable, and amber can't simply be darkened — see the
+     ramp-inversion note in lib/semantic-colors.ts. Deliberately left alone
+     here rather than half-fixed alongside the accent tokens above.
+     --chart-1 stays at 67% so it keeps its lightness separation from
+     --chart-5 sky (55%, only 23° away in hue). */
+  --chart-1: 222 90% 67%;   /* indigo — primary series */
   --chart-2: 158 64% 52%;   /* emerald */
   --chart-3: 38 92% 50%;    /* amber */
   --chart-4: 280 65% 65%;   /* violet */
@@ -144,8 +166,14 @@
   --accent: 220 10% 18%;
   --accent-foreground: 210 20% 98%;
 
-  --destructive: 0 60% 50%;
-  --destructive-foreground: 210 20% 98%;
+  /* Dark mode inverts, exactly as --primary does above: a light fill with a
+     dark label. The old `0 60% 50%` + near-white pairing made the destructive
+     *button* fine (5.09:1) but `text-destructive` on the canvas measured
+     3.60:1 — and error text is the more common of the two uses. Lightening
+     the fill fixes the text (6.73:1); flipping the foreground dark keeps the
+     button (6.43:1). Mirrors the mobile shell's dark destructive. */
+  --destructive: 0 91% 71%;
+  --destructive-foreground: 220 10% 10%;
 
   --ring: 222 90% 67%;
 
