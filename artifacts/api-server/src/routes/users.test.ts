@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, beforeEach } from "vitest";
+import { describe, it, expect, beforeAll, beforeEach, afterEach } from "vitest";
 import type { Request, Response } from "express";
 import { initCatalystApp, createCommandersRepo, createSettingsChangeLogRepo } from "@workspace/db/catalyst";
 import { installCatalystFake, type CatalystTestStore } from "../test-support/catalyst-test-app";
@@ -74,10 +74,12 @@ const ACTOR: Actor = {
   role: "admin",
 };
 
-interface UserRow { id: string; email: string; displayName: string; role: string; isActive: boolean }
+interface UserRow { id: string; email: string; displayName: string; role: string; isActive: boolean; isPending?: boolean }
 
+// Every fixture address must sit on the allowed corporate domain
+// (lib/email-domain.ts) — POST /users refuses anything else outright.
 async function createUser(overrides: { email?: string; role?: string } = {}): Promise<UserRow> {
-  const email = overrides.email ?? `users-test-${store.count("commanders")}@example.com`;
+  const email = overrides.email ?? `users-test-${store.count("commanders")}@zohocorp.com`;
   const { result, status, thrown } = await call<{ data: UserRow }>(
     getHandler("post", "/users"),
     { body: { email, display_name: "Test User", role: overrides.role } },
@@ -87,13 +89,18 @@ async function createUser(overrides: { email?: string; role?: string } = {}): Pr
   return result.data;
 }
 
-/** Put a commander row straight into the store, bypassing the invite handler. */
+/**
+ * Put a commander row straight into the store, bypassing the invite handler.
+ * Always CLAIMED (catalyst_user_id set), i.e. someone who has actually signed
+ * in — which is what makes an admin count toward the last-admin invariant.
+ * For an unclaimed admin invite, use createUser({ role: "admin" }).
+ */
 async function seedCommander(role: "admin" | "reader", isActive = true): Promise<UserRow> {
   const repo = createCommandersRepo(initCatalystApp({ headers: {} }));
   const n = store.count("commanders");
   const row = await repo.create({
     catalystUserId: `cat-${n}`,
-    username: `seeded-${n}@example.com`,
+    username: `seeded-${n}@zohocorp.com`,
     displayName: `Seeded ${n}`,
     role,
     isActive,
@@ -118,18 +125,24 @@ beforeEach(() => {
   store.declareUnique("commanders", ["id", "username"]);
 });
 
+afterEach(() => {
+  delete process.env.ALLOWED_EMAIL_DOMAINS;
+});
+
 describe("POST /users", () => {
   it("creates a user, returns no password field, and writes one change-log row", async () => {
     const { result, status } = await call<{ data: Record<string, unknown> }>(
       getHandler("post", "/users"),
-      { body: { email: "Create.Test@Example.com", display_name: "Create Test", role: "reader" } },
+      { body: { email: "Create.Test@ZohoCorp.com", display_name: "Create Test", role: "reader" } },
       ACTOR,
     );
     expect(status).toBe(201);
     expect(result?.data).not.toHaveProperty("passwordHash");
     expect(result?.data).not.toHaveProperty("password_hash");
+    // Nor the Catalyst user id — isPending exposes only whether it is absent.
+    expect(result?.data).not.toHaveProperty("catalystUserId");
     // Email is lower-cased on the way in, matching every lookup in the file.
-    expect(result?.data.email).toBe("create.test@example.com");
+    expect(result?.data.email).toBe("create.test@zohocorp.com");
 
     const logs = await changeLogFor(result!.data.id as string);
     expect(logs).toHaveLength(1);
@@ -137,10 +150,10 @@ describe("POST /users", () => {
   });
 
   it("invites through Catalyst with the display name split into first/last", async () => {
-    await createUser({ email: "split.me@example.com" });
+    await createUser({ email: "split.me@zohocorp.com" });
     expect(store.invites).toHaveLength(1);
     expect(store.invites[0]).toMatchObject({
-      email: "split.me@example.com",
+      email: "split.me@zohocorp.com",
       firstName: "Test",
       lastName: "User",
     });
@@ -178,11 +191,78 @@ describe("POST /users", () => {
     const before = store.count("commanders");
     const { thrown } = await call(
       getHandler("post", "/users"),
-      { body: { email: "rejected@example.com", display_name: "Rejected" } },
+      { body: { email: "rejected@zohocorp.com", display_name: "Rejected" } },
       ACTOR,
     );
     expect(thrown).toMatchObject({ status: 409 });
     expect(store.count("commanders")).toBe(before);
+  });
+
+  it("marks a freshly invited user as pending until they claim the invite", async () => {
+    const invited = await createUser();
+    expect(invited.isPending).toBe(true);
+
+    const { result } = await call<{ data: UserRow[] }>(getHandler("get", "/users"), {}, ACTOR);
+    expect(result?.data.find((u) => u.id === invited.id)?.isPending).toBe(true);
+    // A seeded row stands in for someone who has actually signed in.
+    const claimed = await seedCommander("reader");
+    const { result: after } = await call<{ data: UserRow[] }>(getHandler("get", "/users"), {}, ACTOR);
+    expect(after?.data.find((u) => u.id === claimed.id)?.isPending).toBe(false);
+  });
+});
+
+describe("POST /users — corporate email domain", () => {
+  it("refuses an off-domain email with 400, touching NOTHING", async () => {
+    const before = store.count("commanders");
+    const { thrown } = await call(
+      getHandler("post", "/users"),
+      { body: { email: "someone@gmail.com", display_name: "Outside Person" } },
+      ACTOR,
+    );
+    expect(thrown).toMatchObject({ status: 400 });
+    expect(thrown?.message).toContain("@zohocorp.com");
+    // The check must run BEFORE the Catalyst invite, or a typo'd outsider is
+    // left registered on the Catalyst project with no commanders row.
+    expect(store.invites).toHaveLength(0);
+    expect(store.count("commanders")).toBe(before);
+  });
+
+  it.each(["a@notzohocorp.com", "a@zohocorp.com.attacker.example", "a@in.zohocorp.com"])(
+    "refuses the look-alike domain in %o",
+    async (email) => {
+      const { thrown } = await call(
+        getHandler("post", "/users"),
+        { body: { email, display_name: "Look Alike" } },
+        ACTOR,
+      );
+      expect(thrown).toMatchObject({ status: 400 });
+    },
+  );
+
+  it("refuses a value that is not an email address at all", async () => {
+    const { thrown } = await call(
+      getHandler("post", "/users"),
+      { body: { email: "notanemail", display_name: "No At Sign" } },
+      ACTOR,
+    );
+    expect(thrown).toMatchObject({ status: 400 });
+  });
+
+  it("honours ALLOWED_EMAIL_DOMAINS when it is configured", async () => {
+    process.env.ALLOWED_EMAIL_DOMAINS = "zohocorp.com,partner.example";
+    const { status } = await call(
+      getHandler("post", "/users"),
+      { body: { email: "guest@partner.example", display_name: "Guest User" } },
+      ACTOR,
+    );
+    expect(status).toBe(201);
+
+    const { thrown } = await call(
+      getHandler("post", "/users"),
+      { body: { email: "someone@gmail.com", display_name: "Still Outside" } },
+      ACTOR,
+    );
+    expect(thrown).toMatchObject({ status: 400 });
   });
 });
 
@@ -261,6 +341,38 @@ describe("PATCH /users/:id — self and last-admin guards", () => {
     expect(await repo.getById(target.id)).toMatchObject({ role: "reader" });
   });
 
+  // An admin INVITE is not an admin. Nobody has signed in as them, so counting
+  // the invite would let the only real admin demote themselves and leave the
+  // app with nobody able to administer it.
+  it("does NOT let an unclaimed admin invite satisfy the last-admin invariant", async () => {
+    const lastAdmin = await seedCommander("admin");
+    const pendingAdmin = await createUser({ role: "admin" });
+    expect(pendingAdmin.isPending).toBe(true);
+
+    const otherAdminActor: Actor = { ...(await seedCommander("admin", false)), username: "other@zohocorp.com" };
+    const { thrown } = await call(
+      getHandler("patch", "/users/:id"),
+      { params: { id: lastAdmin.id }, body: { role: "reader" } },
+      otherAdminActor,
+    );
+    expect(thrown).toMatchObject({ status: 409 });
+
+    const repo = createCommandersRepo(initCatalystApp({ headers: {} }));
+    expect(await repo.getById(lastAdmin.id)).toMatchObject({ role: "admin", isActive: true });
+  });
+
+  it("ALLOWS demoting an unclaimed admin invite even when it is the only other admin", async () => {
+    const pendingAdmin = await createUser({ role: "admin" });
+    await seedCommander("admin"); // the one real admin
+
+    const { status } = await call(
+      getHandler("patch", "/users/:id"),
+      { params: { id: pendingAdmin.id }, body: { role: "reader" } },
+      ACTOR,
+    );
+    expect(status).toBe(200);
+  });
+
   it("returns 404 for a nonexistent user", async () => {
     const { thrown } = await call(
       getHandler("patch", "/users/:id"),
@@ -299,6 +411,31 @@ describe("DELETE /users/:id", () => {
     expect(thrown).toMatchObject({ status: 409 });
     const repo = createCommandersRepo(initCatalystApp({ headers: {} }));
     expect(await repo.getById(lastAdmin.id)).not.toBeNull();
+  });
+
+  it("does NOT let an unclaimed admin invite satisfy the last-admin invariant", async () => {
+    const lastAdmin = await seedCommander("admin");
+    await createUser({ role: "admin" }); // an invite, not an admin
+    const otherAdminActor: Actor = { ...(await seedCommander("admin", false)), username: "other@zohocorp.com" };
+
+    const { thrown } = await call(
+      getHandler("delete", "/users/:id"),
+      { params: { id: lastAdmin.id } },
+      otherAdminActor,
+    );
+    expect(thrown).toMatchObject({ status: 409 });
+    const repo = createCommandersRepo(initCatalystApp({ headers: {} }));
+    expect(await repo.getById(lastAdmin.id)).not.toBeNull();
+  });
+
+  it("ALLOWS cancelling an unclaimed admin invite that is the only other admin", async () => {
+    const pendingAdmin = await createUser({ role: "admin" });
+    await seedCommander("admin"); // the one real admin
+
+    const { status } = await call(getHandler("delete", "/users/:id"), { params: { id: pendingAdmin.id } }, ACTOR);
+    expect(status).toBe(200);
+    const repo = createCommandersRepo(initCatalystApp({ headers: {} }));
+    expect(await repo.getById(pendingAdmin.id)).toBeNull();
   });
 
   it("deletes a reader, removes the Catalyst directory user, and writes a delete audit row", async () => {

@@ -48,6 +48,7 @@ export interface AuthUser {
   email: string;
   role: AuthUserRole;
   displayName: string;
+  allowedEmailDomains?: string[];
 }
 
 export interface DashboardVisitResponse {
@@ -72,6 +73,7 @@ export interface User {
   createdAt: string;
   /** @nullable */
   lastDashboardVisitAt: string | null;
+  isPending: boolean;
 }
 
 export interface UserListResponse {

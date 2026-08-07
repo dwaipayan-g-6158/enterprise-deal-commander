@@ -12,4 +12,5 @@ export interface AuthUser {
   email: string;
   role: AuthUserRole;
   displayName: string;
+  allowedEmailDomains?: string[];
 }

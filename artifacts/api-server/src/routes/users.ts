@@ -10,6 +10,7 @@ import {
 } from "@workspace/db/catalyst";
 import { ListUsersResponse, CreateUserBody, UpdateUserParams, UpdateUserBody, DeleteUserParams } from "@workspace/api-zod";
 import { getActor, type Role } from "../lib/auth";
+import { isAllowedEmailDomain, formatAllowedDomains } from "../lib/email-domain";
 import { badRequest, conflict, notFound } from "../lib/http";
 import { logSettingsChange } from "../lib/catalyst/settings-audit";
 import { logger } from "../lib/logger";
@@ -31,6 +32,11 @@ import { logger } from "../lib/logger";
  * catalyst_user_id null and is claimed automatically on their first sign-in
  * (see lib/auth.ts's resolveCommander) — the chosen role sticks because it's
  * on the pending row, not decided fresh at claim time.
+ *
+ * Who may be invited is restricted to the corporate email domains in
+ * lib/email-domain.ts. That check is only half the boundary — the other half
+ * is in lib/auth.ts, which refuses to auto-provision an off-domain identity
+ * that signs in without an invite at all.
  */
 
 const router: IRouter = Router();
@@ -44,7 +50,24 @@ function toUserRow(row: CommanderRow) {
     isActive: row.isActive,
     createdAt: row.createdAt.toISOString(),
     lastDashboardVisitAt: row.lastDashboardVisitAt ? row.lastDashboardVisitAt.toISOString() : null,
+    // Invited, never signed in. The Catalyst user id itself stays withheld —
+    // only the fact that it is still absent is anyone's business.
+    isPending: row.catalystUserId === null,
   };
+}
+
+/**
+ * Whether this row counts toward "at least one active admin must remain".
+ *
+ * An invited-but-unclaimed admin (catalyst_user_id still null) does NOT count.
+ * Nobody has ever signed in as them, so letting the invite satisfy the
+ * invariant would allow the last real admin to demote or delete themselves and
+ * leave the app with no one who can actually administer it — recoverable only
+ * if the invitee happens to complete sign-up. An inactive admin does not count
+ * either, which is what "active admin" meant all along.
+ */
+function isEffectiveAdmin(row: CommanderRow): boolean {
+  return row.role === "admin" && row.isActive && row.catalystUserId !== null;
 }
 
 router.get("/users", async (req: Request, res: Response) => {
@@ -63,6 +86,16 @@ router.post("/users", async (req: Request, res: Response) => {
   const email = parsed.data.email.trim().toLowerCase();
   const role: Role = parsed.data.role ?? "reader";
   const displayName = parsed.data.display_name;
+
+  // Before the duplicate check and, crucially, before inviteCatalystUser: a
+  // refused address must never reach Catalyst's directory, or a typo'd
+  // outsider would be left registered on the project with no commanders row
+  // to show for it (and re-inviting the corrected address later would then
+  // collide with that orphan). Same "reject before you create anything"
+  // ordering as the invite-before-insert sequence below.
+  if (!isAllowedEmailDomain(email)) {
+    throw badRequest(`Only ${formatAllowedDomains()} email addresses can be invited`);
+  }
 
   const repo = createCommandersRepo(initCatalystApp(req));
   const existing = await repo.getByUsername(email);
@@ -139,8 +172,8 @@ router.patch("/users/:id", async (req: Request, res: Response) => {
     }
   }
 
-  const willDemote = body.role === "reader" && target.role === "admin";
-  const willDeactivate = body.is_active === false && target.isActive;
+  const willDemote = body.role === "reader" && isEffectiveAdmin(target);
+  const willDeactivate = body.is_active === false && isEffectiveAdmin(target);
 
   // Data Store has no transactions and no row locks (unlike the original
   // Drizzle version's `SELECT ... FOR UPDATE`) — this is the plan's accepted
@@ -150,7 +183,7 @@ router.patch("/users/:id", async (req: Request, res: Response) => {
   // concurrency, but self-revert means the failure mode is a rejected
   // request, never a permanently admin-less app.
   if (willDemote || willDeactivate) {
-    const others = (await repo.listAll()).filter((u) => u.role === "admin" && u.isActive && u.id !== target.id);
+    const others = (await repo.listAll()).filter((u) => isEffectiveAdmin(u) && u.id !== target.id);
     if (others.length === 0) {
       throw conflict("At least one active admin must remain — promote another user first");
     }
@@ -174,7 +207,7 @@ router.patch("/users/:id", async (req: Request, res: Response) => {
     // true no matter what just happened. That made this entire self-revert
     // backstop dead code: verified by disabling the pre-check above, at which
     // point the invariant could be violated with no 409 and no revert.
-    const stillOk = (await adminRepo.listAll()).some((u) => u.role === "admin" && u.isActive);
+    const stillOk = (await adminRepo.listAll()).some(isEffectiveAdmin);
     if (!stillOk) {
       await adminRepo.update(id, { role: target.role, isActive: target.isActive });
       throw conflict("At least one active admin must remain — promote another user first");
@@ -206,9 +239,9 @@ router.delete("/users/:id", async (req: Request, res: Response) => {
   if (target.id === actor.id) {
     throw conflict("You cannot delete your own account");
   }
-  const isLastActiveAdmin = target.role === "admin" && target.isActive;
+  const isLastActiveAdmin = isEffectiveAdmin(target);
   if (isLastActiveAdmin) {
-    const others = (await repo.listAll()).filter((u) => u.role === "admin" && u.isActive && u.id !== target.id);
+    const others = (await repo.listAll()).filter((u) => isEffectiveAdmin(u) && u.id !== target.id);
     if (others.length === 0) {
       throw conflict("At least one active admin must remain — promote another user first");
     }
@@ -222,8 +255,20 @@ router.delete("/users/:id", async (req: Request, res: Response) => {
   // different admins when exactly 2 are active) is the same class of
   // accepted trade-off as PATCH's above. Loudly logging rather than silently
   // succeeding is the correct response if it ever actually happens.
+  //
+  // MUST read through `adminRepo`, for exactly the reason PATCH's equivalent
+  // re-check documents above: the read cache is a WeakMap keyed on the
+  // catalystApp OBJECT, and initCatalystApp/initCatalystAdminApp return two
+  // different objects with two separate caches. `adminRepo.delete` invalidated
+  // only the admin app's cache, so `repo.listAll()` here replayed the snapshot
+  // taken by the pre-check above — the deleted admin included — and `stillOk`
+  // was therefore true no matter what had just happened. That made this whole
+  // backstop dead code: the one log line that would ever tell us the app had
+  // been left with zero admins could not fire. Verified the same way PATCH's
+  // was: temporarily disable the pre-check above, delete the only admin, and
+  // watch for the log — absent through `repo`, present through `adminRepo`.
   if (isLastActiveAdmin) {
-    const stillOk = (await repo.listAll()).some((u) => u.role === "admin" && u.isActive);
+    const stillOk = (await adminRepo.listAll()).some(isEffectiveAdmin);
     if (!stillOk) {
       logger.error({ deletedId: id }, "Last active admin was deleted in a race — the app may now have zero admins");
     }
