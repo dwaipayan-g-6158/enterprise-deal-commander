@@ -11,8 +11,7 @@
 
 ## Setup
 
-See [installation.md](./installation.md). In brief: Node 24 + pnpm + PostgreSQL 16, then
-`pnpm install`, copy the `.env.example` files, `push` the schema, and `seed`.
+See [installation.md](./installation.md). In brief: Node 24 + pnpm, then `pnpm install`, copy the `.env.example` files, and run the two dev servers — no schema to push and no local database to provision.
 
 ## The development loop
 
@@ -38,7 +37,7 @@ Tests use **Vitest**, colocated with source as `*.test.ts`.
 
 ```bash
 pnpm --filter @workspace/engine run test        # pure, no DB
-pnpm --filter @workspace/api-server run test     # needs a reachable DATABASE_URL
+pnpm --filter @workspace/api-server run test     # no database needed; the suite runs entirely against the in-memory Data Store fake (artifacts/api-server/src/test-support/catalyst-test-app.ts)
 pnpm --filter @workspace/edc run test
 
 # single file / single test
@@ -70,7 +69,7 @@ What's worth testing where:
   (stage guardrail, audit `entity_id`, route ordering, health source).
 - **Read the memory note** for any area with a documented gotcha before changing it
   (`.agents/memory/MEMORY.md`).
-- **Never** weaken the supply-chain guard or use `push-force`.
+- **Never** weaken the supply-chain guard.
 - **Regenerate, don't hand-edit** generated API code.
 - Prefer additive, reversible schema changes; remember the post-merge sync caveat.
 
@@ -87,15 +86,9 @@ pnpm --filter @workspace/api-spec run codegen
 Register literal routes before param routes (`/gates/batch` before `/gates/:gateCode`). Don't
 change `info.title`.
 
-## Working with the database
+## Working with the datastore
 
-```bash
-# 1. edit lib/db/src/schema/*.ts
-# 2. apply
-pnpm --filter @workspace/db run push
-```
-
-Phase 2 durable tables go in the `edc_v2` schema. See [data-model.md](./data-model.md).
+Schema changes are made directly against Zoho Catalyst Data Store (Console or the Catalyst MCP tools), not by editing files in this repo — see [`docs/CATALYST_SCHEMA.md`](./CATALYST_SCHEMA.md) for the 71-table manifest and [`docs/catalyst-datastore-constraints.md`](./catalyst-datastore-constraints.md) for the Row API's constraints. `lib/db/src/catalyst/repositories/*.ts` holds the per-table repositories every route uses; add a method there when a route needs a new query shape.
 
 ## Working with the engine
 

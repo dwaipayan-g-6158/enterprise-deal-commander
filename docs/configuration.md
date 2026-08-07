@@ -16,10 +16,14 @@ files are git-ignored — copy the provided `.env.example` files.
 
 | Variable | Required | Default | Description |
 |---|---|---|---|
-| `DATABASE_URL` | ✅ | — | PostgreSQL connection string. The app uses the `edc` and `edc_v2` schemas within this database. |
 | `SESSION_SECRET` | ✅ (prod) | dev fallback constant | Secret used to sign the HS256 session JWT. In production the server **requires** this; in dev a constant fallback is used if unset. Generate with `openssl rand -hex 32`. |
 | `NODE_ENV` | — | `development` | `development` or `production`. In production, session cookies are marked `Secure`. |
 | `PORT` | — | `5000` | Port the Express server listens on. |
+| `EDC_JOB_SECRET` | ✅ | — | Secret used to authenticate background job callbacks from the Catalyst Job Scheduler. Generate with `openssl rand -hex 32`. |
+| `SUPER_ADMIN_EMAIL` | — | — | Email address that receives initial admin grant (optional; the app creates no users on startup). |
+| `APP_ORIGIN` | — | — | The SPA origin for CORS, OAuth redirect URIs, etc. (optional; defaults to the API server's origin). |
+| `SMTP_URL` | — | — | SMTP connection string for transactional email (optional; emails are not sent if unset). |
+| `LOG_LEVEL` | — | `info` | Minimum log level: `debug`, `info`, `warn`, `error`. |
 
 ### Frontend (`artifacts/edc/.env`)
 
@@ -38,11 +42,14 @@ files are git-ignored — copy the provided `.env.example` files.
 | `tsconfig.base.json` | Shared TypeScript compiler options (ESNext modules, `moduleResolution: bundler`, `customConditions: ["workspace"]`, strict null checks). |
 | `tsconfig.json` (root) | Project references pointing at the buildable libs. |
 | `lib/api-spec/orval.config.ts` | Orval codegen configuration (OpenAPI → Zod + React Query hooks). |
-| `lib/db/drizzle.config.ts` | Drizzle Kit config (postgresql dialect, schema location). A `drizzle.local.config.ts` variant also exists. |
 | `artifacts/edc/vite.config.ts` | Vite build, the `/api` dev proxy, and PWA (Workbox) configuration. |
 | `artifacts/edc/components.json` | shadcn/ui configuration (new-york style, path aliases). |
 | `artifacts/api-server/build.mjs` | esbuild bundler settings. |
 | `artifacts/*/vitest.config.ts`, `lib/engine/vitest.config.ts` | Test runner config. |
+
+### Catalyst configuration
+
+`catalyst.json` (repo root) declares the AppSail app (`{"appsail":[{"source":".","name":"edc"}]}`). The real Catalyst project/org identifiers and the full 71-table Data Store schema manifest live in [`docs/CATALYST_SCHEMA.md`](./CATALYST_SCHEMA.md).
 
 There is **no ESLint config** — Prettier is the only formatter (workspace devDependency, default
 config). There is **no `tailwind.config`** — Tailwind v4 is configured in CSS
