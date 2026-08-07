@@ -37,6 +37,16 @@ and the project aims to follow [Semantic Versioning](https://semver.org/spec/v2.
 - Predictive score now has **9 factors** and the risk engine **16 patterns** (was 8 / 15).
 - The full test suite (1,360 tests) now runs against an in-memory Data Store fake with **no
   database required at all** — previously it needed a reachable `DATABASE_URL`.
+- **Sign-in rebuilt as a designed first-party screen** — a two-column layout with a branding rail,
+  and Catalyst's embedded widget flattened into the card so it no longer reads as a foreign box.
+  The iframe is themed by a static stylesheet handed to the SDK as `css_url`, which Zoho fetches
+  itself so it applies *before* the frame's first paint; the previous approach injected CSS after
+  load and flashed an unstyled white panel. That sheet must keep its
+  `@import` of Catalyst's own `embedded_signin.css` as its first rule — `css_url` **replaces**
+  Zoho's base sheet rather than adding to it, and without the import the form loses the
+  `display:none` toggles that advance it between steps. The page is deliberately dark-only: a
+  static file cannot follow light/dark × time-band × mobile token permutations.
+- The sign-in page is **always dark** and no longer participates in the theme system.
 
 ### Removed
 - Drizzle, `pg`, and every Postgres schema/migration file. `DATABASE_URL` and `SESSION_SECRET`
@@ -55,6 +65,16 @@ and the project aims to follow [Semantic Versioning](https://semver.org/spec/v2.
   missed it.
 - The sign-in page now shows an explicit error with a **Retry** action (and a loading skeleton)
   instead of a permanently blank card when the Catalyst sign-in widget can't load.
+- **Accent tokens failed WCAG AA on every screen.** Light `--primary` put white button labels and
+  `text-primary` links at 3.18:1, and dark `text-destructive` read 3.60:1. Light `--primary` moves
+  to 55% lightness (fixing fill and text together, hue unchanged), light `--destructive` to 47%,
+  and dark `--destructive` now inverts like `--primary` — a light fill with a dark label. A new
+  computed test asserts the ratios against every surface each mode presents, including all three
+  `data-time-band` overrides; two of the three failures were invisible when measured against the
+  base canvas alone. **Known gap left open:** the light-mode chart series is the dark palette
+  reused, and four of its five colours fail WCAG 1.4.11's 3:1 floor for graphical objects
+  (emerald 1.74:1, amber 1.94:1, sky 2.19:1, indigo 2.88:1) — rebalancing all five while keeping
+  them distinguishable is its own task.
 
 ## [0.6.0] — Settings backend foundation (inferred)
 
