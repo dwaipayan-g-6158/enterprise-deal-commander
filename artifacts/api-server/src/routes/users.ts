@@ -255,8 +255,20 @@ router.delete("/users/:id", async (req: Request, res: Response) => {
   // different admins when exactly 2 are active) is the same class of
   // accepted trade-off as PATCH's above. Loudly logging rather than silently
   // succeeding is the correct response if it ever actually happens.
+  //
+  // MUST read through `adminRepo`, for exactly the reason PATCH's equivalent
+  // re-check documents above: the read cache is a WeakMap keyed on the
+  // catalystApp OBJECT, and initCatalystApp/initCatalystAdminApp return two
+  // different objects with two separate caches. `adminRepo.delete` invalidated
+  // only the admin app's cache, so `repo.listAll()` here replayed the snapshot
+  // taken by the pre-check above — the deleted admin included — and `stillOk`
+  // was therefore true no matter what had just happened. That made this whole
+  // backstop dead code: the one log line that would ever tell us the app had
+  // been left with zero admins could not fire. Verified the same way PATCH's
+  // was: temporarily disable the pre-check above, delete the only admin, and
+  // watch for the log — absent through `repo`, present through `adminRepo`.
   if (isLastActiveAdmin) {
-    const stillOk = (await repo.listAll()).some(isEffectiveAdmin);
+    const stillOk = (await adminRepo.listAll()).some(isEffectiveAdmin);
     if (!stillOk) {
       logger.error({ deletedId: id }, "Last active admin was deleted in a race — the app may now have zero admins");
     }
