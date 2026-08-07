@@ -40,7 +40,16 @@
 html,
 body {
   overflow: hidden !important;
-  height: 100% !important;
+  /* `min-height`, NOT `height`. Pinning the body to 100% of a frame we size to
+     its content means Zoho's taller layout overflows a shorter box, and Catalyst
+     then scrolls the body itself when the OTP input takes focus (measured:
+     scrollTop 88 in a 280px frame). Everything above the field slid up out of
+     view — including the "<email> / Change" row, which is the only way back to
+     edit the address. Letting the body grow to its content leaves nothing to
+     scroll, so no row can be scrolled away or hidden under a pinned banner.
+     `min-height` keeps the background covering a short frame. */
+  height: auto !important;
+  min-height: 100% !important;
 }
 body::-webkit-scrollbar,
 html::-webkit-scrollbar {
