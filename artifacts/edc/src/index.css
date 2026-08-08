@@ -261,6 +261,129 @@
   }
 }
 
+/* ---------------------------------------------------------------------------
+   Login entrance (pages/login.tsx).
+
+   Ported from the sibling Customer-Insight-Engine ("Periscope") project, which
+   has run this on its /sign-in for months: index.css:359-375 (card) and
+   318-348 (mark). The overshoot lives entirely in the keyframe percentage
+   stops — cubic-bezier(0.16, 1, 0.3, 1) is a plain ease-out-expo with no
+   negative control points, so it paces movement between the stops without
+   adding or removing the bounce. Retiming these is safe; flattening the stops
+   is what would kill the effect.
+
+   These are the first @keyframes in this file. Everything else animated in the
+   app lives either in the mobile-only chunk (mobile/motion.css) or inside a
+   component's own injected <style> (edc-logo-mark.tsx). They are global here
+   because login.tsx is a plain page with no chunk of its own — but the `login-`
+   prefix keeps them unambiguously single-purpose.
+
+   The brand mark is NOT animated here: EdcLogoMark already owns its draw-on
+   trace/fill sequence and its own reduced-motion handling. login.tsx just
+   stops passing animated={false}.
+   --------------------------------------------------------------------------- */
+
+@keyframes login-card-enter {
+  0% {
+    opacity: 0;
+    transform: translateY(14px) scale(0.9);
+  }
+  55% {
+    opacity: 1;
+    transform: translateY(-3px) scale(1.03);
+  }
+  80% {
+    transform: translateY(1px) scale(0.985);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* The rail's overshoot is deliberately far smaller than the card's (1.006 vs
+   1.03). Seven elements each bouncing as hard as the card reads as jitter
+   rather than as one gesture travelling down the panel. */
+@keyframes login-rise {
+  0% {
+    opacity: 0;
+    transform: translateY(10px) scale(0.985);
+  }
+  62% {
+    opacity: 1;
+    transform: translateY(-2px) scale(1.006);
+  }
+  100% {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes login-glow-drift {
+  0%, 100% {
+    transform: none;
+  }
+  50% {
+    transform: translate(26px, 20px) scale(1.14);
+  }
+}
+
+/* letter-spacing is deliberately absent from the `to` stop. CSS fills a
+   missing endpoint from the element's own computed value, so this animates to
+   whatever tracking each lockup already sets — 0.14em on the rail, 0.16em on
+   the mobile restatement — instead of hardcoding one and fighting the other. */
+@keyframes login-wordmark {
+  from {
+    opacity: 0;
+    letter-spacing: 0.5em;
+    filter: blur(2px);
+  }
+  to {
+    opacity: 1;
+    filter: none;
+  }
+}
+
+@keyframes login-fade {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+.login-card-enter {
+  animation: login-card-enter 600ms cubic-bezier(0.16, 1, 0.3, 1) 180ms both;
+}
+.login-rise {
+  animation: login-rise 520ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation-delay: calc(250ms + var(--j, 0) * 80ms);
+}
+.login-wordmark {
+  animation: login-wordmark 620ms ease-out 620ms both;
+}
+.login-glow {
+  animation: login-glow-drift 18s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* The glow is the only infinite animation on this page, and it is REMOVED
+     rather than left to the global clamp above. That clamp clips a loop to a
+     single 0.01ms iteration, which is not a stop — it is an instantaneous jump
+     to scale(1.14) and back, i.e. a visible pop on the exact screen where
+     someone asked for less movement. mobile.css:402 makes the same call for
+     its shimmer, and for the same reason. */
+  .login-glow {
+    animation: none;
+  }
+  /* The rest degrade to a plain fade. The global clamp will shorten these to
+     0.01ms anyway; naming a fade keeps the intent explicit and keeps the
+     end state (visible) correct if that clamp is ever narrowed. */
+  .login-card-enter,
+  .login-rise,
+  .login-wordmark {
+    animation: login-fade 240ms ease both;
+    animation-delay: 0s;
+  }
+}
+
 /* Safe-area utilities. Needed because the installed iOS PWA declares
    apple-mobile-web-app-status-bar-style=black-translucent, which draws page
    content under the notch and the home indicator. index.html already sets

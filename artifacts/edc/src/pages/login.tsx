@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
 import { AlertTriangle, Gauge, Layers, Presentation } from "lucide-react";
 import { EdcLogoMark } from "@/components/edc-logo-mark";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -30,7 +30,25 @@ const SHELL_BG = "hsl(220 10% 8%)";
 const RAIL_BORDER = "hsl(220 10% 20%)"; // --border
 const CARD_BG = "hsl(220 10% 12%)"; // --card
 const CARD_BORDER = "hsl(220 10% 20%)";
-const ACCENT = "hsl(222 90% 67%)"; // --primary
+// Bare HSL triple, not an hsl() string: <EdcLogoMark /> paints itself from
+// `hsl(var(--primary))` rather than a prop, so the only way to hand it this
+// page's accent is to redeclare the token on an ancestor. Without that it
+// resolves --primary from the cascade — 222 90% 55% under :root — and a
+// light-mode visitor gets a noticeably darker mark sitting next to bullets and
+// a glow that are hardcoded to the .dark value. Invisible while the mark was
+// static; not invisible now that it draws itself in as the page's focal point.
+const ACCENT_HSL = "222 90% 67%"; // --primary, .dark
+const ACCENT = `hsl(${ACCENT_HSL})`;
+
+// Both lockups scope the accent token for the mark. Typed loosely because
+// React's CSSProperties has no index signature for custom properties.
+const ACCENT_SCOPE = { "--primary": ACCENT_HSL } as CSSProperties;
+
+// The mark's own draw-on sequence (edc-logo-mark.tsx) runs 3.22s at 1x, which
+// is splash-screen pacing. Halving it lands the settle at ~1.61s, just after
+// the rail cascade's last item, so the whole page arrives as one gesture
+// instead of the lockup still animating under a form you can already type in.
+const LOGO_TIME_SCALE = 2;
 
 // Each names something the product actually does, in the vocabulary
 // docs/glossary.md insists on (technical gate, pattern alert, Executive
@@ -155,10 +173,12 @@ export default function Login() {
         className="relative hidden flex-col justify-between overflow-hidden border-r px-12 py-12 lg:flex lg:w-[44%]"
         style={{ borderColor: RAIL_BORDER }}
       >
-        {/* Accent bleed, off the top-left corner. */}
+        {/* Accent bleed, off the top-left corner. The only perpetual motion on
+            the page — an 18s drift, killed outright (not clamped) under
+            prefers-reduced-motion; see index.css's login-glow rules. */}
         <div
           aria-hidden="true"
-          className="pointer-events-none absolute -left-40 -top-40 h-[560px] w-[560px] rounded-full opacity-20"
+          className="login-glow pointer-events-none absolute -left-40 -top-40 h-[560px] w-[560px] rounded-full opacity-20"
           style={{ background: `radial-gradient(circle, ${ACCENT} 0%, transparent 70%)` }}
         />
         {/* Dot grid — the only texture on the page; keeps the rail from reading
@@ -172,26 +192,44 @@ export default function Login() {
           }}
         />
 
-        <div className="relative flex items-center gap-3 text-white">
-          <EdcLogoMark size={40} animated={false} />
+        <div className="relative flex items-center gap-3 text-white" style={ACCENT_SCOPE}>
+          <EdcLogoMark size={40} timeScale={LOGO_TIME_SCALE} />
           {/* Uppercase here is the logotype, not a UI label. */}
-          <span className="text-sm font-bold uppercase tracking-[0.14em]">Enterprise Deal Commander</span>
+          <span className="login-wordmark text-sm font-bold uppercase tracking-[0.14em]">
+            Enterprise Deal Commander
+          </span>
         </div>
 
+        {/* --j drives the cascade's stagger (index.css: 250ms + j * 80ms).
+            The indices are the reading order of the panel, so the wave walks
+            the value proposition top-to-bottom and hands off to the card. */}
         <div className="relative max-w-sm">
-          <p className="mb-4 text-[11px] font-bold uppercase tracking-[0.14em] text-white/40">
+          <p
+            className="login-rise mb-4 text-[11px] font-bold uppercase tracking-[0.14em] text-white/40"
+            style={{ "--j": 0 } as CSSProperties}
+          >
             Presales Command Cockpit
           </p>
-          <h1 className="mb-4 text-pretty text-4xl font-bold leading-[1.15] tracking-tight text-white">
+          <h1
+            className="login-rise mb-4 text-pretty text-4xl font-bold leading-[1.15] tracking-tight text-white"
+            style={{ "--j": 1 } as CSSProperties}
+          >
             Technical reality, tracked as rigorously as revenue.
           </h1>
-          <p className="text-sm leading-relaxed text-white/60">
+          <p
+            className="login-rise text-sm leading-relaxed text-white/60"
+            style={{ "--j": 2 } as CSSProperties}
+          >
             Large TCV pipelines fail from a disconnect between commercial progression and technical
             validation — not from a lack of activity.
           </p>
           <ul className="mt-7 space-y-4">
-            {HIGHLIGHTS.map(({ icon: Icon, text }) => (
-              <li key={text} className="flex items-start gap-3 text-sm text-white/70">
+            {HIGHLIGHTS.map(({ icon: Icon, text }, i) => (
+              <li
+                key={text}
+                className="login-rise flex items-start gap-3 text-sm text-white/70"
+                style={{ "--j": 3 + i } as CSSProperties}
+              >
                 <Icon className="mt-0.5 h-4 w-4 shrink-0" style={{ color: ACCENT }} aria-hidden="true" />
                 <span>{text}</span>
               </li>
@@ -199,7 +237,10 @@ export default function Login() {
           </ul>
         </div>
 
-        <p className="relative text-[10.5px] uppercase tracking-wider text-white/30">
+        <p
+          className="login-rise relative text-[10.5px] uppercase tracking-wider text-white/30"
+          style={{ "--j": 3 + HIGHLIGHTS.length } as CSSProperties}
+        >
           Internal use only &middot; ManageEngine Enterprise Deal Commander
         </p>
       </aside>
@@ -215,16 +256,28 @@ export default function Login() {
         }}
       >
         <div className="w-full max-w-[400px]">
-          {/* The rail's lockup is gone below lg, so restate it above the card. */}
-          <div className="mb-8 flex flex-col items-center gap-3 text-center text-white lg:hidden">
-            <EdcLogoMark size={56} animated={false} />
-            <span className="text-xs font-bold uppercase leading-snug tracking-[0.16em]">
+          {/* The rail's lockup is gone below lg, so restate it above the card.
+              This is also the only piece of the entrance that survives on a
+              phone — the rail, its glow and the whole cascade are display:none
+              there — which is why the mark animates rather than just fading. */}
+          <div
+            className="mb-8 flex flex-col items-center gap-3 text-center text-white lg:hidden"
+            style={ACCENT_SCOPE}
+          >
+            <EdcLogoMark size={56} timeScale={LOGO_TIME_SCALE} />
+            <span className="login-wordmark text-xs font-bold uppercase leading-snug tracking-[0.16em]">
               Enterprise Deal Commander
             </span>
           </div>
 
+          {/* Transform-only, deliberately. This card wraps Catalyst's
+              cross-origin auth iframe, and it also collapses from the 340px
+              skeleton reservation to the real frame height once Catalyst
+              reports in. Animating height here would put that collapse and
+              this spring on the same property; keeping the spring on transform
+              leaves them as two separate beats. */}
           <div
-            className="rounded-2xl border px-7 py-7 shadow-2xl"
+            className="login-card-enter rounded-2xl border px-7 py-7 shadow-2xl"
             style={{ background: CARD_BG, borderColor: CARD_BORDER }}
           >
             <div className="mb-6">
