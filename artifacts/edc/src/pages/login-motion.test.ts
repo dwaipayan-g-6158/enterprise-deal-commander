@@ -57,7 +57,7 @@ function ruleBody(css: string, selector: string): string | null {
 }
 
 const RM = reducedMotionBlocks(CSS).join("\n");
-const ANIMATED_CLASSES = [".login-card-enter", ".login-rise", ".login-wordmark", ".login-glow"];
+const ANIMATED_CLASSES = [".login-card-enter", ".login-rise", ".login-blur-word", ".login-glow"];
 
 describe("login entrance — index.css", () => {
   it("defines every class the login page applies", () => {
@@ -121,7 +121,22 @@ describe("login entrance — login.tsx", () => {
   it("applies the entrance classes to the right elements", () => {
     expect(LOGIN).toContain("login-glow pointer-events-none");
     expect(LOGIN).toContain("login-card-enter rounded-2xl");
-    expect(LOGIN).toMatch(/login-wordmark[\s\S]*login-wordmark/); // rail + mobile lockup
+    expect(LOGIN).toMatch(/<Wordmark[\s\S]*<Wordmark/); // rail + mobile lockup
+  });
+
+  it("keeps the blurred words inline-block", () => {
+    // filter and transform are both no-ops on a non-replaced inline box, so
+    // dropping this turns the whole effect into a plain fade — silently, with
+    // no error anywhere. And `block` would stack the three words vertically.
+    const rule = ruleBody(CSS, ".login-blur-word") ?? "";
+    expect(rule).toMatch(/display:\s*inline-block/);
+  });
+
+  it("blurs per word, not per character", () => {
+    // At 0.14em tracking the letters are already far apart; per-character blur
+    // reads as a glitch rather than as type resolving.
+    expect(LOGIN).toContain('WORDMARK.split(" ")');
+    expect(LOGIN).not.toContain('.split("")');
   });
 
   it("staggers the rail with a contiguous --j sequence starting at 0", () => {

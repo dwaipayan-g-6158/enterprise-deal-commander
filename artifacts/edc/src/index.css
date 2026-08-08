@@ -328,19 +328,27 @@
   }
 }
 
-/* letter-spacing is deliberately absent from the `to` stop. CSS fills a
-   missing endpoint from the element's own computed value, so this animates to
-   whatever tracking each lockup already sets — 0.14em on the rail, 0.16em on
-   the mobile restatement — instead of hardcoding one and fighting the other. */
-@keyframes login-wordmark {
+/* Wordmark, resolving out of focus one word at a time.
+   Modelled on shadcn.io's Blur Text, whose measured initial state is
+   blur(10px) + translateY(-50px) + opacity 0 over ~800ms with a ~150ms
+   per-word stagger. The distances are scaled here rather than copied: that
+   reference animates a large display heading, and 10px of blur on 14px
+   uppercase type is unreadable mud rather than a reveal, while -50px would
+   launch the lockup clear out of the rail.
+
+   Everything animated is compositor-friendly. The previous version tweened
+   letter-spacing, which reflows the text on every frame — this is the reason
+   to prefer blur/transform, not just the look. */
+@keyframes login-blur-word {
   from {
     opacity: 0;
-    letter-spacing: 0.5em;
-    filter: blur(2px);
+    filter: blur(5px);
+    transform: translateY(-10px);
   }
   to {
     opacity: 1;
-    filter: none;
+    filter: blur(0);
+    transform: none;
   }
 }
 
@@ -356,8 +364,14 @@
   animation: login-rise 520ms cubic-bezier(0.16, 1, 0.3, 1) both;
   animation-delay: calc(250ms + var(--j, 0) * 80ms);
 }
-.login-wordmark {
-  animation: login-wordmark 620ms ease-out 620ms both;
+/* inline-block is load-bearing: filter and transform do not apply to a
+   non-replaced inline box, so as a plain inline span the words would fade but
+   never blur or move. It also has to stay inline-*block* rather than block, or
+   the three words stack vertically instead of reading as one lockup. */
+.login-blur-word {
+  display: inline-block;
+  animation: login-blur-word 700ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation-delay: calc(620ms + var(--w, 0) * 110ms);
 }
 .login-glow {
   animation: login-glow-drift 18s ease-in-out infinite;
@@ -378,7 +392,7 @@
      end state (visible) correct if that clamp is ever narrowed. */
   .login-card-enter,
   .login-rise,
-  .login-wordmark {
+  .login-blur-word {
     animation: login-fade 240ms ease both;
     animation-delay: 0s;
   }

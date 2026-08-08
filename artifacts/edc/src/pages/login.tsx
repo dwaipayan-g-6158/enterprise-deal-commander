@@ -50,6 +50,37 @@ const ACCENT_SCOPE = { "--primary": ACCENT_HSL } as CSSProperties;
 // instead of the lockup still animating under a form you can already type in.
 const LOGO_TIME_SCALE = 2;
 
+const WORDMARK = "Enterprise Deal Commander";
+
+/**
+ * The logotype, resolving out of focus one word at a time (index.css's
+ * .login-blur-word).
+ *
+ * Split per word rather than per character: at 0.14em tracking the letters are
+ * already spaced apart, so blurring them individually reads as a glitch rather
+ * than as type coming into focus.
+ *
+ * The spaces are real text nodes between the spans, not padding or a flex gap.
+ * That keeps the words wrapping and spacing exactly as normal text — which the
+ * mobile lockup depends on, since it restates the same three words in a much
+ * narrower column.
+ */
+function Wordmark({ className }: { className?: string }) {
+  const words = WORDMARK.split(" ");
+  return (
+    <span className={className}>
+      {words.map((word, i) => (
+        <span key={word}>
+          <span className="login-blur-word" style={{ "--w": i } as CSSProperties}>
+            {word}
+          </span>
+          {i < words.length - 1 ? " " : null}
+        </span>
+      ))}
+    </span>
+  );
+}
+
 // Each names something the product actually does, in the vocabulary
 // docs/glossary.md insists on (technical gate, pattern alert, Executive
 // Briefing). No pattern count: the docs state 12, 15 and 16 in different
@@ -192,12 +223,15 @@ export default function Login() {
           }}
         />
 
-        <div className="relative flex items-center gap-3 text-white" style={ACCENT_SCOPE}>
-          <EdcLogoMark size={40} timeScale={LOGO_TIME_SCALE} />
-          {/* Uppercase here is the logotype, not a UI label. */}
-          <span className="login-wordmark text-sm font-bold uppercase tracking-[0.14em]">
-            Enterprise Deal Commander
-          </span>
+        {/* The mark is sized against the logotype, not chosen independently: at
+            40px beside 18px caps it read as an undersized bullet, and the
+            draw-on was too fine to register at that scale. */}
+        <div className="relative flex items-center gap-3.5 text-white" style={ACCENT_SCOPE}>
+          <EdcLogoMark size={52} timeScale={LOGO_TIME_SCALE} />
+          {/* Uppercase here is the logotype, not a UI label. Tracking eases off
+              as the size goes up — 0.14em was set for 14px, and wide tracking
+              on large caps reads as stretched rather than as a lockup. */}
+          <Wordmark className="text-lg font-bold uppercase tracking-[0.11em]" />
         </div>
 
         {/* --j drives the cascade's stagger (index.css: 250ms + j * 80ms).
@@ -265,9 +299,7 @@ export default function Login() {
             style={ACCENT_SCOPE}
           >
             <EdcLogoMark size={56} timeScale={LOGO_TIME_SCALE} />
-            <span className="login-wordmark text-xs font-bold uppercase leading-snug tracking-[0.16em]">
-              Enterprise Deal Commander
-            </span>
+            <Wordmark className="text-sm font-bold uppercase leading-snug tracking-[0.13em]" />
           </div>
 
           {/* Transform-only, deliberately. This card wraps Catalyst's
