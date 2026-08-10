@@ -89,7 +89,8 @@ Every one of these was verified to fail closed by planting a violation.
 | `theme-color.test.ts` | The OS chrome reads the token, never the transitioning background |
 | `tokens.test.ts`, `type-usage.test.ts`, `deps.test.ts`, `class-scan.ts` | Contrast, type-rung collisions, banned imports, thin-glass misuse |
 
-**74 test files, 1026 tests.**
+**74 test files, 1026 tests** at the end of the build phase; 76 / 1041 after the
+deployed sweep added the guards below.
 
 ## Bugs the guards caught during the work
 
@@ -135,17 +136,64 @@ All additive or behaviour-preserving.
 | `src/components/theme-color-sync.tsx` | Exported `THEME_COLOR` and `themeColorTag()` so the mobile shell writes the same tag |
 | `vite.config.ts` | Manifest shortcuts corrected and extended |
 
-## Still to verify on the deployed app
+## Verified on the deployed app
 
-Local sign-in is impossible — `/__catalyst/sdk/init.js` is gateway-only — so
-everything behind auth needs the deployed build. Outstanding:
+Local sign-in is impossible — `/__catalyst/sdk/init.js` is gateway-only — so this
+had to wait for a deploy. Driven signed in at 390px against
+`index-DWQAqhM4.js`.
 
-1. Sweep every screen at 375 / 390 / 430px, light and dark, all four time bands.
-2. Offline write: copy must say *not saved*, never *queued*.
-3. Reader 403: no write controls render.
-4. 409 override: the guardrail branch, and that a typed reason survives a failure.
-5. Back gesture: Android predictive back and iOS edge swipe both animate and
-   restore scroll.
+| Check | Result |
+|---|---|
+| Offline write | Says **"Not saved — you're offline"**; the words *queued* and *will save automatically* never appear, and the optimistic patch rolls back |
+| 409 override | Guardrail renders in place with tappable pattern rows, "Fix it first" primary, override behind a disclosure, 10-character gate live-counted |
+| Back gesture | popstate back runs a view transition and restores scroll exactly (420 → push → back → 420) |
+| theme-color | Resolves to `#0b0c14`, the shell's actual night-band canvas |
+
+**Four defects that only the running app could show** — each fixed, each with a
+guard that was verified to fail closed by planting the regression.
+
+1. **`ListRow`'s content column could not shrink.** shadcn's `ItemContent` is
+   `flex flex-1 flex-col` and sets no min-width, so it keeps a flex item's
+   default `min-width: auto` and cannot go below its min-content width — which,
+   for a `nowrap` title, is the whole title. Measured at 390px on the deal
+   Brief: the column grew to **1003px** and the coaching sentences painted off
+   the right edge of the card and the screen. On the Command Center the row
+   wrapped instead, dropping the icon and the trailing destination onto their
+   own lines — 3 of 3 rows. `truncate` on the title rescued neither: text-overflow
+   only ellipsises a box something has constrained.
+2. **`theme-color` was written to a tag the browser never reads.** index.html
+   ships a media-scoped light/dark pair for first paint; both syncs wrote a
+   third, unscoped tag on the belief — written into a comment — that being last
+   in the document made it win. The spec takes the *first* candidate in tree
+   order whose media matches, and the pair covers both schemes exhaustively.
+   Measured in dark/night: the shell had correctly computed `#0b0c14` while the
+   resolvable tag was the static `#15171a`. This was a **pre-existing desktop
+   bug** that the mobile component inherited.
+3. **Forward navigation recorded the wrong scroll position.** `aroundNav` called
+   `rememberScroll` in the after-commit callback — the same slot
+   `back-gesture.ts` uses to *restore* — so the shared container had already
+   moved and every push stored 0 against the entry it was leaving. Back always
+   landed at the top. `back-gesture.ts` had it right and says why; the two paths
+   simply disagreed.
+4. **The 409 guardrail rendered below the fold**, putting both its actions in the
+   band the Commander capsule floats in. A hit test at the centre of "Advance
+   anyway" returned the Intelligence tab. The first fix aligned to the scroll
+   container's bottom edge — which is *behind* the tab bar — so it made the block
+   visible and still untappable; the second subtracts the scroller's own
+   `padding-bottom`.
+
+**76 test files, 1041 tests.**
+
+### Still unverified
+
+- **Reader 403.** Needs a second account with the reader role; the sweep ran as
+  an admin. The server-side gate is covered by `routes/index.rbac.test.ts`'s
+  exhaustive route walk, so what is untested is only whether the *mobile* screens
+  hide their controls.
+- **Real iOS and Android devices.** The sweep ran in emulated Chromium, which
+  cannot show iOS edge-swipe, Android predictive back, or standalone-mode chrome.
+- **375px and 430px, light mode, and the other three time bands.** Only 390px
+  dark/night was swept.
 
 **Screenshots: never capture Settings → Users.** `docs/assets/` is a public
 repository and that screen lists real names and email addresses.

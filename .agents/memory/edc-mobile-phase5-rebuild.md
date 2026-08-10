@@ -1,7 +1,7 @@
 # Mobile PWA Phase 5 — the visible layer rebuilt
 
 Full write-up: `docs/changes/2026-08-11-mobile-phase5-rebuild.md`.
-Branch `feat/mobile-phase5-rebuild`, 13 commits. 74 test files / 1026 tests.
+Branch `feat/mobile-phase5-rebuild`, 15 commits. 76 test files / 1041 tests.
 
 Four tabs (Command · Deals · Intelligence · Memory) for all seven desktop areas.
 Portfolio and Autopsy stopped being "needs desktop" stubs. Deal detail went from
@@ -56,6 +56,47 @@ bans `useMutation` everywhere), `nav/routes` (table ⟷ `mobile-app.tsx`
 agreement, literal-before-param), `screens/deal/panels` (which files may import
 a write hook), `manifest`, `theme-color`, `tokens`, `type-usage`, `deps`.
 
-**Not yet verified:** everything behind auth. Local sign-in is impossible
-(`/__catalyst/sdk/init.js` is gateway-only), so the offline-write copy, reader
-403, 409 override and back-gesture checks all need the deployed build.
+## What the deployed sweep found (2026-08-11)
+
+Offline copy, the 409 branch and the animated back gesture all behaved as
+designed. Four defects did not, and none was reachable from a unit test:
+
+**A flex child with no `min-w-0` does not truncate — it BURSTS.** shadcn's
+`ItemContent` sets no min-width, so it keeps `min-width: auto` and cannot shrink
+below its min-content width; with a `nowrap` title that is the entire title.
+Measured 1003px inside a 390px phone. `truncate` on the title is inert, because
+text-overflow only ellipsises a constrained box. If `Item` can wrap, you get a
+mangled row instead of overflow — same cause, different symptom.
+
+**`theme-color` is resolved FIRST-match-in-tree-order, not last.** index.html's
+media-scoped light/dark pair precedes any unscoped tag JS appends, and between
+them they always match, so the unscoped tag can never win. Both syncs had been
+inert since the pair was added — a desktop bug mobile inherited. Fix: drop the
+scoped pair once JS runs (correct under either ordering rule).
+
+**Two navigation paths captured scroll in different places.** `aroundNav`
+recorded it in the after-commit callback, where the shared container has already
+moved to the incoming screen, so every push stored 0 for the outgoing entry.
+`back-gesture.ts` recorded before moving and was right. Back always landed at
+the top.
+
+**"Reveal it in place" must clear the floating chrome, not the container.**
+Aligning a revealed block's bottom to the scroller's bottom edge puts it behind
+the tab bar and capsule — on screen, still untappable. A hit test at the centre
+of "Advance anyway" returned the Intelligence tab. Subtract the scroller's own
+`padding-bottom`, which is what reserves that band.
+
+**Verify the served bundle hash before trusting any measurement.** The service
+worker re-registered and replayed the previous build; a check that reads the
+script filename first caught it and would otherwise have produced a false
+"the fix didn't work".
+
+**CDP `networkConditions: Offline` does NOT set `navigator.onLine`.** The app
+concluded it was online with a failing server and bounced to /login, which looks
+exactly like an offline-resilience bug and is not one. Patch `navigator.onLine`
+and dispatch the `offline` event as well. Also: `emulate` REPLACES the whole
+emulation state, so passing only `networkConditions` silently drops the viewport
+and the desktop shell renders instead.
+
+**Still unverified:** reader 403 (needs a reader account), real iOS/Android
+devices, and 375/430px + light mode + the other three time bands.
