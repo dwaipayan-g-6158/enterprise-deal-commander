@@ -13,6 +13,7 @@ import { useAppResumeRefetch } from "@/mobile/hooks/use-app-resume-refetch";
 import { CommanderProvider } from "@/mobile/commander/commander-context";
 import { CommanderButton } from "@/mobile/commander/commander-button";
 import { CommanderSheet } from "@/mobile/commander/commander-sheet";
+import { WriteStatusProvider } from "@/mobile/write/write-status-context";
 
 const ScrollContainerContext = createContext<RefObject<HTMLElement | null> | null>(null);
 
@@ -52,6 +53,18 @@ export function useShellScrollRef(): RefObject<HTMLElement | null> {
  * instead of hanging the tab bar below the fold.
  */
 export function MShell({ children }: { children: ReactNode }) {
+  // WriteStatusProvider wraps rather than nests, because MShellFrame calls
+  // useAppResumeRefetch — which reads the in-flight counter to avoid reverting
+  // an optimistic patch — and a hook cannot see a provider its own component
+  // renders.
+  return (
+    <WriteStatusProvider>
+      <MShellFrame>{children}</MShellFrame>
+    </WriteStatusProvider>
+  );
+}
+
+function MShellFrame({ children }: { children: ReactNode }) {
   const scrollRef = useRef<HTMLElement | null>(null);
   const frameRef = useRef<HTMLDivElement | null>(null);
   useAppResumeRefetch();

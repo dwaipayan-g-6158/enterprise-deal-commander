@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import { useWriteStatusOptional } from "@/mobile/write/write-status-context";
 
 /**
  * Refetch stale visible data when the app comes back to the foreground.
@@ -15,6 +16,7 @@ import { useQueryClient } from "@tanstack/react-query";
  */
 export function useAppResumeRefetch(): void {
   const queryClient = useQueryClient();
+  const writeStatus = useWriteStatusOptional();
 
   useEffect(() => {
     const onVisibilityChange = () => {
@@ -22,10 +24,16 @@ export function useAppResumeRefetch(): void {
       // Offline, a refetch can only fail; the service worker is already
       // serving the last-synced reads.
       if (typeof navigator !== "undefined" && !navigator.onLine) return;
+      // A write is in flight, and a resume refetch would land on top of its
+      // optimistic patch and silently revert it. This is not a rare race: it is
+      // exactly what happens when someone taps and the phone locks, which on a
+      // field app is most taps. The write's own invalidation will refresh
+      // whatever this would have.
+      if (writeStatus?.hasWritesInFlight) return;
       void queryClient.refetchQueries({ type: "active", stale: true });
     };
 
     document.addEventListener("visibilitychange", onVisibilityChange);
     return () => document.removeEventListener("visibilitychange", onVisibilityChange);
-  }, [queryClient]);
+  }, [queryClient, writeStatus]);
 }
