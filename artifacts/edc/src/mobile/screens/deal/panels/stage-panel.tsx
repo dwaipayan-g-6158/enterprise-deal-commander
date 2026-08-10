@@ -227,11 +227,18 @@ function StageRail({ stages, currentName }: { stages: BoardStage[]; currentName:
  * returned the Intelligence tab underneath it, which would have left the deal
  * entirely.
  *
- * `scrollIntoView` is not used: its `block: "end"` aligns against the
- * scrollport's PADDING box, and this scroller carries `pb-tabbar` precisely so
- * content can clear the tab bar — so "end" would stop short of clearing it. The
- * offset is computed against the container instead, and clamped, so a block that
- * already fits does not move the screen at all.
+ * The target is NOT the container's bottom edge. That edge sits behind the tab
+ * bar and the Commander capsule, so aligning to it leaves the block technically
+ * on screen and still untappable — measured, after a first attempt did exactly
+ * that: the section fit the viewport and a hit test on "Advance anyway" still
+ * returned the capsule, and one on "Cancel" still returned the Intelligence tab.
+ *
+ * The scroller's own `padding-bottom` (`pb-tabbar`) is the app's declaration of
+ * how much of its bottom edge is spoken for, so that is what gets subtracted —
+ * reading it rather than hard-coding a pixel count keeps this correct if the
+ * chrome's height ever changes. `scrollIntoView` cannot express this: its
+ * `block: "end"` aligns against the scrollport's padding box, which is the very
+ * edge that is occluded.
  */
 function useRevealedBelowFold<T extends HTMLElement>() {
   const ref = useRef<T>(null);
@@ -242,7 +249,9 @@ function useRevealedBelowFold<T extends HTMLElement>() {
     const scroller = scrollRef.current;
     if (!el || !scroller) return;
 
-    const overshoot = el.getBoundingClientRect().bottom - scroller.getBoundingClientRect().bottom;
+    const reserved = Number.parseFloat(getComputedStyle(scroller).paddingBottom) || 0;
+    const usableBottom = scroller.getBoundingClientRect().bottom - reserved;
+    const overshoot = el.getBoundingClientRect().bottom - usableBottom;
     if (overshoot <= 0) return;
 
     scroller.scrollTo({
