@@ -8,7 +8,7 @@ import { OUTCOME_CLASS } from "@/lib/semantic-colors";
 import { normalizeOutcome, OUTCOME_LABEL } from "@/mobile/lib/outcome";
 import { armSharedCard } from "@/mobile/lib/shared-card";
 import { useDebouncedValue } from "@/mobile/hooks/use-debounced-value";
-import { MobileHeader } from "@/mobile/shell/mobile-header";
+import { MNavBar } from "@/mobile/shell/m-nav-bar";
 import { OutcomePill } from "@/mobile/components/badges";
 import { SegmentChips, type Segment } from "@/mobile/components/segment-chips";
 import { Shimmer } from "@/mobile/components/shimmer";
@@ -54,7 +54,7 @@ export function MemoryScreen() {
 
   return (
     <>
-      <MobileHeader
+      <MNavBar
         title="Deal Memory"
         subtitle={isLoading ? undefined : `${results.length} archived deals`}
       >
@@ -64,7 +64,7 @@ export function MemoryScreen() {
           onChange={(id) => setOutcome(id)}
           label="Filter by outcome"
         />
-      </MobileHeader>
+      </MNavBar>
 
       {/* Pull-to-refresh here as on the other three tabs. Memory was the one
           screen without it, and a gesture that works everywhere except one

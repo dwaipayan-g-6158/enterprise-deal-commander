@@ -11,7 +11,7 @@ import { WifiOff } from "lucide-react";
  * — measured at a 20px overlap. It is desktop-only now, and this takes over
  * below `md`.
  *
- * Rendered inside `MobileHeader` rather than as a sibling of it, for two
+ * Rendered inside `MNavBar` rather than as a sibling of it, for two
  * reasons. The header already owns `pt-safe`, so a strip above it would either
  * double the status-bar inset or have to negotiate for it. And the header
  * carries `m-vt-navbar`, which lifts it out of the route transition's snapshot

@@ -11,7 +11,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 import { OUTCOME_CLASS } from "@/lib/semantic-colors";
 import { TONE_SLIPPING } from "@/mobile/lib/tones";
-import { MobileHeader } from "@/mobile/shell/mobile-header";
+import { MNavBar } from "@/mobile/shell/m-nav-bar";
 import { MobileCard, CardHeader } from "@/mobile/components/mobile-card";
 import { ListRow } from "@/mobile/components/list-row";
 import { Shimmer } from "@/mobile/components/shimmer";
@@ -78,7 +78,7 @@ export function AnalyticsScreen() {
 
   return (
     <Tabs defaultValue="forecast">
-      <MobileHeader title="Analytics">
+      <MNavBar title="Analytics">
         <div className="px-4 pb-3">
           <TabsList className="grid h-12 w-full grid-cols-2 rounded-full p-1">
             <TabsTrigger value="forecast" className="m-label h-full rounded-full">
@@ -89,7 +89,7 @@ export function AnalyticsScreen() {
             </TabsTrigger>
           </TabsList>
         </div>
-      </MobileHeader>
+      </MNavBar>
 
       <PullToRefresh onRefresh={refresh}>
         <TabsContent value="forecast" className="mt-0 space-y-3 p-4">

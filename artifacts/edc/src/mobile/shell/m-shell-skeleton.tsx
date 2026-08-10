@@ -20,7 +20,7 @@ export function MobileShellSkeleton() {
 
       <header className="pt-safe shrink-0 border-b border-border bg-card">
         <div className="flex h-14 items-center gap-2 px-4">
-          {/* The real mark, at the size MobileHeader's leading slot renders it,
+          {/* The real mark, at the size MNavBar's leading slot renders it,
               so the handover to the live shell moves nothing. */}
           <EdcLogoMark size={24} animated={false} />
           <Skeleton className="h-4 w-36" />

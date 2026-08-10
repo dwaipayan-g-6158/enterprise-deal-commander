@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { ListTree, Search, SlidersHorizontal, Target, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useShellScrollRef } from "@/mobile/shell/mobile-shell";
+import { useShellScrollRef } from "@/mobile/shell/m-shell";
 import { useCommander } from "@/mobile/commander/commander-context";
 
 /** Scroll travel that has to accumulate before the capsule changes state. */

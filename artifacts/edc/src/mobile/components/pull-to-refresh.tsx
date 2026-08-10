@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import { haptic } from "@/mobile/lib/haptics";
-import { useShellScrollRef } from "@/mobile/shell/mobile-shell";
+import { useShellScrollRef } from "@/mobile/shell/m-shell";
 
 /** Pull distance, after resistance, that arms the refresh. */
 const TRIGGER_PX = 64;

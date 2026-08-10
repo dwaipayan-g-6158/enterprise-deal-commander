@@ -10,7 +10,7 @@ import {
 import { useMemo, useState } from "react";
 import { useJumpTargets } from "@/mobile/commander/use-jump-targets";
 import { sharedCardSeed } from "@/mobile/lib/shared-card";
-import { MobileHeader } from "@/mobile/shell/mobile-header";
+import { MNavBar } from "@/mobile/shell/m-nav-bar";
 import { Shimmer } from "@/mobile/components/shimmer";
 import { ErrorState } from "@/mobile/components/states";
 import { PullToRefresh } from "@/mobile/components/pull-to-refresh";
@@ -103,7 +103,7 @@ export function DealDetailScreen({ id }: { id: string }) {
   if (intelQuery.isError) {
     return (
       <>
-        <MobileHeader title="Deal" backHref="/deals" backLabel="Back to deals" />
+        <MNavBar title="Deal" backHref="/deals" backLabel="Back to deals" />
         <ErrorState
           title="Couldn't load this deal"
           body="It may have been archived, or the connection dropped. Go back and try again."
@@ -115,7 +115,7 @@ export function DealDetailScreen({ id }: { id: string }) {
   if (!intel) {
     return (
       <>
-        <MobileHeader
+        <MNavBar
           title={seed?.title ?? "Deal"}
           subtitle={seed?.eyebrow}
           backHref="/deals"
@@ -151,7 +151,7 @@ export function DealDetailScreen({ id }: { id: string }) {
 
   return (
     <>
-      <MobileHeader
+      <MNavBar
         title={intel.dealName}
         subtitle={intel.accountName}
         backHref="/deals"

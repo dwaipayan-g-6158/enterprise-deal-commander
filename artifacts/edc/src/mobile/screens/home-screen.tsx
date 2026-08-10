@@ -12,7 +12,7 @@ import { HEALTH_CLASS, HEALTH_SHORT_LABEL, type Health } from "@/lib/semantic-co
 import { EdcLogoMark } from "@/components/edc-logo-mark";
 import { alertBody } from "@/mobile/lib/alert-text";
 import { syncBadge } from "@/mobile/lib/app-badge";
-import { MobileHeader } from "@/mobile/shell/mobile-header";
+import { MNavBar } from "@/mobile/shell/m-nav-bar";
 import { MobileCard, CardHeader } from "@/mobile/components/mobile-card";
 import { ListRow } from "@/mobile/components/list-row";
 import { StatTile, DeltaLine } from "@/mobile/components/stat-tile";
@@ -75,7 +75,7 @@ export function HomeScreen() {
   if (summaryQuery.isError) {
     return (
       <>
-        <MobileHeader title="Command Center" leading={BRAND_MARK} />
+        <MNavBar title="Command Center" leading={BRAND_MARK} />
         <ErrorState
           title="Couldn't load the portfolio"
           body="The pipeline summary didn't come back. Pull down to try again."
@@ -92,7 +92,7 @@ export function HomeScreen() {
 
   return (
     <>
-      <MobileHeader
+      <MNavBar
         title="Command Center"
         leading={BRAND_MARK}
         subtitle={summary ? `${summary.totalDealsMonitored} deals monitored` : undefined}

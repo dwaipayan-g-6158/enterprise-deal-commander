@@ -12,7 +12,7 @@ import { cn } from "@/lib/utils";
 import { OUTCOME_CLASS } from "@/lib/semantic-colors";
 import { normalizeOutcome, OUTCOME_LABEL } from "@/mobile/lib/outcome";
 import { sharedCardSeed, useSharedCardStyle } from "@/mobile/lib/shared-card";
-import { MobileHeader } from "@/mobile/shell/mobile-header";
+import { MNavBar } from "@/mobile/shell/m-nav-bar";
 import { MobileCard, CardHeader } from "@/mobile/components/mobile-card";
 import { MetaChip, OutcomePill } from "@/mobile/components/badges";
 import { ListRow } from "@/mobile/components/list-row";
@@ -51,7 +51,7 @@ export function MemoryDetailScreen({ id }: { id: string }) {
   if (memoryQuery.isError) {
     return (
       <>
-        <MobileHeader title="Memory" backHref="/memory" backLabel="Back to memory" />
+        <MNavBar title="Memory" backHref="/memory" backLabel="Back to memory" />
         <ErrorState
           title="Couldn't load this record"
           body="It may have been removed. Go back and search again."
@@ -63,7 +63,7 @@ export function MemoryDetailScreen({ id }: { id: string }) {
   if (!memory) {
     return (
       <>
-        <MobileHeader
+        <MNavBar
           title={seed?.title ?? "Memory"}
           subtitle={seed?.eyebrow}
           backHref="/memory"
@@ -95,7 +95,7 @@ export function MemoryDetailScreen({ id }: { id: string }) {
 
   return (
     <>
-      <MobileHeader
+      <MNavBar
         title={memory.dealName}
         subtitle={memory.accountName}
         backHref="/memory"

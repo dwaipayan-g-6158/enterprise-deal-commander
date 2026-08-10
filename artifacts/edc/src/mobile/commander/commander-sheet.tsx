@@ -19,7 +19,7 @@ import {
   describeNlcConditions,
 } from "@/lib/nlc-filter";
 import { compactCurrency } from "@/lib/format";
-import { MOBILE_TABS } from "@/mobile/lib/mobile-nav";
+import { MOBILE_TABS } from "@/mobile/nav/mobile-nav";
 import { useCommander } from "@/mobile/commander/commander-context";
 import { SectionSheet } from "@/mobile/components/section-sheet";
 import { ListRow } from "@/mobile/components/list-row";

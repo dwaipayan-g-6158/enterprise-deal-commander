@@ -1,5 +1,5 @@
 import { useCallback, useSyncExternalStore, type CSSProperties } from "react";
-import { supportsViewTransitions } from "@/mobile/lib/view-transitions";
+import { supportsViewTransitions } from "./view-transition-support";
 
 /**
  * The card-to-detail morph.

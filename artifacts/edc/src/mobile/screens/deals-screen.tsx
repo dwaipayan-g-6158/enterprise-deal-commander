@@ -6,7 +6,7 @@ import { useRosterData } from "@/components/roster/hooks/use-roster-data";
 import { terminalOutcome } from "@/components/roster/model/board";
 import type { RosterRow } from "@/components/roster/model/roster-types";
 import { armSharedCard } from "@/mobile/lib/shared-card";
-import { MobileHeader } from "@/mobile/shell/mobile-header";
+import { MNavBar } from "@/mobile/shell/m-nav-bar";
 import { SegmentChips, type Segment } from "@/mobile/components/segment-chips";
 import { HealthDot, MetaChip, VelocityMark } from "@/mobile/components/badges";
 import { Shimmer } from "@/mobile/components/shimmer";
@@ -108,7 +108,7 @@ export function DealsScreen() {
 
   return (
     <>
-      <MobileHeader
+      <MNavBar
         title="Deals"
         subtitle={
           isLoading ? undefined : `${counts.all} active · ${compactCurrency(pipeline)} pipeline`
@@ -123,7 +123,7 @@ export function DealsScreen() {
           onChange={(id) => setSegment(id)}
           label="Filter deals"
         />
-      </MobileHeader>
+      </MNavBar>
 
       <PullToRefresh onRefresh={refetch}>
         <div className="space-y-3 p-4">
