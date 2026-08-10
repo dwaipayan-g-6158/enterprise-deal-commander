@@ -1,7 +1,7 @@
 # Mobile PWA Phase 5 — the visible layer rebuilt
 
 Full write-up: `docs/changes/2026-08-11-mobile-phase5-rebuild.md`.
-Branch `feat/mobile-phase5-rebuild`, 15 commits. 76 test files / 1041 tests.
+Branch `feat/mobile-phase5-rebuild`, 18 commits. 76 test files / 1046 tests.
 
 Four tabs (Command · Deals · Intelligence · Memory) for all seven desktop areas.
 Portfolio and Autopsy stopped being "needs desktop" stubs. Deal detail went from
@@ -98,5 +98,19 @@ and dispatch the `offline` event as well. Also: `emulate` REPLACES the whole
 emulation state, so passing only `networkConditions` silently drops the viewport
 and the desktop shell renders instead.
 
-**Still unverified:** reader 403 (needs a reader account), real iOS/Android
-devices, and 375/430px + light mode + the other three time bands.
+**Floating chrome may cover prose, never a control.** `pb-tabbar` reserves the
+band only at MAX scroll. A screen a little taller than the usable area renders
+its tail under the bar at rest, and if that tail is interactive it is worse than
+hidden — it is mis-tappable. `/account` put Sign out 28px under the tab bar with
+the capsule over the other 20px: no tappable pixels, a centre tap switched tabs,
+and 128px of scroll was too little to read as scrollable. Fix is ordering (put
+the prose last) plus hiding the capsule where it has no verb (`/account`,
+`/settings/*`, joining `/memory` and `/deals`).
+
+**Reader 403 verified** (2026-08-11, `dwaipayan.g@zohotest.com`): zero write
+controls on any screen, and every list still renders in full — 9 gates, 26
+playbook steps, 8 alerts, the whole stage rail. That last part is the
+`AdminOnly`-renders-null fix holding; without it a reader sees empty cards.
+
+**Still unverified:** real iOS/Android devices, and 375/430px + light mode + the
+other three time bands.

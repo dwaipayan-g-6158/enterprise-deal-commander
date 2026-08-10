@@ -148,6 +148,13 @@ had to wait for a deploy. Driven signed in at 390px against
 | 409 override | Guardrail renders in place with tappable pattern rows, "Fix it first" primary, override behind a disclosure, 10-character gate live-counted |
 | Back gesture | popstate back runs a view transition and restores scroll exactly (420 → push → back → 420) |
 | theme-color | Resolves to `#0b0c14`, the shell's actual night-band canvas |
+| Reader 403 | Signed in as a reader: **zero** write controls anywhere, and every list still renders in full |
+
+**The reader check, in detail.** `/stage` shows the whole pipeline rail with no
+advance control; `/gates` shows all 9 gates with no toggles; `/playbook` shows all
+26 steps; `/alerts` shows all 8 alerts with no disposition buttons. That last
+column is the payoff of the `AdminOnly`-renders-`null` fix: a read-only user gets
+the lists, not empty cards.
 
 **Four defects that only the running app could show** — each fixed, each with a
 guard that was verified to fail closed by planting the regression.
@@ -182,14 +189,19 @@ guard that was verified to fail closed by planting the regression.
    visible and still untappable; the second subtracts the scroller's own
    `padding-bottom`.
 
-**76 test files, 1041 tests.**
+5. **Sign out had no tappable pixels** — found by trying to use it, when
+   switching to the reader account. On `/account` at rest the 48px row sat 28px
+   under the tab bar with the Commander capsule over the remaining 20px: a tap
+   at its centre switched tabs, one at its top edge opened search, and the
+   screen's 128px of scroll made it look complete. The capsule now hides on
+   `/account` and `/settings/*` (nothing there to search or jump to), and Sign
+   out moved above the engine-settings note — **floating chrome may cover prose,
+   never the one destructive control on the screen.**
+
+**76 test files, 1046 tests.**
 
 ### Still unverified
 
-- **Reader 403.** Needs a second account with the reader role; the sweep ran as
-  an admin. The server-side gate is covered by `routes/index.rbac.test.ts`'s
-  exhaustive route walk, so what is untested is only whether the *mobile* screens
-  hide their controls.
 - **Real iOS and Android devices.** The sweep ran in emulated Chromium, which
   cannot show iOS edge-swipe, Android predictive back, or standalone-mode chrome.
 - **375px and 430px, light mode, and the other three time bands.** Only 390px
