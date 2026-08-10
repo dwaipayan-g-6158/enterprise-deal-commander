@@ -138,6 +138,69 @@ export function lossSubById(id: string | undefined): LossSub | undefined {
   return LOSS_SUBS.find((s) => s.id === id);
 }
 
+/**
+ * The Memory tab's five lenses, each a literal route under `/memory`.
+ *
+ * These are why the literal-before-param rule in `MOBILE_ROUTES` has teeth.
+ * `/memory/ask` registered after `/memory/:id` opens a deal-memory record whose
+ * id is the literal string "ask" — a 404 from the API that looks like a data
+ * problem rather than a routing one. The ordering assertion in routes.test.ts
+ * exists for exactly this table.
+ */
+export interface MemoryLens {
+  id: string;
+  title: string;
+  blurb: string;
+}
+
+export const MEMORY_LENSES: MemoryLens[] = [
+  {
+    id: "ask",
+    title: "Ask the advisor",
+    blurb: "Put a question to the archive and get a cited answer.",
+  },
+  {
+    id: "health",
+    title: "Archive health",
+    blurb: "How complete and how fresh the record actually is.",
+  },
+  {
+    id: "revival",
+    title: "Revival candidates",
+    blurb: "Lost deals worth another approach, and why.",
+  },
+  {
+    id: "competitors",
+    title: "Competitor intel",
+    blurb: "Who we meet, how often we win, and how they beat us.",
+  },
+  {
+    id: "pricing",
+    title: "Pricing benchmarks",
+    blurb: "What deals like this one actually closed at.",
+  },
+];
+
+export function memoryLensById(id: string | undefined): MemoryLens | undefined {
+  return MEMORY_LENSES.find((l) => l.id === id);
+}
+
+/** The pushed sub-screens of one archived deal. */
+export interface MemoryPanel {
+  id: string;
+  title: string;
+}
+
+export const MEMORY_PANELS: MemoryPanel[] = [
+  { id: "narrative", title: "Narrative" },
+  { id: "timeline", title: "Timeline" },
+  { id: "connections", title: "Connections" },
+];
+
+export function memoryPanelById(id: string | undefined): MemoryPanel | undefined {
+  return MEMORY_PANELS.find((p) => p.id === id);
+}
+
 export interface MobileRoute {
   /** wouter pattern. `:name` matches exactly one segment. */
   pattern: string;
@@ -182,7 +245,15 @@ export const MOBILE_ROUTES: MobileRoute[] = [
   { pattern: "/autopsy/:sub", tab: "intelligence" },
 
   { pattern: "/memory", tab: "memory" },
+  // EVERY literal before the param. See the note on MEMORY_LENSES.
+  { pattern: "/memory/ask", tab: "memory" },
+  { pattern: "/memory/health", tab: "memory" },
+  { pattern: "/memory/revival", tab: "memory" },
+  { pattern: "/memory/competitors", tab: "memory" },
+  { pattern: "/memory/pricing", tab: "memory" },
+  { pattern: "/memory/compare", tab: "memory" },
   { pattern: "/memory/:id", tab: "memory" },
+  { pattern: "/memory/:id/:panel", tab: "memory" },
 
   { pattern: "/account" },
   { pattern: "/settings" },

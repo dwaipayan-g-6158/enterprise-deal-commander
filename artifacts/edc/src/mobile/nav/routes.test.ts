@@ -6,6 +6,8 @@ import { MOBILE_TABS, activeTabId } from "./mobile-nav";
 import {
   DEAL_PANELS,
   LOSS_SUBS,
+  MEMORY_LENSES,
+  MEMORY_PANELS,
   MOBILE_ROUTES,
   PANEL_GROUP_LABEL,
   PANEL_GROUP_ORDER,
@@ -108,6 +110,53 @@ describe("loss sub-screens", () => {
   });
 });
 
+describe("memory lenses", () => {
+  it("each resolves to its own literal route, not to a memory record", () => {
+    // The failure this prevents: `/memory/ask` matching `/memory/:id` and asking
+    // the API for a deal-memory record whose id is the string "ask". The 404 that
+    // comes back reads as missing data rather than as a routing mistake, which is
+    // why the ordering assertion above exists at all.
+    for (const lens of MEMORY_LENSES) {
+      expect(routeFor(`/memory/${lens.id}`)?.pattern, lens.id).toBe(`/memory/${lens.id}`);
+    }
+  });
+
+  it("never collides with a memory panel segment", () => {
+    // `/memory/:id/:panel` and `/memory/<lens>` are different depths, so they
+    // cannot collide — but a lens id that duplicated a panel id would make the
+    // root's row and a record's row read as the same destination.
+    const lensIds = new Set(MEMORY_LENSES.map((l) => l.id));
+    for (const panel of MEMORY_PANELS) {
+      expect(lensIds.has(panel.id), panel.id).toBe(false);
+    }
+  });
+
+  it("gives every lens and panel a title, and every lens a blurb", () => {
+    for (const lens of MEMORY_LENSES) {
+      expect(lens.title.trim().length).toBeGreaterThan(0);
+      expect(lens.blurb.trim().length).toBeGreaterThan(0);
+      expect(lens.id).toMatch(/^[a-z][a-z-]*[a-z]$/);
+    }
+    for (const panel of MEMORY_PANELS) {
+      expect(panel.title.trim().length).toBeGreaterThan(0);
+      expect(panel.id).toMatch(/^[a-z][a-z-]*[a-z]$/);
+    }
+  });
+
+  it("routes every record panel through the one memory pattern", () => {
+    for (const panel of MEMORY_PANELS) {
+      expect(routeFor(`/memory/mem-1/${panel.id}`)?.pattern).toBe("/memory/:id/:panel");
+    }
+  });
+
+  it("keeps `compare` out of the lens list", () => {
+    // Compare is reached by selecting records, not from the lens menu — a row
+    // that opens an empty comparison is a row that only ever disappoints.
+    expect(MEMORY_LENSES.some((l) => l.id === "compare")).toBe(false);
+    expect(routeFor("/memory/compare")?.pattern).toBe("/memory/compare");
+  });
+});
+
 describe("matchesPattern", () => {
   it("matches segment-wise and requires equal length", () => {
     expect(matchesPattern("/deals/:id", "/deals/abc")).toBe(true);
@@ -156,7 +205,7 @@ describe("route table", () => {
     }
   });
 
-  it("gives every concrete path exactly one owning pattern", () => {
+  it("resolves every concrete path to its most specific pattern", () => {
     const probes = [
       "/",
       "/deals",
@@ -170,13 +219,35 @@ describe("route table", () => {
       "/autopsy",
       "/autopsy/archetypes",
       "/memory",
+      "/memory/ask",
+      "/memory/compare",
       "/memory/mem-1",
+      "/memory/mem-1/narrative",
       "/account",
       "/settings",
     ];
+    // Overlap is EXPECTED, not forbidden: `/memory/ask` matches both its own
+    // literal and `/memory/:id`, and first-match ordering is precisely what
+    // resolves that. This asserted "exactly one match" until the memory lenses
+    // landed, which was only accidentally true while no literal shared a depth
+    // with a param — so it was testing the absence of the situation rather than
+    // the rule that handles it.
+    //
+    // The real invariant: something owns the path, and what owns it is the most
+    // specific thing that could.
     for (const path of probes) {
       const matches = MOBILE_ROUTES.filter((r) => matchesPattern(r.pattern, path));
-      expect(matches, `${path} matched ${matches.map((m) => m.pattern).join(", ")}`).toHaveLength(1);
+      expect(matches.length, `nothing claims ${path}`).toBeGreaterThan(0);
+
+      const paramCount = (pattern: string) =>
+        segmentsOf(pattern).filter((s) => s.startsWith(":")).length;
+      const fewestParams = Math.min(...matches.map((m) => paramCount(m.pattern)));
+      const owner = routeFor(path);
+
+      expect(owner, path).toBeDefined();
+      expect(paramCount(owner!.pattern), `${path} resolved to ${owner!.pattern}`).toBe(
+        fewestParams,
+      );
     }
   });
 

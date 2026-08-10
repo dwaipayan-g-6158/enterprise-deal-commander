@@ -20,8 +20,17 @@ import { PortfolioScreen } from "@/mobile/screens/intelligence/portfolio-screen"
 import { PortfolioAlertsScreen } from "@/mobile/screens/intelligence/portfolio-alerts-screen";
 import { LossesScreen } from "@/mobile/screens/intelligence/losses-screen";
 import { LossDetailScreen } from "@/mobile/screens/intelligence/loss-detail-screen";
-import { MemoryScreen } from "@/mobile/screens/memory-screen";
-import { MemoryDetailScreen } from "@/mobile/screens/memory-detail-screen";
+import { MemoryScreen } from "@/mobile/screens/memory/memory-screen";
+import { MemoryDetailScreen } from "@/mobile/screens/memory/memory-detail-screen";
+import { MemoryPanelScreen } from "@/mobile/screens/memory/memory-panel-screen";
+import { AskScreen } from "@/mobile/screens/memory/ask-screen";
+import { CompareScreen } from "@/mobile/screens/memory/compare-screen";
+import {
+  CompetitorIntelScreen,
+  MemoryHealthScreen,
+  PricingBenchmarksScreen,
+  RevivalScreen,
+} from "@/mobile/screens/memory/lens-screens";
 import NotFound from "@/pages/not-found";
 import Login from "@/pages/login";
 import Share from "@/pages/share";
@@ -168,9 +177,29 @@ export default function MobileApp() {
                   {(params) => <LossDetailScreen key={params.sub} sub={params.sub} />}
                 </Route>
 
+                {/* EVERY literal before /memory/:id. wouter's Switch is
+                    first-match, so `/memory/ask` registered after the param
+                    would ask the API for a record whose id is "ask" — a 404 that
+                    reads as missing data rather than as a routing mistake.
+                    routes.test.ts asserts this ordering. */}
                 <Route path="/memory" component={MemoryScreen} />
+                <Route path="/memory/ask" component={AskScreen} />
+                <Route path="/memory/health" component={MemoryHealthScreen} />
+                <Route path="/memory/revival" component={RevivalScreen} />
+                <Route path="/memory/competitors" component={CompetitorIntelScreen} />
+                <Route path="/memory/pricing" component={PricingBenchmarksScreen} />
+                <Route path="/memory/compare" component={CompareScreen} />
                 <Route path="/memory/:id">
                   {(params) => <MemoryDetailScreen key={params.id} id={params.id} />}
+                </Route>
+                <Route path="/memory/:id/:panel">
+                  {(params) => (
+                    <MemoryPanelScreen
+                      key={`${params.id}:${params.panel}`}
+                      id={params.id}
+                      panelId={params.panel}
+                    />
+                  )}
                 </Route>
 
                 <Route path="/account" component={AccountScreen} />
