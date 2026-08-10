@@ -173,7 +173,8 @@ describe("the module walk is real", () => {
     for (const name of [
       "command-screen",
       "deals-screen",
-      "deal-detail-screen",
+      "deal-brief-screen",
+      "panel-screen",
       "memory-screen",
       "account-screen",
     ]) {

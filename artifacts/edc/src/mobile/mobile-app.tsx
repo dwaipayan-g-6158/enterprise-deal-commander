@@ -12,7 +12,8 @@ import { DesktopOnlyScreen } from "@/mobile/screens/desktop-only-screen";
 import { AccountScreen } from "@/mobile/screens/account/account-screen";
 import { CommandScreen } from "@/mobile/screens/command/command-screen";
 import { DealsScreen } from "@/mobile/screens/deals/deals-screen";
-import { DealDetailScreen } from "@/mobile/screens/deal-detail-screen";
+import { DealBriefScreen } from "@/mobile/screens/deal/deal-brief-screen";
+import { DealPanelScreen } from "@/mobile/screens/deal/panel-screen";
 import { AnalyticsScreen } from "@/mobile/screens/analytics-screen";
 import { MemoryScreen } from "@/mobile/screens/memory-screen";
 import { MemoryDetailScreen } from "@/mobile/screens/memory-detail-screen";
@@ -129,19 +130,24 @@ export default function MobileApp() {
                 <Route path="/deals" component={DealsScreen} />
                 <Route path="/deals/:id">
                   {(params) => (
-                    // Keyed so switching deals remounts the screen: section
-                    // open/closed state belongs to the deal you opened it on,
-                    // not the next one.
-                    <DealDetailScreen key={params.id} id={params.id} />
+                    // Keyed so switching deals remounts the screen rather than
+                    // reusing one deal's local state for the next.
+                    <DealBriefScreen key={params.id} id={params.id} />
                   )}
                 </Route>
-                {/* The sixteen pushed panels land in the next slice. Until they
-                    do this mirrors the redirect the desktop shell already
-                    carries for the same URLs, so a panel deep link — from the
-                    Command Center, or shared from a laptop — opens the deal
-                    rather than dead-ending on a 404. */}
+                {/* One route for all sixteen panels; the segment is resolved
+                    against nav/routes.ts. Keyed on both parts, so moving between
+                    two panels of the same deal — or the same panel of two deals
+                    — starts the new screen clean rather than showing the
+                    previous one's sheet state. */}
                 <Route path="/deals/:id/:panel">
-                  {(params) => <Redirect to={`/deals/${params.id}`} transition={false} />}
+                  {(params) => (
+                    <DealPanelScreen
+                      key={`${params.id}:${params.panel}`}
+                      id={params.id}
+                      panelId={params.panel}
+                    />
+                  )}
                 </Route>
 
                 <Route path="/analytics" component={AnalyticsScreen} />
