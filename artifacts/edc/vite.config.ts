@@ -73,16 +73,30 @@ export default defineConfig({
         start_url: ".",
         scope: ".",
         // Long-press the installed icon. Relative, like start_url, so they
-        // resolve against the manifest rather than assuming the app is
-        // served from the domain root. `filter` is read by the mobile Deals
-        // screen; adding a shortcut to a filter the screen cannot restore
-        // would land the user on an unfiltered list.
+        // resolve against the manifest rather than assuming the app is served
+        // from the domain root.
+        //
+        // THE QUERY KEYS ARE THE ROSTER URL CODEC'S, NOT INVENTED HERE. This
+        // read `?filter=critical` until the Deals screen moved onto
+        // `roster-url.ts` as its source of truth — at which point the key
+        // silently stopped being recognised and the shortcut began opening an
+        // unfiltered pipeline. A decoder drops keys it does not know without
+        // complaining, so nothing failed; the shortcut just quietly stopped
+        // filtering. `manifest.test.ts` now decodes every one of these through
+        // the same codec the screen parses them with.
         shortcuts: [
           {
             name: "Red alerts",
             short_name: "Red alerts",
-            description: "Deals that need attention right now",
-            url: "deals?filter=critical",
+            description: "Deals the engine has flagged red",
+            url: "deals?h=RED",
+            icons: [{ src: "icon-192.png", sizes: "192x192", type: "image/png" }],
+          },
+          {
+            name: "Closing soon",
+            short_name: "Closing",
+            description: "Deals due inside thirty days, soonest first",
+            url: "deals?close=30d&so=expectedCloseDate",
             icons: [{ src: "icon-192.png", sizes: "192x192", type: "image/png" }],
           },
           {
@@ -90,6 +104,13 @@ export default defineConfig({
             short_name: "Deals",
             description: "The live pipeline",
             url: "deals",
+            icons: [{ src: "icon-192.png", sizes: "192x192", type: "image/png" }],
+          },
+          {
+            name: "Deal memory",
+            short_name: "Memory",
+            description: "Search the archive of closed deals",
+            url: "memory",
             icons: [{ src: "icon-192.png", sizes: "192x192", type: "image/png" }],
           },
         ],

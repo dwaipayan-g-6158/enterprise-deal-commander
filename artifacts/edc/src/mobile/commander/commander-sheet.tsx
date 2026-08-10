@@ -19,9 +19,9 @@ import {
   describeNlcConditions,
 } from "@/lib/nlc-filter";
 import { compactCurrency } from "@/lib/format";
-import { MOBILE_TABS } from "@/mobile/lib/mobile-nav";
+import { MOBILE_TABS } from "@/mobile/nav/mobile-nav";
 import { useCommander } from "@/mobile/commander/commander-context";
-import { SectionSheet } from "@/mobile/components/section-sheet";
+import { MSheet } from "@/mobile/ui/m-sheet";
 import { ListRow } from "@/mobile/components/list-row";
 import { HealthDot } from "@/mobile/components/badges";
 
@@ -117,7 +117,7 @@ export function CommanderSheet() {
   };
 
   return (
-    <SectionSheet
+    <MSheet
       open={open}
       onOpenChange={(next) => {
         haptic();
@@ -248,7 +248,7 @@ export function CommanderSheet() {
           Nothing matches that. Try an account name, or ask for red deals above $1M.
         </p>
       ) : null}
-    </SectionSheet>
+    </MSheet>
   );
 }
 

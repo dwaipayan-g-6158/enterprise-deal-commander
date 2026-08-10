@@ -1,0 +1,278 @@
+/* =============================================================================
+ * Mobile shell — materials
+ *
+ * The rules that consume tokens.css. Surfaces, the Liquid Glass material, the
+ * Commander capsule, touch affordances and loading states.
+ * ========================================================================== */
+
+/* --- The frame ------------------------------------------------------------
+ * The shell is a fixed 100dvh box that never itself scrolls; <main> inside it
+ * does. That is what lets the ambient sky stay where the sky is while content
+ * moves under it, and it is why scroll restoration has to remember main's
+ * scrollTop rather than the document's.
+ *
+ * The wash is painted as background-image rather than a positioned
+ * pseudo-element. A ::before would establish paint order above every
+ * non-positioned card and tint the cards along with the canvas; background
+ * layers paint above background-color and below content, which is where a sky
+ * belongs.
+ *
+ * Three sources, not one: a broad glow at the top edge, a smaller off-centre
+ * one, and a faint ground bounce. One radial gradient reads as a vignette; three
+ * read as light. */
+.m-shell {
+  background-color: hsl(var(--background));
+  background-image:
+    radial-gradient(
+      122% 58% at 50% -10%,
+      rgb(var(--m-sky-rgb) / var(--m-sky-alpha)),
+      transparent 62%
+    ),
+    radial-gradient(
+      84% 38% at 100% 2%,
+      rgb(var(--m-sky2-rgb) / var(--m-sky2-alpha)),
+      transparent 70%
+    ),
+    linear-gradient(
+      to top,
+      rgb(var(--m-ground-rgb) / var(--m-ground-alpha)),
+      transparent 32%
+    );
+  color: hsl(var(--foreground));
+
+  /* Deliberately NOT background-attachment: fixed. The shell is already a
+     non-scrolling 100dvh box — <main> inside it does the scrolling — so the
+     background stays put on its own, and `fixed` on iOS Safari is a well-known
+     source of repaint jank and outright misplacement. It would be pure risk for
+     an effect already achieved by the layout. */
+
+  /* Figures align in a column without monospace. A monospace period occupies a
+     full character cell and renders the most important number in the app as
+     `$3 . 82M`, which is why there is no mono anywhere in this shell. */
+  font-variant-numeric: tabular-nums;
+
+  /* The grey iOS flash under a designed press state is the single fastest way
+     for an installed app to read as a website. */
+  -webkit-tap-highlight-color: transparent;
+
+  /* Colour only. Transitioning background-image would re-rasterise three
+     gradients every frame for two seconds. */
+  transition: background-color 2s ease;
+}
+
+/* --- E1: card ------------------------------------------------------------- */
+.m-card {
+  background-color: hsl(var(--card));
+  border: 1px solid hsl(var(--card-border));
+  border-radius: var(--m-radius-card);
+  box-shadow: var(--m-e1);
+}
+
+/* --- Liquid Glass ---------------------------------------------------------
+ * Four channels are what separate a material from a translucent panel:
+ *   1. a blurred, saturation-boosted backdrop (the saturate is what stops
+ *      colour going muddy behind heavy blur),
+ *   2. a depth gradient — brighter at the lit edge, not a flat wash,
+ *   3. a specular hairline along that edge,
+ *   4. the keyline each caller carries as its own border.
+ *
+ * Built from background layers rather than a ::before, because .m-glass lands
+ * on sticky, absolute and fixed elements and a pseudo-element would need every
+ * one of them to establish a containing block.
+ *
+ * There is no SVG refraction. Every Liquid Glass tutorial reaches for
+ * feTurbulence + feDisplacementMap as a backdrop-filter, and Safari — the only
+ * engine this shell is really aimed at — does not support SVG filters there. It
+ * renders as nothing on the target device and costs a filter pass everywhere
+ * else.
+ *
+ * TWO WEIGHTS, and the split is a contrast requirement, not a style. See the
+ * measured table in tokens.css:
+ *   .m-glass       regular — may carry any text.
+ *   .m-glass-thin  thin    — --foreground-coloured content ONLY. Muted and
+ *                            primary measure ~3.3:1 on it and are not allowed.
+ */
+.m-glass {
+  background-color: rgb(var(--m-glass-rgb) / var(--m-glass-alpha));
+  background-image:
+    linear-gradient(
+      to bottom,
+      rgb(var(--m-glass-specular-rgb) / var(--m-glass-specular-alpha)) 0 1px,
+      transparent 1px
+    ),
+    linear-gradient(
+      to bottom,
+      rgb(var(--m-glass-tint-rgb) / calc(var(--m-glass-tint-alpha) * 1.6)),
+      rgb(var(--m-glass-tint-rgb) / calc(var(--m-glass-tint-alpha) * 0.4))
+    );
+  backdrop-filter: blur(var(--m-glass-blur)) saturate(var(--m-glass-saturate));
+  -webkit-backdrop-filter: blur(var(--m-glass-blur)) saturate(var(--m-glass-saturate));
+}
+
+.m-glass-thin {
+  background-color: rgb(var(--m-glass-rgb) / var(--m-glass-thin-alpha));
+  background-image: linear-gradient(
+    to bottom,
+    rgb(var(--m-glass-specular-rgb) / var(--m-glass-specular-alpha)) 0 1px,
+    transparent 1px
+  );
+  backdrop-filter: blur(16px) saturate(var(--m-glass-saturate));
+  -webkit-backdrop-filter: blur(16px) saturate(var(--m-glass-saturate));
+}
+
+/* Which way the chrome casts. Split into classes rather than parameterised
+   because a box-shadow offset cannot be negated by a custom property. */
+.m-glass-top {
+  box-shadow: 0 6px 20px -14px rgb(var(--m-glass-shadow-rgb) / var(--m-glass-shadow-alpha));
+}
+.m-glass-bottom {
+  box-shadow: 0 -6px 20px -14px rgb(var(--m-glass-shadow-rgb) / var(--m-glass-shadow-alpha));
+}
+
+/* --- E3: sheet ------------------------------------------------------------
+ * Carries the same specular edge as the chrome, so a sheet reads as the same
+ * material rising rather than an opaque card appearing.
+ *
+ * background-image is also doing a second job: vaul portals its content to
+ * document.body, outside the shell's subtree, so every sheet re-applies
+ * .m-shell to get tokens — which would otherwise repaint the ambient sky across
+ * the top of the sheet. Setting an explicit background-image here overrides it. */
+.m-sheet {
+  background-color: hsl(var(--popover));
+  background-image: linear-gradient(
+    to bottom,
+    rgb(var(--m-glass-specular-rgb) / var(--m-glass-specular-alpha)) 0 1px,
+    transparent 1px
+  );
+  border-top-left-radius: var(--m-radius-sheet);
+  border-top-right-radius: var(--m-radius-sheet);
+  box-shadow: var(--m-e3);
+}
+
+/* --- E4: the Commander capsule -------------------------------------------
+ * One object, maximum separation from the canvas — which is why its polarity
+ * inverts between themes rather than staying obsidian. tokens.css has the
+ * measurements. */
+.m-capsule {
+  background-color: rgb(var(--m-capsule-rgb) / var(--m-capsule-alpha));
+  color: hsl(var(--m-capsule-foreground));
+  border-radius: var(--m-radius-pill);
+  box-shadow:
+    var(--m-e4),
+    var(--m-specular),
+    0 0 0 1px hsl(var(--m-capsule-ring) / var(--m-capsule-ring-alpha));
+  backdrop-filter: blur(20px) saturate(160%);
+  -webkit-backdrop-filter: blur(20px) saturate(160%);
+}
+
+/* --- Fallbacks ------------------------------------------------------------
+ * Mandatory for a glass-led design rather than nice to have. Without the first
+ * rule, an engine with no backdrop-filter renders chrome at 80%/68% opacity
+ * with nothing blurred behind it — content scrolls through the header legibly
+ * enough to look broken. The other two are iOS's own accessibility switches:
+ * "Reduce Transparency" and "Increase Contrast". A shell that ignores them is
+ * not shippable. */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .m-glass,
+  .m-glass-thin,
+  .m-capsule {
+    background-color: hsl(var(--card));
+    background-image: none;
+  }
+  .m-capsule {
+    background-color: hsl(var(--foreground));
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .m-glass,
+  .m-glass-thin {
+    background-color: hsl(var(--card));
+    background-image: none;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+  .m-capsule {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    --m-capsule-alpha: 1;
+  }
+}
+
+/* Increase Contrast also removes the sky: the wash exists to be atmospheric,
+   and atmosphere is exactly what someone enabling this setting is asking to
+   turn off. tokens.css raises the border and muted-foreground values to match. */
+@media (prefers-contrast: more) {
+  .m-shell {
+    background-image: none;
+  }
+  .m-glass,
+  .m-glass-thin {
+    background-color: hsl(var(--card));
+    background-image: none;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+}
+
+/* --- Interaction ---------------------------------------------------------- */
+
+/* Touch target floor. Applied to every tappable row, chip and control. */
+.m-tap {
+  min-height: var(--m-tap);
+  min-width: var(--m-tap);
+}
+
+/* Tap compression. Since iOS closed the haptics side channel (see lib/haptics.ts),
+   the physical feedback for a tap is entirely visual on the target device: the
+   surface compresses and its shadow collapses. */
+.m-press {
+  transition:
+    transform var(--m-dur-tap) var(--m-ease-exit),
+    filter var(--m-dur-tap) var(--m-ease-exit),
+    box-shadow var(--m-dur-tap) var(--m-ease-exit);
+}
+.m-press:active {
+  transform: scale(0.965);
+  filter: brightness(0.96);
+  box-shadow: none;
+}
+
+/* Horizontal gestures must not start at the screen edge: iOS owns the first
+   ~20px for its interactive back swipe, and there is no way to arbitrate. Any
+   scrubbable chart or snap carousel insets itself with this. For the same
+   reason, nothing that reaches the left edge may set touch-action: none. */
+.m-edge-guard {
+  margin-inline: 24px;
+}
+
+/* --- Loading --------------------------------------------------------------
+ * A slow breathe, not a sweep. The sweep was a ::after gradient, which forced
+ * `position: relative` and `overflow: hidden` onto every host element, and it
+ * had to be deleted outright under reduced motion anyway — the global clamp
+ * collapses an infinite animation into one instant pop rather than stopping it.
+ * Opacity on the element itself has none of those constraints and composites on
+ * the GPU. */
+@keyframes m-breathe {
+  to {
+    opacity: 1;
+  }
+}
+
+.m-skeleton {
+  background-color: rgb(var(--m-skeleton-rgb) / var(--m-skeleton-alpha));
+  border-radius: var(--m-radius-nested);
+  opacity: 0.62;
+  animation: m-breathe 2.4s var(--m-ease-standard) infinite alternate;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .m-skeleton {
+    animation: none;
+    opacity: 1;
+  }
+  .m-press:active {
+    transform: none;
+    filter: none;
+  }
+}

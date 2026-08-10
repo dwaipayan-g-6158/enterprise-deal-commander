@@ -7,11 +7,10 @@ import {
   getGetDealQueryKey,
   getGetDealIntelligenceQueryKey,
   getSearchDealMemoryQueryKey,
-  type Deal,
   type DealUpdate,
 } from "@workspace/api-client-react";
 import { useToast } from "@/hooks/use-toast";
-import { extractGuardrail, type BoardStage } from "../model/board";
+import { extractGuardrail, patchDealStage, type BoardStage } from "../model/board";
 import type { RosterRow } from "../model/roster-types";
 
 export interface PendingOverride {
@@ -41,22 +40,6 @@ export interface StageMoveApi {
 export interface StageMoveOptions {
   /** Called after a successful move into a terminal stage (in place of the generic toast). */
   onClosed?: (row: RosterRow, outcome: "won" | "lost") => void;
-}
-
-// Optimistically move a deal between columns in a cached deals-list response.
-// Returns the input untouched when the deal isn't present, so unrelated cached
-// param-variants are left alone.
-function patchDealStage(cached: unknown, dealId: string, toStage: BoardStage): unknown {
-  if (!cached || typeof cached !== "object") return cached;
-  const c = cached as { data?: Deal[] };
-  if (!Array.isArray(c.data)) return cached;
-  let changed = false;
-  const data = c.data.map((d) => {
-    if (d.id !== dealId) return d;
-    changed = true;
-    return { ...d, salesStageId: toStage.id, salesStage: toStage.name };
-  });
-  return changed ? { ...c, data } : cached;
 }
 
 /**

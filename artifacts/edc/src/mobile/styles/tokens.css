@@ -1,0 +1,429 @@
+/* =============================================================================
+ * Mobile shell — colour, radius and elevation tokens
+ *
+ * Loaded only from the mobile chunk entry (mobile-app.tsx), so a laptop never
+ * downloads any of this.
+ *
+ * ## The one rule that makes the shell work
+ *
+ * `.m-shell` RE-POINTS shadcn's own semantic tokens for its subtree. It does not
+ * define a parallel palette. An earlier version did, with `--m-bg`, `--m-text`
+ * and friends, and it looked tidy right up until you tried to use a primitive:
+ * no shadcn component can see those names. `<Badge>` reads `hsl(var(--primary))`,
+ * `<Item>` reads `hsl(var(--card))`. Re-pointing means every one of the 58
+ * installed primitives renders in mobile colours with no per-component work,
+ * because index.css consumes these through Tailwind v4's `@theme inline`, which
+ * keeps the `var()` live at the use site rather than resolving it once at `:root`.
+ *
+ * Two mechanical consequences:
+ *   1. Values are BARE HSL TRIPLETS. `hsl(#14171c)` is not a colour.
+ *   2. Anything translucent is declared as an `--x-rgb` + `--x-alpha` PAIR, never
+ *      an inline `rgba(...)`. A literal cannot be parsed and re-composited by a
+ *      test, and that is exactly why this file went four phases unmeasured.
+ *
+ * ## Every value here was computed, not chosen
+ *
+ * tokens.test.ts re-derives all of it. Numbers quoted in comments are WCAG
+ * ratios against the WORST surface the token can land on — which is usually not
+ * the one you would guess. Notable results:
+ *
+ *   - `--destructive` is 40% light, not the 43% that looks right in isolation.
+ *     The worst backdrop is red text on glass over a *destructive fill*, where
+ *     43% measures 4.47:1.
+ *   - `--primary` is 50%, not 52%. Same reason: 52% gives 4.52:1 under glass.
+ *   - Dark `--destructive` is 76%, not 72%. 72% measures 4.43:1 on glass over an
+ *     amber chart fill.
+ *
+ * Health, risk and outcome colours are deliberately ABSENT. `lib/semantic-colors.ts`
+ * is their single tested source. What is here is the chart STROKE ramp, which is
+ * a different thing with a different requirement — see the note above it.
+ * ========================================================================== */
+
+.m-shell {
+  color-scheme: light;
+
+  /* --- Surfaces --------------------------------------------------------- */
+  --background: 220 24% 97%;
+  --card: 0 0% 100%;
+  --popover: 0 0% 100%;
+
+  --foreground: 224 24% 9%;
+  --card-foreground: 224 24% 9%;
+  --popover-foreground: 224 24% 9%;
+
+  --muted: 220 16% 92%;
+  /* 38%, not 40%. On regular glass over a destructive fill, 40% measures
+     4.56:1 — passing, but by 0.06, so any later nudge to either token breaks
+     it silently. 38% clears at 4.91:1. */
+  --muted-foreground: 222 13% 38%;
+
+  --border: 220 14% 89%;
+  --input: 220 14% 89%;
+  --card-border: 220 14% 89%;
+  --popover-border: 220 14% 89%;
+
+  /* --- Accents ---------------------------------------------------------- */
+  --primary: 226 78% 50%;
+  --primary-foreground: 0 0% 100%;
+  --ring: 226 78% 50%;
+
+  --secondary: 226 76% 95%;
+  --secondary-foreground: 226 62% 26%;
+  --accent: 226 76% 95%;
+  --accent-foreground: 226 62% 26%;
+
+  --destructive: 358 76% 40%;
+  --destructive-foreground: 0 0% 100%;
+
+  /* --- Geometry ---------------------------------------------------------
+   * The single highest-leverage line in the shell. Desktop runs 0.25rem; at
+   * 1rem every shadcn primitive lands on iOS proportions at once, with no
+   * per-component override anywhere.
+   *
+   * Nested-corner rule (Apple's, and what makes stacked rounded shapes look
+   * drawn rather than assembled): an inner surface's radius is the outer
+   * radius minus its inset. Inside a 22px card padded 12px, an inner control
+   * is 10px — that is --m-radius-nested.
+   *
+   * Spelled out with calc() rather than var(--radius-xl): `@theme inline`
+   * substitutes theme values into utilities, and relying on it to ALSO emit a
+   * variable for hand-written CSS is a dependency on an implementation detail. */
+  --radius: 1rem;
+  --m-radius-card: calc(var(--radius) + 6px);
+  --m-radius-sheet: 28px;
+  --m-radius-nested: calc(var(--m-radius-card) - 12px);
+  --m-radius-pill: 999px;
+
+  /* Touch target floor — WCAG 2.5.5 and Apple's HIG agree on 44pt; 48 gives
+     the shell a little margin on Android too. */
+  --m-tap: 48px;
+
+  /* --- Elevation --------------------------------------------------------
+   * E0 canvas · E1 card · E2 sticky chrome · E3 sheet · E4 floating capsule.
+   * Light separates planes with a keyline plus shadow. Direction is split into
+   * classes rather than parameterised because a box-shadow offset cannot be
+   * negated by a custom property. */
+  --m-e1:
+    0 1px 1px -0.5px hsl(224 24% 9% / 0.05),
+    0 2px 4px -2px hsl(224 24% 9% / 0.05);
+  --m-e2:
+    0 2px 4px -2px hsl(224 24% 9% / 0.06),
+    0 8px 16px -8px hsl(224 24% 9% / 0.1);
+  --m-e3: 0 -12px 40px -12px hsl(224 24% 9% / 0.22);
+  --m-e4:
+    0 6px 12px -6px hsl(224 24% 9% / 0.18),
+    0 16px 40px -12px hsl(224 24% 9% / 0.28);
+  --m-specular: inset 0 1px 0 0 hsl(0 0% 100% / 0.65);
+
+  /* --- Liquid Glass -----------------------------------------------------
+   * Two weights, and that is a measured requirement rather than a stylistic
+   * preference. Compositing the material over every backdrop that can scroll
+   * beneath it — canvases, every time band, and the solid chart/chip fills,
+   * which are far harsher than any canvas:
+   *
+   *     alpha   --foreground   --muted-foreground   --primary
+   *     0.62      9.90             3.34 ✗             3.33 ✗
+   *     0.72     11.76             3.97 ✗             3.96 ✗
+   *     0.80     13.43             4.91 ✓             4.88 ✓
+   *
+   * So a single weight either fails AA for chrome subtitles or stops being
+   * glass. Apple's answer is .regularMaterial vs .thinMaterial, and it is the
+   * right one:
+   *
+   *   REGULAR (--m-glass-alpha) may carry any text.
+   *   THIN    (--m-glass-thin-alpha) may carry --foreground-coloured content
+   *           ONLY — 9.90:1 at its worst. Muted and primary sit at ~3.3 on it.
+   *
+   * material.css enforces the split by class; tokens.test.ts enforces it by
+   * measurement. */
+  --m-glass-rgb: 255 255 255;
+  --m-glass-alpha: 0.8;
+  --m-glass-thin-alpha: 0.62;
+  --m-glass-tint-rgb: 255 255 255;
+  --m-glass-tint-alpha: 0.09;
+  --m-glass-specular-rgb: 255 255 255;
+  --m-glass-specular-alpha: 0.85;
+  --m-glass-rim-rgb: 20 24 33;
+  --m-glass-rim-alpha: 0.06;
+  --m-glass-shadow-rgb: 16 19 24;
+  --m-glass-shadow-alpha: 0.3;
+  --m-glass-blur: 24px;
+  --m-glass-saturate: 180%;
+
+  /* --- The Commander capsule -------------------------------------------
+   * The most prominent object on any screen, so it is drawn at maximum
+   * separation from the canvas — which means its polarity INVERTS between
+   * themes. Here: an indigo-black obsidian pill carrying a white label
+   * (12.82:1 label, 10.30:1 against the canvas). See the dark block for why
+   * it cannot stay dark there. */
+  --m-capsule-rgb: 18 22 33;
+  --m-capsule-alpha: 0.88;
+  --m-capsule-foreground: 0 0% 100%;
+  --m-capsule-ring: 226 78% 50%;
+  --m-capsule-ring-alpha: 0.38;
+
+  /* --- Loading ---------------------------------------------------------- */
+  --m-skeleton-rgb: 22 24 29;
+  --m-skeleton-alpha: 0.07;
+
+  /* --- Ambient sky ------------------------------------------------------
+   * Overridden per time band below. Declared here so the base case is a real
+   * value rather than an inherited surprise. */
+  --m-sky-rgb: 120 168 255;
+  --m-sky-alpha: 0.1;
+  --m-sky2-rgb: 120 168 255;
+  --m-sky2-alpha: 0.07;
+  --m-ground-rgb: 120 168 255;
+  --m-ground-alpha: 0.04;
+
+  /* --- Chart strokes ----------------------------------------------------
+   * NOT a second copy of semantic-colors.ts. That file owns the FILL identity
+   * of every risk, health and outcome value, and it stays the single source of
+   * it. This is a boundary treatment with a different requirement.
+   *
+   * The problem it solves: the Tailwind -500 fills those roles use are correct
+   * as fills but fail WCAG 1.4.11's 3:1 as shapes on a light card — amber-500
+   * measures 1.94:1 on white. index.css records that as a known light-mode gap
+   * and pins only the dark side, because asserting light would ship a red suite
+   * and loosening the floor would bless the failure.
+   *
+   * The mobile kit resolves it instead of inheriting it: every chart shape is
+   * drawn with a 1px --card separator plus a 1.5px stroke in its own hue,
+   * darkened until the STROKE clears 3:1 against --card. WCAG 1.4.11 binds on
+   * the boundary of a graphical object, so a compliant boundary is a compliant
+   * object — and the fill keeps the hue everyone recognises.
+   *
+   * Ratios below are against --card. Charts always render inside MChartFrame,
+   * which is always a card, so the tinted canvas is never a chart backdrop. */
+  --m-stroke-low: 199 92% 33%; /* sky      5.43 */
+  --m-stroke-moderate: 38 96% 32%; /* amber    4.76 */
+  --m-stroke-elevated: 24 92% 38%; /* orange   4.98 */
+  --m-stroke-high: 358 76% 40%; /* red      6.81 */
+  --m-stroke-green: 160 90% 26%; /* emerald  5.09 */
+  --m-stroke-yellow: 45 96% 28%; /* yellow   5.04 */
+  --m-stroke-won: 262 72% 52%; /* violet   6.86 */
+  --m-stroke-lost: 215 20% 40%; /* slate    6.16 */
+
+  /* Non-semantic series only — a multi-line trend, a flow ribbon. Anything
+     that means "risk" or "health" uses the strokes above. */
+  --m-series-1: 226 78% 50%;
+  --m-series-2: 160 90% 26%;
+  --m-series-3: 38 96% 32%;
+  --m-series-4: 262 72% 52%;
+  --m-series-5: 199 92% 33%;
+}
+
+/* =============================================================================
+ * Dark
+ *
+ * Planes separate by LIGHTNESS STEP (5% → 9% → 12%), not by shadow: a shadow on
+ * a near-black canvas is invisible, so elevation has to be carried by the
+ * surface itself. Every plane still keeps a border.
+ * ========================================================================== */
+
+.dark .m-shell {
+  color-scheme: dark;
+
+  --background: 224 22% 5%;
+  --card: 223 18% 9%;
+  --popover: 222 16% 12%;
+
+  --foreground: 220 28% 97%;
+  --card-foreground: 220 28% 97%;
+  --popover-foreground: 220 28% 97%;
+
+  --muted: 221 14% 16%;
+  --muted-foreground: 220 12% 66%;
+
+  --border: 221 12% 18%;
+  --input: 221 12% 18%;
+  --card-border: 221 12% 18%;
+  --popover-border: 221 14% 22%;
+
+  --primary: 224 96% 74%;
+  --primary-foreground: 224 24% 8%;
+  --ring: 224 96% 74%;
+
+  --secondary: 225 32% 20%;
+  --secondary-foreground: 224 90% 92%;
+  --accent: 225 32% 20%;
+  --accent-foreground: 224 90% 92%;
+
+  /* 76%, not 72%. The worst backdrop is red text on regular glass over an
+     amber-500 chart fill, where 72% measures 4.43:1. 76% clears at 5.07:1 and
+     is still saturated red rather than washed toward pink. */
+  --destructive: 358 92% 76%;
+  --destructive-foreground: 224 24% 8%;
+
+  --m-e1: 0 1px 2px 0 hsl(0 0% 0% / 0.45);
+  --m-e2:
+    0 2px 6px -2px hsl(0 0% 0% / 0.5),
+    0 10px 24px -10px hsl(0 0% 0% / 0.55);
+  --m-e3: 0 -14px 44px -12px hsl(0 0% 0% / 0.65);
+  --m-e4:
+    0 8px 16px -6px hsl(0 0% 0% / 0.6),
+    0 20px 48px -14px hsl(0 0% 0% / 0.7);
+  --m-specular: inset 0 1px 0 0 hsl(0 0% 100% / 0.08);
+
+  --m-glass-rgb: 16 19 24;
+  --m-glass-alpha: 0.68;
+  --m-glass-thin-alpha: 0.5;
+  --m-glass-tint-rgb: 0 0 0;
+  --m-glass-tint-alpha: 0.22;
+  --m-glass-specular-rgb: 255 255 255;
+  --m-glass-specular-alpha: 0.12;
+  --m-glass-rim-rgb: 0 0 0;
+  --m-glass-rim-alpha: 0.5;
+  --m-glass-shadow-rgb: 0 0 0;
+  --m-glass-shadow-alpha: 0.55;
+  --m-glass-blur: 26px;
+  --m-glass-saturate: 160%;
+
+  /* The capsule inverts, and it has to. Measured against the dark canvas:
+   *   obsidian (as light mode)  1.01:1   — invisible
+   *   raised indigo             1.71:1
+   *   muted primary             2.84:1   — still short of the 3:1 floor
+   *   bright primary            5.46:1   ✓
+   * On a near-black ground, "most prominent" can only mean light. So the pill
+   * becomes a bright indigo carrying a dark label (6.69:1) — the same hue
+   * family as light mode's obsidian, with the lightness inverted. This is the
+   * same logic iOS uses for a prominent filled button in dark mode. */
+  --m-capsule-rgb: 125 159 252;
+  --m-capsule-alpha: 0.95;
+  --m-capsule-foreground: 224 24% 8%;
+  --m-capsule-ring: 224 96% 74%;
+  --m-capsule-ring-alpha: 0.45;
+
+  --m-skeleton-rgb: 244 246 249;
+  --m-skeleton-alpha: 0.08;
+
+  --m-sky-rgb: 96 152 255;
+  --m-sky-alpha: 0.1;
+  --m-sky2-rgb: 96 152 255;
+  --m-sky2-alpha: 0.07;
+  --m-ground-rgb: 96 152 255;
+  --m-ground-alpha: 0.04;
+
+  --m-stroke-low: 198 92% 62%; /* 8.94 */
+  --m-stroke-moderate: 42 96% 60%; /* 11.04 */
+  --m-stroke-elevated: 26 95% 62%; /* 8.03 */
+  --m-stroke-high: 358 92% 76%; /* 7.86 */
+  --m-stroke-green: 158 68% 56%; /* 10.34 */
+  --m-stroke-yellow: 45 95% 58%; /* 11.50 */
+  --m-stroke-won: 266 90% 76%; /* 7.07 */
+  --m-stroke-lost: 215 20% 68%; /* 7.80 */
+
+  --m-series-1: 224 96% 74%;
+  --m-series-2: 158 68% 56%;
+  --m-series-3: 42 96% 60%;
+  --m-series-4: 266 90% 76%;
+  --m-series-5: 198 92% 62%;
+}
+
+/* =============================================================================
+ * Ambient time-of-day
+ *
+ * Bands come from lib/greetings/time-bands.ts — morning 6–12, afternoon 12–17,
+ * evening 17–21, night 21–6 — and never from a second banding scheme.
+ *
+ * The wash is painted in material.css as background-image on the fixed 100dvh
+ * frame, so the light stays where the sky is while content scrolls under it. A
+ * positioned pseudo-element would paint above every non-positioned card and
+ * tint the cards too.
+ *
+ * These are declared as rgb/alpha pairs specifically so tokens.test.ts can
+ * COMPOSITE them over the band background and measure the pixel that actually
+ * ships. Measuring the flat --background instead would audit a surface no user
+ * ever sees; on the night band that is the difference between a comfortable
+ * number and 4.72:1.
+ *
+ * Afternoon inherits the base tokens — it is the neutral case by construction.
+ * ========================================================================== */
+
+:root[data-time-band="morning"] .m-shell {
+  --background: 30 46% 97%;
+  --m-sky-rgb: 255 196 128;
+  --m-sky-alpha: 0.16;
+  --m-sky2-rgb: 255 196 128;
+  --m-sky2-alpha: 0.11;
+  --m-ground-rgb: 255 196 128;
+  --m-ground-alpha: 0.05;
+}
+:root[data-time-band="evening"] .m-shell {
+  --background: 18 46% 96%;
+  --m-sky-rgb: 255 146 96;
+  --m-sky-alpha: 0.16;
+  --m-sky2-rgb: 255 146 96;
+  --m-sky2-alpha: 0.11;
+  --m-ground-rgb: 255 146 96;
+  --m-ground-alpha: 0.05;
+}
+:root[data-time-band="night"] .m-shell {
+  --background: 232 36% 96%;
+  --m-sky-rgb: 104 120 225;
+  --m-sky-alpha: 0.15;
+  --m-sky2-rgb: 104 120 225;
+  --m-sky2-alpha: 0.1;
+  --m-ground-rgb: 104 120 225;
+  --m-ground-alpha: 0.05;
+}
+
+/* Listed after the light band rules, matching the ordering .dark already uses
+   against :root, so dark correctly wins when both apply. */
+.dark[data-time-band="morning"] .m-shell {
+  --background: 26 18% 6%;
+  --m-sky-rgb: 255 182 104;
+  --m-sky-alpha: 0.12;
+  --m-sky2-rgb: 255 182 104;
+  --m-sky2-alpha: 0.08;
+  --m-ground-rgb: 255 182 104;
+  --m-ground-alpha: 0.04;
+}
+.dark[data-time-band="evening"] .m-shell {
+  --background: 16 20% 6%;
+  --m-sky-rgb: 255 124 76;
+  --m-sky-alpha: 0.13;
+  --m-sky2-rgb: 255 124 76;
+  --m-sky2-alpha: 0.09;
+  --m-ground-rgb: 255 124 76;
+  --m-ground-alpha: 0.04;
+}
+.dark[data-time-band="night"] .m-shell {
+  --background: 231 28% 6%;
+  --m-sky-rgb: 84 104 225;
+  --m-sky-alpha: 0.17;
+  --m-sky2-rgb: 84 104 225;
+  --m-sky2-alpha: 0.11;
+  --m-ground-rgb: 84 104 225;
+  --m-ground-alpha: 0.05;
+}
+
+/* =============================================================================
+ * Accessibility overrides
+ *
+ * iOS "Increase Contrast" maps to prefers-contrast: more. A shell that leans
+ * this hard on translucency and hairlines has to answer it, or the settings
+ * toggle does nothing where it matters most. Borders go from decorative to
+ * load-bearing and muted text stops being muted.
+ * ========================================================================== */
+
+@media (prefers-contrast: more) {
+  .m-shell {
+    /* 58%, not the 62% that looks like "a clearly visible hairline". A border is
+       a graphical object, so 1.4.11's 3:1 binds against --card — and on white,
+       62% measures 2.89:1. In the one mode whose entire purpose is contrast,
+       shipping a boundary that fails the boundary rule would be absurd. */
+    --border: 224 14% 58%;
+    --input: 224 14% 58%;
+    --card-border: 224 14% 58%;
+    --popover-border: 224 14% 58%;
+    --muted-foreground: 222 16% 30%;
+  }
+  .dark .m-shell {
+    --border: 220 12% 42%;
+    --input: 220 12% 42%;
+    --card-border: 220 12% 42%;
+    --popover-border: 220 12% 42%;
+    --muted-foreground: 220 14% 78%;
+  }
+}

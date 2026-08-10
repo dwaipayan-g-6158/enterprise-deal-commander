@@ -1,0 +1,155 @@
+/* =============================================================================
+ * Mobile shell — type ladder
+ *
+ * Eight rungs. The previous set was six, which was itself a correction from
+ * eighteen ad-hoc styles on the deal screen alone — but six over-corrected in
+ * two specific places, and the evidence was in the components: tab-bar.tsx
+ * hand-rolled `text-[0.6875rem]` with an inline fontWeight and letterSpacing
+ * because the ladder had no bottom rung, and the analytics figures reached for
+ * .m-title where a genuine display size was wanted. Eight named rungs each with
+ * a stated job is a system; eighteen arbitrary utilities is sprawl. They are not
+ * the same failure, and the fix for one is not the fix for the other.
+ *
+ * ## Two properties here are load-bearing
+ *
+ * UNLAYERED. These rules sit outside any @layer, so they beat every layered
+ * rule — which is the entire reason the shell can be built on shadcn primitives
+ * at all. `.m-headline` on an <ItemTitle> overrides the `text-sm font-medium`
+ * baked into it; `.m-label` on a <Badge> overrides its `text-xs font-semibold`.
+ * Move this file into @layer components and every primitive silently reverts to
+ * desktop sizing, with nothing to see in the markup.
+ *
+ * COLOURLESS. The same precedence cuts the other way. If a rung carried a
+ * colour it would beat the semantic-colors.ts utility sitting next to it and
+ * grey out every health, risk and outcome pill in the app. Colour is always a
+ * per-site decision: labels pair with .m-muted, pills pair with their semantic
+ * class. .m-muted below is the only colour-bearing class in this file, and it is
+ * separate for exactly that reason.
+ *
+ * The cost of the precedence trick is that `className="m-caption text-xs"`
+ * silently discards text-xs. class-scan.ts + type-usage.test.ts catch it.
+ *
+ * ## Scaling
+ *
+ * Every size runs through a scale variable that lib/dynamic-type.ts sets from
+ * the reader's iOS text-size setting (1 everywhere else). Line heights are
+ * unitless so they follow the scaled size instead of being left behind by it.
+ *
+ * Display sizes use a GENTLER curve than body text. Apple grows body faster
+ * than large titles, and for good reason: at 1.35x a linearly-scaled 44px hero
+ * is 59px and the pipeline figure stops fitting on one line at 375pt. The
+ * display curve grows the hero 19% instead of 35% over the same range.
+ *
+ * There is no monospace. The shell sets font-variant-numeric: tabular-nums, so
+ * figures still align in a column; mono was buying a terminal look plus one real
+ * defect, because a monospace period occupies a full character cell and rendered
+ * the most important number in the app as `$3 . 82M`.
+ *
+ * Labels are sentence case. The strings were always written that way — the old
+ * .m-eyebrow uppercased them in CSS, and uppercase plus 0.06em tracking is the
+ * single most dated signal in a mobile interface.
+ * ========================================================================== */
+
+.m-shell {
+  --m-type-scale-display: calc(1 + (var(--m-type-scale, 1) - 1) * 0.55);
+}
+
+/* The one figure a screen is about — portfolio value, close score, a deal's TCV.
+   At most one per screen; two heroes means neither is. */
+.m-hero {
+  font-size: calc(2.75rem * var(--m-type-scale-display, 1));
+  line-height: 1.04;
+  font-weight: 680;
+  letter-spacing: -0.035em;
+}
+
+/* The large title in the scroll flow, before it collapses into the nav bar. */
+.m-display {
+  font-size: calc(2rem * var(--m-type-scale-display, 1));
+  line-height: 1.12;
+  font-weight: 660;
+  letter-spacing: -0.028em;
+}
+
+/* The compact nav-bar title, and a card's lead figure. */
+.m-title {
+  font-size: calc(1.3125rem * var(--m-type-scale-display, 1));
+  line-height: 1.24;
+  font-weight: 640;
+  letter-spacing: -0.021em;
+}
+
+/* A row's or a card's lead line. iOS `.headline`, near enough. */
+.m-headline {
+  font-size: calc(1.0625rem * var(--m-type-scale, 1));
+  line-height: 1.29;
+  font-weight: 590;
+  letter-spacing: -0.013em;
+}
+
+/* Prose: narratives, alert messages, empty-state copy.
+   Held at 16px. Body size was never what the inventory faulted, and 16 is the
+   documented floor for mobile body text — stepping under it to buy a tighter
+   scale would be a regression dressed as a refinement. It is also the threshold
+   below which iOS Safari zooms on focusing an input. */
+.m-body {
+  font-size: calc(1rem * var(--m-type-scale, 1));
+  line-height: 1.5;
+  font-weight: 400;
+  letter-spacing: -0.006em;
+}
+
+/* A card's label, and the weight every pill is set in. */
+.m-label {
+  font-size: calc(0.8125rem * var(--m-type-scale, 1));
+  line-height: 1.38;
+  font-weight: 560;
+  letter-spacing: 0;
+}
+
+/* Metadata: dates, counts, deltas, footnotes. Same size as .m-label, lighter —
+   the pair is how a row separates what a thing IS from what it MEASURES without
+   introducing another size. */
+.m-caption {
+  font-size: calc(0.8125rem * var(--m-type-scale, 1));
+  line-height: 1.38;
+  font-weight: 440;
+  letter-spacing: 0;
+}
+
+/* Tab labels, axis ticks, legend entries. The rung whose absence made
+   tab-bar.tsx hand-roll its own type. */
+.m-micro {
+  font-size: calc(0.6875rem * var(--m-type-scale, 1));
+  line-height: 1.18;
+  font-weight: 560;
+  letter-spacing: 0.005em;
+}
+
+/* The only colour-bearing class here, and deliberately not part of any rung. */
+.m-muted {
+  color: hsl(var(--muted-foreground));
+}
+
+/* A modifier, not a rung: combines with any size. For readouts whose digits
+   change under a stationary finger — a scrubbed chart, a counting figure —
+   where proportional digits jitter the width and the number appears to wobble.
+   The shell already sets tabular-nums globally; this pins it at sites where it
+   must not be inherited away, and tightens tracking so long figures still fit. */
+.m-num {
+  font-variant-numeric: tabular-nums lining-nums;
+  letter-spacing: -0.02em;
+}
+
+/* Dynamic Type at the largest sizes: the tab bar's four labels stop fitting at
+   375pt well before the 1.35 ceiling. The right response is for the bar to
+   adapt rather than for the whole app to stop growing, so lib/dynamic-type.ts
+   stamps a size band and the bar drops to icons only. The labels move to
+   aria-label, which the tabs need regardless. */
+[data-m-type-size="xlarge"] .m-tabbar-label {
+  display: none;
+}
+[data-m-type-size="xlarge"] .m-tabbar-icon {
+  width: 1.625rem;
+  height: 1.625rem;
+}

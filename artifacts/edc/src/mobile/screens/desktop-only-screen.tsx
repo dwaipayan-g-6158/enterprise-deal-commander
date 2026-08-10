@@ -1,6 +1,6 @@
 import { Link } from "wouter";
 import { Monitor } from "lucide-react";
-import { MobileHeader } from "@/mobile/shell/mobile-header";
+import { MNavBar } from "@/mobile/shell/m-nav-bar";
 
 /**
  * Stands in for Portfolio, Autopsy and Settings. Those are wide table and
@@ -11,7 +11,7 @@ import { MobileHeader } from "@/mobile/shell/mobile-header";
 export function DesktopOnlyScreen({ name, reason }: { name: string; reason: string }) {
   return (
     <>
-      <MobileHeader title={name} />
+      <MNavBar title={name} />
       <div className="flex flex-col items-center gap-3 px-8 py-16 text-center">
         <span className="m-card flex h-14 w-14 items-center justify-center rounded-full">
           <Monitor className="h-6 w-6 m-muted" aria-hidden="true" />

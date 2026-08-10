@@ -21,14 +21,41 @@ const BASELINE_PX = 17;
 
 /**
  * Bounds. The floor allows a reader who has turned text *down* to get some of
- * that back without dropping the 13px caption under 12. The ceiling is where
- * the tab bar's four labels stop fitting across 375px — past that the layout
- * breaks rather than adapting, and a broken layout serves nobody.
+ * that back without dropping the 13px caption under 12.
+ *
+ * The ceiling used to be where the tab bar's four labels stop fitting across
+ * 375px. That was the wrong thing to fix: capping the whole interface because
+ * one component runs out of room punishes every other screen for the tab bar's
+ * geometry. The bar now adapts instead — see `bandFor` — so the ceiling is set
+ * by where prose genuinely stops being readable in a phone column.
  */
 const MIN_SCALE = 0.92;
-const MAX_SCALE = 1.35;
+const MAX_SCALE = 1.5;
 
 const PROPERTY = "--m-type-scale";
+const BAND_ATTRIBUTE = "mTypeSize";
+
+export type TypeSizeBand = "default" | "large" | "xlarge";
+
+/**
+ * Coarse band for layout decisions that a continuous ratio cannot express.
+ *
+ * A component either fits or it does not; there is no 1.22-scale version of a
+ * four-label tab bar. At `xlarge`, type.css drops the tab labels and grows the
+ * icons, moving the names to `aria-label` — which the tabs need regardless, so
+ * nothing is lost to a screen reader.
+ */
+export function bandFor(scale: number): TypeSizeBand {
+  if (scale >= 1.3) return "xlarge";
+  if (scale >= 1.15) return "large";
+  return "default";
+}
+
+/** The clamp, extracted so it can be tested without a DOM. */
+export function clampScale(px: number): number {
+  if (!Number.isFinite(px) || px <= SENTINEL_PX * 4) return 1;
+  return Math.min(MAX_SCALE, Math.max(MIN_SCALE, px / BASELINE_PX));
+}
 
 /**
  * A size the probe could never legitimately report. Set before the shorthand
@@ -59,13 +86,19 @@ export function measureTypeScale(): number {
   const px = Number.parseFloat(getComputedStyle(probe).fontSize);
   probe.remove();
 
-  if (!Number.isFinite(px) || px <= SENTINEL_PX * 4) return 1;
-  return Math.min(MAX_SCALE, Math.max(MIN_SCALE, px / BASELINE_PX));
+  return clampScale(px);
 }
 
-/** Publishes the ratio for the stylesheet. Returns the value it wrote. */
+/**
+ * Publishes the ratio and the band for the stylesheet. Returns the value written.
+ *
+ * Both go on <html> rather than on .m-shell: BootSplash renders before any shell
+ * has mounted and borrows the same tokens, and the band drives a rule that has
+ * to be in scope for portalled sheet content too.
+ */
 export function applyTypeScale(): number {
   const scale = measureTypeScale();
   document.documentElement.style.setProperty(PROPERTY, String(scale));
+  document.documentElement.dataset[BAND_ATTRIBUTE] = bandFor(scale);
   return scale;
 }

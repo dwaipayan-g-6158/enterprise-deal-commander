@@ -35,6 +35,7 @@ export function ListRow({
   onClick,
   media,
   title,
+  titleLines = 1,
   sub,
   body,
   trailing,
@@ -49,6 +50,15 @@ export function ListRow({
   /** A dot or icon ahead of the title. Centred rather than baselined. */
   media?: ReactNode;
   title: ReactNode;
+  /**
+   * How many lines the title may run to before it is clamped.
+   *
+   * One is right for a row whose trailing column is the point (a value, a
+   * delta), where the title is a label. Two is right when the title IS the
+   * content and the trailing column is a hint — a one-line clamp there spends
+   * the row's information on the least important thing in it.
+   */
+  titleLines?: 1 | 2;
   /** One line under the title: an account, a stage, an actor. */
   sub?: ReactNode;
   /** Prose under the title. Clamped to two lines by `ItemDescription`. */
@@ -63,10 +73,28 @@ export function ListRow({
   const content = (
     <>
       {media ? <ItemMedia className="w-4 translate-y-0 self-center">{media}</ItemMedia> : null}
-      <ItemContent className="gap-0.5">
+      {/* `min-w-0` is load-bearing, and its absence was VISIBLE on the deployed
+          app. shadcn's ItemContent is `flex flex-1 flex-col` with no min-width
+          override, so it inherits a flex item's default `min-width: auto` and
+          cannot shrink below its own min-content width. With a `nowrap` title
+          that min-content width is the WHOLE title, so the column grew to 1003px
+          inside a 390px phone: on the deal Brief the coaching titles painted
+          straight off the right edge of the card and the screen, and on the
+          Command Center the row wrapped instead, dropping the icon and the
+          trailing destination onto their own lines. `truncate` on the title
+          could not save either case — text-overflow only ellipsises a box that
+          something has constrained, and nothing was constraining this one. */}
+      <ItemContent className="min-w-0 gap-0.5">
         {/* ItemTitle is a flex row by default, and text-overflow needs a block
             container — so `truncate` on it alone would do nothing. */}
-        <ItemTitle className="m-headline block w-full min-w-0 truncate">{title}</ItemTitle>
+        <ItemTitle
+          className={cn(
+            "m-headline block w-full min-w-0",
+            titleLines === 2 ? "line-clamp-2" : "truncate",
+          )}
+        >
+          {title}
+        </ItemTitle>
         {sub ? <ItemDescription className="m-caption truncate">{sub}</ItemDescription> : null}
         {body ? <ItemDescription className="m-body">{body}</ItemDescription> : null}
       </ItemContent>

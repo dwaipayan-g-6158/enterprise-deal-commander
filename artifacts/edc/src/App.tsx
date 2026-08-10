@@ -12,7 +12,7 @@ import { ThemeProvider } from "@/components/theme-provider";
 import { ThemeColorSync } from "@/components/theme-color-sync";
 import { FocusModeProvider } from "@/lib/presence/focus-mode-context";
 import { AppShellSkeleton } from "@/components/app-shell-skeleton";
-import { MobileShellSkeleton } from "@/mobile/shell/mobile-shell-skeleton";
+import { MobileShellSkeleton } from "@/mobile/shell/m-shell-skeleton";
 import { useMediaQuery } from "@/hooks/use-media-query";
 
 // Each shell is a separate chunk: a phone never downloads the desktop cockpit,

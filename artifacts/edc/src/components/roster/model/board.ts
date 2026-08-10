@@ -163,3 +163,29 @@ export function extractGuardrail(err: unknown): GuardrailInfo | null {
     patternCodes: apiErr.patternCodes ?? [],
   };
 }
+
+/**
+ * Optimistically move a deal between stages inside a cached deals-list response.
+ *
+ * Returns the input untouched when the deal isn't present, so `setQueriesData`
+ * can be pointed at every cached param-variant and the ones that don't hold this
+ * deal are left strictly identical — no new object, no re-render.
+ *
+ * Lives here rather than beside its first caller because it now has two: the
+ * desktop board's drag-to-move and the mobile stage-advance screen. Two
+ * implementations of "move a deal between stages" is exactly the divergence
+ * useRosterData exists to prevent, and this is the module that is already
+ * node-tested.
+ */
+export function patchDealStage(cached: unknown, dealId: string, toStage: BoardStage): unknown {
+  if (!cached || typeof cached !== "object") return cached;
+  const c = cached as { data?: { id: string; salesStageId?: number | null; salesStage?: string | null }[] };
+  if (!Array.isArray(c.data)) return cached;
+  let changed = false;
+  const data = c.data.map((d) => {
+    if (d.id !== dealId) return d;
+    changed = true;
+    return { ...d, salesStageId: toStage.id, salesStage: toStage.name };
+  });
+  return changed ? { ...c, data } : cached;
+}
