@@ -14,7 +14,7 @@ import { WifiOff } from "lucide-react";
  * Rendered inside `MobileHeader` rather than as a sibling of it, for two
  * reasons. The header already owns `pt-safe`, so a strip above it would either
  * double the status-bar inset or have to negotiate for it. And the header
- * carries `m-vt-header`, which lifts it out of the route transition's snapshot
+ * carries `m-vt-navbar`, which lifts it out of the route transition's snapshot
  * — a strip outside that name would slide away with the content underneath it
  * on every navigation.
  *

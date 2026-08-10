@@ -20,7 +20,7 @@ import { cn } from "@/lib/utils";
  * Snap points are 55% and 92% — a peek that leaves the underlying screen
  * visible, and a full read. Dragging between them, and the fling-to-dismiss,
  * are vaul's own physics, and its snap curve is already the Apple sheet
- * easing this shell uses elsewhere as --m-ease-ios.
+ * easing this shell uses elsewhere as --m-ease-standard.
  */
 export function SectionSheet({
   open,

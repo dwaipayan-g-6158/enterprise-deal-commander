@@ -1,0 +1,349 @@
+/* =============================================================================
+ * Mobile shell — motion
+ *
+ * Declared on :root rather than .m-shell, and that is not an oversight:
+ * ::view-transition-* pseudo-elements are children of the DOCUMENT root and
+ * cannot see anything scoped to a class inside it. The file still ships only in
+ * the mobile chunk, so a laptop never downloads it.
+ *
+ * Five kinds of motion, and there is no sixth:
+ *   TAP           .m-press — compression on touch-down
+ *   STATE         selection, chips, badges, tint changes
+ *   PUSH / POP    a route change, via startViewTransition
+ *   SHEET         vaul owns the drag; we own the backdrop and the scale-back
+ *   SCROLL-DRIVEN reveals, header lift, large-title collapse
+ *
+ * Anything that does not fit one of those is decoration and does not ship.
+ * ========================================================================== */
+
+:root {
+  --m-dur-instant: 90ms; /* icon or colour flip */
+  --m-dur-tap: 140ms; /* press down */
+  --m-dur-quick: 200ms; /* state change */
+  --m-dur-move: 280ms; /* screen push */
+  --m-dur-sheet: 460ms; /* sheet presents */
+  --m-dur-dismiss: 320ms; /* sheet leaves — asymmetric on purpose: arriving is
+                             an event, leaving is a formality */
+
+  --m-ease-standard: cubic-bezier(0.32, 0.72, 0, 1); /* Apple's sheet curve */
+  --m-ease-emphasized: cubic-bezier(0.2, 0.9, 0.1, 1);
+  --m-ease-enter: cubic-bezier(0.05, 0.7, 0.1, 1);
+  --m-ease-exit: cubic-bezier(0.3, 0, 0.8, 0.15);
+
+  /* Fallback: a symmetric overshoot. Readable as "springy", but it accelerates
+     into the overshoot as hard as it decelerates out, which no physical spring
+     does. */
+  --m-ease-spring: cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+/* A real critically-damped spring — ~1.7% overshoot, settled by 83% — sampled
+   from a spring solver rather than hand-drawn. Hand-tuning a linear() produces
+   a wobble, not a spring; regenerate it if the physics need to change.
+   Safari 17.2+, Chromium 113+. */
+@supports (animation-timing-function: linear(0, 1)) {
+  :root {
+    --m-ease-spring: linear(
+      0,
+      0.006,
+      0.025 2.8%,
+      0.101 6.1%,
+      0.539 18.9%,
+      0.721 25.3%,
+      0.849 31.5%,
+      0.937 38.1%,
+      0.968 41.8%,
+      0.991 45.7%,
+      1.006 50.1%,
+      1.015 55%,
+      1.017 63.9%,
+      1.001 82.8%,
+      1
+    );
+  }
+}
+
+/* --- Boot splash -----------------------------------------------------------
+ * Installed app, once per session. FADE_MS in boot-splash.tsx must match the
+ * duration here or the overlay is removed mid-fade. */
+.m-boot {
+  transition:
+    opacity 320ms var(--m-ease-exit),
+    scale 320ms var(--m-ease-exit);
+}
+.m-boot[data-leaving="true"] {
+  opacity: 0;
+  scale: 1.04;
+}
+
+@keyframes m-boot-wordmark {
+  from {
+    opacity: 0;
+    translate: 0 6px;
+  }
+  to {
+    opacity: 1;
+    translate: none;
+  }
+}
+.m-boot-wordmark {
+  animation: m-boot-wordmark 520ms var(--m-ease-enter) both;
+}
+
+/* --- Push and pop ----------------------------------------------------------
+ * A real iOS push, not a cross-fade. The outgoing screen travels 28% of the
+ * incoming screen's distance and dims — that parallax is the entire reason a
+ * push reads as a STACK rather than a slide, and it costs nothing because view
+ * transitions snapshot whole screens on the compositor.
+ *
+ * Direction comes from lib/history-index.ts, which stamps a monotonic index
+ * into history.state, so `data-m-nav` is a fact rather than an inference from
+ * path depth. Depth is a proxy for history and disagrees with it constantly:
+ * back from /deals to /analytics is not lateral, and a forward tab jump from
+ * /deals/:id to /memory is not a pop.
+ *
+ * LATERAL (tab to tab) stays a short cross-fade with a small rise. A full push
+ * between peer destinations implies a hierarchy that is not there. */
+:root[data-m-nav="forward"]::view-transition-old(root) {
+  animation: m-push-out var(--m-dur-move) var(--m-ease-standard) both;
+}
+:root[data-m-nav="forward"]::view-transition-new(root) {
+  animation: m-push-in var(--m-dur-move) var(--m-ease-standard) both;
+}
+:root[data-m-nav="back"]::view-transition-old(root) {
+  animation: m-pop-out var(--m-dur-move) var(--m-ease-standard) both;
+}
+:root[data-m-nav="back"]::view-transition-new(root) {
+  animation: m-pop-in var(--m-dur-move) var(--m-ease-standard) both;
+}
+:root[data-m-nav="lateral"]::view-transition-old(root) {
+  animation: m-lateral-out var(--m-dur-quick) var(--m-ease-exit) both;
+}
+:root[data-m-nav="lateral"]::view-transition-new(root) {
+  animation: m-lateral-in var(--m-dur-quick) var(--m-ease-enter) both;
+}
+
+@keyframes m-push-out {
+  to {
+    transform: translateX(-28%);
+    filter: brightness(0.9);
+  }
+}
+@keyframes m-push-in {
+  from {
+    transform: translateX(100%);
+  }
+}
+@keyframes m-pop-out {
+  to {
+    transform: translateX(100%);
+  }
+}
+@keyframes m-pop-in {
+  from {
+    transform: translateX(-28%);
+    filter: brightness(0.9);
+  }
+}
+@keyframes m-lateral-out {
+  to {
+    opacity: 0;
+    translate: 0 -6px;
+  }
+}
+@keyframes m-lateral-in {
+  from {
+    opacity: 0;
+    translate: 0 8px;
+  }
+}
+
+/* Chrome holds still while content slides underneath. Giving each element its
+   own view-transition-name lifts it out of the root snapshot, so it cross-fades
+   in place instead of being dragged along with the page.
+   Names must be unique per document: two elements sharing one silently disables
+   the transition for both. */
+.m-vt-navbar {
+  view-transition-name: m-navbar;
+}
+.m-vt-tabbar {
+  view-transition-name: m-tabbar;
+}
+.m-vt-capsule {
+  view-transition-name: m-capsule;
+}
+
+/* aroundNav bails out entirely under reduced motion, so nothing above should
+   ever run. This is a backstop: a transition started by anything else — a
+   gesture the UA drives, say — still has to be silent. */
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation: none !important;
+  }
+}
+
+/* --- Scroll-driven ---------------------------------------------------------
+ * Cards rise as they cross into the scrollport; the nav bar gains a shadow and
+ * its compact title once anything has scrolled under it. All of it runs on the
+ * compositor with no scroll listener, which is why it costs nothing on a slow
+ * phone — where a JS equivalent costs the most.
+ *
+ * THREE TRAPS, each of which fails silently:
+ *
+ *  1. animation-timeline MUST be declared AFTER the animation shorthand. The
+ *     shorthand resets it to `auto`. Written the other way round the rule looks
+ *     right in review and simply never runs.
+ *  2. Movement uses `translate`, never `transform`. A filled animation beats a
+ *     normal declaration, so a finished reveal holding `transform: none` would
+ *     cancel .m-press's scale-on-tap for the rest of the session. `translate`
+ *     is an independent property and composes rather than replaces.
+ *  3. A non-scrollable container makes the timeline INACTIVE, so the animation
+ *     does not apply at all. Every polarity below is therefore written so that
+ *     "no timeline" lands on the visible state.
+ */
+@keyframes m-reveal-in {
+  from {
+    opacity: 0;
+    translate: 0 10px;
+  }
+  to {
+    opacity: 1;
+    translate: none;
+  }
+}
+
+@keyframes m-navbar-lift {
+  from {
+    box-shadow: 0 6px 20px -14px transparent;
+  }
+  to {
+    box-shadow: 0 10px 24px -12px rgb(var(--m-glass-shadow-rgb) / var(--m-glass-shadow-alpha));
+  }
+}
+
+@keyframes m-navbar-title-in {
+  from {
+    opacity: 0;
+    translate: 0 6px;
+  }
+  to {
+    opacity: 1;
+    translate: none;
+  }
+}
+
+@keyframes m-largetitle-out {
+  to {
+    opacity: 0;
+    translate: 0 -8px;
+  }
+}
+
+@media not (prefers-reduced-motion: reduce) {
+  @supports (animation-timeline: view()) {
+    .m-reveal {
+      animation: m-reveal-in linear both;
+      animation-timeline: view();
+      /* Finished by the time the card is a quarter of the way up the
+         scrollport, so it is fully legible well before mid-screen. */
+      animation-range: entry 0% cover 26%;
+    }
+  }
+
+  @supports (animation-timeline: scroll()) {
+    .m-navbar-lift {
+      animation: m-navbar-lift linear both;
+      animation-timeline: scroll(nearest);
+      animation-range: 0 72px;
+    }
+
+    /* The large-title collapse pair. Both are gated on [data-m-scrollable="true"],
+       which m-shell sets from a single ResizeObserver comparing scrollHeight
+       against clientHeight.
+       That gate is what resolves the polarity problem neither pure-CSS answer
+       could: hidden-by-default loses the compact title on a short screen, under
+       reduced motion, and on an engine without animation-timeline; but
+       visible-by-default shows the title TWICE on a short screen, once in the
+       bar and once in the flow. With the gate, a non-scrolling screen simply
+       never installs the pair and renders the nav title alone. */
+    [data-m-scrollable="true"] .m-navbar-title {
+      animation: m-navbar-title-in linear both;
+      animation-timeline: scroll(nearest);
+      /* Starts a few pixels in, so a rubber-band overscroll at the top does not
+         flash the title on and off. */
+      animation-range: 6px 52px;
+    }
+
+    [data-m-scrollable="true"] .m-largetitle {
+      animation: m-largetitle-out linear both;
+      animation-timeline: scroll(nearest);
+      animation-range: 0 52px;
+    }
+  }
+}
+
+/* --- State changes --------------------------------------------------------- */
+
+/* Content replacing its own skeleton. Short enough to read as the skeleton
+   dissolving rather than as a second load. The global reduced-motion rule
+   clamps this to 0.01ms and `both` lands it on the end state, so it needs no
+   separate guard. */
+@keyframes m-appear {
+  from {
+    opacity: 0;
+    translate: 0 4px;
+  }
+  to {
+    opacity: 1;
+    translate: none;
+  }
+}
+.m-appear {
+  animation: m-appear var(--m-dur-quick) var(--m-ease-enter) both;
+}
+
+/* Progressive disclosure. Grid-rows rather than max-height: an arbitrary
+   max-height either clips tall content or coasts through empty space on short
+   content, and 1fr measures whatever is actually there. */
+.m-collapse {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows var(--m-dur-quick) var(--m-ease-standard);
+}
+.m-collapse[data-open="true"] {
+  grid-template-rows: 1fr;
+}
+.m-collapse > * {
+  overflow: hidden;
+  min-height: 0;
+}
+
+/* The tab bar's selection pop. Fires only on a genuine tab change, never on the
+   initial mount — see tab-bar.tsx, which tracks the previous tab in module
+   scope precisely because the bar used to remount on every navigation. */
+@keyframes m-tab-pop {
+  0% {
+    scale: 1;
+  }
+  42% {
+    scale: 0.86;
+  }
+  100% {
+    scale: 1;
+  }
+}
+.m-tab-pop {
+  animation: m-tab-pop 320ms var(--m-ease-spring) both;
+}
+
+/* Pull-to-refresh confirmation. Without a deliberate beat, a fast refetch reads
+   as the gesture having been ignored. */
+@keyframes m-ptr-pulse {
+  50% {
+    scale: 1.18;
+  }
+}
+.m-ptr-pulse {
+  animation: m-ptr-pulse 280ms var(--m-ease-emphasized) both;
+}

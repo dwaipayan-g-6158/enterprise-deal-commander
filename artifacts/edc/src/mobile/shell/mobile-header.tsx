@@ -56,12 +56,12 @@ export function MobileHeader({
   return (
     <header
       className={cn(
-        // m-vt-header lifts the bar out of the route transition's root
+        // m-vt-navbar lifts the bar out of the route transition's root
         // snapshot, so it cross-fades in place while the content slides
         // underneath it — an iOS nav bar does not travel with its screen.
-        // m-header-lift deepens the shadow over the first 72px of scroll, so
+        // m-navbar-lift deepens the shadow over the first 72px of scroll, so
         // the bar reads as lifting off content that has gone under it.
-        "m-glass m-glass-top m-header-lift m-vt-header sticky top-0 z-30 border-b border-border pt-safe",
+        "m-glass m-glass-top m-navbar-lift m-vt-navbar sticky top-0 z-30 border-b border-border pt-safe",
         className,
       )}
     >
@@ -81,7 +81,7 @@ export function MobileHeader({
             because a back button that appears on scroll is a back button you
             cannot find. The <h1> is never removed from the tree either — it is
             invisible, not absent, so a screen reader still gets the title. */}
-        <div className={cn("min-w-0 flex-1", collapseTitle && "m-nav-title")}>
+        <div className={cn("min-w-0 flex-1", collapseTitle && "m-navbar-title")}>
           <h1 className="m-title truncate">{title}</h1>
           {subtitle ? <p className="m-caption m-muted mt-0.5 truncate">{subtitle}</p> : null}
         </div>

@@ -106,25 +106,27 @@ export function CommanderButton() {
       tabIndex={hidden ? -1 : undefined}
       aria-hidden={hidden}
       className={cn(
-        // m-vt-commander: like the tab bar, the capsule holds still while the
+        // m-vt-capsule: like the tab bar, the capsule holds still while the
         // screen changes behind it.
-        "m-press m-vt-commander absolute bottom-[calc(4rem+env(safe-area-inset-bottom)+0.75rem)] left-1/2 z-40",
-        "flex h-14 items-center justify-center gap-2 rounded-full px-6",
-        // The inset highlight along the top edge is the same specular the
-        // glass chrome carries, so the capsule reads as the same material
-        // rather than a solid pill sitting on top of it.
-        "bg-[var(--m-obsidian)] text-white",
-        "shadow-[inset_0_1px_0_0_rgba(255,255,255,0.16),0_8px_24px_rgba(0,0,0,0.28)]",
-        "ring-1 ring-[var(--m-obsidian-ring)] backdrop-blur-xl backdrop-saturate-150",
+        "m-press m-vt-capsule absolute bottom-[calc(4rem+env(safe-area-inset-bottom)+0.75rem)] left-1/2 z-40",
+        "flex h-14 items-center justify-center gap-2 px-6",
+        // .m-capsule carries the whole material — fill, label colour, pill
+        // radius, elevation, specular edge and ring. It is a single class
+        // rather than utilities because the fill's POLARITY INVERTS between
+        // themes: obsidian on light, bright indigo on dark. A dark pill on a
+        // near-black canvas measures 1.01:1 against it and is simply not
+        // visible as a shape, so "most prominent" can only mean light there.
+        // Hard-coding text-white here would have made the dark label unreadable.
+        "m-capsule",
         // `translate` rather than `transform`, so it composes with .m-press's
         // scale on tap instead of cancelling it — the same trap the
         // scroll-driven reveals hit.
-        "-translate-x-1/2 transition-[translate,opacity] duration-[var(--m-dur-move)] ease-[var(--m-ease-ios)]",
+        "-translate-x-1/2 transition-[translate,opacity] duration-[var(--m-dur-move)] ease-[var(--m-ease-standard)]",
         hidden ? "pointer-events-none translate-y-[calc(100%+1.5rem)] opacity-0" : "translate-y-0",
       )}
     >
       <Icon className="h-5 w-5 shrink-0" aria-hidden="true" />
-      <span className="m-label whitespace-nowrap text-white opacity-90">{label}</span>
+      <span className="m-label whitespace-nowrap opacity-90">{label}</span>
     </button>
   );
 }

@@ -20,8 +20,10 @@ import Share from "@/pages/share";
 // The mobile chunk's stylesheets, imported at its entry rather than inside
 // MobileShell: BootSplash below borrows .m-shell's tokens and renders before
 // any MobileShell has mounted.
-import "@/mobile/mobile.css";
-import "@/mobile/motion.css";
+import "@/mobile/styles/tokens.css";
+import "@/mobile/styles/material.css";
+import "@/mobile/styles/type.css";
+import "@/mobile/styles/motion.css";
 
 /**
  * Session guard for the mobile shell. Same semantics as the desktop guard —
