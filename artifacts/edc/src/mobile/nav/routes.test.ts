@@ -5,6 +5,7 @@ import { COCKPIT_GROUPS } from "../../components/cockpit/cockpit-tabs";
 import { MOBILE_TABS, activeTabId } from "./mobile-nav";
 import {
   DEAL_PANELS,
+  LOSS_SUBS,
   MOBILE_ROUTES,
   PANEL_GROUP_LABEL,
   PANEL_GROUP_ORDER,
@@ -78,6 +79,35 @@ describe("deal panels", () => {
   });
 });
 
+describe("loss sub-screens", () => {
+  it("keeps the desktop tab ids, so a shared link means the same thing", () => {
+    // Slice 0 added `/autopsy/:panel` → `/autopsy` as a desktop redirect. These
+    // ids are also the desktop tab values, so a link shared from a phone lands
+    // on the right subject rather than a generic page.
+    expect(LOSS_SUBS.map((s) => s.id)).toEqual([
+      "early-warning",
+      "archetypes",
+      "product-gaps",
+    ]);
+  });
+
+  it("gives every sub a title and a blurb", () => {
+    for (const sub of LOSS_SUBS) {
+      expect(sub.title.trim().length).toBeGreaterThan(0);
+      // The blurb is what the lens root shows instead of the screen's content.
+      // A row with no blurb is a row nobody can decide whether to tap.
+      expect(sub.blurb.trim().length).toBeGreaterThan(0);
+      expect(sub.id).toMatch(/^[a-z][a-z-]*[a-z]$/);
+    }
+  });
+
+  it("routes every sub through the one autopsy pattern", () => {
+    for (const sub of LOSS_SUBS) {
+      expect(routeFor(`/autopsy/${sub.id}`)?.pattern).toBe("/autopsy/:sub");
+    }
+  });
+});
+
 describe("matchesPattern", () => {
   it("matches segment-wise and requires equal length", () => {
     expect(matchesPattern("/deals/:id", "/deals/abc")).toBe(true);
@@ -134,8 +164,11 @@ describe("route table", () => {
       "/deals/abc/alerts",
       "/deals/abc/cross-sell",
       "/analytics",
+      "/analytics/flow",
       "/portfolio",
+      "/portfolio/alerts",
       "/autopsy",
+      "/autopsy/archetypes",
       "/memory",
       "/memory/mem-1",
       "/account",

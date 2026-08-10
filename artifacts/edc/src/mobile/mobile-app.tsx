@@ -14,7 +14,12 @@ import { CommandScreen } from "@/mobile/screens/command/command-screen";
 import { DealsScreen } from "@/mobile/screens/deals/deals-screen";
 import { DealBriefScreen } from "@/mobile/screens/deal/deal-brief-screen";
 import { DealPanelScreen } from "@/mobile/screens/deal/panel-screen";
-import { AnalyticsScreen } from "@/mobile/screens/analytics-screen";
+import { PipelineScreen } from "@/mobile/screens/intelligence/pipeline-screen";
+import { FlowScreen } from "@/mobile/screens/intelligence/flow-screen";
+import { PortfolioScreen } from "@/mobile/screens/intelligence/portfolio-screen";
+import { PortfolioAlertsScreen } from "@/mobile/screens/intelligence/portfolio-alerts-screen";
+import { LossesScreen } from "@/mobile/screens/intelligence/losses-screen";
+import { LossDetailScreen } from "@/mobile/screens/intelligence/loss-detail-screen";
 import { MemoryScreen } from "@/mobile/screens/memory-screen";
 import { MemoryDetailScreen } from "@/mobile/screens/memory-detail-screen";
 import NotFound from "@/pages/not-found";
@@ -150,23 +155,17 @@ export default function MobileApp() {
                   )}
                 </Route>
 
-                <Route path="/analytics" component={AnalyticsScreen} />
-
-                {/* Desktop-only surfaces still resolve rather than 404, so a
-                    link shared from a laptop doesn't dead-end on a phone. These
-                    shrink as the Intelligence tab absorbs Portfolio and Autopsy
-                    in a later slice. */}
-                <Route path="/portfolio">
-                  <DesktopOnlyScreen
-                    name="Portfolio"
-                    reason="Portfolio risk reads as a heatmap across account managers, technical leads and products — a grid that needs width to compare."
-                  />
-                </Route>
-                <Route path="/autopsy">
-                  <DesktopOnlyScreen
-                    name="Autopsy"
-                    reason="Loss analysis puts archetypes, competitors and product gaps side by side, which takes more columns than a phone has."
-                  />
+                {/* The Intelligence tab, on the REAL desktop URLs. There is
+                    deliberately no /intelligence route: inventing one would
+                    break deep-link parity, and a lens switch would read as a
+                    push into a hierarchy that does not exist. */}
+                <Route path="/analytics" component={PipelineScreen} />
+                <Route path="/analytics/flow" component={FlowScreen} />
+                <Route path="/portfolio" component={PortfolioScreen} />
+                <Route path="/portfolio/alerts" component={PortfolioAlertsScreen} />
+                <Route path="/autopsy" component={LossesScreen} />
+                <Route path="/autopsy/:sub">
+                  {(params) => <LossDetailScreen key={params.sub} sub={params.sub} />}
                 </Route>
 
                 <Route path="/memory" component={MemoryScreen} />

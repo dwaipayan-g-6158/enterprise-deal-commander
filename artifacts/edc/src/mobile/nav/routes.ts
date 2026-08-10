@@ -96,6 +96,48 @@ export function panelHref(dealId: string, panelId: string): string {
   return `/deals/${dealId}/${panelId}`;
 }
 
+/**
+ * The pushed sub-screens of the Losses lens.
+ *
+ * Desktop's Autopsy page carries five tabs. Two of them — the loss dashboard and
+ * the competitive matrix — are the answer to "how are we losing", which is what
+ * the lens root already says; folding them in is what leaves the root worth
+ * opening. The other three are each a different question with a different unit
+ * (deals at risk, archetypes, products), and each gets a screen.
+ *
+ * Segments match the desktop tab ids exactly, so `/autopsy/archetypes` means the
+ * same thing on both shells and the redirect Slice 0 added on desktop lands
+ * somewhere sensible.
+ */
+export interface LossSub {
+  id: string;
+  title: string;
+  /** One line on the lens root, saying what the screen answers. */
+  blurb: string;
+}
+
+export const LOSS_SUBS: LossSub[] = [
+  {
+    id: "early-warning",
+    title: "Early warning",
+    blurb: "Live deals matching the patterns that preceded past losses.",
+  },
+  {
+    id: "archetypes",
+    title: "Loss archetypes",
+    blurb: "How each kind of loss actually played out.",
+  },
+  {
+    id: "product-gaps",
+    title: "Product gaps",
+    blurb: "Products that show up disproportionately in stalled deals.",
+  },
+];
+
+export function lossSubById(id: string | undefined): LossSub | undefined {
+  return LOSS_SUBS.find((s) => s.id === id);
+}
+
 export interface MobileRoute {
   /** wouter pattern. `:name` matches exactly one segment. */
   pattern: string;
@@ -133,8 +175,11 @@ export const MOBILE_ROUTES: MobileRoute[] = [
   { pattern: "/deals/:id/:panel", tab: "deals" },
 
   { pattern: "/analytics", tab: "intelligence" },
+  { pattern: "/analytics/flow", tab: "intelligence" },
   { pattern: "/portfolio", tab: "intelligence" },
+  { pattern: "/portfolio/alerts", tab: "intelligence" },
   { pattern: "/autopsy", tab: "intelligence" },
+  { pattern: "/autopsy/:sub", tab: "intelligence" },
 
   { pattern: "/memory", tab: "memory" },
   { pattern: "/memory/:id", tab: "memory" },
