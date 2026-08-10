@@ -12,6 +12,7 @@ import pinoHttp from "pino-http";
 import { ZodError } from "zod";
 import router from "./routes";
 import { logger } from "./lib/logger";
+import { securityHeaders } from "./lib/security-headers";
 import { HttpError, badRequest, sendError } from "./lib/http";
 import type { AuthedRequest } from "./lib/auth";
 
@@ -36,6 +37,9 @@ app.use(
     },
   }),
 );
+// Before the router and the static handler, so every response this server
+// produces carries them — including API JSON and the SPA shell.
+app.use(securityHeaders);
 app.use(cors());
 app.use(cookieParser());
 app.use(express.json());

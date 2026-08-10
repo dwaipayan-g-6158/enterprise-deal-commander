@@ -9,6 +9,7 @@ import {
 import { MTabBar } from "@/mobile/shell/m-tab-bar";
 import { applyTypeScale } from "@/mobile/lib/dynamic-type";
 import { forgetScrollMemory, installScrollMemory } from "@/mobile/lib/scroll-memory";
+import { requestPersistentStorage } from "@/mobile/lib/persistent-storage";
 import { useAppResumeRefetch } from "@/mobile/hooks/use-app-resume-refetch";
 import { CommanderProvider } from "@/mobile/commander/commander-context";
 import { CommanderButton } from "@/mobile/commander/commander-button";
@@ -83,6 +84,14 @@ function MShellFrame({ children }: { children: ReactNode }) {
   useEffect(() => {
     installScrollMemory(scrollRef.current);
     return forgetScrollMemory;
+  }, []);
+
+  // Opt this origin out of storage eviction. Fired from the shell rather than
+  // at boot because the shell only mounts behind the auth guard, and asking
+  // before there is anything worth keeping is what makes some browsers prompt.
+  // Deliberately unawaited: nothing on screen depends on the answer.
+  useEffect(() => {
+    void requestPersistentStorage();
   }, []);
 
   /**
