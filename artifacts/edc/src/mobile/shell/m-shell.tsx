@@ -137,7 +137,24 @@ function MShellFrame({ children }: { children: ReactNode }) {
           // non-scrolling box, which is what vaul's wrapper has to be.
           data-vaul-drawer-wrapper=""
         >
+          {/* First in the DOM and invisible until focused, which is the whole
+              mechanism: a keyboard user tabbing into the app lands here and can
+              jump the tab bar and nav chrome instead of walking through them on
+              every screen. `sr-only` alone would make it unreachable — it needs
+              to become visible when focused, or the user is told nothing about
+              where the focus ring went. */}
+          <a
+            href="#m-main"
+            className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded-lg focus:bg-primary focus:px-4 focus:py-2 focus:text-primary-foreground"
+          >
+            Skip to content
+          </a>
           <main
+            id="m-main"
+            // -1 so the skip link can move focus here. A positive value would
+            // insert the scroll container into the tab order ahead of the
+            // content it holds.
+            tabIndex={-1}
             ref={scrollRef}
             // overscroll-contain stops a rubber-band at the end of a list from
             // scrolling the page behind it (and, in the installed PWA, from

@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { decodeRosterUrl } from "../components/roster/model/roster-url";
 import { MOBILE_ROUTES, matchesPattern } from "./nav/routes";
+import { stripCodeComments } from "./class-scan";
 
 /**
  * The PWA manifest lives inside `vite.config.ts`, which cannot be imported here
@@ -128,5 +129,79 @@ describe("the installed app's identity", () => {
     for (const path of ["/api", "/accounts", "/__catalyst", "/baas"]) {
       expect(CONFIG.includes(path), `${path} is no longer denied`).toBe(true);
     }
+  });
+
+  it("never locks orientation, because the same manifest serves desktop", () => {
+    // "any" states the absence of a lock rather than leaving the field off and
+    // inviting someone to add "portrait" — which would be wrong on a laptop.
+    expect(CONFIG).toMatch(/orientation:\s*"any"/);
+  });
+
+  it("offers install screenshots, and marks them narrow so a phone shows them", () => {
+    // Without form_factor Chrome assumes wide and silently ignores them on the
+    // device the richer install dialog exists for.
+    //
+    // Comments are stripped first: the config explains this rule in prose that
+    // contains the literal `form_factor: "narrow"`, and counting that made the
+    // first draft of this test fail against a correct config.
+    const code = stripCodeComments(CONFIG);
+    const shots = [...code.matchAll(/src:\s*"(screenshot-[^"]+)"/g)].map((m) => m[1]);
+    expect(shots.length, "no install screenshots declared").toBeGreaterThanOrEqual(2);
+    expect([...code.matchAll(/form_factor:\s*"narrow"/g)]).toHaveLength(shots.length);
+  });
+
+  it("keeps the screenshots and the OG card out of the precache", () => {
+    // Roughly 950KB of images the app itself never renders. Chrome's install UI
+    // and link unfurlers both fetch them online, so precaching only taxes the
+    // install. vite-plugin-pwa's default globPatterns would otherwise take
+    // every png in the output.
+    expect(CONFIG).toMatch(/globIgnores/);
+    expect(CONFIG).toMatch(/screenshot-\*\.png/);
+    expect(CONFIG).toMatch(/opengraph\.png/);
+  });
+});
+
+describe("link previews", () => {
+  const HTML = readFileSync(join(import.meta.dirname, "..", "..", "index.html"), "utf8");
+
+  it("backs summary_large_image with an actual image", () => {
+    // The card was declared for months with nothing behind it, which unfurls as
+    // a title and a blank slab. If the image is ever dropped again, drop the
+    // card type with it rather than leaving this mismatch.
+    if (/twitter:card"\s+content="summary_large_image"/.test(HTML)) {
+      expect(HTML, "summary_large_image with no og:image").toMatch(/property="og:image"/);
+    }
+  });
+
+  it("uses a root-absolute image URL", () => {
+    // A relative href resolves against whatever path was shared, so a link to
+    // /deals/123 would ask the unfurler for /deals/opengraph.png.
+    const src = HTML.match(/property="og:image"\s+content="([^"]+)"/)?.[1];
+    expect(src, "no og:image").toBeDefined();
+    expect(src!.startsWith("/"), `og:image "${src}" is not root-absolute`).toBe(true);
+  });
+});
+
+describe("touch and keyboard affordances", () => {
+  const MATERIAL = readFileSync(
+    join(import.meta.dirname, "styles", "material.css"),
+    "utf8",
+  );
+  const SHELL = readFileSync(join(import.meta.dirname, "shell", "m-shell.tsx"), "utf8");
+
+  it("removes the double-tap delay on every tap target", () => {
+    // `manipulation`, never `none`: none would also kill panning, and anything
+    // reaching the left edge must leave horizontal drags to the iOS back
+    // gesture.
+    expect(MATERIAL).toMatch(/\.m-tap\s*\{[^}]*touch-action:\s*manipulation/s);
+    expect(MATERIAL).not.toMatch(/\.m-tap\s*\{[^}]*touch-action:\s*none/s);
+  });
+
+  it("gives a keyboard user a way past the chrome", () => {
+    // A skip link that cannot become visible on focus is worse than none: the
+    // focus ring vanishes and the user is told nothing about where it went.
+    expect(SHELL).toMatch(/href="#m-main"/);
+    expect(SHELL).toMatch(/focus:not-sr-only/);
+    expect(SHELL).toMatch(/id="m-main"/);
   });
 });

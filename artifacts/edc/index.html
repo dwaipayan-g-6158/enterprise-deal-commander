@@ -36,9 +36,20 @@
     <meta property="og:title" content="Enterprise Deal Commander" />
     <meta property="og:description" content="Enterprise Deal Commander — a cockpit for managing enterprise software deals, risk, and governance." />
     <meta property="og:type" content="website" />
+    <!-- `summary_large_image` was declared for months with no image behind it,
+         which unfurls as a title and a blank slab. The card is a rendered brand
+         image rather than a screenshot of the app: every real screen is behind
+         invite-only auth, so a preview of one would show data to people who
+         cannot open it. Root-absolute for the same reason as apple-touch-icon —
+         a relative href resolves against whatever path was shared. -->
+    <meta property="og:image" content="/opengraph.png" />
+    <meta property="og:image:width" content="2400" />
+    <meta property="og:image:height" content="1260" />
+    <meta property="og:image:alt" content="Enterprise Deal Commander — technical reality, tracked as rigorously as revenue." />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="Enterprise Deal Commander" />
     <meta name="twitter:description" content="Enterprise Deal Commander — a cockpit for managing enterprise software deals, risk, and governance." />
+    <meta name="twitter:image" content="/opengraph.png" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <!-- Root-absolute: a relative href resolves against the current path, so
          installing from /deals/123 asked iOS for /deals/apple-touch-icon.png

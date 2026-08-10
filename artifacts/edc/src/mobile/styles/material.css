@@ -217,10 +217,18 @@
 
 /* --- Interaction ---------------------------------------------------------- */
 
-/* Touch target floor. Applied to every tappable row, chip and control. */
+/* Touch target floor. Applied to every tappable row, chip and control.
+ *
+ * `touch-action: manipulation` disables double-tap-to-zoom on these elements,
+ * and disabling it is what removes the ~300ms wait Safari spends deciding
+ * whether a tap was the first of two. It is the narrow value on purpose:
+ * `none` would also kill panning and would break any control sitting near the
+ * left edge, where iOS reads horizontal drags as its interactive back gesture
+ * (see .m-edge-guard below). Scrolling and pinch-zoom both survive this. */
 .m-tap {
   min-height: var(--m-tap);
   min-width: var(--m-tap);
+  touch-action: manipulation;
 }
 
 /* Tap compression. Since iOS closed the haptics side channel (see lib/haptics.ts),

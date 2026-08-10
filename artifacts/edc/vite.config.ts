@@ -66,12 +66,41 @@ export default defineConfig({
           "Enterprise Deal Commander — a cockpit for managing enterprise software deals, risk, and governance.",
         // Matches the app's default light theme. These were #15171a, which
         // flashed a near-black splash and window chrome into a light app.
-        // (No orientation lock: the same manifest serves desktop installs.)
         theme_color: "#f8f9fb",
         background_color: "#f8f9fb",
         display: "standalone",
         start_url: ".",
         scope: ".",
+        categories: ["business", "productivity"],
+        // "any" is the ABSENCE of a lock, stated rather than left implicit. The
+        // same manifest serves desktop installs, so "portrait" would be wrong
+        // here — a laptop window is not portrait. Saying so out loud stops the
+        // next reader adding a lock because the field looked unfinished.
+        orientation: "any",
+        // Shown in Android's richer install dialog instead of a bare icon.
+        // `form_factor: "narrow"` is what makes them eligible there; without it
+        // Chrome assumes wide and ignores them on a phone.
+        //
+        // Captured from the deployed app at 390x844 @2x. Deals and Intelligence
+        // deliberately, not Command: Command opens with a greeting that carries
+        // the signed-in user's name, and this repository is public. Settings →
+        // Users must never appear here for the same reason.
+        screenshots: [
+          {
+            src: "screenshot-deals.png",
+            sizes: "780x1688",
+            type: "image/png",
+            form_factor: "narrow",
+            label: "The live pipeline, with health, score and gate progress per deal",
+          },
+          {
+            src: "screenshot-intelligence.png",
+            sizes: "780x1688",
+            type: "image/png",
+            form_factor: "narrow",
+            label: "Probabilistic forecast and win rate across the open pipeline",
+          },
+        ],
         // Long-press the installed icon. Relative, like start_url, so they
         // resolve against the manifest rather than assuming the app is served
         // from the domain root.
@@ -134,6 +163,13 @@ export default defineConfig({
         ],
       },
       workbox: {
+        // vite-plugin-pwa's default globPatterns sweep every png in the output,
+        // which would drag the install-dialog screenshots and the Open Graph
+        // card into the precache — about 950KB the app itself never renders.
+        // They are fetched by Chrome's install UI and by link unfurlers, both
+        // of which are online by definition, so precaching them buys nothing
+        // and costs every installing user the download.
+        globIgnores: ["**/screenshot-*.png", "**/opengraph.png"],
         navigateFallback: "index.html",
         // Workbox's NavigationRoute tests each of these against
         // `url.pathname + url.search`, only for requests whose mode is
