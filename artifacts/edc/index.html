@@ -9,13 +9,26 @@
          --background token from index.css for each mode. -->
     <meta name="theme-color" media="(prefers-color-scheme: light)" content="#f8f9fb" />
     <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#15171a" />
-    <!-- Installed-app behaviour. black-translucent draws the page under the
-         status bar, which is why the mobile shell's chrome pads itself with
-         env(safe-area-inset-*); without viewport-fit=cover above, those insets
-         resolve to zero. -->
+    <!-- Installed-app behaviour.
+
+         status-bar-style is `default`, not `black-translucent`, and that is a
+         legibility fix rather than a preference. black-translucent draws the page
+         under the status bar AND forces light glyphs regardless of theme, so in
+         light mode the clock, battery and carrier render white-on-near-white over
+         the shell's light glass header. There is no scrim that rescues it: measured
+         over the light header, white glyphs reach 1.82:1 at 0.28 alpha, 2.79 at
+         0.45 and only 3.70 at 0.55 — by which point it is a black bar, not glass,
+         and still short of 4.5:1.
+
+         `default` hands the status bar back to iOS, which picks glyph colour from
+         the system appearance. The cost is losing edge-to-edge under the status
+         bar; the benefit is a readable clock. env(safe-area-inset-top) collapses
+         to 0 on iOS as a result, so pt-safe becomes a no-op there — it is kept
+         because Android draws edge-to-edge and iOS landscape still reports insets.
+         Without viewport-fit=cover above, every inset resolves to zero. -->
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta name="apple-mobile-web-app-title" content="Deal Commander" />
     <title>Enterprise Deal Commander</title>
     <meta name="description" content="Enterprise Deal Commander — a cockpit for managing enterprise software deals, risk, and governance." />

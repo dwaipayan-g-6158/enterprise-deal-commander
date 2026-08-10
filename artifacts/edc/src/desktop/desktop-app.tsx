@@ -58,6 +58,26 @@ export default function DesktopApp() {
       <Route path="/memory" component={() => <ProtectedRoute component={Memory} />} />
       <Route path="/memory/:id" component={() => <ProtectedRoute component={MemoryDetail} />} />
       <Route path="/settings" component={() => <ProtectedRoute component={Settings} />} />
+
+      {/* Deep-link parity with the mobile shell.
+          Mobile addresses each panel as its own pushed screen — /deals/:id/gates,
+          /autopsy/archetypes, /memory/:id/timeline — because a phone navigates by
+          pushing, not by switching tabs in place. Desktop has no such URLs: its
+          sub-tab is local state. Without these, a link a rep shares from the field
+          404s for whoever opens it on a laptop, which is exactly the dead-end the
+          shared-URL design exists to prevent.
+
+          Redirect to the parent rather than honouring the panel: desktop's sub-tab
+          isn't addressable, so there is nothing to redirect *to*. Landing on the
+          right deal at its default tab is the honest outcome. Registered after the
+          parent routes purely for readability — wouter matches whole paths, so the
+          differing segment counts never collide. */}
+      <Route path="/deals/:id/:panel">{(p) => <Redirect to={`/deals/${p.id}`} />}</Route>
+      <Route path="/memory/:id/:panel">{(p) => <Redirect to={`/memory/${p.id}`} />}</Route>
+      <Route path="/analytics/:panel"><Redirect to="/analytics" /></Route>
+      <Route path="/portfolio/:panel"><Redirect to="/portfolio" /></Route>
+      <Route path="/autopsy/:panel"><Redirect to="/autopsy" /></Route>
+
       <Route path="/m"><Redirect to="/" /></Route>
       <Route path="/__catalyst/*" component={CatalystAuthBounce} />
       <Route path="/accounts/*" component={CatalystAuthBounce} />

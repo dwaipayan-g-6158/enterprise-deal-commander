@@ -398,15 +398,27 @@
   }
 }
 
-/* Safe-area utilities. Needed because the installed iOS PWA declares
-   apple-mobile-web-app-status-bar-style=black-translucent, which draws page
-   content under the notch and the home indicator. index.html already sets
-   viewport-fit=cover, without which env(safe-area-inset-*) resolves to 0. */
+/* Safe-area utilities for the installed PWA. index.html sets viewport-fit=cover,
+   without which every env(safe-area-inset-*) resolves to 0.
+
+   pt-safe stays load-bearing even though iOS now uses status-bar-style=default
+   (which starts the web view below the status bar and collapses the top inset to
+   0): Android draws edge-to-edge, and iOS in landscape still reports a top inset.
+
+   pl-safe/pr-safe exist for landscape on a notched iPhone, where the left/right
+   insets are non-zero and the nav bar's back chevron and the tab bar's outer
+   labels otherwise run under the notch. */
 @utility pt-safe {
   padding-top: env(safe-area-inset-top);
 }
 @utility pb-safe {
   padding-bottom: env(safe-area-inset-bottom);
+}
+@utility pl-safe {
+  padding-left: env(safe-area-inset-left);
+}
+@utility pr-safe {
+  padding-right: env(safe-area-inset-right);
 }
 /* Scroll-container clearance for the mobile shell's fixed bottom furniture.
    Covers all of it, not just the tab bar: the 4rem tab bar, plus whatever

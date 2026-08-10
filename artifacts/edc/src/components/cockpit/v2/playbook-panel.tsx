@@ -126,7 +126,7 @@ function StepList({
       await setState.mutateAsync({
         assignmentId,
         stepId,
-        data: { status, note: note ? note : null } as never,
+        data: { status, note: note ? note : null },
       });
       await onChanged();
     } catch {

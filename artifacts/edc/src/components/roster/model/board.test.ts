@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import type { PipelineStage } from "@workspace/api-client-react";
-import { buildBoard, isAtRisk, moveIntent, extractGuardrail, terminalOutcome, toBoardStage, type BoardColumn } from "./board";
+import { buildBoard, isAtRisk, moveIntent, extractGuardrail, patchDealStage, terminalOutcome, toBoardStage, type BoardColumn, type BoardStage } from "./board";
 import type { RosterRow } from "./roster-types";
 
 /** Ids of the rows in a column's section with the given key ([] if absent). */
@@ -194,5 +194,42 @@ describe("extractGuardrail", () => {
     expect(extractGuardrail(new Error("boom"))).toBeNull();
     expect(extractGuardrail(null)).toBeNull();
     expect(extractGuardrail(undefined)).toBeNull();
+  });
+});
+
+describe("patchDealStage", () => {
+  const NEGOTIATION: BoardStage = { id: 4, name: "Negotiation", sortOrder: 40, terminal: null };
+  const cache = () => ({
+    data: [
+      { id: "d1", salesStageId: 2, salesStage: "Discovery" },
+      { id: "d2", salesStageId: 3, salesStage: "Validation" },
+    ],
+    meta: { total: 2 },
+  });
+
+  it("moves only the named deal, and carries both the id and the display name", () => {
+    const out = patchDealStage(cache(), "d2", NEGOTIATION) as ReturnType<typeof cache>;
+    expect(out.data[1]).toEqual({ id: "d2", salesStageId: 4, salesStage: "Negotiation" });
+    // Siblings are untouched, including by reference — a memoized card must not churn.
+    expect(out.data[0]).toEqual({ id: "d1", salesStageId: 2, salesStage: "Discovery" });
+    // Everything outside `data` survives; the caller re-seeds a whole response.
+    expect(out.meta).toEqual({ total: 2 });
+  });
+
+  it("returns the SAME REFERENCE when the deal isn't in this variant", () => {
+    // This is the load-bearing property, not an optimization. setQueriesData is
+    // pointed at every cached deals-list param-variant at once; returning a new
+    // object for the variants that don't hold this deal would re-render every
+    // list in the app on every stage move.
+    const input = cache();
+    expect(patchDealStage(input, "nope", NEGOTIATION)).toBe(input);
+  });
+
+  it("passes through anything that isn't a deals-list response", () => {
+    const noArray = { data: "not an array" };
+    expect(patchDealStage(noArray, "d1", NEGOTIATION)).toBe(noArray);
+    expect(patchDealStage(undefined, "d1", NEGOTIATION)).toBeUndefined();
+    expect(patchDealStage(null, "d1", NEGOTIATION)).toBeNull();
+    expect(patchDealStage("garbage", "d1", NEGOTIATION)).toBe("garbage");
   });
 });
