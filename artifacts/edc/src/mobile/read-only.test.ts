@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { readdirSync, readFileSync, statSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { readFileSync } from "node:fs";
+import { importsOf, reachableModules } from "./module-graph";
 
 /**
  * The mobile shell is read-only by construction, and this is what enforces it.
@@ -9,16 +9,14 @@ import { dirname, join, resolve } from "node:path";
  * registered route rather than trusting a checklist: here we walk every module
  * reachable from src/mobile and assert that none of them can issue a write.
  *
- * The walk is transitive on purpose. A per-file scan would pass a mobile
- * screen that innocently imports a desktop component which itself imports
- * edit-deal-sheet.tsx — the mutation would ship, one hop out of sight.
+ * The walk itself now lives in module-graph.ts, shared with the other mobile
+ * guards and covered by its own fixture suite — including the `export … from`
+ * forms this file's original parser missed, any one of which would have
+ * disabled the walk silently.
  *
  * The server's deny-by-default gate still refuses any write from a reader, so
  * this is the second of two independent guarantees, not the only one.
  */
-
-const SRC = resolve(import.meta.dirname, "..");
-const MOBILE = join(SRC, "mobile");
 
 /**
  * Verbs the mobile surface may perform. The dashboard-visit ping (which
@@ -36,94 +34,6 @@ const ALLOWED_MUTATION_HOOKS = new Set(["useDashboardVisit"]);
 const READ_HOOK = /^use(Get|List|Search|Compare)/;
 const QUERY_HELPER = /(QueryKey|QueryOptions|QueryResult|QueryError)$/;
 
-function walkFiles(dir: string): string[] {
-  return readdirSync(dir).flatMap((entry) => {
-    const full = join(dir, entry);
-    return statSync(full).isDirectory()
-      ? walkFiles(full)
-      : /\.tsx?$/.test(entry) && !/\.test\.tsx?$/.test(entry)
-        ? [full]
-        : [];
-  });
-}
-
-interface ImportRecord {
-  specifier: string;
-  names: string[];
-}
-
-/** Static and dynamic import specifiers, with their named bindings. */
-function parseImports(source: string): ImportRecord[] {
-  const records: ImportRecord[] = [];
-
-  // import ... from "x" — the binding clause is optional (side-effect imports).
-  const staticImport = /import\s+(?:([\s\S]*?)\s+from\s+)?["']([^"']+)["']/g;
-  for (const match of source.matchAll(staticImport)) {
-    const clause = match[1] ?? "";
-    const braces = clause.match(/\{([\s\S]*?)\}/);
-    const names = braces
-      ? braces[1]
-          .split(",")
-          .map((n) => n.replace(/\btype\b/, "").split(/\s+as\s+/)[0].trim())
-          .filter(Boolean)
-      : [];
-    records.push({ specifier: match[2], names });
-  }
-
-  for (const match of source.matchAll(/import\(\s*["']([^"']+)["']\s*\)/g)) {
-    records.push({ specifier: match[1], names: [] });
-  }
-
-  return records;
-}
-
-/** Resolves a first-party specifier to a file on disk, or null if external. */
-function resolveFirstParty(specifier: string, fromFile: string): string | null {
-  let base: string;
-  if (specifier.startsWith("@/")) {
-    base = join(SRC, specifier.slice(2));
-  } else if (specifier.startsWith(".")) {
-    base = resolve(dirname(fromFile), specifier);
-  } else {
-    // A bare specifier is a package (@workspace/*, react, lucide-react …).
-    return null;
-  }
-
-  for (const candidate of [
-    base,
-    `${base}.ts`,
-    `${base}.tsx`,
-    join(base, "index.ts"),
-    join(base, "index.tsx"),
-  ]) {
-    try {
-      if (statSync(candidate).isFile()) return candidate;
-    } catch {
-      // Not this candidate; try the next extension.
-    }
-  }
-  return null;
-}
-
-/** Every first-party module reachable from src/mobile, including the entrypoints. */
-function reachableModules(): string[] {
-  const seen = new Set<string>();
-  const queue = walkFiles(MOBILE);
-
-  while (queue.length > 0) {
-    const file = queue.pop()!;
-    if (seen.has(file)) continue;
-    seen.add(file);
-
-    for (const record of parseImports(readFileSync(file, "utf8"))) {
-      const resolved = resolveFirstParty(record.specifier, file);
-      if (resolved && !seen.has(resolved)) queue.push(resolved);
-    }
-  }
-
-  return [...seen];
-}
-
 describe("the mobile shell cannot write", () => {
   const modules = reachableModules();
 
@@ -138,7 +48,7 @@ describe("the mobile shell cannot write", () => {
 
   it("imports no mutation primitives from React Query", () => {
     const offenders = modules.filter((file) =>
-      parseImports(readFileSync(file, "utf8")).some(
+      importsOf(file).some(
         (record) =>
           record.specifier === "@tanstack/react-query" &&
           record.names.some((name) =>
@@ -154,7 +64,7 @@ describe("the mobile shell cannot write", () => {
     const offenders: string[] = [];
 
     for (const file of modules) {
-      for (const record of parseImports(readFileSync(file, "utf8"))) {
+      for (const record of importsOf(file)) {
         if (record.specifier !== "@workspace/api-client-react") continue;
         for (const name of record.names) {
           if (!name.startsWith("use")) continue;
@@ -172,7 +82,7 @@ describe("the mobile shell cannot write", () => {
   it("issues no write requests through raw fetch", () => {
     const offenders = modules.filter((file) => {
       const source = readFileSync(file, "utf8");
-      return /method:\s*["'](POST|PUT|PATCH|DELETE)["']/i.test(source);
+      return /method:\s*["'`](POST|PUT|PATCH|DELETE)["'`]/i.test(source);
     });
 
     expect(offenders).toEqual([]);

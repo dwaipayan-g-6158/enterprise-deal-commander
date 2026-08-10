@@ -204,7 +204,7 @@ function TagList({ memory }: { memory: DealMemory }) {
   return (
     <div className="flex flex-wrap gap-2">
       {memory.tags.map((tag) => (
-        <Badge key={tag} variant="secondary" className="m-caption font-normal">
+        <Badge key={tag} variant="secondary" className="m-caption">
           {tag}
         </Badge>
       ))}
