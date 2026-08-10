@@ -64,6 +64,11 @@ export function NeedsBlock({ rows, loading }: { rows: NeedRow[]; loading: boolea
                     />
                   }
                   title={row.title}
+                  // Two lines: the title here is "<deal>: <what is wrong>", and
+                  // a one-line clamp cut it at the deal name — spending the row
+                  // on the destination hint, which is the least useful text in
+                  // it. Measured at 390px: "Project Atlas: Premature …".
+                  titleLines={2}
                   body={row.meta}
                   trailing={KIND_DESTINATION[row.kind]}
                   // The visible title already carries the deal name; the label

@@ -36,16 +36,45 @@ export function themeColorTag(): HTMLMetaElement {
   return tag;
 }
 
+/**
+ * Writes the colour the OS should paint, and makes sure it is the one the OS
+ * actually reads.
+ *
+ * ## Why this is not just `themeColorTag().content = hex`
+ *
+ * index.html ships a media-scoped pair (`prefers-color-scheme: light` / `dark`)
+ * so first paint is right before any JS runs. Both syncs used to write only the
+ * unscoped tag, on the belief — stated in this file's own comment — that "being
+ * last in the document it wins over both". **It does not.** The HTML spec walks
+ * the candidate `theme-color` elements in TREE ORDER and returns the first whose
+ * media matches, so the earlier scoped tag wins and the unscoped one is never
+ * reached. The two scoped tags cover light and dark exhaustively, so one of them
+ * always matches: the unscoped tag could never win, and both syncs were inert.
+ *
+ * Measured on the deployed app, dark theme, night band: the mobile shell had
+ * correctly computed and written `#0b0c14`, while the tag the browser would
+ * resolve to was index.html's static `#15171a`.
+ *
+ * The fix does not depend on that reading of the spec. Removing the scoped pair
+ * once JS is running leaves exactly ONE candidate, so it wins under a
+ * first-match rule and a last-match rule alike. They have already done their job
+ * by then — they exist for the frames before hydration, and a live measurement
+ * of the rendered canvas beats a static media query. A reload re-parses them
+ * from the HTML, so first paint keeps its fallback.
+ */
+export function setThemeColor(hex: string): void {
+  for (const stale of document.querySelectorAll('meta[name="theme-color"][media]')) {
+    stale.remove();
+  }
+  themeColorTag().content = hex;
+}
+
 export function ThemeColorSync() {
   const { resolvedTheme } = useTheme();
 
   useEffect(() => {
     if (resolvedTheme !== "light" && resolvedTheme !== "dark") return;
-
-    // The media-scoped pair stays in place for first paint on a fresh load;
-    // this unscoped tag is appended once and then updated, and being last in
-    // the document it wins over both.
-    themeColorTag().content = THEME_COLOR[resolvedTheme];
+    setThemeColor(THEME_COLOR[resolvedTheme]);
   }, [resolvedTheme]);
 
   return null;

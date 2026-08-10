@@ -10,6 +10,8 @@ const THEME_COLOR_SOURCE = readFileSync(
   join(SRC, "mobile", "shell", "m-theme-color.tsx"),
   "utf8",
 );
+const SYNC_SOURCE = readFileSync(join(SRC, "components", "theme-color-sync.tsx"), "utf8");
+const INDEX_HTML = readFileSync(join(SRC, "..", "index.html"), "utf8");
 
 /**
  * The same conversion `m-theme-color.tsx` performs at runtime, kept here so the
@@ -109,5 +111,45 @@ describe("the component reads the token, not the painted colour", () => {
     // A phone-tinted chrome persisting on a window resized to desktop would not
     // be corrected until the theme next changed.
     expect(THEME_COLOR_SOURCE).toMatch(/THEME_COLOR\[resolvedTheme\]/);
+  });
+});
+
+describe("the value written is the value the browser resolves", () => {
+  /**
+   * The regression this pins, and it shipped.
+   *
+   * index.html carries a media-scoped pair of theme-color tags so first paint is
+   * right before any JS runs. Both syncs wrote a THIRD, unscoped tag, on the
+   * belief — written into a comment — that being last in the document made it
+   * win. The HTML spec resolves theme-color by walking the candidates in TREE
+   * ORDER and taking the first whose media matches, so the earlier scoped tag
+   * wins instead. Light and dark between them always match, so the unscoped tag
+   * could never be reached and both syncs were inert.
+   *
+   * Measured on the deployed app in dark/night: the shell had computed and
+   * written `#0b0c14`, and the tag that would actually resolve was the static
+   * `#15171a`.
+   */
+  it("index.html's scoped pair is a FIRST-PAINT fallback, so the sync must drop it", () => {
+    // If this first assertion ever fails, the scoped tags are gone from the HTML
+    // and the removal below is dead code that should go with them.
+    expect(INDEX_HTML).toMatch(/<meta\s+name="theme-color"\s+media=/);
+    expect(SYNC_SOURCE).toMatch(/querySelectorAll\('meta\[name="theme-color"\]\[media\]'\)/);
+    expect(SYNC_SOURCE).toMatch(/\.remove\(\)/);
+  });
+
+  it("callers write through the helper, never straight at the tag", () => {
+    // A bare `themeColorTag().content = …` at a CALL SITE is the bug coming
+    // back: it updates a tag the browser will not read while a scoped tag
+    // precedes it. setThemeColor itself must contain exactly one such
+    // assignment — it is the one place allowed to touch the tag, and counting
+    // it rather than banning it keeps this honest about where the write lives.
+    const helper = stripCodeComments(SYNC_SOURCE).match(/themeColorTag\(\)\.content\s*=/g) ?? [];
+    expect(helper, "setThemeColor should be the single writer").toHaveLength(1);
+
+    const mobile = stripCodeComments(THEME_COLOR_SOURCE);
+    expect(mobile).not.toMatch(/themeColorTag\(\)\.content\s*=/);
+    expect(mobile).toMatch(/setThemeColor\(/);
+    expect(stripCodeComments(SYNC_SOURCE)).toMatch(/setThemeColor\(THEME_COLOR\[resolvedTheme\]\)/);
   });
 });

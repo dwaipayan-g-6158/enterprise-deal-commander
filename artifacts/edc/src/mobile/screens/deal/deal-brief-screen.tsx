@@ -157,6 +157,11 @@ export function DealBriefScreen({ id }: { id: string }) {
                         ) : undefined
                       }
                       title={action.action}
+                      // A recommended action is a sentence, not a label — one
+                      // line cut "Cannot advance stage: Gate 3 (Performance)…"
+                      // to its first three words. The priority beside it is the
+                      // hint, so the sentence gets the room.
+                      titleLines={2}
                       trailing={humanizeCode(action.priority)}
                     />
                   </li>

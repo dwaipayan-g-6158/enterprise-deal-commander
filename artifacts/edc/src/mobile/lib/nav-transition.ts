@@ -126,6 +126,21 @@ export function aroundNav(navigate: Navigate, to: string, options?: NavigateOpti
     state: stampIndex(options?.state, toIndex),
   };
 
+  // BEFORE the transition, not after it.
+  //
+  // This used to sit in the after-commit callback below, alongside
+  // noteNavigation — which is the same slot back-gesture.ts uses to RESTORE
+  // scroll. By then React has committed the incoming screen and the shared
+  // container is already scrolled to that screen's position, so every forward
+  // navigation recorded 0 against the entry it was leaving. The effect was that
+  // going back always landed at the top: scrolled the Command Center to 420,
+  // pushed into a panel, went back, measured 0.
+  //
+  // back-gesture.ts:onPopState has always had this right, and says why —
+  // "record where we are leaving from before anything moves". The two paths
+  // simply disagreed, and only the popstate one was correct.
+  rememberScroll(from.index);
+
   runTransition(
     navDirection(from, { path: to, index: toIndex }),
     () => navigate(to, withIndex),
@@ -134,7 +149,6 @@ export function aroundNav(navigate: Navigate, to: string, options?: NavigateOpti
       // programmatic navigations on its own — popstate does not fire for them —
       // and a stale "from" would give the next gesture the wrong direction.
       noteNavigation(to, toIndex);
-      rememberScroll(from.index);
     },
   );
 }

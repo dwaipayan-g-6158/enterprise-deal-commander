@@ -1,7 +1,7 @@
 import { useEffect, type RefObject } from "react";
 import { useTheme } from "next-themes";
 import { useTimeBand } from "@/hooks/use-time-band";
-import { THEME_COLOR, themeColorTag } from "@/components/theme-color-sync";
+import { THEME_COLOR, setThemeColor } from "@/components/theme-color-sync";
 import { hslToRgb } from "@/lib/css-token-audit";
 
 /**
@@ -43,14 +43,18 @@ export function MThemeColor({ shellRef }: { shellRef: RefObject<HTMLElement | nu
 
     const triplet = getComputedStyle(el).getPropertyValue("--background").trim();
     const hex = tripletToHex(triplet);
-    if (hex) themeColorTag().content = hex;
+    // setThemeColor, not a bare tag write: index.html's media-scoped pair
+    // precedes the unscoped tag and would otherwise win the spec's
+    // first-match-in-tree-order resolution, leaving this value unread. See
+    // theme-color-sync.tsx.
+    if (hex) setThemeColor(hex);
 
     return () => {
       // The shell unmounts when the viewport crosses into desktop. Handing the
       // tag back stops a phone-tinted chrome persisting on a resized window,
       // where ThemeColorSync would not correct it until the theme next changed.
       if (resolvedTheme === "light" || resolvedTheme === "dark") {
-        themeColorTag().content = THEME_COLOR[resolvedTheme];
+        setThemeColor(THEME_COLOR[resolvedTheme]);
       }
     };
   }, [shellRef, resolvedTheme, band]);

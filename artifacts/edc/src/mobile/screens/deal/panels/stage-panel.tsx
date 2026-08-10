@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "wouter";
 import { AlertTriangle, ArrowRight, Check, Lock } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -7,6 +7,8 @@ import { HEALTH_CLASS } from "@/lib/semantic-colors";
 import { useGetDealIntelligence, useListPipelineStages } from "@workspace/api-client-react";
 import { AdminOnly } from "@/components/auth/write-gate";
 import { moveIntent, terminalOutcome, toBoardStage, type BoardStage } from "@/components/roster/model/board";
+import { prefersReducedMotion } from "@/mobile/lib/view-transition-support";
+import { useShellScrollRef } from "@/mobile/shell/m-shell";
 import { panelHref } from "@/mobile/nav/routes";
 import { PanelBody, type PanelBodyProps } from "@/mobile/screens/deal/panel-screen";
 import { MobileCard, CardHeader } from "@/mobile/components/mobile-card";
@@ -216,6 +218,43 @@ function StageRail({ stages, currentName }: { stages: BoardStage[]; currentName:
 }
 
 /**
+ * Brings a just-revealed block fully into view, clear of the floating chrome.
+ *
+ * "In place, not a modal" only holds if the answer is actually on screen.
+ * Measured on the deployed app: the 409 branch rendered below the fold with the
+ * screen still at scrollTop 0, so both of its actions landed inside the band the
+ * Commander capsule floats in — and a hit test at the centre of "Advance anyway"
+ * returned the Intelligence tab underneath it, which would have left the deal
+ * entirely.
+ *
+ * `scrollIntoView` is not used: its `block: "end"` aligns against the
+ * scrollport's PADDING box, and this scroller carries `pb-tabbar` precisely so
+ * content can clear the tab bar — so "end" would stop short of clearing it. The
+ * offset is computed against the container instead, and clamped, so a block that
+ * already fits does not move the screen at all.
+ */
+function useRevealedBelowFold<T extends HTMLElement>() {
+  const ref = useRef<T>(null);
+  const scrollRef = useShellScrollRef();
+
+  useEffect(() => {
+    const el = ref.current;
+    const scroller = scrollRef.current;
+    if (!el || !scroller) return;
+
+    const overshoot = el.getBoundingClientRect().bottom - scroller.getBoundingClientRect().bottom;
+    if (overshoot <= 0) return;
+
+    scroller.scrollTo({
+      top: Math.min(scroller.scrollTop + overshoot, scroller.scrollHeight - scroller.clientHeight),
+      behavior: prefersReducedMotion() ? "auto" : "smooth",
+    });
+  }, [scrollRef]);
+
+  return ref;
+}
+
+/**
  * The 409, in place.
  *
  * No modal. The reader asked to advance and the server said no; replacing the
@@ -252,9 +291,10 @@ function GuardrailBranch({
   outcome: WriteOutcome | null;
 }) {
   const short = reason.trim().length < OVERRIDE_REASON_MIN_LENGTH;
+  const ref = useRevealedBelowFold();
 
   return (
-    <section className="m-card border-destructive/40 p-4" role="alert">
+    <section ref={ref} className="m-card border-destructive/40 p-4" role="alert">
       <div className="flex items-start gap-3">
         <AlertTriangle
           className={cn("mt-0.5 h-5 w-5 shrink-0", HEALTH_CLASS.RED.text)}

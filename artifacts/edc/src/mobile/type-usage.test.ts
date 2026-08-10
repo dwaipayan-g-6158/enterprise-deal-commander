@@ -61,4 +61,29 @@ describe("mobile type styles are not silently overridden", () => {
       .map(srcRelative);
     expect(offenders).toEqual([]);
   });
+
+  it("gives every ItemContent a min-w-0 so a long title cannot burst the row", () => {
+    /**
+     * The regression this pins, and it was visible on the deployed app.
+     *
+     * shadcn's `ItemContent` is `flex flex-1 flex-col` and sets no min-width, so
+     * it keeps a flex item's default `min-width: auto` and cannot shrink below
+     * its own min-content width. With a `nowrap` title that min-content width is
+     * the ENTIRE title. Measured at 390px on the deal Brief, the column grew to
+     * 1003px and the coaching sentences painted off the right edge of the card
+     * and the screen; on the Command Center the row wrapped instead, dropping
+     * the icon and the trailing destination onto lines of their own.
+     *
+     * `truncate` on the title cannot rescue either case: text-overflow only
+     * ellipsises a box something has constrained, and nothing constrained this
+     * one. The constraint has to be on the flex child.
+     */
+    const offenders = files
+      .filter((file) => {
+        const source = readFileSync(file, "utf8");
+        return /<ItemContent\b/.test(source) && !/<ItemContent[^>]*min-w-0/.test(source);
+      })
+      .map(srcRelative);
+    expect(offenders).toEqual([]);
+  });
 });
