@@ -14,6 +14,7 @@ import { CommanderProvider } from "@/mobile/commander/commander-context";
 import { CommanderButton } from "@/mobile/commander/commander-button";
 import { CommanderSheet } from "@/mobile/commander/commander-sheet";
 import { WriteStatusProvider } from "@/mobile/write/write-status-context";
+import { MThemeColor } from "@/mobile/shell/m-theme-color";
 
 const ScrollContainerContext = createContext<RefObject<HTMLElement | null> | null>(null);
 
@@ -139,6 +140,10 @@ function MShellFrame({ children }: { children: ReactNode }) {
           <CommanderButton />
           <MTabBar />
           <CommanderSheet />
+          {/* Non-visual. Points the OS status bar and task-switcher header at
+              this frame's real background, which the desktop sync cannot know —
+              `.m-shell` re-points the token and the ambient band shifts it. */}
+          <MThemeColor shellRef={frameRef} />
         </div>
       </CommanderProvider>
     </ScrollContainerContext.Provider>
