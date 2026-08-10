@@ -182,26 +182,5 @@ describe("link previews", () => {
   });
 });
 
-describe("touch and keyboard affordances", () => {
-  const MATERIAL = readFileSync(
-    join(import.meta.dirname, "styles", "material.css"),
-    "utf8",
-  );
-  const SHELL = readFileSync(join(import.meta.dirname, "shell", "m-shell.tsx"), "utf8");
-
-  it("removes the double-tap delay on every tap target", () => {
-    // `manipulation`, never `none`: none would also kill panning, and anything
-    // reaching the left edge must leave horizontal drags to the iOS back
-    // gesture.
-    expect(MATERIAL).toMatch(/\.m-tap\s*\{[^}]*touch-action:\s*manipulation/s);
-    expect(MATERIAL).not.toMatch(/\.m-tap\s*\{[^}]*touch-action:\s*none/s);
-  });
-
-  it("gives a keyboard user a way past the chrome", () => {
-    // A skip link that cannot become visible on focus is worse than none: the
-    // focus ring vanishes and the user is told nothing about where it went.
-    expect(SHELL).toMatch(/href="#m-main"/);
-    expect(SHELL).toMatch(/focus:not-sr-only/);
-    expect(SHELL).toMatch(/id="m-main"/);
-  });
-});
+// Skip links and touch targets live in `src/shell-a11y.test.ts` — they belong
+// to both shells, not to the manifest.

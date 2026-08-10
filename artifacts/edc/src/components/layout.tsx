@@ -203,6 +203,20 @@ export function Layout({ children }: { children: ReactNode }) {
 
   return (
     <div className="flex h-screen overflow-hidden bg-background">
+      {/* First focusable thing in the app, and invisible until it is focused.
+          Without it, reaching the page content by keyboard means tabbing past
+          the sidebar's seven nav links, the search button, the presence
+          popover, the theme toggle and sign-out — on every single navigation.
+
+          `focus:not-sr-only` is the load-bearing half: a skip link that stays
+          screen-reader-only when focused takes the focus ring somewhere the
+          sighted keyboard user cannot see, which is worse than not having one. */}
+      <a
+        href="#main"
+        className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded-md focus:bg-primary focus:px-4 focus:py-2 focus:text-sm focus:font-medium focus:text-primary-foreground focus:shadow-lg"
+      >
+        Skip to content
+      </a>
       {!isMobile && (
         <aside className="w-64 border-r border-border bg-card flex flex-col">
           <SidebarBody location={location} user={user} role={role} onLogout={signOut} />
@@ -244,7 +258,16 @@ export function Layout({ children }: { children: ReactNode }) {
             </Button>
           </header>
         )}
-        <main className="flex-1 overflow-auto bg-background [scrollbar-gutter:stable]">
+        {/* id/tabIndex are the skip link's target. -1 so it can receive
+            programmatic focus without joining the tab order itself — a
+            positive value would put the scroll container ahead of the content
+            it holds. The id is `main`, distinct from the mobile shell's
+            `m-main`, so the two shells can never contend for one anchor. */}
+        <main
+          id="main"
+          tabIndex={-1}
+          className="flex-1 overflow-auto bg-background [scrollbar-gutter:stable]"
+        >
           <div className="h-full @container">{children}</div>
         </main>
       </div>
