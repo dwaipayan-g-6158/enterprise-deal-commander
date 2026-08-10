@@ -1,7 +1,10 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   activeLensId,
   activeTabId,
+  hidesCommander,
   isLateralMove,
   isLateralRoot,
   MOBILE_TABS,
@@ -170,5 +173,64 @@ describe("activeLensId", () => {
     for (const lens of INTELLIGENCE_LENSES) {
       expect(activeTabId(lens.href), lens.id).toBe("intelligence");
     }
+  });
+});
+
+describe("hidesCommander", () => {
+  it("stays off the screens that own their own thumb zone", () => {
+    // Memory and the Deals list dock a search input there.
+    expect(hidesCommander("/deals")).toBe(true);
+    expect(hidesCommander("/memory")).toBe(true);
+    expect(hidesCommander("/memory/ask")).toBe(true);
+  });
+
+  it("stays off Account and settings, where it is pure occlusion", () => {
+    /**
+     * The regression this pins.
+     *
+     * There is nothing on these screens to search or jump to, and the capsule
+     * floats over the bottom of the content regardless. Measured on the deployed
+     * app: `/account` at rest put the 48px Sign out row 28px under the tab bar
+     * with the capsule over the remaining 20px, so NONE of it was tappable — a
+     * tap at its centre switched to the Intelligence tab and one at its top edge
+     * opened search. The only way out of the app had no working target.
+     */
+    expect(hidesCommander("/account")).toBe(true);
+    for (const id of ["users", "change-log", "team", "targets", "achievements"]) {
+      expect(hidesCommander(`/settings/${id}`), id).toBe(true);
+    }
+  });
+
+  it("still shows on the screens whose verb it carries", () => {
+    // Guard against a hide rule that quietly swallows the whole app.
+    expect(hidesCommander("/")).toBe(false);
+    expect(hidesCommander("/analytics")).toBe(false);
+    expect(hidesCommander("/deals/abc")).toBe(false);
+    expect(hidesCommander("/deals/abc/stage")).toBe(false);
+  });
+
+  it("ignores query and hash, which do not change the screen", () => {
+    expect(hidesCommander("/deals?h=RED")).toBe(true);
+    expect(hidesCommander("/account#top")).toBe(true);
+  });
+});
+
+describe("the account screen keeps its destructive action out of the chrome band", () => {
+  const SOURCE = readFileSync(
+    join(import.meta.dirname, "..", "screens", "account", "account-screen.tsx"),
+    "utf8",
+  );
+
+  it("puts Sign out above the engine-settings note", () => {
+    // Ordering, not preference. This screen runs a little past the shell's
+    // usable height, so its tail renders under the tab bar — and with Sign out
+    // last, that tail WAS Sign out. Prose is what belongs in a band the chrome
+    // covers: nothing is lost by not tapping it.
+    const signOut = SOURCE.indexOf('title={signingOut ? "Signing out…" : "Sign out"}');
+    const engine = SOURCE.indexOf('title="Engine settings"');
+
+    expect(signOut, "Sign out should still be here").toBeGreaterThan(-1);
+    expect(engine, "the engine-settings note should still be here").toBeGreaterThan(-1);
+    expect(signOut, "Sign out must not be the last thing on the screen").toBeLessThan(engine);
   });
 });

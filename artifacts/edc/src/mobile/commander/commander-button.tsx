@@ -4,6 +4,7 @@ import { ListTree, Search, SlidersHorizontal, Target, type LucideIcon } from "lu
 import { cn } from "@/lib/utils";
 import { useShellScrollRef } from "@/mobile/shell/m-shell";
 import { useCommander } from "@/mobile/commander/commander-context";
+import { hidesCommander } from "@/mobile/nav/mobile-nav";
 
 /** Scroll travel that has to accumulate before the capsule changes state. */
 const HYSTERESIS_PX = 24;
@@ -92,10 +93,9 @@ export function CommanderButton() {
     lastYRef.current = 0;
   }, [path]);
 
-  // Hidden wherever a docked search bar already owns the thumb zone — Memory,
-  // and now the Deals list, whose search moved out of this capsule's sheet.
-  // Two controls competing for the same corner is worse than either alone.
-  if (path.startsWith("/memory") || path === "/deals" || open) return null;
+  // Which screens it stays off, and why, lives in nav/mobile-nav.ts so it is
+  // testable. It is also hidden while the sheet it opens is open.
+  if (open || hidesCommander(path)) return null;
 
   const { label, Icon } = affordanceFor(path, jumpTargets.length > 0);
 

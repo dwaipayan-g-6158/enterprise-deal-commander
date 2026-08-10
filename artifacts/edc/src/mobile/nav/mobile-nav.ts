@@ -132,3 +132,22 @@ export const INTELLIGENCE_LENSES = [
 export function activeLensId(path: string): string | undefined {
   return INTELLIGENCE_LENSES.find((l) => covers(l.href, path))?.id;
 }
+
+/**
+ * Screens the Commander capsule stays off.
+ *
+ * Two reasons, and they land on the same answer. Memory and the Deals list have
+ * a docked search bar of their own, and two controls fighting for one corner is
+ * worse than either alone. Account and the settings screens have nothing to
+ * search or jump to at all, so the capsule there is pure occlusion — and it was
+ * occluding something: on `/account` it covered the exposed sliver of a Sign out
+ * row that the tab bar already had 28px of, leaving the only way out of the app
+ * with no tappable pixels.
+ *
+ * Lives here, in a pure module, rather than inline in the component, so the rule
+ * can be tested rather than re-derived by reading JSX.
+ */
+export function hidesCommander(path: string): boolean {
+  const p = pathnameOf(path);
+  return p === "/deals" || p === "/account" || p.startsWith("/memory") || p.startsWith("/settings");
+}

@@ -83,18 +83,23 @@ export function AccountScreen() {
         </ul>
       </nav>
 
-      {/* The five authoring tabs, with the reason stated rather than the rows
-          simply missing. A reader who cannot find Thresholds should learn why
-          here rather than concluding the app forgot them. */}
-      <section className="m-card mb-4 px-4">
-        <ListRow
-          media={<Settings2 className="h-4 w-4" aria-hidden="true" />}
-          title="Engine settings"
-          body="Thresholds, score weights, custom patterns, smart alerts and webhooks are authoring surfaces — every control on them is a write this app does not do. They stay on desktop."
-        />
-      </section>
+      {/* Sign out sits ABOVE the engine-settings note, and the order is the fix
+          for a real defect rather than a preference.
 
-      <section className="m-card px-4">
+          This screen is a little taller than the shell's usable area, so it
+          carries ~128px of scroll — not enough for it to read as scrollable, and
+          the tab bar and capsule float over its last ~132px. With sign out last,
+          it rendered 28px under the tab bar with the capsule over the remaining
+          20px: none of it was tappable, a tap at its centre switched tabs, and
+          there was no cue that scrolling was required. Measured on the deployed
+          app; it is how this account failed to sign out the first time.
+
+          The capsule is now hidden here too (see commander-button.tsx). What
+          this ordering adds is the rule behind it: floating chrome may cover
+          prose, never the one destructive control on the screen. The note below
+          is the right thing to leave in that band — it reads fine after the
+          small scroll it invites, and nothing is lost by not tapping it. */}
+      <section className="m-card mb-4 px-4">
         <ListRow
           className="text-destructive"
           media={<LogOut className="h-4 w-4" aria-hidden="true" />}
@@ -104,6 +109,17 @@ export function AccountScreen() {
             setSigningOut(true);
             signOut();
           }}
+        />
+      </section>
+
+      {/* The five authoring tabs, with the reason stated rather than the rows
+          simply missing. A reader who cannot find Thresholds should learn why
+          here rather than concluding the app forgot them. */}
+      <section className="m-card px-4">
+        <ListRow
+          media={<Settings2 className="h-4 w-4" aria-hidden="true" />}
+          title="Engine settings"
+          body="Thresholds, score weights, custom patterns, smart alerts and webhooks are authoring surfaces — every control on them is a write this app does not do. They stay on desktop."
         />
       </section>
     </MScreen>
