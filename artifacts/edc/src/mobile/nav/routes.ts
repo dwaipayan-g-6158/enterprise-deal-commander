@@ -201,6 +201,62 @@ export function memoryPanelById(id: string | undefined): MemoryPanel | undefined
   return MEMORY_PANELS.find((p) => p.id === id);
 }
 
+/**
+ * The settings screens a phone can honestly show.
+ *
+ * ## Five of desktop's ten, and the split is not arbitrary
+ *
+ * Thresholds, Score Weights, Custom Patterns, Smart Alerts and Webhooks are
+ * authoring surfaces — every control on them is a write this shell does not
+ * ship, so porting them would produce five screens of inert inputs. The five
+ * here are all questions with answers: who is an admin, who is on the team, what
+ * are we measured against, what has been earned, and what changed.
+ *
+ * Change Log is the most phone-shaped of the lot. "Who changed the thresholds
+ * and when" is exactly the question that gets asked away from a desk.
+ */
+export interface SettingsScreen {
+  id: string;
+  title: string;
+  blurb: string;
+  /** True when the screen shows other people's identities. */
+  sensitive?: boolean;
+}
+
+export const SETTINGS_SCREENS: SettingsScreen[] = [
+  {
+    id: "change-log",
+    title: "Change log",
+    blurb: "Who changed which setting, and when.",
+  },
+  {
+    id: "users",
+    title: "Users",
+    blurb: "Who can write, and who is read-only.",
+    // Never put this on a screenshot: docs/assets is a public repository.
+    sensitive: true,
+  },
+  {
+    id: "team",
+    title: "Team",
+    blurb: "Account managers and technical leads deals can be assigned to.",
+  },
+  {
+    id: "targets",
+    title: "Targets",
+    blurb: "The revenue numbers coverage is measured against.",
+  },
+  {
+    id: "achievements",
+    title: "Achievements",
+    blurb: "What has been earned so far.",
+  },
+];
+
+export function settingsScreenById(id: string | undefined): SettingsScreen | undefined {
+  return SETTINGS_SCREENS.find((s) => s.id === id);
+}
+
 export interface MobileRoute {
   /** wouter pattern. `:name` matches exactly one segment. */
   pattern: string;
@@ -257,6 +313,7 @@ export const MOBILE_ROUTES: MobileRoute[] = [
 
   { pattern: "/account" },
   { pattern: "/settings" },
+  { pattern: "/settings/:screen" },
 ];
 
 /** Segments of a pattern or path, with the leading slash dropped. `/` → `[]`. */

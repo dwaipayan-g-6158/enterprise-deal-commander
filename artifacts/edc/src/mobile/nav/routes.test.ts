@@ -9,6 +9,7 @@ import {
   MEMORY_LENSES,
   MEMORY_PANELS,
   MOBILE_ROUTES,
+  SETTINGS_SCREENS,
   PANEL_GROUP_LABEL,
   PANEL_GROUP_ORDER,
   matchesPattern,
@@ -157,6 +158,47 @@ describe("memory lenses", () => {
   });
 });
 
+describe("settings screens", () => {
+  it("ships the five that are questions, not the five that are forms", () => {
+    // Thresholds, score weights, custom patterns, smart alerts and webhooks are
+    // authoring surfaces — every control on them is a write this shell does not
+    // ship. Porting them would produce five screens of inert inputs.
+    expect(SETTINGS_SCREENS.map((s) => s.id)).toEqual([
+      "change-log",
+      "users",
+      "team",
+      "targets",
+      "achievements",
+    ]);
+  });
+
+  it("routes every screen through the one settings pattern", () => {
+    for (const screen of SETTINGS_SCREENS) {
+      expect(routeFor(`/settings/${screen.id}`)?.pattern).toBe("/settings/:screen");
+    }
+  });
+
+  it("lights no tab, because these are reached from the avatar", () => {
+    expect(routeFor("/settings/users")?.tab).toBeUndefined();
+    expect(activeTabId("/settings/users")).toBeUndefined();
+  });
+
+  it("flags Users as sensitive, and only Users", () => {
+    // Load-bearing: docs/assets is a PUBLIC repository, and this screen lists
+    // real colleagues' names and email addresses. The flag is what a screenshot
+    // step is meant to check before it fires.
+    expect(SETTINGS_SCREENS.filter((s) => s.sensitive).map((s) => s.id)).toEqual(["users"]);
+  });
+
+  it("gives every screen a title and a blurb", () => {
+    for (const screen of SETTINGS_SCREENS) {
+      expect(screen.title.trim().length).toBeGreaterThan(0);
+      expect(screen.blurb.trim().length).toBeGreaterThan(0);
+      expect(screen.id).toMatch(/^[a-z][a-z-]*[a-z]$/);
+    }
+  });
+});
+
 describe("matchesPattern", () => {
   it("matches segment-wise and requires equal length", () => {
     expect(matchesPattern("/deals/:id", "/deals/abc")).toBe(true);
@@ -225,6 +267,7 @@ describe("route table", () => {
       "/memory/mem-1/narrative",
       "/account",
       "/settings",
+      "/settings/users",
     ];
     // Overlap is EXPECTED, not forbidden: `/memory/ask` matches both its own
     // literal and `/memory/:id`, and first-match ordering is precisely what

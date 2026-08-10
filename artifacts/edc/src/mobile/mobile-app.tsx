@@ -10,6 +10,7 @@ import { MobileShellSkeleton } from "@/mobile/shell/m-shell-skeleton";
 import { BootSplash } from "@/mobile/shell/boot-splash";
 import { DesktopOnlyScreen } from "@/mobile/screens/desktop-only-screen";
 import { AccountScreen } from "@/mobile/screens/account/account-screen";
+import { SettingsScreen } from "@/mobile/screens/account/settings-screen";
 import { CommandScreen } from "@/mobile/screens/command/command-screen";
 import { DealsScreen } from "@/mobile/screens/deals/deals-screen";
 import { DealBriefScreen } from "@/mobile/screens/deal/deal-brief-screen";
@@ -203,11 +204,17 @@ export default function MobileApp() {
                 </Route>
 
                 <Route path="/account" component={AccountScreen} />
+                {/* `/settings` itself is the authoring half, which stays on
+                    desktop. The five read-only screens hang off /settings/:screen
+                    and are reached from Account. */}
                 <Route path="/settings">
                   <DesktopOnlyScreen
                     name="Settings"
-                    reason="Settings is where the engine gets configured — thresholds, score weights and alert rules are authoring surfaces."
+                    reason="Settings is where the engine gets configured — thresholds, score weights, custom patterns, smart alerts and webhooks are authoring surfaces, and every control on them is a write this app doesn't do."
                   />
+                </Route>
+                <Route path="/settings/:screen">
+                  {(params) => <SettingsScreen key={params.screen} screenId={params.screen} />}
                 </Route>
 
                 {/* Inside the shell, so a mistyped URL still has a tab bar to

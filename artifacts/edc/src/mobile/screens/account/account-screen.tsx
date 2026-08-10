@@ -1,6 +1,8 @@
 import { useState } from "react";
+import { Link } from "wouter";
 import { useTheme } from "next-themes";
-import { LogOut, Moon, Settings2, Sun } from "lucide-react";
+import { ChevronRight, LogOut, Moon, Settings2, Sun } from "lucide-react";
+import { SETTINGS_SCREENS } from "@/mobile/nav/routes";
 import { useSession } from "@/lib/auth/role-context";
 import { useSignOut } from "@/lib/auth/use-sign-out";
 import { MScreen } from "@/mobile/shell/m-screen";
@@ -62,11 +64,33 @@ export function AccountScreen() {
         />
       </section>
 
+      <nav aria-label="Settings" className="mb-4">
+        <ul className="m-card overflow-hidden">
+          {SETTINGS_SCREENS.map((screen, i) => (
+            <li key={screen.id} className={i > 0 ? "border-t border-border" : undefined}>
+              <Link
+                href={`/settings/${screen.id}`}
+                className="m-tap m-press flex items-center gap-3 px-4 py-3.5"
+              >
+                <span className="min-w-0 flex-1">
+                  <span className="m-headline block truncate">{screen.title}</span>
+                  <span className="m-caption m-muted block text-pretty">{screen.blurb}</span>
+                </span>
+                <ChevronRight className="m-muted h-4 w-4 shrink-0" aria-hidden="true" />
+              </Link>
+            </li>
+          ))}
+        </ul>
+      </nav>
+
+      {/* The five authoring tabs, with the reason stated rather than the rows
+          simply missing. A reader who cannot find Thresholds should learn why
+          here rather than concluding the app forgot them. */}
       <section className="m-card mb-4 px-4">
         <ListRow
           media={<Settings2 className="h-4 w-4" aria-hidden="true" />}
           title="Engine settings"
-          body="Thresholds, score weights and alert rules are authoring surfaces, and they stay on desktop."
+          body="Thresholds, score weights, custom patterns, smart alerts and webhooks are authoring surfaces — every control on them is a write this app does not do. They stay on desktop."
         />
       </section>
 
