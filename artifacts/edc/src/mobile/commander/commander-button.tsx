@@ -92,7 +92,10 @@ export function CommanderButton() {
     lastYRef.current = 0;
   }, [path]);
 
-  if (path.startsWith("/memory") || open) return null;
+  // Hidden wherever a docked search bar already owns the thumb zone — Memory,
+  // and now the Deals list, whose search moved out of this capsule's sheet.
+  // Two controls competing for the same corner is worse than either alone.
+  if (path.startsWith("/memory") || path === "/deals" || open) return null;
 
   const { label, Icon } = affordanceFor(path, jumpTargets.length > 0);
 

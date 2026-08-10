@@ -2,9 +2,11 @@ import { describe, expect, it } from "vitest";
 import {
   activeLensId,
   activeTabId,
+  isLateralMove,
   isLateralRoot,
   MOBILE_TABS,
   INTELLIGENCE_LENSES,
+  pathnameOf,
 } from "./mobile-nav";
 
 /**
@@ -75,6 +77,59 @@ describe("isLateralRoot", () => {
     expect(isLateralRoot("/deals/abc")).toBe(false);
     expect(isLateralRoot("/analytics/flow")).toBe(false);
     expect(isLateralRoot("/account")).toBe(false);
+  });
+
+  it("still recognises a root carrying a query string", () => {
+    // wouter hands aroundNav whatever was passed to navigate(), so a filtered
+    // list arrives as "/deals?h=RED". Without stripping, a tab root stopped
+    // being recognised as one the moment it carried a filter.
+    expect(isLateralRoot("/deals?h=RED")).toBe(true);
+    expect(isLateralRoot("/memory?q=acme")).toBe(true);
+  });
+});
+
+describe("pathnameOf", () => {
+  it("drops the query and the hash", () => {
+    expect(pathnameOf("/deals?h=RED&v=SLOW")).toBe("/deals");
+    expect(pathnameOf("/deals#top")).toBe("/deals");
+    expect(pathnameOf("/deals?q=a#top")).toBe("/deals");
+  });
+
+  it("leaves a bare path alone", () => {
+    expect(pathnameOf("/deals/abc")).toBe("/deals/abc");
+    expect(pathnameOf("/")).toBe("/");
+  });
+});
+
+describe("isLateralMove", () => {
+  it("treats a filter change as lateral, not as a step deeper", () => {
+    // This is what lets the Deals screen push a real history entry per filter
+    // change — so back undoes it and the URL stays shareable — without the
+    // move animating as a push into a stack that does not exist.
+    expect(isLateralMove("/deals", "/deals?h=RED")).toBe(true);
+    expect(isLateralMove("/deals?h=RED", "/deals?v=STALLED")).toBe(true);
+    expect(isLateralMove("/deals?h=RED", "/deals")).toBe(true);
+  });
+
+  it("keeps peer destinations lateral", () => {
+    expect(isLateralMove("/deals", "/memory")).toBe(true);
+    expect(isLateralMove("/analytics", "/portfolio")).toBe(true);
+  });
+
+  it("leaves a real drill-down to the history index", () => {
+    expect(isLateralMove("/deals", "/deals/abc")).toBe(false);
+    expect(isLateralMove("/deals/abc", "/deals/abc/gates")).toBe(false);
+    // Same query, different deal: still a move between two screens.
+    expect(isLateralMove("/deals/abc", "/deals/def")).toBe(false);
+  });
+
+  it("is symmetric for peers and same-path moves", () => {
+    for (const [a, b] of [
+      ["/deals", "/memory"],
+      ["/deals", "/deals?h=RED"],
+    ]) {
+      expect(isLateralMove(a, b)).toBe(isLateralMove(b, a));
+    }
   });
 });
 

@@ -10,8 +10,8 @@ import { MobileShellSkeleton } from "@/mobile/shell/m-shell-skeleton";
 import { BootSplash } from "@/mobile/shell/boot-splash";
 import { DesktopOnlyScreen } from "@/mobile/screens/desktop-only-screen";
 import { AccountScreen } from "@/mobile/screens/account/account-screen";
-import { HomeScreen } from "@/mobile/screens/home-screen";
-import { DealsScreen } from "@/mobile/screens/deals-screen";
+import { CommandScreen } from "@/mobile/screens/command/command-screen";
+import { DealsScreen } from "@/mobile/screens/deals/deals-screen";
 import { DealDetailScreen } from "@/mobile/screens/deal-detail-screen";
 import { AnalyticsScreen } from "@/mobile/screens/analytics-screen";
 import { MemoryScreen } from "@/mobile/screens/memory-screen";
@@ -120,8 +120,12 @@ export default function MobileApp() {
         <Route>
           <MobileGuard>
             <MShell>
+              {/* This list, and its ORDER, are asserted against nav/routes.ts
+                  by routes.test.ts — which reads this file. The table is where
+                  the literal-before-param rule and the tab ownership live; this
+                  is where the screens are attached. Neither can drift. */}
               <Switch>
-                <Route path="/" component={HomeScreen} />
+                <Route path="/" component={CommandScreen} />
                 <Route path="/deals" component={DealsScreen} />
                 <Route path="/deals/:id">
                   {(params) => (
@@ -131,12 +135,16 @@ export default function MobileApp() {
                     <DealDetailScreen key={params.id} id={params.id} />
                   )}
                 </Route>
-                <Route path="/analytics" component={AnalyticsScreen} />
-                <Route path="/memory" component={MemoryScreen} />
-                <Route path="/memory/:id">
-                  {(params) => <MemoryDetailScreen key={params.id} id={params.id} />}
+                {/* The sixteen pushed panels land in the next slice. Until they
+                    do this mirrors the redirect the desktop shell already
+                    carries for the same URLs, so a panel deep link — from the
+                    Command Center, or shared from a laptop — opens the deal
+                    rather than dead-ending on a 404. */}
+                <Route path="/deals/:id/:panel">
+                  {(params) => <Redirect to={`/deals/${params.id}`} transition={false} />}
                 </Route>
-                <Route path="/account" component={AccountScreen} />
+
+                <Route path="/analytics" component={AnalyticsScreen} />
 
                 {/* Desktop-only surfaces still resolve rather than 404, so a
                     link shared from a laptop doesn't dead-end on a phone. These
@@ -154,6 +162,13 @@ export default function MobileApp() {
                     reason="Loss analysis puts archetypes, competitors and product gaps side by side, which takes more columns than a phone has."
                   />
                 </Route>
+
+                <Route path="/memory" component={MemoryScreen} />
+                <Route path="/memory/:id">
+                  {(params) => <MemoryDetailScreen key={params.id} id={params.id} />}
+                </Route>
+
+                <Route path="/account" component={AccountScreen} />
                 <Route path="/settings">
                   <DesktopOnlyScreen
                     name="Settings"

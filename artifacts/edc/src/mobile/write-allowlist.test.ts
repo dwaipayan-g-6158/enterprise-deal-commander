@@ -167,7 +167,16 @@ describe("the module walk is real", () => {
   });
 
   it("reaches named screens across the shell", () => {
-    for (const name of ["deal-detail-screen", "deals-screen", "memory-screen", "account-screen"]) {
+    // One per tab, plus the two screens reached from elsewhere. A walk that
+    // stopped short of any of these would leave that whole tab unaudited while
+    // still reporting a healthy module count.
+    for (const name of [
+      "command-screen",
+      "deals-screen",
+      "deal-detail-screen",
+      "memory-screen",
+      "account-screen",
+    ]) {
       expect(modules.some((m) => m.includes(name)), name).toBe(true);
     }
   });

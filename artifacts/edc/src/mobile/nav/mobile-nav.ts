@@ -85,7 +85,41 @@ export function activeTabId(path: string): string | undefined {
 export const LATERAL_ROOTS: readonly string[] = MOBILE_TABS.flatMap((t) => t.prefixes);
 
 export function isLateralRoot(path: string): boolean {
-  return LATERAL_ROOTS.includes(path);
+  return LATERAL_ROOTS.includes(pathnameOf(path));
+}
+
+/**
+ * The path part of a navigation target, without its query or hash.
+ *
+ * wouter hands `aroundNav` whatever was passed to `navigate()`, which for a
+ * filtered list is `/deals?h=RED` — so every path comparison downstream has to
+ * strip first. It did not, which made `isLateralRoot("/deals?h=RED")` false and
+ * would have animated a filter change as a push.
+ */
+export function pathnameOf(to: string): string {
+  const cut = to.search(/[?#]/);
+  return cut === -1 ? to : to.slice(0, cut);
+}
+
+/**
+ * Whether moving from one location to the other is lateral — no change of depth,
+ * so the screens cross-fade rather than pushing.
+ *
+ * Two cases, and both are design statements rather than inferences:
+ *
+ *  - **Peer destinations.** The four tab roots and Intelligence's three lenses
+ *    have no hierarchy between them, whatever order they were visited in.
+ *  - **The same path with a different query.** Filtering, sorting or searching a
+ *    list re-cuts the list; it does not go anywhere. This is what lets the Deals
+ *    screen push a real history entry for every filter change — so the back
+ *    gesture undoes it and the URL stays shareable — without the move animating
+ *    as a step deeper into a stack.
+ */
+export function isLateralMove(fromPath: string, toPath: string): boolean {
+  const from = pathnameOf(fromPath);
+  const to = pathnameOf(toPath);
+  if (from === to) return true;
+  return isLateralRoot(from) && isLateralRoot(to);
 }
 
 /** The lenses behind the Intelligence tab, in the order the segmented control shows them. */

@@ -8,7 +8,7 @@ import {
   type NavDirection,
 } from "./history-index";
 import { rememberScroll } from "./scroll-memory";
-import { isLateralRoot } from "../nav/mobile-nav";
+import { isLateralMove } from "../nav/mobile-nav";
 import {
   prefersReducedMotion,
   supportsViewTransitions,
@@ -24,11 +24,11 @@ type Navigate = (to: string, options?: NavigateOptions) => void;
 /**
  * Which way the screens should move.
  *
- * Peer destinations come first and unconditionally: the four tab roots and
- * Intelligence's three lenses have no hierarchy between them, so movement among
- * them is lateral whatever the history says. A push between peers would imply a
- * stack that does not exist, and the user would then find that "back" does not
- * undo it.
+ * Lateral moves come first and unconditionally — peer tab roots, and any change
+ * of query string on the path you are already on. A push between peers would
+ * imply a stack that does not exist; a push on a filter change would imply the
+ * reader had gone somewhere, when all they did was re-cut the list in front of
+ * them. `isLateralMove` owns both rules, in the module that is node-tested.
  *
  * Everything else is decided by history index, not by path depth. See
  * history-index.ts for why depth was wrong.
@@ -37,7 +37,7 @@ export function navDirection(
   from: { path: string; index: number },
   to: { path: string; index: number },
 ): NavDirection {
-  if (isLateralRoot(from.path) && isLateralRoot(to.path)) return "lateral";
+  if (isLateralMove(from.path, to.path)) return "lateral";
   return directionBetween(from.index, to.index);
 }
 
