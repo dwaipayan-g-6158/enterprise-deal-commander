@@ -3,6 +3,7 @@ import {
   classNameExpressions,
   classWorlds,
   expandTernaries,
+  findThinGlassMisuse,
   findTypeCollisions,
   stripCodeComments,
 } from "./class-scan";
@@ -78,6 +79,25 @@ describe("classNameExpressions", () => {
       "m-caption m-muted",
     ]);
     expect(findTypeCollisions(src)).toEqual([]);
+  });
+});
+
+describe("findThinGlassMisuse", () => {
+  it("flags muted and accent text on a thin-glass element", () => {
+    expect(findThinGlassMisuse(`<div className="m-glass-thin m-muted" />`)[0].message).toMatch(
+      /not legible on \.m-glass-thin/,
+    );
+    expect(findThinGlassMisuse(`<div className="m-glass-thin text-primary" />`)).toHaveLength(1);
+  });
+
+  it("allows foreground-coloured content on thin glass", () => {
+    // Which is the entire point of having a thin weight at all.
+    expect(findThinGlassMisuse(`<div className="m-glass-thin m-headline" />`)).toEqual([]);
+    expect(findThinGlassMisuse(`<div className="m-glass-thin text-foreground" />`)).toEqual([]);
+  });
+
+  it("leaves regular glass alone", () => {
+    expect(findThinGlassMisuse(`<div className="m-glass m-muted" />`)).toEqual([]);
   });
 });
 

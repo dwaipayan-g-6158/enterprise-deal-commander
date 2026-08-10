@@ -2,13 +2,8 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import { haptic } from "@/mobile/lib/haptics";
 import { useShellScrollRef } from "@/mobile/shell/m-shell";
+import { isArmed, pullDistance, pullProgress, TRIGGER_PX } from "@/mobile/ui/pull-physics";
 
-/** Pull distance, after resistance, that arms the refresh. */
-const TRIGGER_PX = 64;
-/** Half the finger's travel, so the gesture feels weighted rather than loose. */
-const RESISTANCE = 0.5;
-/** Hard stop, so a long drag doesn't tear the content off the screen. */
-const MAX_PULL_PX = 96;
 /** One beat of "that worked" before the content settles back. */
 const CONFIRM_MS = 340;
 
@@ -44,6 +39,8 @@ export function PullToRefresh({
   const pullRef = useRef(0);
   const startYRef = useRef<number | null>(null);
   const refreshingRef = useRef(false);
+  /** Whether the arm-threshold haptic has already fired for this gesture. */
+  const armedRef = useRef(false);
   const onRefreshRef = useRef(onRefresh);
   onRefreshRef.current = onRefresh;
 
@@ -53,6 +50,7 @@ export function PullToRefresh({
 
     const reset = () => {
       startYRef.current = null;
+      armedRef.current = false;
       pullRef.current = 0;
       setPull(0);
     };
@@ -75,16 +73,25 @@ export function PullToRefresh({
         return;
       }
       e.preventDefault();
-      const next = Math.min(travelled * RESISTANCE, MAX_PULL_PX);
+      const next = pullDistance(travelled);
       pullRef.current = next;
       setPull(next);
+
+      // Fired when the gesture ARMS, not when it is released. That is the
+      // moment the outcome is decided, and it is what lets someone commit or
+      // back off without watching the indicator. Latched, so a finger resting
+      // near the threshold cannot buzz repeatedly.
+      const armed = isArmed(next);
+      if (armed && !armedRef.current) haptic();
+      armedRef.current = armed;
     };
 
     const onTouchEnd = () => {
       if (startYRef.current == null) return;
       startYRef.current = null;
 
-      if (pullRef.current < TRIGGER_PX) {
+      if (!isArmed(pullRef.current)) {
+        armedRef.current = false;
         pullRef.current = 0;
         setPull(0);
         return;
@@ -92,8 +99,8 @@ export function PullToRefresh({
 
       // Hold the indicator at the trigger point for the duration of the
       // refetch, so a fast response still reads as "something happened."
+      armedRef.current = false;
       refreshingRef.current = true;
-      haptic();
       setRefreshing(true);
       setPull(TRIGGER_PX);
       void Promise.resolve(onRefreshRef.current()).finally(() => {
@@ -123,7 +130,7 @@ export function PullToRefresh({
     };
   }, [scrollRef]);
 
-  const progress = Math.min(pull / TRIGGER_PX, 1);
+  const progress = pullProgress(pull);
 
   return (
     <div className="relative">

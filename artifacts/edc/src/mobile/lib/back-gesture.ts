@@ -69,6 +69,28 @@ let installed = false;
 /** Re-entrancy guard: our own re-dispatch must not be intercepted again. */
 let redispatching = false;
 
+/**
+ * How many overlays currently own the back press.
+ *
+ * A sheet pushes a marker history entry so the back gesture closes it rather
+ * than leaving the screen (see ui/use-back-dismiss.ts). That pop must reach the
+ * sheet's own listener — and this file, registered first and calling
+ * stopImmediatePropagation, would otherwise eat it and the sheet would never
+ * close. So while an overlay is open we stand down completely.
+ *
+ * Standing down is also correct on its own terms: dismissing a sheet is not a
+ * navigation, and animating a screen transition for it would be a lie.
+ */
+let overlayDepth = 0;
+
+export function pushOverlayEntry(): void {
+  overlayDepth += 1;
+}
+
+export function popOverlayEntry(): void {
+  overlayDepth = Math.max(0, overlayDepth - 1);
+}
+
 function onPopState(event: PopStateEvent): void {
   const toIndex = indexOfEvent(event.state);
   const { path: fromPath, index: fromIndex } = lastNavigation();
@@ -76,6 +98,7 @@ function onPopState(event: PopStateEvent): void {
   noteNavigation(window.location.pathname, toIndex);
 
   if (redispatching) return;
+  if (overlayDepth > 0) return;
 
   // Record where we are leaving from before anything moves, so a later return
   // to this entry lands where the reader actually was.

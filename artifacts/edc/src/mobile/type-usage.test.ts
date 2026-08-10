@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { findTypeCollisions } from "./class-scan";
+import { findThinGlassMisuse, findTypeCollisions } from "./class-scan";
 import { srcRelative, SRC, walkFiles } from "./module-graph";
 
 /**
@@ -35,6 +35,19 @@ describe("mobile type styles are not silently overridden", () => {
         // not just what. A guard that reports only a filename sends the reader
         // hunting through three hundred lines of JSX.
         (f) => `${srcRelative(file)}: ${f.message}\n    in: ${f.world.replace(/\s+/g, " ").trim().slice(0, 160)}`,
+      ),
+    );
+    expect(offenders).toEqual([]);
+  });
+
+  it("never puts muted or accent text on thin glass", () => {
+    // The two glass weights are a measured contrast requirement, not a style:
+    // thin glass carries --foreground-coloured content only. tokens.test.ts
+    // proves the numbers; this stops a component from ignoring them. It caught
+    // MSegmented's first draft, which used a thin-glass track with muted labels.
+    const offenders = files.flatMap((file) =>
+      findThinGlassMisuse(readFileSync(file, "utf8")).map(
+        (f) => `${srcRelative(file)}: ${f.message}`,
       ),
     );
     expect(offenders).toEqual([]);

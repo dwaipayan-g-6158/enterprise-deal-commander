@@ -65,7 +65,7 @@ function MobileGuard({ children }: { children: ReactNode }) {
  * sign-in and the auth bounce. Both are shared components that also serve
  * desktop, so they can't take `.m-shell` themselves; wrapping the route gives
  * them the mobile palette and radius scale on a phone and leaves the desktop
- * tree alone. Same mechanism SectionSheet uses for vaul's portalled drawer.
+ * tree alone. Same mechanism MSheet uses for vaul’s portalled drawer.
  *
  * No layout classes: the shell's own frame is `h-[100dvh] overflow-hidden`, and
  * these pages manage their own height.

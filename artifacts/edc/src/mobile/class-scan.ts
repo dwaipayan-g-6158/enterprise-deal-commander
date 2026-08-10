@@ -235,6 +235,18 @@ export const TYPOGRAPHY_CONFLICTS: { pattern: RegExp; property: string }[] = [
   { pattern: /\bleading-[\w[\]().-]+/g, property: "line-height" },
 ];
 
+/**
+ * Colour roles that thin glass cannot legibly carry.
+ *
+ * tokens.css measures both weights over every backdrop that can scroll beneath
+ * them. Regular glass carries any text; thin glass carries --foreground-coloured
+ * content only, because --muted-foreground and --primary land at roughly 3.3:1
+ * on it. The palette suite proves the numbers, but nothing stopped a component
+ * from putting a muted label on a thin surface anyway — which is exactly what
+ * the first draft of MSegmented did.
+ */
+export const THIN_GLASS_FORBIDDEN = /\b(m-muted|text-muted-foreground|text-primary|text-destructive)\b/g;
+
 export interface TypeFinding {
   world: string;
   message: string;
@@ -265,5 +277,28 @@ export function findTypeCollisions(source: string): TypeFinding[] {
     }
   }
 
+  return findings;
+}
+
+/**
+ * Muted or accent text placed directly on thin glass.
+ *
+ * Only flags the same className — a thin-glass CONTAINER with muted text on a
+ * child element is a real risk too, but it cannot be judged from source without
+ * resolving the tree, and a scanner that guesses produces false positives. The
+ * same-element case is the one that is unambiguous, and it is the one that
+ * actually happened.
+ */
+export function findThinGlassMisuse(source: string): TypeFinding[] {
+  const findings: TypeFinding[] = [];
+  for (const world of classWorlds(source)) {
+    if (!/\bm-glass-thin\b/.test(world)) continue;
+    const hit = [...world.matchAll(THIN_GLASS_FORBIDDEN)][0];
+    if (!hit) continue;
+    findings.push({
+      world,
+      message: `"${hit[0]}" is not legible on .m-glass-thin — use .m-glass, or an opaque surface`,
+    });
+  }
   return findings;
 }
