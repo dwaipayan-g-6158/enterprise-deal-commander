@@ -200,6 +200,26 @@ guard that was verified to fail closed by planting the regression.
 
 **76 test files, 1046 tests.**
 
+### PWA audit follow-up
+
+`/pwa-review` scored the deployed app **130/192 (C)**, with Security the only
+failing category. Two findings were acted on; the rest of the gap is categories
+that do not apply to an invite-only internal cockpit (`share_target`,
+`file_handlers`, push, canonical URLs, JSON-LD).
+
+- **Content-Security-Policy**, plus `Referrer-Policy` and `Permissions-Policy`
+  (`api-server/src/lib/security-headers.ts`). Built from a browser capture of
+  every request the deployed `/login` makes, because a policy guessed from
+  imports is how you take sign-in down. HSTS, `nosniff` and `X-Frame-Options`
+  are deliberately **not** re-sent — the Catalyst gateway already sets all three.
+- **`navigator.storage.persist()`** from the mobile shell. iOS clears
+  best-effort storage after ~7 days without a visit, which for a weekly-checked
+  cockpit takes the whole precache and every cached read with it.
+
+Verified with the policy enforcing: signed in end-to-end, walked all four tabs
+and three deal panels, **zero CSP violations**; `storage.persisted()` is `true`.
+Re-scored: **136/192 (B)**.
+
 ### Still unverified
 
 - **Real iOS and Android devices.** The sweep ran in emulated Chromium, which
