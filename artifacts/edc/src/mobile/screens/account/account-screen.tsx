@@ -1,7 +1,12 @@
-import { useState } from "react";
+import { useCallback, useState, useSyncExternalStore } from "react";
 import { Link } from "wouter";
 import { useTheme } from "next-themes";
-import { ChevronRight, LogOut, Moon, Settings2, Sun } from "lucide-react";
+import { ChevronRight, Download, LogOut, Moon, Settings2, Sun } from "lucide-react";
+import {
+  canInstall,
+  onInstallAvailabilityChange,
+  promptInstall,
+} from "@/mobile/lib/install-prompt";
 import { SETTINGS_SCREENS } from "@/mobile/nav/routes";
 import { useSession } from "@/lib/auth/role-context";
 import { useSignOut } from "@/lib/auth/use-sign-out";
@@ -27,6 +32,16 @@ export function AccountScreen() {
   const { resolvedTheme, setTheme } = useTheme();
   const signOut = useSignOut();
   const [signingOut, setSigningOut] = useState(false);
+
+  // useSyncExternalStore, because the store is a module that captured
+  // `beforeinstallprompt` before React mounted — see install-prompt.ts. The
+  // server snapshot is `false`: there is no install offer during SSR or the
+  // first paint, and claiming otherwise would flash a row that then vanishes.
+  const installable = useSyncExternalStore(
+    onInstallAvailabilityChange,
+    canInstall,
+    useCallback(() => false, []),
+  );
 
   const isDark = resolvedTheme === "dark";
 
@@ -82,6 +97,22 @@ export function AccountScreen() {
           ))}
         </ul>
       </nav>
+
+      {/* Only when the browser has actually offered an install. It is not
+          rendered-and-disabled on iOS, where `beforeinstallprompt` does not
+          exist and installing is Share → Add to Home Screen — a button that
+          cannot do anything is worse than no button, because tapping it is the
+          only way to find out. */}
+      {installable ? (
+        <section className="m-card mb-4 px-4">
+          <ListRow
+            media={<Download className="h-4 w-4" aria-hidden="true" />}
+            title="Install Deal Commander"
+            sub="Full screen, and offline reads on the last-synced data"
+            onPress={() => void promptInstall()}
+          />
+        </section>
+      ) : null}
 
       {/* Sign out sits ABOVE the engine-settings note, and the order is the fix
           for a real defect rather than a preference.

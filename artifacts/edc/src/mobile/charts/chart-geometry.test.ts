@@ -1,4 +1,7 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { stripCodeComments } from "../class-scan";
 import {
   areaPath,
   bandPath,
@@ -112,6 +115,47 @@ describe("bandPath", () => {
     // One M, then out (2) and back (3) — the reversed floor includes its first
     // point, which is what closes the shape without a gap.
     expect(d.match(/L/g)).toHaveLength(5);
+  });
+
+  it("degenerates to a rectangle when the two series are constant", () => {
+    /**
+     * Not a defect in bandPath — it draws what it is given. This documents WHY
+     * the forecast chart must not use it.
+     *
+     * `toFanSeries` sets lo to p10 and hi to p90 at every point, so both edges
+     * are flat for any input and the band is always a rectangle. On the deployed
+     * app it measured y=22.07 across the top and y=297.93 across the bottom.
+     * Worse, the x axis there is PERCENTILE, so the curve already spans p10→p90
+     * and the band merely redrew its own endpoints.
+     */
+    const scale = { min: 0, max: 100 };
+    const d = bandPath(seriesPoints([10, 10, 10], scale), seriesPoints([90, 90, 90], scale));
+    const ys = [...d.matchAll(/[ML]\S+ (\S+)/g)].map((m) => Number(m[1]));
+    expect(new Set(ys).size, "a meaningful band has more than two distinct y values").toBe(2);
+  });
+});
+
+describe("the forecast chart fills under its curve, not between two constants", () => {
+  const SOURCE = readFileSync(join(import.meta.dirname, "m-forecast-band.tsx"), "utf8");
+
+  it("uses areaPath and not bandPath", () => {
+    const code = stripCodeComments(SOURCE);
+    expect(code).toMatch(/areaPath\(midPoints\)/);
+    expect(code, "bandPath here is always a rectangle — see the test above").not.toMatch(
+      /bandPath\(/,
+    );
+  });
+
+  it("leaves the shared transform alone, so desktop renders as before", () => {
+    // toFanSeries feeds desktop's forecast-fan.tsx too. The fix is in this
+    // renderer; changing the shaping would have moved a desktop chart nobody
+    // asked to change.
+    const shared = readFileSync(
+      join(import.meta.dirname, "..", "..", "components", "cockpit", "charts", "transforms.ts"),
+      "utf8",
+    );
+    expect(shared).toMatch(/lo:\s*f\.p10/);
+    expect(shared).toMatch(/hi:\s*f\.p90/);
   });
 });
 
