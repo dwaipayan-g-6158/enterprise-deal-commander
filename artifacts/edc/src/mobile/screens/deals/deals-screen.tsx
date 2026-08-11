@@ -9,7 +9,7 @@ import { isDefaultView } from "@/components/roster/model/roster-url";
 import { BUILTIN_VIEWS } from "@/components/roster/model/saved-views.defaults";
 import type { RosterGroup } from "@/components/roster/model/derive-rows";
 import { MNavBar } from "@/mobile/shell/m-nav-bar";
-import { MAvatar } from "@/mobile/shell/m-avatar";
+import { MNavTrailing } from "@/mobile/shell/m-nav-trailing";
 import { SegmentChips, type Segment } from "@/mobile/components/segment-chips";
 import { Shimmer } from "@/mobile/components/shimmer";
 import { EmptyState, ErrorState } from "@/mobile/components/states";
@@ -97,7 +97,7 @@ export function DealsScreen() {
     <>
       <MNavBar
         title="Deals"
-        right={<MAvatar />}
+        right={<MNavTrailing />}
         subtitle={
           isLoading
             ? undefined

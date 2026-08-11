@@ -3,9 +3,8 @@ import { compactCurrency, calendarDaysUntil } from "@/lib/format";
 import { computeStreak } from "@/lib/streak/compute-streak";
 import { buildMission } from "@/lib/mission/priority-scorer";
 import { terminalOutcome } from "@/components/roster/model/board";
-import { EdcLogoMark } from "@/components/edc-logo-mark";
 import { MNavBar } from "@/mobile/shell/m-nav-bar";
-import { MAvatar } from "@/mobile/shell/m-avatar";
+import { MNavTrailing } from "@/mobile/shell/m-nav-trailing";
 import { ErrorState } from "@/mobile/components/states";
 import { PullToRefresh } from "@/mobile/components/pull-to-refresh";
 import { useCommandData, toInsightVitals } from "@/mobile/screens/command/use-command-data";
@@ -21,12 +20,6 @@ import { WeekBlock } from "@/mobile/screens/command/week-block";
 
 /** "Closing this week" for the Monday plan — the same window the greeting uses. */
 const CLOSE_WINDOW_DAYS = 7;
-
-/**
- * The brand mark. Static: the draw-in belongs to the launch moment (BootSplash),
- * and replaying it every time someone taps Command turns a signature into a tic.
- */
-const BRAND_MARK = <EdcLogoMark size={24} animated={false} />;
 
 /**
  * The Command Center: six blocks, in the order a commander asks.
@@ -113,7 +106,7 @@ export function CommandScreen() {
   if (data.isError) {
     return (
       <>
-        <MNavBar title="Command" leading={BRAND_MARK} right={<MAvatar />} />
+        <MNavBar title="Command" right={<MNavTrailing />} />
         <ErrorState
           title="Couldn't load the portfolio"
           body="The pipeline summary didn't come back. Pull down to try again."
@@ -126,8 +119,7 @@ export function CommandScreen() {
     <>
       <MNavBar
         title="Command"
-        leading={BRAND_MARK}
-        right={<MAvatar />}
+        right={<MNavTrailing />}
         subtitle={
           data.summary ? `${data.summary.totalDealsMonitored} deals monitored` : undefined
         }

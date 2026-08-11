@@ -8,10 +8,11 @@ import { EdcLogoMark } from "@/components/edc-logo-mark";
  *
  * Kept eager and outside mobile-app.tsx so App.tsx can render it as the
  * Suspense fallback while the lazy mobile chunk loads. That eagerness is why
- * the mark here is static: this component renders before the mobile chunk has
- * downloaded, and a 3.2s draw-in that gets torn down after 200ms reads as a
- * glitch rather than a flourish. The launch animation lives in BootSplash,
- * which outlives its own sequence.
+ * the mark here is static even though the live one in MNavTrailing animates:
+ * this component renders before the mobile chunk has downloaded, and a draw-in
+ * torn down after 200ms reads as a glitch rather than a flourish. The mark the
+ * user sees draw is the one that replaces this, which is the right moment for
+ * it — that is also when the screen it belongs to actually exists.
  */
 export function MobileShellSkeleton() {
   return (
@@ -20,10 +21,17 @@ export function MobileShellSkeleton() {
 
       <header className="pt-safe shrink-0 border-b border-border bg-card">
         <div className="flex h-14 items-center gap-2 px-4">
-          {/* The real mark, at the size MNavBar's leading slot renders it,
-              so the handover to the live shell moves nothing. */}
-          <EdcLogoMark size={24} animated={false} />
           <Skeleton className="h-4 w-36" />
+          {/* Mirrors MNavTrailing: the real mark at its real size, then a disc
+              standing in for the avatar, inside the same 48px tap box .m-tap
+              gives the live one. Measuring only the visible 32px disc would
+              hand over 16px narrower and shift the mark on the swap. */}
+          <div className="ml-auto flex items-center gap-1">
+            <EdcLogoMark size={24} animated={false} />
+            <div className="flex h-12 w-12 items-center justify-center">
+              <Skeleton className="h-8 w-8 rounded-full" />
+            </div>
+          </div>
         </div>
       </header>
 
