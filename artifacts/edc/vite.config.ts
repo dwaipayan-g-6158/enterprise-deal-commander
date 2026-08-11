@@ -175,6 +175,20 @@ export default defineConfig({
         // running at all. Precaching them would add 76 entries to the manifest
         // that nothing can ever request through fetch.
         globIgnores: ["**/screenshot-*.png", "**/opengraph.png", "**/splash/*.png"],
+        // woff2 is NOT in vite-plugin-pwa's default globPatterns
+        // (js,css,html,ico,png,svg), so naming the defaults again alongside it is
+        // the only way to add it — a bare ["**/*.woff2"] would REPLACE them and
+        // silently stop precaching the app itself.
+        //
+        // The fonts have to be in here rather than in a runtime cache. They used
+        // to come from fonts.gstatic.com through a CacheFirst bucket, which meant
+        // the first load of a session always paid the network for them and an
+        // offline cold launch before that first load had nothing to fall back on.
+        // Precaching is what makes "installed app opens in Geist, on a plane"
+        // true. 143KB across eleven subsets; unicode-range means each reader
+        // downloads a fraction of that, but the worker holds all of it so no
+        // subset is the one that happens to be missing.
+        globPatterns: ["**/*.{js,css,html,ico,png,svg,woff2}"],
         navigateFallback: "index.html",
         // Workbox's NavigationRoute tests each of these against
         // `url.pathname + url.search`, only for requests whose mode is
@@ -287,25 +301,19 @@ export default defineConfig({
               cacheableResponse: { statuses: [0, 200] },
             },
           },
-          // Webfonts, so an offline cold launch renders in Geist instead of
-          // falling back to a system face mid-session.
-          {
-            urlPattern: ({ url }: { url: URL }) => url.origin === "https://fonts.googleapis.com",
-            handler: "StaleWhileRevalidate" as const,
-            options: {
-              cacheName: "google-fonts-stylesheets",
-              cacheableResponse: { statuses: [0, 200] },
-            },
-          },
-          {
-            urlPattern: ({ url }: { url: URL }) => url.origin === "https://fonts.gstatic.com",
-            handler: "CacheFirst" as const,
-            options: {
-              cacheName: "google-fonts-webfonts",
-              expiration: { maxEntries: 30, maxAgeSeconds: 31536000 },
-              cacheableResponse: { statuses: [0, 200] },
-            },
-          },
+          // There were two more buckets here, "google-fonts-stylesheets" and
+          // "google-fonts-webfonts", for exactly the reason the comment above
+          // this list gives about lookups: an offline cold launch should render
+          // in Geist rather than falling back to a system face mid-session.
+          //
+          // They are gone because the fonts are no longer a third party's to
+          // serve — they ship from public/fonts and are PREcached (see
+          // globPatterns above). That is strictly better at the job these were
+          // written for: a runtime cache is empty until the first successful
+          // online fetch, so the very first launch of a freshly installed app
+          // with no connectivity had nothing to serve. It also removes the two
+          // cross-origin hosts from the critical path entirely. Nothing replaced
+          // them — the precache is the replacement.
         ],
       },
     }),

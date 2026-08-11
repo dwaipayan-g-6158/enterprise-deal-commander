@@ -9,9 +9,12 @@
     "serve": "vite preview --config vite.config.ts --host 0.0.0.0",
     "test": "vitest run",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "generate-splash": "node scripts/generate-splash.mjs"
+    "generate-splash": "node scripts/generate-splash.mjs",
+    "sync-fonts": "node scripts/sync-fonts.mjs"
   },
   "devDependencies": {
+    "@fontsource-variable/geist": "5.3.0",
+    "@fontsource-variable/geist-mono": "5.3.0",
     "@hookform/resolvers": "^3.10.0",
     "@radix-ui/react-accordion": "^1.2.4",
     "@radix-ui/react-alert-dialog": "^1.1.7",

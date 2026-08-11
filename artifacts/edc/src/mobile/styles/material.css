@@ -60,9 +60,19 @@
   /* The grey iOS flash under a designed press state is the single fastest way
      for an installed app to read as a website. */
   -webkit-tap-highlight-color: transparent;
+}
 
-  /* Colour only. Transitioning background-image would re-rasterise three
-     gradients every frame for two seconds. */
+/* Colour only. Transitioning background-image would re-rasterise three
+   gradients every frame for two seconds.
+
+   Split out of the block above and gated on data-app-ready, which AppReveal
+   sets when it lifts, so the tween can only run after boot. It is here for the
+   band turning over at 12:00/17:00/21:00 mid-session; on a cold load it instead
+   spent two seconds fading the shell into the colour it had already been given,
+   because --background resolving for the first time counts as a change. See the
+   matching rule in index.css for the full account — the desktop body had the
+   identical bug. */
+html[data-app-ready] .m-shell {
   transition: background-color 2s ease;
 }
 

@@ -154,7 +154,27 @@ export default function Dashboard() {
   const avgScore = vitalSigns?.avgScore ?? null;
 
   return (
-    <div className="p-8 max-w-[1600px] mx-auto space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+    /**
+     * `slide-in-from-bottom-4` is gone, and the fade is shorter.
+     *
+     * The slide fired when the intelligence-summary query flipped — one of fifteen
+     * on this page — so the whole dashboard travelled 16px upward while the other
+     * fourteen were still landing. It read as the page arriving and then failing to
+     * settle, which is the single most "unpolished" thing a refresh did here.
+     *
+     * The entrance belongs to AppReveal now: it holds an opaque canvas over the
+     * app until the shell, the session, the fonts and this page's first data wave
+     * are all quiet, then cross-fades once. A second, longer entrance underneath
+     * that is the "full page restart" feel this work exists to remove — two
+     * animations for one arrival, the inner one starting before the content it is
+     * animating exists.
+     *
+     * A short fade is kept rather than nothing at all, for the case AppReveal
+     * cannot cover: its 1200ms ceiling can lift the mask while this page is still
+     * on its skeleton, and a hard cut from skeleton to content is worth softening.
+     * No transform, so it cannot move anything.
+     */
+    <div className="p-8 max-w-[1600px] mx-auto space-y-6 animate-in fade-in duration-200">
       <DashboardHero reportingCurrency={reportingCurrency} />
       <CelebrationWatcher previousVisitAt={previousVisitAt} />
       <DailyBar previousVisitAt={previousVisitAt} reportingCurrency={reportingCurrency} />

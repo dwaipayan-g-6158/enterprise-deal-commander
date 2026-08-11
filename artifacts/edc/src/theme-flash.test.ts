@@ -27,6 +27,9 @@ const HTML = readFileSync(join(SRC, "..", "index.html"), "utf8");
 /** Everything up to the module entry — i.e. what runs before the app does. */
 const BEFORE_APP = HTML.slice(0, HTML.indexOf('<script type="module"'));
 
+/** The inline script's body, comments and all. */
+const INLINE = BEFORE_APP.slice(BEFORE_APP.indexOf("<script>"));
+
 describe("pre-paint theme", () => {
   it("runs a blocking inline script before the app module", () => {
     expect(HTML, "index.html should still load the app as a module").toContain(
@@ -77,5 +80,137 @@ describe("pre-paint theme", () => {
     const inline = BEFORE_APP.slice(BEFORE_APP.indexOf("<script>"));
     expect(inline).toMatch(/try\s*\{/);
     expect(inline).toMatch(/catch\s*\(/);
+  });
+});
+
+/**
+ * The ambient time band, which is the SAME bug as the theme class and was left
+ * out of the original fix.
+ *
+ * `data-time-band` selects `--background` and `--card` (index.css,
+ * mobile/styles/tokens.css). AmbientBackground used to be the only thing that set
+ * it, from a React effect — so on every load the page painted the bandless
+ * background and then tweened two seconds to the real one once React mounted.
+ * Unlike the theme flash this was not a dark-mode edge case: it happened on every
+ * refresh, on every route, in both shells, and it is the main reason a reload
+ * looked like the app was struggling to rebuild itself.
+ *
+ * Stamping it here makes the first painted colour the final one. The tween that
+ * made the correction visible is separately gated — see the last block below.
+ */
+describe("pre-paint time band", () => {
+  /** The band boundaries, as the shared module states them. */
+  const TIME_BANDS = readFileSync(join(SRC, "lib", "greetings", "time-bands.ts"), "utf8");
+
+  /**
+   * Every hour threshold in a source, in order of appearance.
+   *
+   * Compared rather than re-implemented: the inline script cannot import
+   * getTimeBand (nothing importable runs that early), so the boundaries are
+   * necessarily duplicated. Duplication is fine; SILENT duplication is not.
+   */
+  function thresholds(source: string): number[] {
+    return [...source.matchAll(/hour\s*[><]=?\s*(\d+)/g)].map((m) => Number(m[1]));
+  }
+
+  /**
+   * The band names a source mentions, in first-appearance order, deduped —
+   * time-bands.ts names all four twice (once in the TimeBand union, once per
+   * return), the inline script once each. The ORDER is the thing being compared:
+   * it encodes which band each threshold belongs to.
+   */
+  function bands(source: string): string[] {
+    return [
+      ...new Set([...source.matchAll(/"(morning|afternoon|evening|night)"/g)].map((m) => m[1])),
+    ];
+  }
+
+  it("stamps the band on <html> before the app module runs", () => {
+    expect(
+      INLINE,
+      "the band must be set before first paint, or --background changes after it",
+    ).toMatch(/setAttribute\(\s*["']data-time-band["']/);
+  });
+
+  it("uses the same hour boundaries as time-bands.ts", () => {
+    // 6/12/17/21. A drift here does not throw — it silently tints the app on a
+    // different schedule than the greeting that is supposed to match it.
+    expect(thresholds(INLINE)).toEqual(thresholds(TIME_BANDS));
+  });
+
+  it("names the same four bands, in the same order", () => {
+    expect(bands(INLINE)).toEqual(bands(TIME_BANDS));
+  });
+
+  it("is still inside the try/catch, so a blocked read cannot lose the theme too", () => {
+    // Both stamps share one try block. If the band work were moved outside it, a
+    // throw from Date/setAttribute would abandon the theme class as well — worse
+    // than the bug either half fixes.
+    const tryBody = INLINE.slice(INLINE.indexOf("try"), INLINE.indexOf("} catch"));
+    expect(tryBody).toContain("data-time-band");
+  });
+
+  it("leaves AmbientBackground as an updater that cannot re-trigger the tween", () => {
+    // It still has to exist: a session left open across 12:00/17:00/21:00 should
+    // re-tint. But it runs on mount too, when the pre-paint script has already
+    // written the same value — and an unconditional re-write hands body a fresh
+    // background-color to transition to, which is the exact smear this removes.
+    const ambient = readFileSync(join(SRC, "components", "ambient-background.tsx"), "utf8");
+    expect(ambient, "the write must be guarded by a read of the current value").toMatch(
+      /getAttribute\(\s*["']data-time-band["']\s*\)\s*===\s*band/,
+    );
+  });
+});
+
+/**
+ * The tween itself.
+ *
+ * Two seconds is right for the band crossing at 12:00/17:00/21:00 and wrong for
+ * the first paint, and unqualified it applied to both — the first resolution of
+ * `--background` counts as a change, so body spent two seconds fading into the
+ * colour it had already been given. One capture had it still running 1.9s in.
+ *
+ * Both halves are load-bearing: the pre-paint stamp above removes the change, and
+ * gating the transition removes the fade that would make any other
+ * first-resolution visible. Keeping only one of them brings the smear back in a
+ * slightly different shape.
+ */
+describe("the 2s background transition", () => {
+  const SHEETS = [
+    { name: "index.css", css: readFileSync(join(SRC, "index.css"), "utf8") },
+    {
+      name: "mobile/styles/material.css",
+      css: readFileSync(join(SRC, "mobile", "styles", "material.css"), "utf8"),
+    },
+  ] as const;
+
+  for (const sheet of SHEETS) {
+    describe(sheet.name, () => {
+      /** Every rule whose body animates background-color, with its selector. */
+      const animated = [
+        ...sheet.css.matchAll(/([^{}]+)\{([^}]*transition:[^;}]*background-color[^;}]*;)/g),
+      ].map((m) => ({ selector: m[1].trim(), body: m[2] }));
+
+      it("animates background-color somewhere, or this guard is measuring nothing", () => {
+        expect(animated.length).toBeGreaterThan(0);
+      });
+
+      it("can only run once boot is over", () => {
+        // data-app-ready is set by AppReveal when it lifts. Without the gate the
+        // tween runs during boot, which is when it must not.
+        for (const rule of animated) {
+          expect(rule.selector, `${sheet.name}: "${rule.selector}"`).toContain(
+            "[data-app-ready]",
+          );
+        }
+      });
+    });
+  }
+
+  it("has exactly one writer of data-app-ready, and it is AppReveal", () => {
+    // If a second component set it, the gate would open before AppReveal decided
+    // the app was ready and the tween would be back inside boot.
+    const reveal = readFileSync(join(SRC, "components", "app-reveal.tsx"), "utf8");
+    expect(reveal).toMatch(/setAttribute\(\s*["']data-app-ready["']/);
   });
 });

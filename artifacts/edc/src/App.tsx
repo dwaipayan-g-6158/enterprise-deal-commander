@@ -13,6 +13,7 @@ import { ThemeColorSync } from "@/components/theme-color-sync";
 import { FocusModeProvider } from "@/lib/presence/focus-mode-context";
 import { AppShellSkeleton } from "@/components/app-shell-skeleton";
 import { MobileShellSkeleton } from "@/mobile/shell/m-shell-skeleton";
+import { AppReveal } from "@/components/app-reveal";
 import { useMediaQuery } from "@/hooks/use-media-query";
 
 // Each shell is a separate chunk: a phone never downloads the desktop cockpit,
@@ -88,6 +89,13 @@ function App() {
           <TooltipProvider>
             <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
               <ShellGate />
+              {/* Inside the Router, not beside it: AppReveal reads the current
+                  path to stay off the sign-in, share and Catalyst-bounce routes,
+                  and useLocation outside a Router has no base applied. Inside
+                  QueryClientProvider too, because its readiness signal is
+                  useIsFetching. One instance covers both shells — ShellGate picks
+                  a shell below this point, so neither has to know it exists. */}
+              <AppReveal />
             </WouterRouter>
             <Toaster />
             <ThemeColorSync />

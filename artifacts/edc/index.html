@@ -3,8 +3,8 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <!-- Applies the theme BEFORE the first paint, and it has to be inline and
-         blocking to do that.
+    <!-- Applies the theme AND the ambient time band BEFORE the first paint, and
+         it has to be inline and blocking to do that.
 
          next-themes sets the class from JavaScript once React has mounted. In
          Next.js it ships its own pre-paint script; in a plain Vite SPA there is
@@ -20,6 +20,24 @@
          fade still running 1.9s in. theme-provider.tsx's own docstring says a
          home-screen icon opened at night "should not flash a white screen" —
          this is what makes that true.
+
+         data-time-band is stamped here for the SAME reason, and leaving it out
+         was a second, quieter version of the identical bug. The band selects
+         --background and --card (index.css, mobile/styles/tokens.css), and
+         AmbientBackground used to be the only thing that set it — from a React
+         effect, i.e. after mount. So EVERY load painted the bandless
+         --background, then tweened two full seconds to the real one once React
+         came up. Not a dark-mode edge case: it happened on every refresh, on
+         every route, in both shells, and it is the reason a reload looked like
+         the app was struggling rather than reloading. The band now arrives with
+         the theme, so the first painted colour is already the final one and
+         there is nothing left to tween. AmbientBackground keeps only the job it
+         is actually needed for: re-stamping when the band changes under a
+         session that stays open across 12:00/17:00/21:00.
+
+         The boundaries below are lib/greetings/time-bands.ts's, duplicated
+         because nothing importable can run this early. theme-flash.test.ts
+         parses both and fails if they disagree, so the copy cannot drift.
 
          Kept deliberately tiny and dependency-free: it must run before anything
          else and must never throw, because a throw here would leave the class
@@ -38,9 +56,24 @@
           // Tells the UA which form controls and scrollbars to draw before any
           // stylesheet has had a say.
           document.documentElement.style.colorScheme = dark ? "dark" : "light";
+
+          // Morning 6-12, Afternoon 12-17, Evening 17-21, Night 21-6 (wraps
+          // midnight) — getTimeBand() in lib/greetings/time-bands.ts.
+          var hour = new Date().getHours();
+          var band =
+            hour >= 6 && hour < 12
+              ? "morning"
+              : hour >= 12 && hour < 17
+                ? "afternoon"
+                : hour >= 17 && hour < 21
+                  ? "evening"
+                  : "night";
+          document.documentElement.setAttribute("data-time-band", band);
         } catch (e) {
           // Storage blocked, or matchMedia unavailable. Light is the fallback
-          // the stylesheet already assumes, so there is nothing to do.
+          // the stylesheet already assumes, so there is nothing to do. A missing
+          // band is likewise already handled — afternoon has no override block
+          // and uses the baseline tokens as-is.
         }
       })();
     </script>
@@ -188,15 +221,37 @@
     <link rel="apple-touch-startup-image" media="(device-width: 768px) and (device-height: 1024px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)" href="/splash/ipad-9-7-portrait-light.png" />
     <link rel="apple-touch-startup-image" media="(device-width: 768px) and (device-height: 1024px) and (-webkit-device-pixel-ratio: 2) and (orientation: landscape)" href="/splash/ipad-9-7-landscape-light.png" />
     <!-- splash:end -->
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <!-- Geist + Geist Mono only. Inter was loaded but assigned to nothing —
-         a third family of render-blocking weights for no glyphs on screen.
-         Requested as a variable axis rather than fixed instances: the mobile
-         type scale sets weights between the stops (450 body, 550 eyebrow,
-         650 headline) to separate levels without leaning on size alone, and
-         static instances would snap each of those to a neighbour. -->
-    <link href="https://fonts.googleapis.com/css2?family=Geist:wght@100..900&family=Geist+Mono:wght@100..900&display=swap" rel="stylesheet">
+    <!-- Geist + Geist Mono, self-hosted. Inter was once loaded here and assigned
+         to nothing — a third family of render-blocking weights for no glyphs on
+         screen. Both remaining families are variable rather than fixed instances:
+         the mobile type scale sets weights between the stops (450 body, 550
+         eyebrow, 650 headline) to separate levels without leaning on size alone,
+         and static instances would snap each of those to a neighbour.
+
+         These were a <link rel="stylesheet"> to fonts.googleapis.com, preceded by
+         a preconnect pair to two hosts. That is a render-blocking cross-origin
+         stylesheet whose only content is more cross-origin URLs, so first paint
+         waited on a chain of two third parties — and when Geist finally landed,
+         `display=swap` relaid out every line of text on the page, because the
+         system fallback's metrics are not Geist's. Both costs are removed by the
+         files being same-origin: the browser learns about them from this markup,
+         and the service worker precaches them (see the woff2 glob in
+         vite.config.ts) instead of runtime-caching them on a second load.
+
+         Only the latin subsets are preloaded, and only these two. Preload is a
+         promise that the file WILL be used this navigation: latin is needed by
+         every screen in an English UI, so preloading it removes a round trip from
+         the critical path. The other nine subsets are declared in index.css with
+         their unicode-ranges and fetched only if someone's text actually reaches
+         into them — preloading those would download 90KB nobody renders and earn
+         a console warning for it. `crossorigin` is required even same-origin:
+         fonts are fetched in CORS mode, and without it the preload sits unused
+         and the file is requested a second time.
+
+         scripts/sync-fonts.mjs owns the file list; fonts.test.ts asserts these
+         hrefs exist on disk. -->
+    <link rel="preload" href="/fonts/geist-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
+    <link rel="preload" href="/fonts/geist-mono-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
   </head>
   <body>
     <div id="root"></div>

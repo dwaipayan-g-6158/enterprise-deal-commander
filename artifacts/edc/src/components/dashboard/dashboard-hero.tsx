@@ -140,7 +140,27 @@ export function DashboardHero({ reportingCurrency }: { reportingCurrency: string
   }
 
   return (
-    <div className="space-y-4">
+    /**
+     * min-h, and it is the most valuable two inches of layout stability on the
+     * page — because this block sits ABOVE everything else, every pixel it gains
+     * on resolving pushes the entire dashboard down.
+     *
+     * It resolved late and grew when it did. `dataReady` waits on four separate
+     * queries (deals, next actions, recent activity, me), so the swap landed well
+     * after the widgets below had already drawn; and the placeholder measured 64px
+     * (h-9 + h-5 over space-y-2) against resolved content of 68px, or 88px once
+     * the streak line appears. So the page settled, then jumped.
+     *
+     * 88px is the tallest of the three states — headline, subline, streak — so the
+     * box is sized for the greeting that has all of them and the shorter ones
+     * simply sit in it. Reserving the tallest rather than the average is the point:
+     * a min-h that is right on average is wrong twice.
+     *
+     * The skeleton keeps its own smaller footprint inside the same box; what
+     * matters is that the BOX does not change size, not that the two states are
+     * pixel-identical.
+     */
+    <div className="min-h-[88px] space-y-4">
       {lockedGreeting ? (
         <div>
           <h1 className="text-3xl font-bold tracking-tight text-foreground">{headline}</h1>
