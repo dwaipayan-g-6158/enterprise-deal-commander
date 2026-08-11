@@ -230,28 +230,48 @@ arm plus a stray late one satisfied a position check while doing the wrong thing
 It counts calls as well as locating them now. `scroll-memory.test.ts` records the
 same trap one line away; I read it and still wrote it the weak way.
 
-## 8. A defect this surfaced but did not cause
+## 8. A defect this surfaced but did not cause — now fixed
 
-**A successful write visibly bounces back.** Driving a real gate toggle on the
+**A successful write visibly bounced back.** Driving a real gate toggle on the
 deployed app: the optimistic patch moved the fill 56% → 67%, the capsule said
 *Saving…* then *Saved*, and the fill then slid **back to 56%** with the gate
-un-ticked. The `PUT` returned **200** — twice, checked in the network log — so
-the capsule was telling the truth and the write did land.
+un-ticked. The `PUT` returned **200**, so the capsule was telling the truth and
+the write did land.
 
-The cause is `invalidate.ts` refetching the instant the mutation resolves,
-against a Data Store with a **~1–2 second read lag** (already recorded in
-`docs/catalyst-datastore-constraints.md` and the memory index). The refetch wins
-the race and overwrites the correct optimistic value with the pre-write one.
+**The first diagnosis in this document was wrong, and is corrected here.** It
+blamed `invalidate.ts` refetching into the Data Store's documented ~1–2s read
+lag. Measured, there is no lag on this path: the `PUT`'s own response carries
+the new value, the first uncached `GET` agrees **203ms** later, `/intelligence`
+agrees too and holds for 12s, and the per-request read cache in `sdk.ts` is
+correctly invalidated on every write path. The server was never stale.
 
-This predates this phase and affects all four write actions equally — but
-`.m-fill` made it *visible*, because the value now slides back instead of
-teleporting. **Deliberately not fixed here**: a correct fix changes the write
-layer's invalidation strategy for playbook, gates, disposition and stage
-together, and deserves its own change with its own verification rather than
-being smuggled into a motion phase.
+**The real cause was the service worker.** `edc-api-reads` used
+`StaleWhileRevalidate`, which answers from cache and revalidates behind it —
+exactly wrong for the read that follows a write. Asked twice at the same
+instant, plainly and with a cache-buster:
 
-The seed data was restored afterwards and confirmed by a direct server read past
-the lag: `G3_INTEGRATIONS_MAPPED` is `false`, as it started.
+| moment | plain URL | cache-busted |
+|---|---|---|
+| before the write | `false` | `false` |
+| **immediately after** | **`false`** | **`true`** |
+| 1.5s later | `true` | `true` |
+
+React Query committed the stale body and had no reason to fetch again; the
+revalidation landed too late to matter. It affected **every write in the app, on
+both shells** — anything that writes and then reads its own change.
+
+Fixed in `fix/sw-stale-reads-revert-writes`: `NetworkFirst` with a 3s timeout,
+which keeps the offline story whole (a rejected fetch falls straight through to
+cache) and gives up only the instant paint from cache while *online* — which
+costs little, because React Query's in-memory cache already covers repeat views
+within a session. The lookups bucket deliberately stays `StaleWhileRevalidate`:
+nothing in this app authors a stage or a gate definition, so there is no
+write-then-read-your-own-write to get wrong there.
+`service-worker-caching.test.ts` pins it and fails closed.
+
+Re-verified after deploying the fix: the gate now **sticks** — `Saving…` →
+`Saved`, fill holds at 67%, plain and cache-busted reads agree immediately. Seed
+data restored either way; `G3_INTEGRATIONS_MAPPED` is `false`, as it started.
 
 ## 9. Verification
 
