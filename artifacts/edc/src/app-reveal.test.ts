@@ -88,7 +88,33 @@ describe("the reveal cannot outlive a stalled query", () => {
     expect(SOURCE, "readiness must require having SEEN a fetch, not merely none now").toMatch(
       /sawFetching/,
     );
-    expect(SOURCE).toMatch(/sawFetching\.current\s*&&\s*inFlight\s*===\s*0/);
+  });
+
+  it("requires the quiet to persist, because it also goes quiet between waves", () => {
+    /**
+     * The correction the deployed measurement forced after the first version
+     * shipped. The page loads in three waves — session, then role/lookups, then
+     * the dashboard's twenty — and each wave is only mounted by the commit the
+     * previous wave's data triggered. So the in-flight count returns to ZERO in
+     * the gaps: measured at 479ms and 1292ms before the real 2047ms, with gaps of
+     * 11ms and 22ms. `sawFetching` cannot catch those; it is already set.
+     *
+     * Without the debounce the mask lifted at 477ms onto a page that stayed on its
+     * skeleton until 1658ms — the same bug this component exists to fix, wearing a
+     * shorter coat.
+     */
+    expect(SOURCE).toMatch(/QUIET_MS\s*=\s*(\d+)/);
+    const quiet = Number(SOURCE.match(/QUIET_MS\s*=\s*(\d+)/)![1]);
+    // An order of magnitude above the observed 11-22ms wave gaps, and well inside
+    // the ceiling so it can never be the thing that decides.
+    expect(quiet).toBeGreaterThanOrEqual(100);
+    const ceiling = Number(SOURCE.match(/CEILING_MS\s*=\s*(\d+)/)![1]);
+    expect(quiet).toBeLessThan(ceiling / 2);
+
+    // A new request must CANCEL the pending verdict, not race it.
+    expect(SOURCE).toMatch(/setQuietHeld\(false\)/);
+    expect(SOURCE).toMatch(/clearTimeout\(t\)/);
+    expect(SOURCE).toMatch(/offline\s*\|\|\s*quietHeld/);
   });
 
   it("counts offline as settled rather than pending", () => {

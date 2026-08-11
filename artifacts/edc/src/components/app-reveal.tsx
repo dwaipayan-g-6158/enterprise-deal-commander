@@ -24,6 +24,31 @@ const CEILING_MS = 1200;
 const FADE_MS = 200;
 
 /**
+ * How long the query cache has to stay quiet before "quiet" is believed.
+ *
+ * MEASURED on the deployed Command page, and this number is the whole reason the
+ * debounce exists. The in-flight request count reaches ZERO THREE TIMES on one
+ * reload — at 479ms, 1292ms and 2047ms — because the page loads in waves and each
+ * wave's queries are only mounted by the commit that the previous wave's data
+ * triggered:
+ *
+ *   378-479ms    1 request   the session check
+ *   490-1292ms   5 requests  role + lookups
+ *   1314-2047ms  20 requests the dashboard fan-out
+ *
+ * The gaps between those waves are 11ms and 22ms. A contract that lifts the mask
+ * on "nothing in flight" therefore lifts it on the FIRST wave boundary — measured
+ * at 477ms, with the page still on its skeleton until 1658ms. That is not a
+ * smaller version of the bug this component exists to fix; it is the same bug.
+ *
+ * 150ms is an order of magnitude above the observed gaps and still small enough to
+ * be invisible against the floor. It is not a guess at how long requests take —
+ * the ceiling handles that — it is a guess at how long ONE React commit plus its
+ * effects can take on a slow device, which is a much more stable quantity.
+ */
+const QUIET_MS = 150;
+
+/**
  * Routes that must never be covered.
  *
  * `/__catalyst` and `/accounts` are the Catalyst gateway's namespaces — the
@@ -132,22 +157,42 @@ export function AppReveal() {
   const inFlight = useIsFetching();
 
   /**
-   * `useIsFetching() === 0` is true at TWO different moments, and only the second
-   * one means anything: before the first query has started, and after the last one
-   * has finished. The first zero arrives before the lazy shell chunk has even
-   * downloaded — every query in this app lives inside that chunk, so at the moment
-   * this component first renders there is nothing fetching and nothing mounted to
-   * fetch. Lifting on that would reveal the empty shell and defeat the whole
-   * exercise.
+   * `useIsFetching() === 0` is true at MANY moments and only the last one means
+   * anything, so readiness needs two corrections rather than one.
    *
-   * So the condition is "has been busy, and is now quiet" rather than "is quiet".
-   * BootSplash reads the same signal and gets away with the naive form only
-   * because its 1450ms floor outlasts the pre-flight zero.
+   * First, it is true before anything has started. Every query in this app lives
+   * inside the lazy shell chunk, so when this component first renders there is
+   * nothing fetching and nothing mounted to fetch. Hence `sawFetching`: the
+   * condition is "has been busy" before it can be "is quiet". BootSplash reads the
+   * naive form and gets away with it only because its 1450ms floor outlasts that
+   * pre-flight zero.
+   *
+   * Second — and this is what the deployed measurement caught after the first
+   * version shipped — it is ALSO true in the gap between query waves. The page
+   * loads in three waves and each wave is mounted by the commit the previous wave's
+   * data triggered, so the count returns to zero twice on the way. The latch above
+   * does nothing about those: it has already been set. Hence the debounce, which
+   * requires the quiet to PERSIST for QUIET_MS. See QUIET_MS for the measurements.
+   *
+   * Written as one effect that re-arms, so any new request cancels the pending
+   * verdict rather than racing it.
    */
   const sawFetching = useRef(false);
+  const [quietHeld, setQuietHeld] = useState(false);
+
   useEffect(() => {
-    if (inFlight > 0) sawFetching.current = true;
-  }, [inFlight]);
+    if (phase !== "masking") return;
+
+    if (inFlight > 0) {
+      sawFetching.current = true;
+      setQuietHeld(false);
+      return;
+    }
+    if (!sawFetching.current) return;
+
+    const t = setTimeout(() => setQuietHeld(true), QUIET_MS);
+    return () => clearTimeout(t);
+  }, [phase, inFlight]);
 
   const leftRef = useRef(false);
   const leave = useCallback(() => {
@@ -195,9 +240,8 @@ export function AppReveal() {
 
   useEffect(() => {
     if (phase !== "masking" || !floorElapsed || !fontsReady) return;
-    const dataSettled = offline || (sawFetching.current && inFlight === 0);
-    if (dataSettled) leave();
-  }, [phase, floorElapsed, fontsReady, offline, inFlight, leave]);
+    if (offline || quietHeld) leave();
+  }, [phase, floorElapsed, fontsReady, offline, quietHeld, leave]);
 
   useEffect(() => {
     if (phase !== "leaving") return;
