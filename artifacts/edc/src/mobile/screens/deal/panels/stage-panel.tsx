@@ -8,6 +8,7 @@ import { useGetDealIntelligence, useListPipelineStages } from "@workspace/api-cl
 import { AdminOnly } from "@/components/auth/write-gate";
 import { moveIntent, terminalOutcome, toBoardStage, type BoardStage } from "@/components/roster/model/board";
 import { prefersReducedMotion } from "@/mobile/lib/view-transition-support";
+import { markProgrammaticScroll } from "@/mobile/lib/scroll-memory";
 import { useShellScrollRef } from "@/mobile/shell/m-shell";
 import { panelHref } from "@/mobile/nav/routes";
 import { PanelBody, type PanelBodyProps } from "@/mobile/screens/deal/panel-screen";
@@ -19,6 +20,9 @@ import {
   OVERRIDE_REASON_MIN_LENGTH,
   type GuardrailBlock,
 } from "@/mobile/write/use-stage-advance";
+
+/** How long the guardrail reveal keeps scrolling after it is asked to. */
+const SMOOTH_REVEAL_MS = 800;
 
 /**
  * Where the deal is in the pipeline, and the one write that moves it.
@@ -259,6 +263,11 @@ function useRevealedBelowFold<T extends HTMLElement>() {
     const overshoot = el.getBoundingClientRect().bottom - usableBottom;
     if (overshoot <= 0) return;
 
+    // The app is scrolling, not the reader. Unmarked, this downward scroll reads
+    // to the Commander capsule as a deliberate flick and hides it — on the one
+    // screen where the guardrail has just appeared and the reader most needs the
+    // rest of the app reachable.
+    markProgrammaticScroll(prefersReducedMotion() ? undefined : SMOOTH_REVEAL_MS);
     scroller.scrollTo({
       top: Math.min(scroller.scrollTop + overshoot, scroller.scrollHeight - scroller.clientHeight),
       behavior: prefersReducedMotion() ? "auto" : "smooth",

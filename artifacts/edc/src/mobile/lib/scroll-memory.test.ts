@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
@@ -204,3 +204,62 @@ describe("the Commander capsule", () => {
     expect(body.indexOf("isProgrammaticScroll()")).toBeLessThan(body.indexOf("HYSTERESIS_PX"));
   });
 });
+
+/**
+ * Every programmatic scroll of the SHELL scroller has to say so.
+ *
+ * Marking one site fixes one symptom; the invariant is what stops the next one
+ * reintroducing it. The capsule is not the only thing that reacts to scroll, and
+ * a scroll nobody claimed is indistinguishable from a thumb.
+ *
+ * Scoped to the shell's vertical scroller. `segment-chips.tsx` is excluded on
+ * purpose: it scrolls a horizontal chip strip with `block: "nearest"`, which is
+ * a different container and a different intent.
+ */
+describe("no unclaimed programmatic scrolling", () => {
+  const MOBILE = join(import.meta.dirname, "..");
+  const SITES = [
+    "commander/commander-sheet.tsx",
+    "screens/deal/panels/stage-panel.tsx",
+    "screens/memory/ask-screen.tsx",
+    "shell/m-tab-bar.tsx",
+  ];
+
+  it.each(SITES)("%s claims the scroll it starts", (file) => {
+    const source = readFileSync(join(MOBILE, file), "utf8");
+    const scrolls = /scrollIntoView\(|\.scrollTo\(/.test(source);
+    expect(scrolls, `${file} was listed as a scroll site but no longer scrolls`).toBe(true);
+    expect(source, `${file} scrolls the shell without marking it`).toMatch(
+      /markProgrammaticScroll\(/,
+    );
+  });
+
+  it("names every site that moves the shell scroller", () => {
+    // Catches a NEW file starting a programmatic scroll: it will not be in
+    // SITES, so it is listed here and has to be triaged deliberately.
+    const walk = (dir: string): string[] =>
+      readdirSync(dir, { withFileTypes: true }).flatMap((e) =>
+        e.isDirectory()
+          ? walk(join(dir, e.name))
+          : /\.tsx?$/.test(e.name) && !e.name.endsWith(".test.ts")
+            ? [join(dir, e.name)]
+            : [],
+      );
+
+    const scrolling = walk(MOBILE)
+      .filter((f) => {
+        const s = stripLineComments(readFileSync(f, "utf8"));
+        return /scrollIntoView\(|\.scrollTo\(|scrollTop\s*=\s*(?!=)/.test(s);
+      })
+      .map((f) => f.slice(MOBILE.length + 1).replaceAll("\\", "/"))
+      // scroll-memory owns the mechanism; chips scroll their own strip.
+      .filter((f) => f !== "lib/scroll-memory.ts" && f !== "components/segment-chips.tsx");
+
+    expect(scrolling.sort()).toEqual([...SITES].sort());
+  });
+});
+
+/** Comments describe these calls constantly; only real code counts. */
+function stripLineComments(source: string): string {
+  return source.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+}

@@ -1,9 +1,13 @@
 import { useRef } from "react";
+import { markProgrammaticScroll } from "@/mobile/lib/scroll-memory";
 import { Link, useLocation } from "wouter";
 import { cn } from "@/lib/utils";
 import { MOBILE_TABS, activeTabId } from "@/mobile/nav/mobile-nav";
 import { haptic } from "@/mobile/lib/haptics";
 import { useShellScrollRef } from "@/mobile/shell/m-shell";
+
+/** How long the scroll-to-top keeps scrolling after the tap. */
+const SMOOTH_TO_TOP_MS = 800;
 
 /**
  * Bottom navigation. Four destinations in the thumb arc — there is no hamburger
@@ -63,6 +67,7 @@ export function MTabBar() {
                   // iOS convention. Navigating again would push a duplicate
                   // history entry and make back feel broken.
                   event.preventDefault();
+                  markProgrammaticScroll(SMOOTH_TO_TOP_MS);
                   scrollRef.current?.scrollTo({ top: 0, behavior: "smooth" });
                 }}
                 className={cn(
