@@ -290,11 +290,26 @@ describe("layout reservations measured against the deployed app", () => {
     expect(verdict).toMatch(/className="mt-5 min-h-\[74px\]"/);
   });
 
-  it("reserves the mobile needs list at three rows' real height", () => {
-    // 112px per resolved row, 336px for the three the block is built around,
-    // against a 92px placeholder.
+  it("gives the mobile needs list a count-independent box", () => {
+    /**
+     * A FIXED box, not a reservation, and the difference was measured the hard way.
+     *
+     * 112px per resolved row, 336px for the three rows the block is built around,
+     * against a 92px placeholder — so it grew 244px on arrival. Reserving three
+     * rows fixed that and created its mirror image: the row COUNT is unknown until
+     * the data lands, and a run returning one row collapsed 336px to 112px and
+     * yanked everything below it UP 224px. CLS did not improve.
+     *
+     * For a list of unknown length no placeholder height is correct, so the box
+     * must not depend on the count. The loading and populated states have to sit
+     * INSIDE it — if the empty-state branch came first in a plain ternary, the box
+     * itself would be what moves.
+     */
     const needs = read("mobile", "screens", "command", "needs-block.tsx");
+    expect(needs).toContain("min-h-[336px]");
     expect(needs).toContain("h-28");
+    // The empty state opts out: one sentence in a 336px frame reads as a failure.
+    expect(needs).toMatch(/rows\.length === 0 && !loading/);
   });
 
   it("reserves the nav bar's subtitle line wherever it is data-driven", () => {
