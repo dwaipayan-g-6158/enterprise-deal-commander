@@ -1,7 +1,8 @@
 import { useCallback, useState, useSyncExternalStore } from "react";
 import { Link } from "wouter";
 import { useTheme } from "next-themes";
-import { ChevronRight, Download, LogOut, Moon, Settings2, Sun } from "lucide-react";
+import { BellDot, ChevronRight, Download, LogOut, Moon, Settings2, Sun } from "lucide-react";
+import { badgeEnabled, badgeSupported, disableBadge, enableBadge } from "@/mobile/lib/app-badge";
 import {
   canInstall,
   onInstallAvailabilityChange,
@@ -27,6 +28,13 @@ import { initialsFor } from "@/mobile/shell/m-avatar";
  * achievements) attach to this screen in a later slice; this is the identity,
  * appearance and session part.
  */
+/** What the badge row says underneath itself, which is where the refusal lands. */
+function badgeSub(on: boolean, denied: boolean): string {
+  if (on) return "Shows how many deals are in the red";
+  if (denied) return "Blocked — allow notifications for this app in Settings";
+  return "Needs notification permission";
+}
+
 export function AccountScreen() {
   const { user, role } = useSession();
   const { resolvedTheme, setTheme } = useTheme();
@@ -44,6 +52,28 @@ export function AccountScreen() {
   );
 
   const isDark = resolvedTheme === "dark";
+
+  const [badgeOn, setBadgeOn] = useState(badgeEnabled);
+  const [badgeDenied, setBadgeDenied] = useState(false);
+
+  /**
+   * iOS routes the icon badge through notification permission and only ever
+   * asks ONCE, so a decline here is permanent until the user goes into
+   * Settings. That is why this is a row that says what the permission is for
+   * and asks only on tap, rather than a prompt at launch — and why a refusal
+   * has to explain the trip to Settings rather than just failing quietly.
+   */
+  const toggleBadge = async () => {
+    if (badgeOn) {
+      await disableBadge();
+      setBadgeOn(false);
+      setBadgeDenied(false);
+      return;
+    }
+    const result = await enableBadge();
+    setBadgeOn(result === "enabled");
+    setBadgeDenied(result !== "enabled");
+  };
 
   return (
     <MScreen title="Account" backHref="/" backLabel="Back">
@@ -77,6 +107,22 @@ export function AccountScreen() {
           sub="Tap to switch"
           onPress={() => setTheme(isDark ? "light" : "dark")}
         />
+        {/* Absent entirely where the platform cannot badge an icon, rather than
+            present and inert — a control that cannot do anything is worse than
+            no control, because tapping it is the only way to find out.
+
+            It moved here from the Commander sheet, which is about the current
+            screen's verb rather than about the account. The outcome is reported
+            in this row instead of in a toast: <Toaster/> renders outside
+            `.m-shell`, so it paints desktop tokens on a phone. */}
+        {badgeSupported() ? (
+          <ListRow
+            media={<BellDot className="h-4 w-4" aria-hidden="true" />}
+            title={badgeOn ? "Alert count on app icon" : "Show alert count on app icon"}
+            sub={badgeSub(badgeOn, badgeDenied)}
+            onPress={() => void toggleBadge()}
+          />
+        ) : null}
       </section>
 
       <nav aria-label="Settings" className="mb-4">
