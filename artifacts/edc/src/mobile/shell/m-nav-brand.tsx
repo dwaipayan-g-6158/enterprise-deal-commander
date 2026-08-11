@@ -1,5 +1,4 @@
 import { EdcLogoMark } from "@/components/edc-logo-mark";
-import { MAvatar } from "@/mobile/shell/m-avatar";
 
 /**
  * How much faster than the desktop sidebar's the mark draws here.
@@ -16,10 +15,9 @@ import { MAvatar } from "@/mobile/shell/m-avatar";
 const MARK_TIME_SCALE = 2.2;
 
 /**
- * The nav bar's trailing cluster on the four tab roots: the brand mark, then
- * the account avatar.
+ * The brand mark, in the nav bar's leading slot on the four tab roots.
  *
- * ## The mark animates here, and that reverses an earlier decision
+ * ## It animates here, and that reverses an earlier decision
  *
  * command-screen.tsx used to render it static, with a comment giving the
  * reason: "the draw-in belongs to the launch moment (BootSplash), and replaying
@@ -41,14 +39,16 @@ const MARK_TIME_SCALE = 2.2;
  * the same reason. Anything cleverer would be state tracking a remount already
  * expresses.
  *
+ * ## Leading, not trailing
+ *
+ * MNavBar ignores `leading` whenever `backHref` is set, which is what keeps this
+ * off pushed screens: the chevron owns that corner, and a brand mark competing
+ * with a back button is how a nav bar starts to read as a toolbar. Tab roots
+ * have no chevron, so the slot is free — and the mark is the reason it exists.
+ *
  * Reduced motion is handled inside EdcLogoMark: the petals render filled with
  * no draw, no shimmer and no breathe.
  */
-export function MNavTrailing() {
-  return (
-    <div className="flex items-center gap-1">
-      <EdcLogoMark size={24} timeScale={MARK_TIME_SCALE} className="shrink-0" />
-      <MAvatar />
-    </div>
-  );
+export function MNavBrand() {
+  return <EdcLogoMark size={24} timeScale={MARK_TIME_SCALE} className="shrink-0" />;
 }

@@ -5,13 +5,18 @@
 
 ## What changed
 
-The EDC mark appeared on **one** of the four tab roots (Command), on the **left**, and **static**.
-It now sits on the trailing side of all four — Command, Deals, Intelligence, Memory — and plays the
-desktop sidebar's draw-in.
+The EDC mark appeared on **one** of the four tab roots (Command), and **static**. It is now in the
+leading slot of all four — Command, Deals, Intelligence, Memory — and plays the desktop sidebar's
+draw-in. The account avatar keeps the trailing slot on all four, unchanged.
 
-New `shell/m-nav-trailing.tsx` owns the trailing cluster: mark, then account avatar. All four
-screens previously passed `right={<MAvatar />}` identically, so they now all pass
-`right={<MNavTrailing />}` — the uniformity is the point, and a test enforces it.
+New `shell/m-nav-brand.tsx` holds the mark and its timing constant, so the four tab roots stay
+identical: `leading={<MNavBrand />} right={<MAvatar />}`. A test enforces both halves — a screen
+that lost the mark, and a screen that lost the avatar, fail separately.
+
+**`leading` is what keeps the mark off pushed screens.** `MNavBar` ignores it whenever `backHref` is
+set, because the chevron owns that corner and a brand mark competing with a back button is how a nav
+bar starts to read as a toolbar. That precedence is the only thing preventing the mark from
+appearing beside a chevron on every detail screen, so it is now asserted rather than assumed.
 
 ## The reversal, stated rather than deleted
 
@@ -38,27 +43,32 @@ unmounts one mark and mounts another, and the animation restarts because the com
 which is also exactly when it should. A reload plays it for the same reason. Anything cleverer would
 be state tracking a remount already expresses.
 
-## The skeleton had to move with it
+## The skeleton gained the avatar's stand-in
 
 `m-shell-skeleton.tsx` renders a static mark at first paint so the handover to the live shell moves
-nothing. Leaving it on the left would have made the mark jump across the header on every launch.
+nothing. The mark's position is unchanged — leading, as before — but the row previously had no
+avatar at all, so the title skeleton stretched into space the live bar reserves.
 
-It is placed inside the same **48px** tap box `.m-tap` gives the live avatar. Measuring only the
-visible 32px disc would have handed over 16px narrower and shifted the mark on the swap — the exact
-class of bug this file exists to prevent. The skeleton's mark stays static: it is torn down within a
-few hundred milliseconds, and a draw-in that dies mid-sequence reads as a glitch.
+The stand-in sits inside the same **48px** tap box `.m-tap` gives the live avatar. Sizing it to the
+visible 32px disc would hand over 16px narrower and shift the row on the swap — the exact class of
+bug this file exists to prevent. The skeleton's mark stays static: it is torn down within a few
+hundred milliseconds, and a draw-in that dies mid-sequence reads as a glitch.
 
 ## Verified
 
-`pnpm run typecheck` clean. Suite **1,218** / 85 files (+15). Both new guards fail closed: reverting
-one screen to a bare `MAvatar`, and setting the time scale back to 1.
+`pnpm run typecheck` clean. Suite **1,219** / 85 files (+16). Four planted violations fail closed:
+a screen with no `leading`, a screen with no avatar, the time scale back at 1, and `MNavBar`
+rendering `leading` alongside the back chevron instead of yielding to it.
 
 On the deployed build (`index-DRw56cQq.js`, asserted served before measuring — the service worker
 had re-registered itself and replayed the previous `index.html` first):
 
-- **Present on all four roots**, mark at x=283 between title and avatar (x=311) at 390px.
+- **Present on all four roots**, at 390px wide.
 - **It draws on navigation.** Sampling from inside the page across a tab switch: fills reset to
   `0,0,0,0`, then `0.10` → `0.77` → `0.99` on petal 1 while petal 2 is at `0.32` (the stagger), all
   four settled at 1.00 by ~1.9s.
 - **Reduced motion** (`prefers-reduced-motion: reduce`): no partial fill in any sample across a tab
   switch — the mark is filled from its first frame.
+
+Placement was measured on the deployed build in both positions: trailing first (mark x=283, avatar
+x=311), then corrected to leading.

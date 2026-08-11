@@ -1,7 +1,8 @@
 import type { ReactNode } from "react";
 import { useLocation } from "wouter";
 import { MNavBar } from "@/mobile/shell/m-nav-bar";
-import { MNavTrailing } from "@/mobile/shell/m-nav-trailing";
+import { MNavBrand } from "@/mobile/shell/m-nav-brand";
+import { MAvatar } from "@/mobile/shell/m-avatar";
 import { MSegmented } from "@/mobile/ui/m-segmented";
 import { PullToRefresh } from "@/mobile/components/pull-to-refresh";
 import { activeLensId, INTELLIGENCE_LENSES } from "@/mobile/nav/mobile-nav";
@@ -41,7 +42,12 @@ export function LensScreen({
 
   return (
     <>
-      <MNavBar title="Intelligence" subtitle={subtitle} right={<MNavTrailing />}>
+      <MNavBar
+        title="Intelligence"
+        subtitle={subtitle}
+        leading={<MNavBrand />}
+        right={<MAvatar />}
+      >
         <div className="px-4 pb-3">
           <MSegmented
             segments={INTELLIGENCE_LENSES.map((lens) => ({

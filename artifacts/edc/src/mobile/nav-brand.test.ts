@@ -24,18 +24,18 @@ const TAB_ROOTS = [
 ];
 
 describe("the brand mark on the tab roots", () => {
-  it.each(TAB_ROOTS)("%s puts MNavTrailing in the nav bar's trailing slot", (file) => {
+  it.each(TAB_ROOTS)("%s puts MNavBrand in the nav bar's leading slot", (file) => {
     const source = stripComments(read(file));
-    expect(source, `${file} should render the brand + account cluster`).toMatch(
-      /right=\{<MNavTrailing\s*\/>\}/,
+    expect(source, `${file} should render the brand mark`).toMatch(
+      /leading=\{<MNavBrand\s*\/>\}/,
     );
   });
 
-  it.each(TAB_ROOTS)("%s no longer renders a bare avatar in that slot", (file) => {
-    // The cluster owns the avatar now. A screen that kept `right={<MAvatar />}`
-    // would look correct in review and simply have no mark.
+  it.each(TAB_ROOTS)("%s keeps the avatar in the trailing slot", (file) => {
+    // The mark took the leading slot, not the avatar's. Losing the avatar would
+    // move Settings, Users and sign-out out of reach on every tab root at once.
     const source = stripComments(read(file));
-    expect(source, `${file} still passes MAvatar directly`).not.toMatch(
+    expect(source, `${file} lost its account entry point`).toMatch(
       /right=\{<MAvatar\s*\/>\}/,
     );
   });
@@ -55,11 +55,11 @@ describe("the brand mark on the tab roots", () => {
 });
 
 describe("the mark itself", () => {
-  const TRAILING = stripComments(read("shell/m-nav-trailing.tsx"));
+  const BRAND = stripComments(read("shell/m-nav-brand.tsx"));
 
   it("animates — it is not passed animated={false}", () => {
-    expect(TRAILING).toMatch(/<EdcLogoMark/);
-    expect(TRAILING, "the draw-in is the whole point of this component").not.toMatch(
+    expect(BRAND).toMatch(/<EdcLogoMark/);
+    expect(BRAND, "the draw-in is the whole point of this component").not.toMatch(
       /animated=\{false\}/,
     );
   });
@@ -68,17 +68,32 @@ describe("the mark itself", () => {
     // EdcLogoMark's own sequence is 3.22s at timeScale 1, which is longer than
     // the gap between two tab taps — the mark would be caught mid-draw on every
     // switch. Anything at or below 1 reintroduces that.
-    const match = TRAILING.match(/MARK_TIME_SCALE\s*=\s*([\d.]+)/);
+    const match = BRAND.match(/MARK_TIME_SCALE\s*=\s*([\d.]+)/);
     expect(match, "the speed-up must stay a named constant").not.toBeNull();
     const scale = Number(match![1]);
     expect(scale).toBeGreaterThan(1);
     expect((3.22 / scale) * 1000, "draw must land under 2s").toBeLessThan(2000);
   });
 
-  it("keeps the account entry point beside it", () => {
-    // The mark took over the slot the avatar had. Losing the avatar would move
-    // Settings, Users and sign-out out of reach on every tab root at once.
-    expect(TRAILING).toMatch(/<MAvatar\s*\/>/);
+  it("renders at the size the leading slot and the skeleton both assume", () => {
+    expect(BRAND).toMatch(/size=\{24\}/);
+  });
+});
+
+/**
+ * The mark stays off pushed screens, and MNavBar is what enforces it.
+ *
+ * `leading` is ignored whenever `backHref` is set — the chevron owns that
+ * corner. That is the only thing keeping the mark from appearing beside a back
+ * button on every detail screen, so it is worth an assertion rather than a
+ * comment.
+ */
+describe("the leading slot yields to the back chevron", () => {
+  const NAV_BAR = read("shell/m-nav-bar.tsx");
+
+  it("renders leading only when there is no backHref", () => {
+    const body = NAV_BAR.slice(NAV_BAR.indexOf("export function MNavBar"));
+    expect(body).toMatch(/backHref\s*\?[\s\S]{0,120}MBackLink[\s\S]{0,80}:\s*leading\s*\?/);
   });
 });
 
@@ -89,11 +104,11 @@ describe("the mark itself", () => {
 describe("the skeleton hands over without moving anything", () => {
   const SKELETON = stripComments(read("shell/m-shell-skeleton.tsx"));
 
-  it("puts the mark on the trailing side too", () => {
-    expect(SKELETON).toMatch(/ml-auto/);
-    const trailing = SKELETON.slice(SKELETON.indexOf("ml-auto"));
-    expect(trailing.indexOf("EdcLogoMark"), "the mark belongs inside the trailing cluster")
-      .toBeGreaterThan(-1);
+  it("puts the mark first, ahead of the title, as the live leading slot does", () => {
+    const mark = SKELETON.indexOf("EdcLogoMark");
+    const title = SKELETON.indexOf('Skeleton className="h-4 w-36"');
+    expect(mark).toBeGreaterThan(-1);
+    expect(mark, "the mark leads the row, like MNavBar's leading slot").toBeLessThan(title);
   });
 
   it("renders the same 24px mark the live bar does", () => {

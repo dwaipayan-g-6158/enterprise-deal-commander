@@ -4,7 +4,8 @@ import { computeStreak } from "@/lib/streak/compute-streak";
 import { buildMission } from "@/lib/mission/priority-scorer";
 import { terminalOutcome } from "@/components/roster/model/board";
 import { MNavBar } from "@/mobile/shell/m-nav-bar";
-import { MNavTrailing } from "@/mobile/shell/m-nav-trailing";
+import { MNavBrand } from "@/mobile/shell/m-nav-brand";
+import { MAvatar } from "@/mobile/shell/m-avatar";
 import { ErrorState } from "@/mobile/components/states";
 import { PullToRefresh } from "@/mobile/components/pull-to-refresh";
 import { useCommandData, toInsightVitals } from "@/mobile/screens/command/use-command-data";
@@ -106,7 +107,7 @@ export function CommandScreen() {
   if (data.isError) {
     return (
       <>
-        <MNavBar title="Command" right={<MNavTrailing />} />
+        <MNavBar title="Command" leading={<MNavBrand />} right={<MAvatar />} />
         <ErrorState
           title="Couldn't load the portfolio"
           body="The pipeline summary didn't come back. Pull down to try again."
@@ -119,7 +120,8 @@ export function CommandScreen() {
     <>
       <MNavBar
         title="Command"
-        right={<MNavTrailing />}
+        leading={<MNavBrand />}
+        right={<MAvatar />}
         subtitle={
           data.summary ? `${data.summary.totalDealsMonitored} deals monitored` : undefined
         }

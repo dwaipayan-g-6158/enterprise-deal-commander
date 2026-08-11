@@ -13,7 +13,8 @@ import { normalizeOutcome, OUTCOME_LABEL } from "@/mobile/lib/outcome";
 import { armSharedCard, useSharedCardStyle } from "@/mobile/lib/shared-card";
 import { useDebouncedValue } from "@/mobile/hooks/use-debounced-value";
 import { MNavBar } from "@/mobile/shell/m-nav-bar";
-import { MNavTrailing } from "@/mobile/shell/m-nav-trailing";
+import { MNavBrand } from "@/mobile/shell/m-nav-brand";
+import { MAvatar } from "@/mobile/shell/m-avatar";
 import { OutcomePill } from "@/mobile/components/badges";
 import { SegmentChips, type Segment } from "@/mobile/components/segment-chips";
 import { Shimmer } from "@/mobile/components/shimmer";
@@ -107,7 +108,8 @@ export function MemoryScreen() {
     <>
       <MNavBar
         title="Memory"
-        right={<MNavTrailing />}
+        leading={<MNavBrand />}
+        right={<MAvatar />}
         subtitle={isLoading ? undefined : `${results.length} archived deals`}
       >
         <SegmentChips
