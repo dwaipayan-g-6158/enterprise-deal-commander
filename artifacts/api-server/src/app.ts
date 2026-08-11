@@ -12,7 +12,11 @@ import pinoHttp from "pino-http";
 import { ZodError } from "zod";
 import router from "./routes";
 import { logger } from "./lib/logger";
-import { securityHeaders } from "./lib/security-headers";
+import {
+  buildContentSecurityPolicy,
+  createSecurityHeaders,
+  inlineScriptHashes,
+} from "./lib/security-headers";
 import { HttpError, badRequest, sendError } from "./lib/http";
 import type { AuthedRequest } from "./lib/auth";
 
@@ -37,9 +41,33 @@ app.use(
     },
   }),
 );
+// Single-origin hosting: this same server can also serve the built SPA (copied
+// to dist/public alongside dist/index.mjs by scripts/build-single.ts).
+// `__dirname` resolves to dist/ at runtime via the esbuild banner in build.mjs.
+// In local dev this directory doesn't exist (the frontend runs as its own Vite
+// process instead), so the SPA block further down is a no-op there.
+const publicDir = path.join(globalThis.__dirname, "public");
+const indexHtmlPath = path.join(publicDir, "index.html");
+
+/**
+ * Read here, before the middleware is mounted, because the policy has to name
+ * the hash of index.html's inline pre-paint script and the header is set on every
+ * response — including the one that carries that very script.
+ *
+ * Derived from the file rather than pinned: see `inlineScriptHashes`. Read once
+ * at startup, not per request; the served bundle cannot change under a running
+ * process, and a read on the hot path would be a needless syscall on every hit.
+ *
+ * Empty when there is no SPA (local dev), which is correct — this server then
+ * never emits HTML and has no inline script to allow.
+ */
+const spaInlineScriptHashes = fs.existsSync(indexHtmlPath)
+  ? inlineScriptHashes(fs.readFileSync(indexHtmlPath, "utf8"))
+  : [];
+
 // Before the router and the static handler, so every response this server
 // produces carries them — including API JSON and the SPA shell.
-app.use(securityHeaders);
+app.use(createSecurityHeaders(buildContentSecurityPolicy(spaInlineScriptHashes)));
 app.use(cors());
 app.use(cookieParser());
 app.use(express.json());
@@ -47,12 +75,7 @@ app.use(express.urlencoded({ extended: true }));
 
 app.use("/api", router);
 
-// Single-origin hosting: this same server can also serve the built SPA
-// (copied to dist/public alongside dist/index.mjs by scripts/build-single.ts).
-// `__dirname` resolves to dist/ at runtime via the esbuild banner in build.mjs.
-// In local dev this directory doesn't exist (the frontend runs as its own
-// Vite process instead), so the block below is a no-op there.
-const publicDir = path.join(globalThis.__dirname, "public");
+// `publicDir` and `indexHtmlPath` are declared above, where the CSP needs them.
 if (fs.existsSync(publicDir)) {
   app.use(
     express.static(publicDir, {
@@ -114,7 +137,7 @@ if (fs.existsSync(publicDir)) {
       next();
       return;
     }
-    res.sendFile(path.join(publicDir, "index.html"));
+    res.sendFile(indexHtmlPath);
   });
 }
 

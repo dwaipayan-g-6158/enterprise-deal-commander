@@ -1,5 +1,13 @@
+import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { CONTENT_SECURITY_POLICY, securityHeaders } from "./security-headers";
+import {
+  CONTENT_SECURITY_POLICY,
+  buildContentSecurityPolicy,
+  inlineScriptHashes,
+  securityHeaders,
+} from "./security-headers";
 import type { Request, Response, NextFunction } from "express";
 
 function directive(name: string): string | undefined {
@@ -92,5 +100,85 @@ describe("the content security policy", () => {
     // not silently widen these too.
     expect(directive("worker-src")).toBe("'self'");
     expect(directive("manifest-src")).toBe("'self'");
+  });
+});
+
+/**
+ * The SPA's inline pre-paint script, and the policy that has to admit it.
+ *
+ * This is the regression these tests exist for. `script-src 'self'` does not
+ * cover inline script, so for as long as index.html has carried its pre-paint
+ * theme stamp, that script was BLOCKED on the deployed app — dark mode flashed
+ * white on every launch and the doc comment in the module under test asserted
+ * there were no inline scripts to worry about. Nothing failed loudly: locally the
+ * SPA is served by Vite on its own port and never sees this header, so the only
+ * symptom lived in a deployed browser's console.
+ *
+ * What follows checks the mechanism (hashes are derived, correctly formed, and
+ * reach the directive) rather than pinning a hash value. A pinned value is the
+ * trap: a CSP hash covers the script's exact bytes including line endings, and
+ * this repo's working tree is CRLF while its git blobs are LF, so the two hash
+ * differently and either literal would break on a checkout normalised the other
+ * way — invisibly, because the source would still look correct.
+ */
+describe("the inline pre-paint script", () => {
+  /** The real file, so this tracks whatever index.html actually says today. */
+  const INDEX_HTML = readFileSync(
+    join(import.meta.dirname, "..", "..", "..", "edc", "index.html"),
+    "utf8",
+  );
+
+  it("still exists in index.html, and still has to be inline", () => {
+    // If this ever legitimately goes away, the hash plumbing can go with it.
+    // Until then it is load-bearing: it applies the theme class and the time band
+    // before the first paint, which is why it cannot be a src= file.
+    expect(INDEX_HTML).toMatch(/<script>[\s\S]*localStorage\.getItem\("theme"\)/);
+  });
+
+  it("is hashed, so script-src can admit it without 'unsafe-inline'", () => {
+    const hashes = inlineScriptHashes(INDEX_HTML);
+    expect(hashes).toHaveLength(1);
+    expect(hashes[0]).toMatch(/^'sha256-[A-Za-z0-9+/]{43}='$/);
+  });
+
+  it("hashes the script body verbatim, because anything else never matches", () => {
+    // Trimming, re-indenting or normalising newlines all produce a hash the
+    // browser will not recognise, and the failure is silent.
+    const body = INDEX_HTML.match(/<script>([\s\S]*?)<\/script>/)![1];
+    const expected = createHash("sha256").update(body, "utf8").digest("base64");
+    expect(inlineScriptHashes(INDEX_HTML)[0]).toBe(`'sha256-${expected}'`);
+  });
+
+  it("ignores scripts with a src, which 'self' already covers", () => {
+    // index.html's module entry is one of these. Hashing an external script's
+    // empty body would whitelist every empty inline script on the origin.
+    expect(INDEX_HTML).toMatch(/<script[^>]+\bsrc=/);
+    const external = inlineScriptHashes('<script type="module" src="/src/main.tsx"></script>');
+    expect(external).toEqual([]);
+  });
+
+  it("puts the hash in script-src and nowhere else", () => {
+    const csp = buildContentSecurityPolicy(inlineScriptHashes(INDEX_HTML));
+    const scriptSrc = csp.split("; ").find((d) => d.startsWith("script-src "))!;
+    expect(scriptSrc).toContain("'sha256-");
+    // One directive, one purpose. A hash loose in style-src or default-src would
+    // be silently ignored and read as coverage that isn't there.
+    expect(csp.split("'sha256-")).toHaveLength(2);
+  });
+
+  it("still refuses 'unsafe-inline' once a hash is present", () => {
+    // The easy fix, and the wrong one: it would admit every injected <script> on
+    // the origin to permit one known function. Browsers also ignore
+    // 'unsafe-inline' when a hash is present, so the two cannot quietly coexist.
+    const csp = buildContentSecurityPolicy(inlineScriptHashes(INDEX_HTML));
+    const scriptSrc = csp.split("; ").find((d) => d.startsWith("script-src "))!;
+    expect(scriptSrc).not.toContain("unsafe-inline");
+    expect(scriptSrc).not.toContain("unsafe-eval");
+  });
+
+  it("carries no hashes when there is no SPA to serve", () => {
+    // Local dev: Vite hosts the frontend, this server emits only JSON, and a
+    // hash for a script it never sends would be noise.
+    expect(CONTENT_SECURITY_POLICY).not.toContain("sha256-");
   });
 });
