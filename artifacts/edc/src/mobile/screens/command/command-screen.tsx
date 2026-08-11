@@ -1,10 +1,9 @@
-import { useEffect, useMemo } from "react";
+import { useMemo } from "react";
 import { compactCurrency, calendarDaysUntil } from "@/lib/format";
 import { computeStreak } from "@/lib/streak/compute-streak";
 import { buildMission } from "@/lib/mission/priority-scorer";
 import { terminalOutcome } from "@/components/roster/model/board";
 import { EdcLogoMark } from "@/components/edc-logo-mark";
-import { syncBadge } from "@/mobile/lib/app-badge";
 import { MNavBar } from "@/mobile/shell/m-nav-bar";
 import { MAvatar } from "@/mobile/shell/m-avatar";
 import { ErrorState } from "@/mobile/components/states";
@@ -58,14 +57,6 @@ export function CommandScreen() {
     () => (n: number) => compactCurrency(n, data.reportingCurrency),
     [data.reportingCurrency],
   );
-
-  // The home-screen icon badge, for anyone who opted in. Rides on the summary
-  // this screen already loads rather than adding a request, and no-ops entirely
-  // when the opt-in is off.
-  const redAlerts = data.summary?.criticalAlertsTotal;
-  useEffect(() => {
-    if (redAlerts != null) void syncBadge(redAlerts);
-  }, [redAlerts]);
 
   const streak = useMemo(
     () => computeStreak(data.activity.map((e) => e.occurredAt), new Date()),

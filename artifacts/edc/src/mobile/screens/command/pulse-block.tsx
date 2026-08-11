@@ -57,7 +57,7 @@ export function PulseBlock({
         <div className="m-appear">
           <p className="m-label m-muted">Weighted pipeline</p>
           <p className="m-display m-num mt-0.5">
-            <CountUp value={vitals.weightedPipeline} format={money} once="command-weighted" />
+            <CountUp value={vitals.weightedPipeline} format={money} valueKey="command-weighted" />
           </p>
           <p className="m-caption mt-1">
             <span className="m-muted">of {money(vitals.totalTCV)} total · </span>

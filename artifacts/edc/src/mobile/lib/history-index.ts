@@ -63,6 +63,21 @@ export function currentIndex(): number {
 }
 
 /**
+ * Whether the entry before this one belongs to the app.
+ *
+ * `ensureCurrentIndexed` stamps 0 onto whatever entry the shell mounted on, and
+ * every in-app push increments — so a non-zero index means there is an earlier
+ * in-app entry to pop to, and zero means this screen IS the entry point (a deep
+ * link, a home-screen shortcut, a shared URL).
+ *
+ * The back chevron needs the distinction: popping is the correct back
+ * behaviour, but popping from the entry point would leave the app entirely.
+ */
+export function canPopWithinApp(): boolean {
+  return currentIndex() > 0;
+}
+
+/**
  * Where the shell believes it currently is.
  *
  * The tracker lives here, in the module that owns the index, rather than in

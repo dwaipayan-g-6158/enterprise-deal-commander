@@ -16,6 +16,7 @@ import { CommanderButton } from "@/mobile/commander/commander-button";
 import { CommanderSheet } from "@/mobile/commander/commander-sheet";
 import { WriteStatusProvider } from "@/mobile/write/write-status-context";
 import { MThemeColor } from "@/mobile/shell/m-theme-color";
+import { MAppBadge } from "@/mobile/shell/m-app-badge";
 
 const ScrollContainerContext = createContext<RefObject<HTMLElement | null> | null>(null);
 
@@ -170,6 +171,11 @@ function MShellFrame({ children }: { children: ReactNode }) {
               this frame's real background, which the desktop sync cannot know —
               `.m-shell` re-points the token and the ambient band shifts it. */}
           <MThemeColor shellRef={frameRef} />
+          {/* Also non-visual, and here rather than on the Command screen for the
+              same reason: an ambient signal that only updates while you are
+              looking at the screen it summarises is not ambient. Mirrors the
+              cache without fetching. */}
+          <MAppBadge />
         </div>
       </CommanderProvider>
     </ScrollContainerContext.Provider>

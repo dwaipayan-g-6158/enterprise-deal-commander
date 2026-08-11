@@ -59,10 +59,21 @@ function MobilePill({
   );
 }
 
+/**
+ * `m-tint-shift` on all three: these levels move as a RESULT of something the
+ * reader just did — dispositioning an alert, ticking a gate — and a pill that
+ * teleports from amber to green reads as a different pill appearing rather than
+ * as this one changing its mind. Colour only; the shade values themselves still
+ * come from lib/semantic-colors.ts and are unchanged.
+ */
 export function HealthDot({ health, className }: { health: Health; className?: string }) {
   return (
     <span
-      className={cn("inline-block h-2 w-2 shrink-0 rounded-full", HEALTH_CLASS[health].dot, className)}
+      className={cn(
+        "m-tint-shift inline-block h-2 w-2 shrink-0 rounded-full",
+        HEALTH_CLASS[health].dot,
+        className,
+      )}
       role="img"
       aria-label={HEALTH_LABEL[health]}
     />
@@ -72,8 +83,8 @@ export function HealthDot({ health, className }: { health: Health; className?: s
 export function HealthPill({ health }: { health: Health }) {
   const c = HEALTH_CLASS[health];
   return (
-    <MobilePill className={cn("border-transparent", c.bg, c.text)}>
-      <span className={cn("h-1.5 w-1.5 rounded-full", c.dot)} aria-hidden="true" />
+    <MobilePill className={cn("m-tint-shift border-transparent", c.bg, c.text)}>
+      <span className={cn("m-tint-shift h-1.5 w-1.5 rounded-full", c.dot)} aria-hidden="true" />
       {HEALTH_LABEL[health]}
     </MobilePill>
   );
@@ -82,7 +93,7 @@ export function HealthPill({ health }: { health: Health }) {
 export function RiskPill({ level, score }: { level: RiskLevel; score?: number | null }) {
   const c = RISK_LEVEL_CLASS[level];
   return (
-    <MobilePill className={cn(c.bg, c.text, c.border)}>
+    <MobilePill className={cn("m-tint-shift", c.bg, c.text, c.border)}>
       {RISK_LEVEL_SHORT_LABEL[level]}
       {score != null ? <span className="opacity-80">{score}</span> : null}
     </MobilePill>

@@ -23,6 +23,17 @@ interface WriteStatusValue {
   undo: UndoEntry | null;
   offerUndo: (entry: UndoEntry) => void;
   clearUndo: () => void;
+  /**
+   * When a write last SUCCEEDED, for the shell's live strip to confirm.
+   *
+   * Separate from `end`, which runs in a finally and therefore fires just as
+   * readily for a write that failed. A confirmation derived from `end` would
+   * announce "Saved" over a rolled-back optimistic patch, which is the one thing
+   * this write layer is built not to do.
+   */
+  savedAt: number | null;
+  /** Call on the success path only, beside the haptic. */
+  noteSaved: () => void;
 }
 
 const WriteStatusContext = createContext<WriteStatusValue | null>(null);
@@ -50,10 +61,14 @@ const WriteStatusContext = createContext<WriteStatusValue | null>(null);
 export function WriteStatusProvider({ children }: { children: ReactNode }) {
   const [inFlight, setInFlight] = useState(0);
   const [undo, setUndo] = useState<UndoEntry | null>(null);
+  const [savedAt, setSavedAt] = useState<number | null>(null);
   const chains = useRef(new Map<string, Promise<unknown>>());
 
   const begin = useCallback((_key: string) => setInFlight((n) => n + 1), []);
   const end = useCallback((_key: string) => setInFlight((n) => Math.max(0, n - 1)), []);
+  // performance.now(), matching undo.ts's openedAt — the two windows are read by
+  // the same shell and a wall clock that jumps would desynchronise them.
+  const noteSaved = useCallback(() => setSavedAt(performance.now()), []);
 
   const runSerial = useCallback(
     <T,>(key: string, task: () => Promise<T>): Promise<T> => {
@@ -79,8 +94,10 @@ export function WriteStatusProvider({ children }: { children: ReactNode }) {
       undo,
       offerUndo: setUndo,
       clearUndo: () => setUndo(null),
+      savedAt,
+      noteSaved,
     }),
-    [inFlight, undo, begin, end, runSerial],
+    [inFlight, undo, savedAt, begin, end, runSerial, noteSaved],
   );
 
   return <WriteStatusContext.Provider value={value}>{children}</WriteStatusContext.Provider>;

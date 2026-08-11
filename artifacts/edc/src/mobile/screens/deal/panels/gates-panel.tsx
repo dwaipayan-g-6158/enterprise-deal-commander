@@ -74,8 +74,11 @@ export function GatesPanel({ dealId }: PanelBodyProps) {
               </span>
             </p>
             <div className="mt-2.5 h-1.5 overflow-hidden rounded-full bg-muted" aria-hidden="true">
+              {/* m-fill: ticking a gate recomputes this across both caches
+                  optimistically, and without a transition the recompute is
+                  invisible — the bar is simply somewhere else next frame. */}
               <div
-                className="h-full rounded-full bg-primary"
+                className="m-fill h-full rounded-full bg-primary"
                 style={{ width: `${Math.max(0, Math.min(100, track.progressPercentage))}%` }}
               />
             </div>

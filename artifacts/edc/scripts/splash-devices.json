@@ -1,0 +1,41 @@
+{
+  "$comment": [
+    "Every iOS device the app declares an apple-touch-startup-image for.",
+    "",
+    "JSON rather than a module because two very different consumers read it: the",
+    "generator (scripts/generate-splash.mjs, plain Node ESM) and the guard",
+    "(src/mobile/splash.test.ts, TypeScript under vitest). JSON is the only shape",
+    "both read without a build step or a resolveJsonModule decision.",
+    "",
+    "w/h are CSS pixels in PORTRAIT and are what the media query matches on —",
+    "iOS does not swap device-width and device-height when the device rotates, so",
+    "the portrait and landscape links differ only by (orientation: …). The PNG",
+    "dimensions are derived: portrait is w*dpr x h*dpr, landscape is h*dpr x w*dpr.",
+    "",
+    "A device with no matching link falls back to a blank screen, so this list",
+    "being short is a visible defect rather than a missing nicety. Adding a device",
+    "means adding it here and re-running `pnpm --filter @workspace/edc run",
+    "generate-splash`; the guard fails if the links and the files disagree."
+  ],
+  "devices": [
+    { "name": "iphone-16-pro-max", "w": 440, "h": 956, "dpr": 3 },
+    { "name": "iphone-16-pro", "w": 402, "h": 874, "dpr": 3 },
+    { "name": "iphone-15-pro-max", "w": 430, "h": 932, "dpr": 3 },
+    { "name": "iphone-15-pro", "w": 393, "h": 852, "dpr": 3 },
+    { "name": "iphone-14-pro-max", "w": 428, "h": 926, "dpr": 3 },
+    { "name": "iphone-14", "w": 390, "h": 844, "dpr": 3 },
+    { "name": "iphone-11-pro-max", "w": 414, "h": 896, "dpr": 3 },
+    { "name": "iphone-11", "w": 414, "h": 896, "dpr": 2 },
+    { "name": "iphone-x", "w": 375, "h": 812, "dpr": 3 },
+    { "name": "iphone-8-plus", "w": 414, "h": 736, "dpr": 3 },
+    { "name": "iphone-8", "w": 375, "h": 667, "dpr": 2 },
+    { "name": "iphone-se", "w": 320, "h": 568, "dpr": 2 },
+    { "name": "ipad-pro-12", "w": 1024, "h": 1366, "dpr": 2 },
+    { "name": "ipad-pro-11", "w": 834, "h": 1194, "dpr": 2 },
+    { "name": "ipad-air-10-9", "w": 820, "h": 1180, "dpr": 2 },
+    { "name": "ipad-pro-10-5", "w": 834, "h": 1112, "dpr": 2 },
+    { "name": "ipad-10-2", "w": 810, "h": 1080, "dpr": 2 },
+    { "name": "ipad-mini-6", "w": 744, "h": 1133, "dpr": 2 },
+    { "name": "ipad-9-7", "w": 768, "h": 1024, "dpr": 2 }
+  ]
+}

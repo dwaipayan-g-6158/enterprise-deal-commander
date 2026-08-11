@@ -7,7 +7,11 @@ import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { OUTCOME_CLASS } from "@/lib/semantic-colors";
 import { normalizeOutcome } from "@/mobile/lib/outcome";
-import { sharedCardSeed, useSharedCardStyle } from "@/mobile/lib/shared-card";
+import {
+  sharedCardSeed,
+  useSharedCardStyle,
+  useSharedReturnSource,
+} from "@/mobile/lib/shared-card";
 import { MNavBar } from "@/mobile/shell/m-nav-bar";
 import { MobileCard, CardHeader } from "@/mobile/components/mobile-card";
 import { MetaChip, OutcomePill } from "@/mobile/components/badges";
@@ -32,6 +36,7 @@ export function MemoryDetailScreen({ id }: { id: string }) {
   const memory = query.data?.data;
   // Only set when this screen was opened by tapping its card in the archive.
   const shared = useSharedCardStyle(id);
+  const returnSource = useSharedReturnSource(id);
   const [seed] = useState(() => sharedCardSeed(id));
 
   if (query.isError) {
@@ -87,8 +92,12 @@ export function MemoryDetailScreen({ id }: { id: string }) {
       />
 
       <PullToRefresh onRefresh={query.refetch}>
-        <header className="px-4 pb-2 pt-4" style={shared("card")}>
+        {/* ref + data-shared-part make this the source of the morph BACK to the
+            archive card. Only the loaded header registers: going back while the
+            record is still shimmering has nothing worth morphing anyway. */}
+        <header ref={returnSource} className="px-4 pb-2 pt-4" style={shared("card")}>
           <OutcomePill
+            sharedPart="value"
             style={shared("value")}
             className={cn(OUTCOME_CLASS[outcome].bg, OUTCOME_CLASS[outcome].text)}
           >

@@ -1,5 +1,5 @@
 import { flushSync } from "react-dom";
-import { disarmSharedCard } from "./shared-card";
+import { armSharedReturn, disarmSharedCard } from "./shared-card";
 import {
   currentIndex,
   directionBetween,
@@ -141,8 +141,17 @@ export function aroundNav(navigate: Navigate, to: string, options?: NavigateOpti
   // simply disagreed, and only the popstate one was correct.
   rememberScroll(from.index);
 
+  const direction = navDirection(from, { path: to, index: toIndex });
+  // Before runTransition, because startViewTransition captures the OLD snapshot
+  // the moment it is called — a name written after that is a name the outgoing
+  // frame never had, and the morph degrades to a plain slide with nothing
+  // anywhere reporting an error. back-gesture.ts arms at the same point for the
+  // same reason; both are needed, because neither path sees the other's
+  // navigations.
+  if (direction === "back") armSharedReturn(toIndex);
+
   runTransition(
-    navDirection(from, { path: to, index: toIndex }),
+    direction,
     () => navigate(to, withIndex),
     () => {
       // Keep the back-gesture tracker in step. It cannot learn about

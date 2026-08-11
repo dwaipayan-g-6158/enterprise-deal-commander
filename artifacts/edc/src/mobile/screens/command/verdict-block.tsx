@@ -73,7 +73,7 @@ export function VerdictBlock({
               )}
             >
               {verdict.figure.kind === "money" ? (
-                <CountUp value={verdict.figure.value} format={money} once="command-verdict" />
+                <CountUp value={verdict.figure.value} format={money} valueKey="command-verdict" />
               ) : (
                 verdict.figure.value
               )}

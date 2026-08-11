@@ -5,7 +5,7 @@ import { cn } from "@/lib/utils";
 import { compactCurrency, calendarDaysUntil } from "@/lib/format";
 import { HEALTH_CLASS } from "@/lib/semantic-colors";
 import type { RosterRow } from "@/components/roster/model/roster-types";
-import { armSharedCard } from "@/mobile/lib/shared-card";
+import { armSharedCard, useSharedCardStyle } from "@/mobile/lib/shared-card";
 import { HealthDot, MetaChip, VelocityMark } from "@/mobile/components/badges";
 import { TONE_AHEAD } from "@/mobile/lib/tones";
 
@@ -35,11 +35,17 @@ export function DealCard({ deal }: { deal: RosterRow }) {
   const cardRef = useRef<HTMLAnchorElement>(null);
   const closeIn = calendarDaysUntil(deal.expectedCloseDate);
   const tcv = compactCurrency(deal.calculatedTCV ?? 0, deal.dealCurrency ?? "USD");
+  // The ARRIVING side of the morph back from the detail screen. Returns
+  // undefined on every card but the one that was armed, so the rest of the list
+  // stays unnamed — a view-transition-name held by two elements at once
+  // silently disables the transition for both.
+  const shared = useSharedCardStyle(deal.id);
 
   return (
     <Link
       ref={cardRef}
       href={`/deals/${deal.id}`}
+      style={shared("card")}
       // wouter runs a Link's own onClick before it navigates, so the names are
       // on the DOM before the transition takes its snapshot. The seed travels
       // with them: the detail screen draws its headline from this while its own
@@ -56,17 +62,17 @@ export function DealCard({ deal }: { deal: RosterRow }) {
     >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
-          <p className="m-label m-muted truncate" data-shared-part="eyebrow">
+          <p className="m-label m-muted truncate" data-shared-part="eyebrow" style={shared("eyebrow")}>
             {deal.accountName}
           </p>
           <h3 className="m-title mt-0.5 flex items-center gap-2">
             <HealthDot health={deal.healthStatus} />
-            <span className="truncate" data-shared-part="title">
+            <span className="truncate" data-shared-part="title" style={shared("title")}>
               {deal.dealName}
             </span>
           </h3>
         </div>
-        <span className="m-headline m-num shrink-0" data-shared-part="value">
+        <span className="m-headline m-num shrink-0" data-shared-part="value" style={shared("value")}>
           {tcv}
         </span>
       </div>
@@ -130,7 +136,8 @@ function GateLine({ pct }: { pct: number }) {
   return (
     <div className="mt-3 flex items-center gap-2">
       <div className="h-1 flex-1 overflow-hidden rounded-full bg-muted" aria-hidden="true">
-        <div className="h-full rounded-full bg-primary" style={{ width: `${clamped}%` }} />
+        {/* Moves when a gate ticked on the deal screen lands back in the list. */}
+        <div className="m-fill h-full rounded-full bg-primary" style={{ width: `${clamped}%` }} />
       </div>
       <span className="m-micro m-muted m-num shrink-0">{clamped}% gates</span>
     </div>

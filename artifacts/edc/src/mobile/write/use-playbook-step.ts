@@ -29,7 +29,7 @@ export function usePlaybookStep(dealId: string) {
   const qc = useQueryClient();
   const setState = useSetPlaybookStepState({ mutation: MOBILE_WRITE_OPTIONS });
   const reopen = useReopenPlaybookStep({ mutation: MOBILE_WRITE_OPTIONS });
-  const { begin, end, runSerial, offerUndo } = useWriteStatus();
+  const { begin, end, runSerial, offerUndo, noteSaved } = useWriteStatus();
 
   async function run(
     assignmentId: string,
@@ -60,6 +60,7 @@ export function usePlaybookStep(dealId: string) {
           });
         }
         haptic();
+        noteSaved();
         await invalidatePlaybook(qc, dealId, assignmentId);
 
         // Reopening IS the undo, so it does not offer one of its own — an undo

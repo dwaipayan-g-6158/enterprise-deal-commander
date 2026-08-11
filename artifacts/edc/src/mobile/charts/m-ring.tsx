@@ -69,6 +69,14 @@ export function MRing({
               // Starts the first segment at twelve o'clock instead of three.
               transform={`rotate(-90 ${size / 2} ${size / 2})`}
               strokeLinecap="butt"
+              // The "one animatable property per segment" this shape was drawn
+              // with dasharray to get, finally used: a health split that shifts
+              // after a write redraws as a movement rather than as a new
+              // picture. The global reduced-motion clamp zeroes the duration,
+              // and a finite transition landing instantly is the right answer
+              // there — unlike an infinite animation, which it would turn into
+              // a single pop.
+              className="m-ring-segment"
             />
           ))}
           {/* Hairline between segments, so two adjacent hues do not read as one

@@ -41,7 +41,7 @@ export function useRiskDisposition(dealId: string) {
   const qc = useQueryClient();
   const setDisposition = useSetDisposition({ mutation: MOBILE_WRITE_OPTIONS });
   const clearDisposition = useClearDisposition({ mutation: MOBILE_WRITE_OPTIONS });
-  const { begin, end, runSerial, offerUndo } = useWriteStatus();
+  const { begin, end, runSerial, offerUndo, noteSaved } = useWriteStatus();
 
   const key = getGetDealIntelligenceQueryKey(dealId);
 
@@ -72,6 +72,7 @@ export function useRiskDisposition(dealId: string) {
           },
         });
         haptic();
+        noteSaved();
         await invalidateDisposition(qc, dealId);
 
         if (disposition !== "accept") {
@@ -102,6 +103,7 @@ export function useRiskDisposition(dealId: string) {
       try {
         await clearDisposition.mutateAsync({ dealId, patternCode });
         haptic();
+        noteSaved();
         await invalidateDisposition(qc, dealId);
         return null;
       } catch (error) {

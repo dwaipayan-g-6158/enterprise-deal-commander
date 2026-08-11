@@ -27,7 +27,7 @@ import { haptic } from "@/mobile/lib/haptics";
 export function useGateToggle(dealId: string) {
   const qc = useQueryClient();
   const mutation = useUpdateGate({ mutation: MOBILE_WRITE_OPTIONS });
-  const { begin, end, runSerial, offerUndo } = useWriteStatus();
+  const { begin, end, runSerial, offerUndo, noteSaved } = useWriteStatus();
 
   async function toggle(
     gateCode: string,
@@ -57,6 +57,7 @@ export function useGateToggle(dealId: string) {
           data: { is_completed: isCompleted, ...(opts.notes ? { notes: opts.notes } : {}) },
         });
         haptic();
+        noteSaved();
         await invalidateGates(qc, dealId);
         if (opts.offerUndoWindow !== false) {
           offerUndo({

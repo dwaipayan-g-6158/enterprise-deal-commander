@@ -1,7 +1,12 @@
 import { useState } from "react";
 import { compactCurrency } from "@/lib/format";
 import type { Intelligence, Tag } from "@workspace/api-client-react";
-import { isSharedCardArmed, useSharedCardStyle, type SharedCardSeed } from "@/mobile/lib/shared-card";
+import {
+  isSharedCardArmed,
+  useSharedCardStyle,
+  useSharedReturnSource,
+  type SharedCardSeed,
+} from "@/mobile/lib/shared-card";
 import { HealthPill, RiskPill } from "@/mobile/components/badges";
 import { CountUp } from "@/mobile/components/count-up";
 import { Shimmer } from "@/mobile/components/shimmer";
@@ -32,27 +37,34 @@ export function BriefHero({
 }) {
   const { financials, risk, governance } = intel;
   const shared = useSharedCardStyle(dealId);
+  // Makes this hero the source of the morph BACK to the card that opened it.
+  // A ref rather than an effect: a popstate handler runs outside React and has
+  // to find the element synchronously, before the snapshot.
+  const returnSource = useSharedReturnSource(dealId);
   // Read once at mount. A figure morphing out of the card's own number must not
   // restart from zero, and the armed flag is released the moment the transition
   // ends — so this cannot be read reactively.
   const [arrivedByMorph] = useState(() => isSharedCardArmed(dealId));
 
   return (
-    <header className="px-4 pb-2 pt-4" style={shared("card")}>
-      <p className="m-label m-muted truncate" style={shared("eyebrow")}>
+    <header ref={returnSource} className="px-4 pb-2 pt-4" style={shared("card")}>
+      <p className="m-label m-muted truncate" data-shared-part="eyebrow" style={shared("eyebrow")}>
         {intel.accountName}
       </p>
-      <h1 className="m-title mt-1 text-balance" style={shared("title")}>
+      <h1 className="m-title mt-1 text-balance" data-shared-part="title" style={shared("title")}>
         {intel.dealName}
       </h1>
 
-      <p className="m-display m-num mt-3" style={shared("value")}>
+      <p className="m-display m-num mt-3" data-shared-part="value" style={shared("value")}>
         {arrivedByMorph ? (
           compactCurrency(financials.calculatedTCV, financials.dealCurrency)
         ) : (
           <CountUp
             value={financials.calculatedTCV}
             format={(n) => compactCurrency(n, financials.dealCurrency)}
+            // Keyed per deal, so returning to one whose value has moved since
+            // you last opened it animates the move rather than the arrival.
+            valueKey={`deal-tcv:${dealId}`}
           />
         )}
       </p>

@@ -15,6 +15,7 @@ import {
   type Rgb,
   rgbTriplet,
   ruleBody,
+  stripComments,
   token,
 } from "../lib/css-token-audit";
 import { SRC } from "./module-graph";
@@ -57,6 +58,8 @@ import { SRC } from "./module-graph";
  */
 
 const TOKENS = readFileSync(join(SRC, "mobile", "styles", "tokens.css"), "utf8");
+/** Only for suite 6, which measures a surface material.css is responsible for. */
+const MATERIAL = readFileSync(join(SRC, "mobile", "styles", "material.css"), "utf8");
 
 const LIGHT = ruleBody(TOKENS, ".m-shell {");
 const DARK = ruleBody(TOKENS, ".dark .m-shell {");
@@ -290,11 +293,10 @@ describe("prefers-contrast: more", () => {
     const body = ruleBody(TOKENS, selector, { after: "@media (prefers-contrast: more)" });
     const mutedFg = token(body, "muted-foreground");
 
-    // Measured WITHOUT the ambient wash, because in this mode there isn't one:
-    // material.css sets `background-image: none` on .m-shell under
-    // prefers-contrast: more. Atmosphere is precisely what someone enabling the
-    // setting is asking to turn off. Auditing a washed surface here would be
-    // measuring a pixel this mode cannot produce.
+    // Measured WITHOUT the ambient wash, because in this mode there isn't one —
+    // asserted just below rather than assumed. Atmosphere is precisely what
+    // someone enabling the setting is asking to turn off, and auditing a washed
+    // surface here would be measuring a pixel this mode cannot produce.
     const flat = surfaces(mode).filter((s) => !s.name.includes("+"));
 
     // Only the tokens the block actually overrides are re-measured; the rest are
@@ -311,6 +313,30 @@ describe("prefers-contrast: more", () => {
       const ratio = contrastRgb(border, hslToRgb(tok(mode, "card")));
       expect(ratio, `${mode.name} border on card`).toBeGreaterThanOrEqual(AA_NON_TEXT);
     }
+  });
+
+  /**
+   * The premise the AAA measurement above rests on: in this mode there is no
+   * wash, so measuring against flat surfaces is the honest reading.
+   *
+   * It must null the TOKEN, not `background-image`. Custom properties inherit,
+   * so `--m-sky-image: none` reaches every surface painting the sky — including
+   * the boot splash's own layer, which is a descendant of `.m-shell` and would
+   * otherwise keep blooming a wash the app underneath it has switched off.
+   * Killing the property instead only silences `.m-shell` itself, which is what
+   * this file used to describe and what would silently regress here.
+   */
+  it("removes the sky by nulling the token, so every consumer loses it", () => {
+    const block = ruleBody(MATERIAL, ".m-shell {", {
+      after: "@media (prefers-contrast: more)",
+    });
+    expect(block, "prefers-contrast: more must null --m-sky-image").toMatch(
+      /--m-sky-image:\s*none/,
+    );
+    expect(
+      stripComments(MATERIAL),
+      ".m-shell paints the sky through the token, so nulling it is sufficient",
+    ).toMatch(/background-image:\s*var\(--m-sky-image\)/);
   });
 });
 

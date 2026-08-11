@@ -62,6 +62,20 @@ export function restoreScroll(index: number): void {
   container.scrollTop = positions.get(index) ?? 0;
 }
 
+/**
+ * Whether we have ever recorded a position for this entry — i.e. whether the
+ * reader has been on it and left it.
+ *
+ * Used by the reverse morph as its "is there something to morph back into"
+ * check. It is a proxy for a warm query cache rather than a reading of one, and
+ * a deliberately cheap one: a screen we have never left cannot have a card
+ * sitting where the hero would fly to, and a screen we have just left almost
+ * certainly still has its data. See armSharedReturn for the residual case.
+ */
+export function hasRememberedScroll(index: number): boolean {
+  return positions.has(index);
+}
+
 /** Reads the index off a popstate event's state, defaulting to the first entry. */
 export function indexOfEvent(state: unknown): number {
   return readIndex(state) ?? 0;
