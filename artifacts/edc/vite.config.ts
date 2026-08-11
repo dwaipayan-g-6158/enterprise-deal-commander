@@ -169,7 +169,12 @@ export default defineConfig({
         // They are fetched by Chrome's install UI and by link unfurlers, both
         // of which are online by definition, so precaching them buys nothing
         // and costs every installing user the download.
-        globIgnores: ["**/screenshot-*.png", "**/opengraph.png"],
+        //
+        // The launch images are excluded for a different reason: iOS reads them
+        // from the OS while the app is starting, before a service worker is
+        // running at all. Precaching them would add 76 entries to the manifest
+        // that nothing can ever request through fetch.
+        globIgnores: ["**/screenshot-*.png", "**/opengraph.png", "**/splash/*.png"],
         navigateFallback: "index.html",
         // Workbox's NavigationRoute tests each of these against
         // `url.pathname + url.search`, only for requests whose mode is
