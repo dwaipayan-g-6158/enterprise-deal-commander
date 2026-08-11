@@ -42,7 +42,7 @@ export type StageResult =
 export function useStageAdvance(dealId: string) {
   const qc = useQueryClient();
   const mutation = useUpdateDeal({ mutation: MOBILE_WRITE_OPTIONS });
-  const { begin, end, runSerial } = useWriteStatus();
+  const { begin, end, runSerial, noteSaved } = useWriteStatus();
 
   async function advance(
     toStage: BoardStage,
@@ -63,6 +63,7 @@ export function useStageAdvance(dealId: string) {
         }
         await mutation.mutateAsync({ id: dealId, data });
         haptic();
+        noteSaved();
         await invalidateStage(qc, dealId);
         return { status: "ok" } as const;
       } catch (error) {

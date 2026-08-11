@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import { Link } from "wouter";
 import { ChevronLeft } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { OfflineStrip } from "@/mobile/shell/offline-strip";
+import { MLiveCapsule } from "@/mobile/shell/m-live-capsule";
 
 export interface MNavBarProps {
   title: ReactNode;
@@ -92,8 +92,8 @@ export function MNavBar({
       </div>
       {children}
       {/* Last, so it sits on the bar's bottom edge with content starting
-          directly beneath it. Renders nothing while online. */}
-      <OfflineStrip />
+          directly beneath it. Renders nothing when there is nothing to say. */}
+      <MLiveCapsule />
     </header>
   );
 }

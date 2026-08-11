@@ -380,6 +380,31 @@
   animation: m-tab-pop 320ms var(--m-ease-spring) both;
 }
 
+/* The live strip's spinner.
+ *
+ * Removed under reduced motion rather than slowed, because the global clamp in
+ * index.css sets animation-iteration-count to 1 — which turns an infinite spin
+ * into a single 0.01ms rotation, i.e. one instant pop. The same reason
+ * .m-skeleton kills m-breathe outright rather than relying on the clamp.
+ *
+ * Nothing is lost by removing it: the strip says "Saving…" in words beside the
+ * icon, so the state was never carried by the rotation alone. */
+@keyframes m-spin {
+  to {
+    rotate: 360deg;
+  }
+}
+.m-spin {
+  animation: m-spin 900ms linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .m-spin {
+    animation: none;
+    rotate: none;
+  }
+}
+
 /* Pull-to-refresh confirmation. Without a deliberate beat, a fast refetch reads
    as the gesture having been ignored. */
 @keyframes m-ptr-pulse {
