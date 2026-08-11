@@ -223,6 +223,14 @@ export default defineConfig({
           // with per-deal reads. NOTE: useSignOut() purges every cache whose
           // key starts "edc-api-", so a new bucket named that way is cleared
           // on sign-out without further wiring.
+          //
+          // This one KEEPS StaleWhileRevalidate while the reads bucket below no
+          // longer can, and the difference is which of them a write can
+          // contradict. Nothing this app does writes a lookup — no screen
+          // authors a stage or a gate definition — so there is no
+          // write-then-read-your-own-write to get wrong here, and the instant
+          // paint is worth having on data every screen needs. The worst case is
+          // a stage added elsewhere showing up a load late.
           {
             urlPattern: ({ url, request }: { url: URL; request: Request }) =>
               request.method === "GET" && /\/api\/v1\/lookups\//.test(url.pathname),
@@ -242,9 +250,36 @@ export default defineConfig({
               // from cache.
               !/\/api\/v1\/auth\//.test(url.pathname) &&
               !/\/api\/v1\/lookups\//.test(url.pathname),
-            handler: "StaleWhileRevalidate" as const,
+            // NetworkFirst, and this is a correctness fix rather than a tuning
+            // preference. It was StaleWhileRevalidate, which reverted the result
+            // of EVERY WRITE IN THE APP.
+            //
+            // The sequence, measured on the deployed build against a real gate
+            // toggle: the mutation succeeds, the client invalidates and refetches
+            // the read it just changed, and SWR answers that refetch from cache —
+            // with the body from BEFORE the write. React Query commits the stale
+            // value, the optimistic patch is undone on screen, and the background
+            // revalidation lands about 1.5s later with nothing left to trigger a
+            // re-render. Asking the same URL twice at that instant, once plainly
+            // and once with a cache-buster, returned `false` and `true`.
+            //
+            // It read as a backend problem and is not one: the server is
+            // immediately consistent — the PUT's own response carries the new
+            // value and the first uncached GET agrees, 203ms later.
+            //
+            // NetworkFirst keeps the offline story whole, which is the only thing
+            // the cache was ever for here: a rejected fetch falls straight
+            // through to the cached copy, and a network that hangs falls through
+            // after the timeout below. What it gives up is the instant paint from
+            // cache while ONLINE — which costs little, because React Query's own
+            // in-memory cache already covers repeat views within a session, and
+            // this bucket's real job is the cold launch and the tunnel.
+            handler: "NetworkFirst" as const,
             options: {
               cacheName: "edc-api-reads",
+              // Long enough not to trip on a slow mobile round-trip, short
+              // enough that a dead connection does not hold a screen hostage.
+              networkTimeoutSeconds: 3,
               // Raised from 60: one mobile deal-detail visit alone touches
               // half a dozen endpoints, so browsing a portfolio used to evict
               // the earlier deals before the user got back to them.
