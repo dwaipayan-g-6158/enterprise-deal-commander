@@ -167,8 +167,8 @@
     var(--m-e4),
     var(--m-specular),
     0 0 0 1px hsl(var(--m-capsule-ring) / var(--m-capsule-ring-alpha));
-  backdrop-filter: blur(20px) saturate(160%);
-  -webkit-backdrop-filter: blur(20px) saturate(160%);
+  backdrop-filter: blur(24px) saturate(160%);
+  -webkit-backdrop-filter: blur(24px) saturate(160%);
 }
 
 /* --- Fallbacks ------------------------------------------------------------

@@ -1,17 +1,8 @@
-import { useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { ListTree, Search, SlidersHorizontal, Target, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useShellScrollRef } from "@/mobile/shell/m-shell";
-import { isProgrammaticScroll } from "@/mobile/lib/scroll-memory";
 import { useCommander } from "@/mobile/commander/commander-context";
 import { hidesCommander } from "@/mobile/nav/mobile-nav";
-
-/** Scroll travel that has to accumulate before the capsule changes state. */
-const HYSTERESIS_PX = 24;
-
-/** How long the scroll has to stop before the capsule comes back. */
-const SETTLE_MS = 420;
 
 /**
  * What the capsule does here, said twice — once in the label, once in the
@@ -33,82 +24,29 @@ function affordanceFor(path: string, hasJumpTargets: boolean): { label: string; 
 /**
  * The Commander capsule: one thumb-zone control that morphs with context.
  *
- * It gets out of the way while you scroll down and returns when you stop or
- * scroll back. It used to only shrink to a circle, and a circle parked over
- * the row you are reading is still parked over the row you are reading — in
- * the captures it sat across a critical alert on Home and the Playbook card
- * on the deal screen. It leaves now, and it leaves downward, so the thumb
- * knows where it went.
+ * ## It does not move, and that is the whole design
  *
- * The settle timer is what makes hiding safe: without it, scrolling down and
- * stopping would strand the reader with no way to reach search until they
- * scrolled back up. (The old comment claimed this behaviour; there was no
- * timer behind it.)
+ * It used to duck downward on any scroll past 24px and come back 420ms after
+ * you stopped. The reason was sound — an OPAQUE pill parked over the row you
+ * are reading is occlusion, and in the Phase 5 captures it sat across a
+ * critical alert on Home and the Playbook card on the deal screen.
  *
- * It is hidden entirely on Memory, where the docked search input already owns
- * the thumb zone, and while the sheet itself is open.
+ * The pill is not opaque any more. `.m-capsule` is drawn at 0.70 alpha in
+ * light and 0.82 in dark over a 24px backdrop blur, so the row underneath is
+ * still legible through it and there is nothing to get out of the way of. That
+ * exchange is the point: a control that is always exactly where you left it is
+ * worth more than one that clears a view you can now see anyway.
+ *
+ * The alphas are floored by tokens.test.ts's contrast assertions and capped by
+ * its MAX_CAPSULE_ALPHA — raise them and the capsule becomes an obstruction
+ * that no longer moves, which is the worst of both designs.
+ *
+ * It is absent entirely on the screens that own their own thumb zone, and
+ * while the sheet it opens is open.
  */
 export function CommanderButton() {
   const [path] = useLocation();
-  const scrollRef = useShellScrollRef();
   const { open, setOpen, jumpTargets } = useCommander();
-  const [hidden, setHidden] = useState(false);
-
-  const lastYRef = useRef(0);
-  const frameRef = useRef<number | null>(null);
-  const settleRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  useEffect(() => {
-    const el = scrollRef.current;
-    if (!el) return;
-
-    const onScroll = () => {
-      // rAF-throttled: scroll fires far more often than a frame can paint, and
-      // the capsule only ever changes between two states.
-      if (frameRef.current != null) return;
-      frameRef.current = requestAnimationFrame(() => {
-        frameRef.current = null;
-        const y = el.scrollTop;
-
-        // The app moved the page, not the reader. Resync the origin so the next
-        // real gesture is measured from where the content actually is, and judge
-        // nothing — this capsule hides to get out of a THUMB's way, and there is
-        // no thumb here.
-        //
-        // Without it the capsule vanished for its full settle window on every
-        // back-navigation (scroll restoration jumps the container), and the
-        // jump-to-section list inside the capsule's own sheet hid the capsule
-        // that had just offered it. Measured: a single scrollTop = 300 took it
-        // to opacity 0 for ~420ms.
-        if (isProgrammaticScroll()) {
-          lastYRef.current = y;
-          return;
-        }
-
-        const travelled = y - lastYRef.current;
-        if (Math.abs(travelled) < HYSTERESIS_PX) return;
-        lastYRef.current = y;
-        // Near the top there is nothing to get out of the way of.
-        setHidden(travelled > 0 && y > 96);
-
-        if (settleRef.current) clearTimeout(settleRef.current);
-        settleRef.current = setTimeout(() => setHidden(false), SETTLE_MS);
-      });
-    };
-
-    el.addEventListener("scroll", onScroll, { passive: true });
-    return () => {
-      el.removeEventListener("scroll", onScroll);
-      if (frameRef.current != null) cancelAnimationFrame(frameRef.current);
-      if (settleRef.current) clearTimeout(settleRef.current);
-    };
-  }, [scrollRef]);
-
-  // Reset on navigation: a new screen starts at the top.
-  useEffect(() => {
-    setHidden(false);
-    lastYRef.current = 0;
-  }, [path]);
 
   // Which screens it stays off, and why, lives in nav/mobile-nav.ts so it is
   // testable. It is also hidden while the sheet it opens is open.
@@ -121,10 +59,6 @@ export function CommanderButton() {
       type="button"
       onClick={() => setOpen(true)}
       aria-label={label}
-      // Out of the tab order and out of the way of a tap while it is gone;
-      // opacity alone would leave an invisible target over the content.
-      tabIndex={hidden ? -1 : undefined}
-      aria-hidden={hidden}
       className={cn(
         // m-vt-capsule: like the tab bar, the capsule holds still while the
         // screen changes behind it.
@@ -138,15 +72,20 @@ export function CommanderButton() {
         // visible as a shape, so "most prominent" can only mean light there.
         // Hard-coding text-white here would have made the dark label unreadable.
         "m-capsule",
-        // `translate` rather than `transform`, so it composes with .m-press's
-        // scale on tap instead of cancelling it — the same trap the
-        // scroll-driven reveals hit.
-        "-translate-x-1/2 transition-[translate,opacity] duration-[var(--m-dur-move)] ease-[var(--m-ease-standard)]",
-        hidden ? "pointer-events-none translate-y-[calc(100%+1.5rem)] opacity-0" : "translate-y-0",
+        // Centring, and it stays a `translate` rather than a `transform` so it
+        // composes with .m-press's scale on tap instead of cancelling it — the
+        // same trap the scroll-driven reveals hit.
+        "-translate-x-1/2",
       )}
     >
       <Icon className="h-5 w-5 shrink-0" aria-hidden="true" />
-      <span className="m-label whitespace-nowrap opacity-90">{label}</span>
+      {/* Full opacity, not the 90% it used to carry. tokens.test.ts measures
+          --m-capsule-foreground against the composited pill, so a label that
+          ships at 0.9 is not the label that was measured — it lands ~0.5:1
+          lower, which was slack on an opaque pill and is margin the dark
+          theme no longer has. Softening the label was also the one thing
+          making it lighter than the icon beside it. */}
+      <span className="m-label whitespace-nowrap">{label}</span>
     </button>
   );
 }

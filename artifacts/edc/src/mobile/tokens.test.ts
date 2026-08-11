@@ -245,6 +245,21 @@ describe.each(MODES)("mobile palette — $name", (mode) => {
   describe("Commander capsule", () => {
     const capsuleOver = (s: Surface) => composite(pair(mode, "m-capsule").rgb, pair(mode, "m-capsule").alpha, s.rgb);
 
+    /**
+     * Why this measures canvases and not `backdrops(mode)`.
+     *
+     * The glass weights are measured against the solid fills too, because a
+     * chart shape scrolling under the header is a real pixel. The capsule is
+     * measured against canvases only, and that is a deliberate limit rather
+     * than an oversight: the capsule IS primary-coloured, so a fully saturated
+     * primary fill directly behind it measures 2.51:1 in light and **1.00:1**
+     * in dark — and no alpha fixes that, including 1. It is the same colour.
+     * What carries the boundary in that case is the ring and the elevation,
+     * neither of which this file can measure.
+     *
+     * Recorded here because the obvious "strengthening" is to widen this set,
+     * and doing so produces a failure that cannot be satisfied.
+     */
     it("carries its label on every canvas", () => {
       const label = hslToRgb(tok(mode, "m-capsule-foreground"));
       const failures = surfaces(mode)
@@ -263,6 +278,25 @@ describe.each(MODES)("mobile palette — $name", (mode) => {
         .filter(({ ratio }) => ratio < AA_NON_TEXT)
         .map(({ s, ratio }) => `capsule vs ${s.name} = ${ratio.toFixed(2)}:1`);
       expect(failures).toEqual([]);
+    });
+
+    /**
+     * The ceiling, and the reason it has to exist.
+     *
+     * Both assertions above are FLOORS, and an opaque pill is the easiest case
+     * either of them will ever see — raise the alpha to 1 and they get greener.
+     * So nothing above can notice the capsule turning back into a solid fill,
+     * which is exactly the regression this change exists to prevent: it stopped
+     * hiding on scroll, so it is permanently over the content, and translucency
+     * is what makes that a window rather than an obstruction.
+     *
+     * Floor and ceiling together are the contract. One without the other is
+     * half a specification.
+     */
+    it("is glass, not a fill", () => {
+      /** Above this the show-through stops reading as a material. */
+      const MAX_CAPSULE_ALPHA = 0.85;
+      expect(pair(mode, "m-capsule").alpha).toBeLessThanOrEqual(MAX_CAPSULE_ALPHA);
     });
   });
 
@@ -337,6 +371,36 @@ describe("prefers-contrast: more", () => {
       stripComments(MATERIAL),
       ".m-shell paints the sky through the token, so nulling it is sufficient",
     ).toMatch(/background-image:\s*var\(--m-sky-image\)/);
+  });
+});
+
+/**
+ * 6b — Reduce Transparency, which the capsule now depends on.
+ *
+ * This block already existed as a courtesy while the capsule was effectively
+ * opaque and hid itself on scroll. It is now the accessibility contract: the
+ * pill sits permanently over the content and is deliberately see-through, so
+ * someone who has asked iOS to stop doing that has to actually get an opaque
+ * pill back. Nothing asserted it, which is how a courtesy quietly becomes a
+ * promise nobody is keeping.
+ */
+describe("prefers-reduced-transparency", () => {
+  const block = () =>
+    ruleBody(MATERIAL, ".m-capsule {", {
+      after: "@media (prefers-reduced-transparency: reduce)",
+    });
+
+  it("restores an opaque capsule", () => {
+    expect(block(), "the capsule must go fully opaque").toMatch(/--m-capsule-alpha:\s*1\s*;/);
+  });
+
+  it("drops the backdrop blur with it", () => {
+    // Alpha alone is not enough: a fully opaque fill still runs the filter, and
+    // the filter is the other half of what the setting is asking to switch off.
+    // Both prefixed and unprefixed, because Safari is the engine that has it.
+    const body = stripComments(block());
+    expect(body).toMatch(/(?<!-webkit-)backdrop-filter:\s*none/);
+    expect(body).toMatch(/-webkit-backdrop-filter:\s*none/);
   });
 });
 

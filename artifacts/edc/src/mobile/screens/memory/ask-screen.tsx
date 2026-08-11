@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { markProgrammaticScroll } from "@/mobile/lib/scroll-memory";
 import { Link } from "wouter";
 import { ArrowUp } from "lucide-react";
 import { useAskDealMemory } from "@workspace/api-client-react";
@@ -28,9 +27,6 @@ const CONFIDENCE_TONE: Record<AdvisorConfidence, string> = {
   low: "m-muted",
   none: "text-destructive",
 };
-
-/** How long the scroll-to-latest keeps scrolling after a new message. */
-const SMOOTH_TO_END_MS = 800;
 
 /** Three questions worth asking, for a thread nobody has started yet. */
 const STARTERS = [
@@ -116,7 +112,6 @@ export function AskScreen() {
   // Stick to the bottom as the thread grows. Six lines, and it scrolls the
   // shell's own container rather than fighting a component that brought its own.
   useEffect(() => {
-    markProgrammaticScroll(SMOOTH_TO_END_MS);
     endRef.current?.scrollIntoView({ block: "end", behavior: "smooth" });
   }, [messages.length, isFetching]);
 

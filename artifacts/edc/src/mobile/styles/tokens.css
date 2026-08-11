@@ -153,11 +153,22 @@
   /* --- The Commander capsule -------------------------------------------
    * The most prominent object on any screen, so it is drawn at maximum
    * separation from the canvas — which means its polarity INVERTS between
-   * themes. Here: an indigo-black obsidian pill carrying a white label
-   * (12.82:1 label, 10.30:1 against the canvas). See the dark block for why
-   * it cannot stay dark there. */
+   * themes. Here: an indigo-black obsidian pill carrying a white label. See
+   * the dark block for why it cannot stay dark there.
+   *
+   * THE ALPHA IS THE POINT. The capsule no longer hides on scroll, so it is
+   * permanently over whatever you are reading, and translucency is what makes
+   * that acceptable rather than occlusion. It is bounded from both sides:
+   * tokens.test.ts's contrast assertions are the floor, MAX_CAPSULE_ALPHA in
+   * that file is the ceiling. Swept in 0.01 steps against every canvas, band
+   * and wash — light fails AA at 0.59, so 0.70 keeps a real margin:
+   *   worst label   6.70:1 (on --card)
+   *   worst shape   5.60:1 (on night background + sky)
+   * The margin is not decoration: the sweep models a flat alpha composite,
+   * while the real pill also runs backdrop-filter saturate(160%), which can
+   * push the backdrop past anything a token describes. */
   --m-capsule-rgb: 18 22 33;
-  --m-capsule-alpha: 0.88;
+  --m-capsule-alpha: 0.7;
   --m-capsule-foreground: 0 0% 100%;
   --m-capsule-ring: 226 78% 50%;
   --m-capsule-ring-alpha: 0.38;
@@ -283,13 +294,22 @@
    *   obsidian (as light mode)  1.01:1   — invisible
    *   raised indigo             1.71:1
    *   muted primary             2.84:1   — still short of the 3:1 floor
-   *   bright primary            5.46:1   ✓
+   *   bright primary            5.46:1   ✓  (at the old opaque 0.95)
    * On a near-black ground, "most prominent" can only mean light. So the pill
-   * becomes a bright indigo carrying a dark label (6.69:1) — the same hue
-   * family as light mode's obsidian, with the lightness inverted. This is the
-   * same logic iOS uses for a prominent filled button in dark mode. */
+   * becomes a bright indigo carrying a dark label — the same hue family as
+   * light mode's obsidian, with the lightness inverted. This is the same logic
+   * iOS uses for a prominent filled button in dark mode.
+   *
+   * THAT INVERSION IS ALSO WHY DARK CANNOT GO AS SHEER AS LIGHT, and the
+   * asymmetry below is a measurement, not a preference. Light's pill is dark
+   * on a near-white canvas, so thinning it moves it AWAY from its white label.
+   * Dark's pill is light and carries a DARK label on a near-black canvas, so
+   * thinning it moves it TOWARD its own label — the label fails first, at 0.74.
+   * At 0.82:
+   *   worst label   5.20:1 (on afternoon background)
+   *   worst shape   3.88:1 (on morning background + sky) */
   --m-capsule-rgb: 125 159 252;
-  --m-capsule-alpha: 0.95;
+  --m-capsule-alpha: 0.82;
   --m-capsule-foreground: 224 24% 8%;
   --m-capsule-ring: 224 96% 74%;
   --m-capsule-ring-alpha: 0.45;

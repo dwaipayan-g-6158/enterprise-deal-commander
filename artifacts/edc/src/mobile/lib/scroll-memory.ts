@@ -59,46 +59,7 @@ export function rememberScroll(index: number): void {
  */
 export function restoreScroll(index: number): void {
   if (!container) return;
-  // Marked BEFORE the assignment: the scroll event it produces must already
-  // find the window open, or the capsule reads the restore as a flick.
-  markProgrammaticScroll();
   container.scrollTop = positions.get(index) ?? 0;
-}
-
-/**
- * When the current programmatic scroll stops counting as one.
- *
- * The scroll container cannot tell us who moved it, and a `scroll` event from
- * `restoreScroll` is indistinguishable from a thumb. That matters because the
- * Commander capsule hides itself on downward scroll: restoring a screen to 300px
- * looked like a deliberate 300px flick, so the capsule ducked out for its full
- * settle window on every back-navigation, and `scrollIntoView` from the
- * capsule's own jump list hid the capsule that offered the jump.
- *
- * A timestamp rather than a boolean flag, because smooth scrolling keeps firing
- * events for hundreds of milliseconds after the call that started it — there is
- * no single event to clear a flag on. `scrollend` would be the precise signal
- * and is too new to rely on here.
- */
-let programmaticUntil = 0;
-
-/**
- * Declare that the next scroll events are the app's doing, not the reader's.
- *
- * The default covers an instant jump; callers that start a SMOOTH scroll pass a
- * longer window, since those keep emitting until the animation lands.
- */
-export function markProgrammaticScroll(durationMs = 250): void {
-  const now = typeof performance === "undefined" ? 0 : performance.now();
-  // Never shortens an in-flight window: a restore landing inside a smooth jump
-  // must not hand the rest of that jump back to the reader.
-  programmaticUntil = Math.max(programmaticUntil, now + durationMs);
-}
-
-/** Whether the scroll happening right now was started by the app. */
-export function isProgrammaticScroll(): boolean {
-  const now = typeof performance === "undefined" ? 0 : performance.now();
-  return now < programmaticUntil;
 }
 
 /**
@@ -124,5 +85,4 @@ export function indexOfEvent(state: unknown): number {
 export function _resetScrollMemory(): void {
   positions.clear();
   container = null;
-  programmaticUntil = 0;
 }
