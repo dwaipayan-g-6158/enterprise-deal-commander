@@ -38,9 +38,36 @@ export function NeedsBlock({ rows, loading }: { rows: NeedRow[]; loading: boolea
       <CardHeader label="What needs you now" />
 
       {loading ? (
-        <div className="space-y-3">
-          <Shimmer className="h-10" />
-          <Shimmer className="h-10" />
+        /**
+         * Three row-shaped placeholders at the row's real height, because this
+         * block was the largest single layout shift on the mobile Command screen.
+         *
+         * MEASURED on the deployed app at 390px: a resolved row is 112px (a
+         * two-line clamped title plus its body line, which is the normal case here
+         * — see titleLines below), and the resolved <ul> is 336px for the three
+         * rows this block is designed around. The old placeholder was two 40px bars
+         * in a space-y-3, i.e. 92px, so the block GREW 244px when the data landed
+         * and shoved everything below it down the screen. The trace attributed
+         * 0.107 to that push directly and another 0.100 to the Pulse card being
+         * carried 224px down by it — together most of a 0.242 CLS.
+         *
+         * h-28 is exactly 112px, so three of them reproduce the 336px the list
+         * settles at. Shaped like a row rather than one tall grey slab: the bars
+         * mirror the two title lines and the body line, so the swap is a change of
+         * content inside a box that does not move.
+         *
+         * This is a reservation, not a promise. A run of one-line titles settles
+         * shorter and gives back a little height; that is a small upward
+         * correction, against a 244px downward shove.
+         */
+        <div aria-hidden="true">
+          {[0, 1, 2].map((i) => (
+            <div key={i} className="flex h-28 flex-col justify-center gap-1.5 py-2">
+              <Shimmer className="h-4 w-full" />
+              <Shimmer className="h-4 w-4/5" />
+              <Shimmer className="h-3 w-1/3" />
+            </div>
+          ))}
         </div>
       ) : rows.length === 0 ? (
         <p className="m-body m-muted">
