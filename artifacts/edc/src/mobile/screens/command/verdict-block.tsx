@@ -43,18 +43,43 @@ export function VerdictBlock({
   const subline = rest.join(" ");
 
   return (
+    /**
+     * Both slots reserve their resolved height, and this block is where it matters
+     * most on the phone: it sits above everything, so every pixel it gains on
+     * resolving moves the entire screen.
+     *
+     * MEASURED on the deployed Command screen at 390px: the block is 148px while
+     * loading and 219px resolved, so it grew 71px and shoved the three cards below
+     * it down by exactly that. The trace recorded the whole screen container moving
+     * +95px in one shift worth 0.089-0.176 depending on the run — the single largest
+     * source of layout instability in the mobile shell.
+     *
+     * Per slot rather than one min-h on the section, so each swap stays local:
+     * greeting resolves to 102px against a 56px placeholder (+46), verdict to 74px
+     * against 48px (+26). 46 + 26 = 72, which is the 71px that was measured.
+     *
+     * `mt-5` moved onto the verdict wrapper so the gap exists in both states rather
+     * than being carried by whichever branch happens to render.
+     *
+     * These are floors, not promises. Greetings vary in length and `text-balance`
+     * decides its own wrapping, so a long one still grows past the reservation —
+     * a few pixels, against the 71 this removes. The desktop hero carries the same
+     * kind of reservation for the same reason.
+     */
     <section className="px-4 pb-2 pt-4">
-      {greeting ? (
-        <div className="m-appear">
-          <h2 className="m-display text-balance">{headline}</h2>
-          {subline ? <p className="m-body m-muted mt-1.5 text-pretty">{subline}</p> : null}
-        </div>
-      ) : (
-        <>
-          <Shimmer className="h-8 w-64" />
-          <Shimmer className="mt-2 h-4 w-48" />
-        </>
-      )}
+      <div className="min-h-[102px]">
+        {greeting ? (
+          <div className="m-appear">
+            <h2 className="m-display text-balance">{headline}</h2>
+            {subline ? <p className="m-body m-muted mt-1.5 text-pretty">{subline}</p> : null}
+          </div>
+        ) : (
+          <>
+            <Shimmer className="h-8 w-64" />
+            <Shimmer className="mt-2 h-4 w-48" />
+          </>
+        )}
+      </div>
 
       {streak > 0 ? (
         <p className="m-caption m-muted mt-2 inline-flex items-center gap-1.5">
@@ -63,36 +88,38 @@ export function VerdictBlock({
         </p>
       ) : null}
 
-      {verdict ? (
-        <div className="m-appear mt-5">
-          {verdict.figure ? (
+      <div className="mt-5 min-h-[74px]">
+        {verdict ? (
+          <div className="m-appear">
+            {verdict.figure ? (
+              <p
+                className={cn(
+                  "m-hero m-num",
+                  verdict.tone === "critical" && "text-destructive",
+                )}
+              >
+                {verdict.figure.kind === "money" ? (
+                  <CountUp value={verdict.figure.value} format={money} valueKey="command-verdict" />
+                ) : (
+                  verdict.figure.value
+                )}
+              </p>
+            ) : null}
             <p
               className={cn(
-                "m-hero m-num",
-                verdict.tone === "critical" && "text-destructive",
+                "text-pretty",
+                // The verdict is the sentence. When there is no figure above it,
+                // it IS the headline of the block and is sized accordingly.
+                verdict.figure ? "m-body mt-1" : "m-headline mt-1",
               )}
             >
-              {verdict.figure.kind === "money" ? (
-                <CountUp value={verdict.figure.value} format={money} valueKey="command-verdict" />
-              ) : (
-                verdict.figure.value
-              )}
+              {verdict.sentence}
             </p>
-          ) : null}
-          <p
-            className={cn(
-              "text-pretty",
-              // The verdict is the sentence. When there is no figure above it,
-              // it IS the headline of the block and is sized accordingly.
-              verdict.figure ? "m-body mt-1" : "m-headline mt-1",
-            )}
-          >
-            {verdict.sentence}
-          </p>
-        </div>
-      ) : (
-        <Shimmer className="mt-5 h-12 w-52" />
-      )}
+          </div>
+        ) : (
+          <Shimmer className="h-12 w-52" />
+        )}
+      </div>
     </section>
   );
 }

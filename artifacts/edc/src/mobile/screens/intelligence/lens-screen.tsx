@@ -45,6 +45,10 @@ export function LensScreen({
       <MNavBar
         title="Intelligence"
         subtitle={subtitle}
+        // Every lens derives its subtitle from a query — `sim ? … : undefined` on
+        // Pipeline, `summary ? … : undefined` on Portfolio — so the line always
+        // arrives late here. Reserved once for all of them rather than per lens.
+        reserveSubtitle
         leading={<MNavBrand />}
         right={<MAvatar />}
       >

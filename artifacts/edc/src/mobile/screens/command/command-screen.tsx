@@ -125,6 +125,10 @@ export function CommandScreen() {
         subtitle={
           data.summary ? `${data.summary.totalDealsMonitored} deals monitored` : undefined
         }
+        // The subtitle waits on the summary, so without this the bar is one line
+        // tall on the first paint and two once it lands — 20px that moves the whole
+        // screen, because the bar is above everything. Measured here.
+        reserveSubtitle
       />
 
       <PullToRefresh onRefresh={data.refresh}>

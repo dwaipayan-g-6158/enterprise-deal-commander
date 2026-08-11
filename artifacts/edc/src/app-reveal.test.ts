@@ -267,6 +267,69 @@ describe("the reveal is painted so it cannot cost a layout pass", () => {
   });
 });
 
+/**
+ * The reservations that keep the masked window from hiding real instability.
+ *
+ * These exist because the mask made the shifts INVISIBLE without making them go
+ * away, and an invisible shift is still recorded by the Core Web Vitals API and
+ * still becomes visible the moment anything reveals earlier. Every number below was
+ * measured on the deployed app at 390px, so a guard that only checked "some min-h
+ * is present" would pass while the value drifted away from the thing it reserves.
+ */
+describe("layout reservations measured against the deployed app", () => {
+  const read = (...parts: string[]) => readFileSync(join(SRC, ...parts), "utf8");
+
+  it("reserves the mobile verdict block's two slots", () => {
+    // The block sits above everything on the phone, so its growth moves the whole
+    // screen: measured 148px loading against 219px resolved. Greeting 56 -> 102,
+    // verdict 48 -> 74.
+    const verdict = read("mobile", "screens", "command", "verdict-block.tsx");
+    expect(verdict).toContain("min-h-[102px]");
+    expect(verdict).toContain("min-h-[74px]");
+    // The gap has to belong to the wrapper, or it exists in only one state.
+    expect(verdict).toMatch(/className="mt-5 min-h-\[74px\]"/);
+  });
+
+  it("reserves the mobile needs list at three rows' real height", () => {
+    // 112px per resolved row, 336px for the three the block is built around,
+    // against a 92px placeholder.
+    const needs = read("mobile", "screens", "command", "needs-block.tsx");
+    expect(needs).toContain("h-28");
+  });
+
+  it("reserves the nav bar's subtitle line wherever it is data-driven", () => {
+    /**
+     * `subtitle === undefined` cannot distinguish "not yet" from "never", so this
+     * is opt-in — and the opt-in is the part that rots. Any screen deriving its
+     * subtitle from a query needs it, or its bar grows 20px on arrival and moves
+     * everything below.
+     */
+    const navBar = read("mobile", "shell", "m-nav-bar.tsx");
+    expect(navBar).toContain("reserveSubtitle");
+    expect(navBar).toContain("min-h-[46px]");
+
+    for (const screen of [
+      ["mobile", "screens", "command", "command-screen.tsx"],
+      ["mobile", "screens", "memory", "memory-screen.tsx"],
+      ["mobile", "screens", "deals", "deals-screen.tsx"],
+      // Covers every Intelligence lens in one place.
+      ["mobile", "screens", "intelligence", "lens-screen.tsx"],
+    ]) {
+      expect(read(...screen), screen.join("/")).toContain("reserveSubtitle");
+    }
+  });
+
+  it("reserves the desktop hero and daily bar too", () => {
+    // The same class of bug on the other shell, and the same fix.
+    expect(read("components", "dashboard", "dashboard-hero.tsx")).toContain("min-h-[88px]");
+    const bar = read("components", "dashboard", "daily-bar", "daily-bar.tsx");
+    expect(bar).toContain("min-h-[44px]");
+    // Hidden rather than an empty pill when every segment legitimately renders
+    // nothing, which is what makes reserving the height safe.
+    expect(bar).toContain("empty:hidden");
+  });
+});
+
 describe("one gate covers both shells", () => {
   it("is mounted once, inside the Router and the QueryClientProvider", () => {
     /**

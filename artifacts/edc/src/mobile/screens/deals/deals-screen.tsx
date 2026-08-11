@@ -105,6 +105,9 @@ export function DealsScreen() {
             ? undefined
             : `${derived.matchedCount} ${derived.matchedCount === 1 ? "deal" : "deals"} · ${money(totalTCV)}`
         }
+        // Gated on isLoading, so the line arrives late and grows the bar. See
+        // MNavBar's reserveSubtitle.
+        reserveSubtitle
       >
         <SegmentChips
           segments={viewSegments}

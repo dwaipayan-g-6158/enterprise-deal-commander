@@ -9,6 +9,19 @@ export interface MNavBarProps {
   title: ReactNode;
   /** One line of context under the title — a count, a total, an account name. */
   subtitle?: ReactNode;
+  /**
+   * Reserve the subtitle's line before it arrives.
+   *
+   * Set this on any screen whose `subtitle` is derived from data, which is nearly
+   * all of them. Without it the bar is one line tall on the first paint and two
+   * once the query lands, and since the bar is above everything that 20px moves
+   * the whole screen — measured on the deployed Command screen.
+   *
+   * Opt-in rather than inferred: `subtitle === undefined` cannot tell "not yet"
+   * from "never", and reserving unconditionally would leave a dead line in the bar
+   * of every screen that has no subtitle at all.
+   */
+  reserveSubtitle?: boolean;
   /** Href for a back chevron. Omit on tab roots. */
   backHref?: string;
   backLabel?: string;
@@ -47,6 +60,7 @@ export interface MNavBarProps {
 export function MNavBar({
   title,
   subtitle,
+  reserveSubtitle = false,
   backHref,
   backLabel = "Back",
   leading,
@@ -78,7 +92,30 @@ export function MNavBar({
             because a back button that appears on scroll is a back button you
             cannot find. The <h1> is never removed from the tree either — it is
             invisible, not absent, so a screen reader still gets the title. */}
-        <div className={cn("min-w-0 flex-1", collapseTitle && "m-navbar-title")}>
+        {/* `min-h-[46px]` when a subtitle is expected, and it is a layout-stability
+            fix rather than styling.
+
+            Nearly every screen derives its subtitle from data —
+            `subtitle={data ? \`${n} deals monitored\` : undefined}` on Command,
+            Memory, Deals, Pipeline and Portfolio — so the line is absent on the
+            first paint and appears when the query lands. Measured on the deployed
+            Command screen at 390px: this block goes 26px to 46px, and because the
+            nav bar sits above everything, that 20px pushes the whole screen down.
+
+            Reserving the two-line height when the caller says one is coming means
+            the subtitle fills a box that already exists. `reserveSubtitle` is opt-in
+            rather than derived, because `subtitle === undefined` cannot distinguish
+            "not yet" from "never" — and screens that genuinely have no subtitle must
+            not carry 20px of dead space in their bar. 46px is measured, not
+            computed from line-heights, so a type-scale change will show up as a
+            small shift rather than as a silently wrong constant. */}
+        <div
+          className={cn(
+            "min-w-0 flex-1",
+            reserveSubtitle && "min-h-[46px]",
+            collapseTitle && "m-navbar-title",
+          )}
+        >
           <h1 className="m-title truncate">{title}</h1>
           {subtitle ? <p className="m-caption m-muted mt-0.5 truncate">{subtitle}</p> : null}
         </div>

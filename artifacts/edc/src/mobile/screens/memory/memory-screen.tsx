@@ -111,6 +111,9 @@ export function MemoryScreen() {
         leading={<MNavBrand />}
         right={<MAvatar />}
         subtitle={isLoading ? undefined : `${results.length} archived deals`}
+        // Gated on isLoading, so the line arrives late and grows the bar. See
+        // MNavBar's reserveSubtitle.
+        reserveSubtitle
       >
         <SegmentChips
           segments={FILTERS}
