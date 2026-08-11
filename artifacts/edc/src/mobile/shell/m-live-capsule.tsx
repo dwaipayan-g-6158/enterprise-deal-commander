@@ -96,30 +96,37 @@ export function MLiveCapsule() {
     if (status !== null) setShown(status);
   }, [status]);
 
-  const { icon: Icon, label, className } = COPY[shown ?? "saving"];
+  // Nothing at all until there has been something to say. Falling back to a
+  // state's copy here would park the words "Saving…" in the collapsed strip from
+  // first paint — invisible and aria-hidden, so not a defect a reader meets, but
+  // it does put a claim in the document that is not true, and it is what any
+  // text extraction of the page reads. Measured on the deployed build.
+  const held = shown === null ? null : COPY[shown];
 
   return (
     <div className="m-collapse" data-open={status !== null} aria-hidden={status === null}>
       <div>
-        <div
-          // Polite: a connection dropping, or a write landing, is worth saying
-          // and is never worth talking over whatever is being read.
-          role="status"
-          // Keyed on the state so React remounts the row and m-appear replays —
-          // offline to saving is a change of message, not of one word, and
-          // swapping the text in place reads as a glitch.
-          key={shown ?? "idle"}
-          className={cn(
-            "m-label m-appear flex items-center justify-center gap-1.5 py-1",
-            className,
-          )}
-        >
-          <Icon
-            className={cn("h-3.5 w-3.5 shrink-0", shown === "saving" && "m-spin")}
-            aria-hidden="true"
-          />
-          {label}
-        </div>
+        {held === null ? null : (
+          <div
+            // Polite: a connection dropping, or a write landing, is worth saying
+            // and is never worth talking over whatever is being read.
+            role="status"
+            // Keyed on the state so React remounts the row and m-appear replays —
+            // offline to saving is a change of message, not of one word, and
+            // swapping the text in place reads as a glitch.
+            key={shown}
+            className={cn(
+              "m-label m-appear flex items-center justify-center gap-1.5 py-1",
+              held.className,
+            )}
+          >
+            <held.icon
+              className={cn("h-3.5 w-3.5 shrink-0", shown === "saving" && "m-spin")}
+              aria-hidden="true"
+            />
+            {held.label}
+          </div>
+        )}
       </div>
     </div>
   );
