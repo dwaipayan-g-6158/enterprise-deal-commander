@@ -192,6 +192,11 @@ function StageRail({ stages, currentName }: { stages: BoardStage[]; currentName:
                 aria-hidden="true"
                 className={cn(
                   "mt-1 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border",
+                  // Advancing is the one write on this screen, and the rail is
+                  // what it changes. Transitioning the border and fill makes the
+                  // marker travel down the pipeline rather than reappear one
+                  // rung lower.
+                  "m-tint-shift",
                   here && "border-primary bg-primary",
                   passed && "border-primary/40 bg-primary/40",
                   !here && !passed && "border-border",

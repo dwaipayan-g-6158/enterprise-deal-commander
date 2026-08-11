@@ -138,6 +138,9 @@ export function PlaybookPanel({ dealId }: PanelBodyProps) {
                   // "assigned but untouched" and "not assigned" do not read the
                   // same at a glance.
                   entry.assignmentId ? "bg-primary" : "bg-muted-foreground/40",
+                  // Ticking a step recomputes this optimistically; the movement
+                  // is the confirmation that the tap landed.
+                  "m-fill",
                 )}
                 style={{ width: `${Math.max(0, Math.min(100, entry.progressPct))}%` }}
               />

@@ -380,6 +380,41 @@
   animation: m-tab-pop 320ms var(--m-ease-spring) both;
 }
 
+/* --- Live values ----------------------------------------------------------
+ * Figures, fills and tints that change while the reader is looking at them.
+ *
+ * All STATE motion under this file's own rule, and all finite transitions
+ * rather than animations — the global reduced-motion clamp zeroes a transition
+ * duration, which lands the element on its destination instantly. That is the
+ * correct reduced-motion answer here and the reason none of these need a guard
+ * of their own, unlike .m-spin below.
+ *
+ * The stroke pair is what a proportional ring was drawn with dasharray to get:
+ * one animatable property per segment, so a split that shifts after a write
+ * redraws as a movement instead of as a different picture. */
+.m-ring-segment {
+  transition:
+    stroke-dashoffset var(--m-dur-move) var(--m-ease-standard),
+    stroke-dasharray var(--m-dur-move) var(--m-ease-standard);
+}
+
+/* A progress fill catching up with an optimistic write. Gates recompute across
+   two caches the moment a step is ticked; without this the bar teleports and
+   the recompute is invisible. */
+.m-fill {
+  transition: width var(--m-dur-move) var(--m-ease-standard);
+}
+
+/* Risk, health and outcome tints. A disposition that downgrades a level should
+   read as the same pill changing its mind, not as a different pill appearing.
+   Colour only — never `all`, which would drag layout properties into it. */
+.m-tint-shift {
+  transition:
+    color var(--m-dur-quick) var(--m-ease-standard),
+    background-color var(--m-dur-quick) var(--m-ease-standard),
+    border-color var(--m-dur-quick) var(--m-ease-standard);
+}
+
 /* The live strip's spinner.
  *
  * Removed under reduced motion rather than slowed, because the global clamp in

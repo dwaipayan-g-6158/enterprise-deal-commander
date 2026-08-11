@@ -62,6 +62,9 @@ export function BriefHero({
           <CountUp
             value={financials.calculatedTCV}
             format={(n) => compactCurrency(n, financials.dealCurrency)}
+            // Keyed per deal, so returning to one whose value has moved since
+            // you last opened it animates the move rather than the arrival.
+            valueKey={`deal-tcv:${dealId}`}
           />
         )}
       </p>

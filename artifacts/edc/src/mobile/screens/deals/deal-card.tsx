@@ -136,7 +136,8 @@ function GateLine({ pct }: { pct: number }) {
   return (
     <div className="mt-3 flex items-center gap-2">
       <div className="h-1 flex-1 overflow-hidden rounded-full bg-muted" aria-hidden="true">
-        <div className="h-full rounded-full bg-primary" style={{ width: `${clamped}%` }} />
+        {/* Moves when a gate ticked on the deal screen lands back in the list. */}
+        <div className="m-fill h-full rounded-full bg-primary" style={{ width: `${clamped}%` }} />
       </div>
       <span className="m-micro m-muted m-num shrink-0">{clamped}% gates</span>
     </div>
