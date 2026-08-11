@@ -220,12 +220,52 @@ Verified with the policy enforcing: signed in end-to-end, walked all four tabs
 and three deal panels, **zero CSP violations**; `storage.persisted()` is `true`.
 Re-scored: **136/192 (B)**.
 
+### The full sweep
+
+Run against the deployed build with an automated geometry probe — overflow,
+row wrapping, and tap-reachability — because 240 hand-inspected screenshots is
+not a review, it is a hope.
+
+**14–15 screens × 375/390/430 × light/dark, plus all four time bands: zero
+findings.** Repeated as an **admin**, which adds the 409 guardrail branch — the
+densest action stack in the app and one a reader account cannot render at all.
+Zero there too, with the branch confirmed present and offering all three actions
+so the zero is not vacuous.
+
+The probe needed four attempts before it could be trusted. Its first run reported
+seven findings, all its own fault: two-line titles on a baseline look like wraps;
+scrolling to maximum pushes a mid-list card *above* the fold, which is not
+"blocked"; and chips inside a horizontal scroller sit past `innerWidth` and
+hit-test to nothing while being perfectly reachable by swiping. A clean result
+only means something once the false positives are gone.
+
+Time bands render distinct canvases in both themes — light
+`#fbf7f4 / #f6f7f9 / #f9f3f0 / #f1f2f8`, dark `#120f0d / #0a0b10 / #120e0c /
+#0b0c14` — with the ambient wash intact, and `theme-color` tracks the live token
+in light mode too.
+
+### Two more fixes the sweep produced
+
+**The forecast "band" was a rectangle by construction.** `toFanSeries` sets
+`lo: f.p10` and `hi: f.p90` at every one of the five points, so its edges are
+flat for any input — measured at y=22.07 and y=297.93 across the full width. The
+x axis is *percentile*, so the curve already spanned p10→p90 and the slab merely
+redrew its own endpoints. Desktop renders the same band at `fillOpacity 0.06`
+with a separate 0.18 fill under the mid line; mobile had copied only the band, at
+the strength desktop reserves for the fill that reads. Now fills under the curve
+and marks p50. `toFanSeries` is untouched — it feeds desktop, and this was a
+renderer bug.
+
+**`beforeinstallprompt`** captured at module scope, because the event fires once
+before React mounts and a `useEffect` subscription misses it silently. The row is
+conditional, never disabled: on iOS the event never arrives and a dead button is
+something a user can only discover by tapping.
+
 ### Still unverified
 
-- **Real iOS and Android devices.** The sweep ran in emulated Chromium, which
+- **Real iOS and Android devices.** Everything ran in emulated Chromium, which
   cannot show iOS edge-swipe, Android predictive back, or standalone-mode chrome.
-- **375px and 430px, light mode, and the other three time bands.** Only 390px
-  dark/night was swept.
+  This is the only remaining gap, and no amount of automation closes it.
 
 **Screenshots: never capture Settings → Users.** `docs/assets/` is a public
 repository and that screen lists real names and email addresses.
