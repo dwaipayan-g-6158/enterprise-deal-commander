@@ -6,6 +6,7 @@ import { useListDeals } from "@workspace/api-client-react";
 import { useSignOut } from "@/lib/auth/use-sign-out";
 import { clearBadge } from "@/mobile/lib/app-badge";
 import { haptic } from "@/mobile/lib/haptics";
+import { markProgrammaticScroll } from "@/mobile/lib/scroll-memory";
 import {
   parseNlcConditions,
   matchNlcDeals,
@@ -20,6 +21,9 @@ import { HealthDot } from "@/mobile/components/badges";
 
 /** Name matches shown before the list gets longer than it is useful. */
 const MAX_DEAL_MATCHES = 8;
+
+/** How long a smooth jump is treated as the app scrolling rather than the reader. */
+const SMOOTH_JUMP_MS = 1000;
 
 /**
  * What the Commander capsule opens: search, natural-language questions, jumps
@@ -74,6 +78,12 @@ export function CommanderSheet() {
     // Deferred a tick: the sheet's closing animation and the scroll would
     // otherwise fight over the same frame.
     setTimeout(() => {
+      // A smooth scroll keeps emitting scroll events until it lands, and every
+      // one of them looked to the capsule like the reader flicking downward — so
+      // jumping to a section hid the capsule that had just offered the jump.
+      // Generous window because the distance, and therefore the duration, is
+      // whatever the page happens to be.
+      markProgrammaticScroll(SMOOTH_JUMP_MS);
       document.getElementById(anchorId)?.scrollIntoView({ behavior: "smooth", block: "start" });
     }, 0);
   };

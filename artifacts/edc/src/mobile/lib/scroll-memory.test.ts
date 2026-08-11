@@ -4,6 +4,8 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   _resetScrollMemory,
   installScrollMemory,
+  isProgrammaticScroll,
+  markProgrammaticScroll,
   rememberScroll,
   restoreScroll,
 } from "./scroll-memory";
@@ -113,5 +115,92 @@ describe("both navigation paths capture before they move", () => {
     expect(remember, "the departure must be captured before the arrival is restored").toBeLessThan(
       restore,
     );
+  });
+});
+
+/**
+ * Telling the app's own scrolling apart from the reader's.
+ *
+ * The container cannot say who moved it, and everything downstream that reacts
+ * to scroll has to know. The Commander capsule hides on downward scroll, so a
+ * restore to 300px read as a deliberate 300px flick and took the capsule away
+ * for its whole settle window on every back-navigation — measured on the
+ * deployed build at ~420ms of opacity 0 from a single `scrollTop = 300`.
+ */
+describe("programmatic scroll marking", () => {
+  it("is off until something claims a scroll", () => {
+    expect(isProgrammaticScroll()).toBe(false);
+  });
+
+  it("reports the app's scrolling for the length of the window", () => {
+    markProgrammaticScroll(50_000);
+    expect(isProgrammaticScroll()).toBe(true);
+  });
+
+  it("expires, so the reader's next real gesture is judged normally", () => {
+    // Zero-length: already expired by the time it is asked.
+    markProgrammaticScroll(0);
+    expect(isProgrammaticScroll()).toBe(false);
+  });
+
+  it("never shortens a window already in flight", () => {
+    // A restore landing inside a smooth jump must not hand the rest of that
+    // jump back to the reader — the jump is still emitting scroll events.
+    markProgrammaticScroll(50_000);
+    markProgrammaticScroll(0);
+    expect(isProgrammaticScroll()).toBe(true);
+  });
+
+  it("restoreScroll claims its own scroll", () => {
+    installScrollMemory(fakeContainer(0));
+    expect(isProgrammaticScroll()).toBe(false);
+    restoreScroll(3);
+    expect(
+      isProgrammaticScroll(),
+      "the scroll event restoreScroll causes must already find the window open",
+    ).toBe(true);
+  });
+
+  /**
+   * Ordering, asserted against source: the mark has to be written BEFORE the
+   * assignment that moves the container, or the event it produces arrives while
+   * the window is still shut.
+   */
+  it("marks before it moves the container", () => {
+    const source = readFileSync(join(import.meta.dirname, "scroll-memory.ts"), "utf8");
+    const body = source.slice(source.indexOf("export function restoreScroll"));
+    const mark = body.indexOf("markProgrammaticScroll(");
+    const assign = body.indexOf("container.scrollTop =");
+    expect(mark).toBeGreaterThan(-1);
+    expect(mark, "mark must precede the assignment").toBeLessThan(assign);
+  });
+});
+
+/** The consumer this exists for. */
+describe("the Commander capsule", () => {
+  const CAPSULE = readFileSync(
+    join(import.meta.dirname, "..", "commander", "commander-button.tsx"),
+    "utf8",
+  );
+
+  it("stands down while the app is the one scrolling", () => {
+    expect(CAPSULE).toMatch(/isProgrammaticScroll\(\)/);
+  });
+
+  it("resyncs its origin rather than just skipping, so the next gesture measures true", () => {
+    // Returning without updating lastYRef would leave the origin at the
+    // pre-jump position, and the reader's next small scroll would then look
+    // like the whole jump.
+    const guard = CAPSULE.slice(CAPSULE.indexOf("isProgrammaticScroll()"));
+    const resync = guard.indexOf("lastYRef.current = y");
+    const ret = guard.indexOf("return;");
+    expect(resync).toBeGreaterThan(-1);
+    expect(resync, "resync must happen before the early return").toBeLessThan(ret);
+  });
+
+  it("is consulted before the hysteresis check, not after", () => {
+    // After the check, a jump smaller than the threshold would still be judged.
+    const body = CAPSULE.slice(CAPSULE.indexOf("const onScroll"));
+    expect(body.indexOf("isProgrammaticScroll()")).toBeLessThan(body.indexOf("HYSTERESIS_PX"));
   });
 });

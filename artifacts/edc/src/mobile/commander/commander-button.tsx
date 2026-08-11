@@ -3,6 +3,7 @@ import { useLocation } from "wouter";
 import { ListTree, Search, SlidersHorizontal, Target, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useShellScrollRef } from "@/mobile/shell/m-shell";
+import { isProgrammaticScroll } from "@/mobile/lib/scroll-memory";
 import { useCommander } from "@/mobile/commander/commander-context";
 import { hidesCommander } from "@/mobile/nav/mobile-nav";
 
@@ -68,6 +69,22 @@ export function CommanderButton() {
       frameRef.current = requestAnimationFrame(() => {
         frameRef.current = null;
         const y = el.scrollTop;
+
+        // The app moved the page, not the reader. Resync the origin so the next
+        // real gesture is measured from where the content actually is, and judge
+        // nothing — this capsule hides to get out of a THUMB's way, and there is
+        // no thumb here.
+        //
+        // Without it the capsule vanished for its full settle window on every
+        // back-navigation (scroll restoration jumps the container), and the
+        // jump-to-section list inside the capsule's own sheet hid the capsule
+        // that had just offered it. Measured: a single scrollTop = 300 took it
+        // to opacity 0 for ~420ms.
+        if (isProgrammaticScroll()) {
+          lastYRef.current = y;
+          return;
+        }
+
         const travelled = y - lastYRef.current;
         if (Math.abs(travelled) < HYSTERESIS_PX) return;
         lastYRef.current = y;

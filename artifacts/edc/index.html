@@ -3,6 +3,47 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <!-- Applies the theme BEFORE the first paint, and it has to be inline and
+         blocking to do that.
+
+         next-themes sets the class from JavaScript once React has mounted. In
+         Next.js it ships its own pre-paint script; in a plain Vite SPA there is
+         nothing before the module entry, so between first paint and hydration
+         <html> carries NO theme class at all and :root's light tokens paint.
+         On a phone in dark mode that is a white screen — and body's 2s
+         background-color transition (the ambient time-band shift, index.css)
+         then smears the correction into a slow fade rather than a blink.
+
+         Measured on the deployed build, dark device, cold cache, 6x CPU
+         throttle: no class on <html> at the first frame, body at
+         rgb(249,250,251), the class arriving at 344ms, and in one capture the
+         fade still running 1.9s in. theme-provider.tsx's own docstring says a
+         home-screen icon opened at night "should not flash a white screen" —
+         this is what makes that true.
+
+         Kept deliberately tiny and dependency-free: it must run before anything
+         else and must never throw, because a throw here would leave the class
+         unset for the whole session. Storage key and values match next-themes
+         ("theme": light | dark | system), which then reads the same state and
+         agrees rather than re-applying. -->
+    <script>
+      (function () {
+        try {
+          var stored = localStorage.getItem("theme");
+          var dark =
+            stored === "dark" ||
+            ((!stored || stored === "system") &&
+              window.matchMedia("(prefers-color-scheme: dark)").matches);
+          if (dark) document.documentElement.classList.add("dark");
+          // Tells the UA which form controls and scrollbars to draw before any
+          // stylesheet has had a say.
+          document.documentElement.style.colorScheme = dark ? "dark" : "light";
+        } catch (e) {
+          // Storage blocked, or matchMedia unavailable. Light is the fallback
+          // the stylesheet already assumes, so there is nothing to do.
+        }
+      })();
+    </script>
     <!-- Paired so the OS chrome matches the app instead of forcing a dark strip
          over a light page. ThemeColorSync rewrites the active one when the
          in-app theme toggle runs; these two cover first paint. Values are the
