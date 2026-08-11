@@ -3,6 +3,7 @@ import { Link } from "wouter";
 import { ChevronLeft } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { MLiveCapsule } from "@/mobile/shell/m-live-capsule";
+import { canPopWithinApp } from "@/mobile/lib/history-index";
 
 export interface MNavBarProps {
   title: ReactNode;
@@ -68,13 +69,7 @@ export function MNavBar({
     >
       <div className="flex min-h-11 items-center gap-2 px-4 py-2">
         {backHref ? (
-          <Link
-            href={backHref}
-            aria-label={backLabel}
-            className="m-press -ml-2 flex h-12 w-12 shrink-0 items-center justify-center rounded-full"
-          >
-            <ChevronLeft className="h-6 w-6" aria-hidden="true" />
-          </Link>
+          <MBackLink href={backHref} label={backLabel} />
         ) : leading ? (
           <span className="flex shrink-0 items-center">{leading}</span>
         ) : null}
@@ -95,5 +90,46 @@ export function MNavBar({
           directly beneath it. Renders nothing when there is nothing to say. */}
       <MLiveCapsule />
     </header>
+  );
+}
+
+/**
+ * The back chevron, which POPS rather than pushing.
+ *
+ * It was a plain `<Link>`, and that was wrong in two compounding ways. wouter
+ * forwards a Link to pushState, so `aroundNav` saw index+1 and animated the
+ * journey back to a list as a forward push — the screen you were leaving slid
+ * out to the left and the list arrived from the right, which is the choreography
+ * for going deeper. And the pushed entry meant the OS back button then returned
+ * you INTO the detail screen you had just left, so hardware back and the chevron
+ * walked in opposite directions forever.
+ *
+ * Popping fixes both at once and costs nothing else: `history.back()` fires a
+ * real popstate, which back-gesture.ts already animates correctly and which now
+ * also arms the reverse card morph. The chevron and the edge swipe become the
+ * same code path, which is the point — they are the same intent.
+ *
+ * `href` is kept rather than replaced with a button. It is the fallback when
+ * there is nothing in-app to pop to (a deep link, a home-screen shortcut, a
+ * shared URL), and it is what makes the control a real link: focusable,
+ * middle-clickable, and announced with a destination.
+ */
+function MBackLink({ href, label }: { href: string; label: string }) {
+  return (
+    <Link
+      href={href}
+      aria-label={label}
+      onClick={(event: React.MouseEvent<HTMLAnchorElement>) => {
+        // Leave modified clicks to the browser — they open a tab, and hijacking
+        // them into a pop would navigate this one instead.
+        if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.shiftKey) return;
+        if (!canPopWithinApp()) return;
+        event.preventDefault();
+        history.back();
+      }}
+      className="m-press -ml-2 flex h-12 w-12 shrink-0 items-center justify-center rounded-full"
+    >
+      <ChevronLeft className="h-6 w-6" aria-hidden="true" />
+    </Link>
   );
 }

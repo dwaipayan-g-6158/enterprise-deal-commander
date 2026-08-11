@@ -10,7 +10,7 @@ import { compactCurrency, formatDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { OUTCOME_CLASS } from "@/lib/semantic-colors";
 import { normalizeOutcome, OUTCOME_LABEL } from "@/mobile/lib/outcome";
-import { armSharedCard } from "@/mobile/lib/shared-card";
+import { armSharedCard, useSharedCardStyle } from "@/mobile/lib/shared-card";
 import { useDebouncedValue } from "@/mobile/hooks/use-debounced-value";
 import { MNavBar } from "@/mobile/shell/m-nav-bar";
 import { MAvatar } from "@/mobile/shell/m-avatar";
@@ -346,6 +346,11 @@ function MemoryCard({
   const tcv = memory.finalTcv != null ? Number(memory.finalTcv) : null;
   const cardRef = useRef<HTMLAnchorElement>(null);
   const badgeClass = cn(OUTCOME_CLASS[outcome].bg, OUTCOME_CLASS[outcome].text);
+  // The arriving side of the morph back from the detail screen. Only the card
+  // and the outcome pill travel, matching the outbound trip — the account line
+  // and deal name go into the detail nav bar, which carries its own transition
+  // name, and a part with nothing to morph into animates out alone.
+  const shared = useSharedCardStyle(memory.id);
 
   return (
     <div className={cn("relative", selected && "ring-2 ring-primary rounded-2xl")}>
@@ -365,6 +370,7 @@ function MemoryCard({
           )
         }
         className="m-card m-press m-reveal block p-4"
+        style={shared("card")}
         aria-label={`${memory.dealName}, ${memory.accountName}`}
       >
         <div className="flex items-start justify-between gap-3">
@@ -376,7 +382,7 @@ function MemoryCard({
               into the detail screen's nav bar rather than its hero, and that
               already has a transition name of its own — a part with nothing to
               morph into just animates out on its own and reads as a glitch. */}
-          <OutcomePill sharedPart="value" className={cn("shrink-0", badgeClass)}>
+          <OutcomePill sharedPart="value" style={shared("value")} className={cn("shrink-0", badgeClass)}>
             {OUTCOME_LABEL[outcome]}
           </OutcomePill>
         </div>

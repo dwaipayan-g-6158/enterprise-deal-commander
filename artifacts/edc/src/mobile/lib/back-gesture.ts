@@ -11,6 +11,7 @@ import {
   noteNavigation,
 } from "./history-index";
 import { indexOfEvent, rememberScroll, restoreScroll } from "./scroll-memory";
+import { armSharedReturn } from "./shared-card";
 
 /**
  * Animates the back gesture.
@@ -120,6 +121,14 @@ function onPopState(event: PopStateEvent): void {
     { path: fromPath, index: fromIndex },
     { path: window.location.pathname, index: toIndex },
   );
+
+  // Before runTransition: startViewTransition snapshots the outgoing frame the
+  // moment it is called, so the hero's names have to already be on the DOM.
+  // Deliberately after the early returns above — under reduced motion, without
+  // view transitions, or when Chromium is driving its own predictive-back
+  // preview, there is no transition to attach a morph to and stamping would
+  // leave names on an element nothing ever clears.
+  if (direction === "back") armSharedReturn(toIndex);
 
   runTransition(
     direction,
