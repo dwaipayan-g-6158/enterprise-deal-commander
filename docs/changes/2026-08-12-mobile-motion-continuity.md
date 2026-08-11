@@ -230,7 +230,30 @@ arm plus a stray late one satisfied a position check while doing the wrong thing
 It counts calls as well as locating them now. `scroll-memory.test.ts` records the
 same trap one line away; I read it and still wrote it the weak way.
 
-## 8. Verification
+## 8. A defect this surfaced but did not cause
+
+**A successful write visibly bounces back.** Driving a real gate toggle on the
+deployed app: the optimistic patch moved the fill 56% → 67%, the capsule said
+*Saving…* then *Saved*, and the fill then slid **back to 56%** with the gate
+un-ticked. The `PUT` returned **200** — twice, checked in the network log — so
+the capsule was telling the truth and the write did land.
+
+The cause is `invalidate.ts` refetching the instant the mutation resolves,
+against a Data Store with a **~1–2 second read lag** (already recorded in
+`docs/catalyst-datastore-constraints.md` and the memory index). The refetch wins
+the race and overwrites the correct optimistic value with the pre-write one.
+
+This predates this phase and affects all four write actions equally — but
+`.m-fill` made it *visible*, because the value now slides back instead of
+teleporting. **Deliberately not fixed here**: a correct fix changes the write
+layer's invalidation strategy for playbook, gates, disposition and stage
+together, and deserves its own change with its own verification rather than
+being smuggled into a motion phase.
+
+The seed data was restored afterwards and confirmed by a direct server read past
+the lag: `G3_INTEGRATIONS_MAPPED` is `false`, as it started.
+
+## 9. Verification
 
 `pnpm run typecheck` clean. **1,188 tests / 82 files** (1,166 at baseline; adds
 `splash`, `shared-card`, `previous-values`, `live-status`, plus a case in
@@ -250,9 +273,49 @@ a service worker exists, so manifest entries would be unreachable by fetch), 76
 links in the built `index.html` with root-absolute hrefs. Two PNGs decoded in a
 real browser — correct dimensions, uniform fill, exact expected colours.
 
-## 9. Not verified on this host
+### On the deployed app
+
+Deployed twice via the Catalyst Console, each time asserting the **served bundle
+hash** rather than a 200. That mattered both times: the first check read
+`mobile-app-EoFdM3Nh.css` (the previous build) because the service worker was
+replaying it, and a later one read a stale `index.html` from the browser's own
+disk cache. Neither was a deploy failure — ten consecutive server fetches were
+consistent, and the superseded asset had stopped existing entirely.
+
+- **All 76 launch images serve as real PNGs.** Asserted on `content-type` and
+  size, not status: the SPA catch-all returns `200 text/html` for any invented
+  filename, which is exactly how a missing asset was once reported as present. A
+  made-up name was used as the control and does return HTML.
+- **`--m-sky-image` resolves on the shell, and `.m-boot-sky`'s computed
+  `background-image` is byte-identical to it** — the actual proof the bloom shows
+  the same sky rather than a similar one. `.m-boot.m-shell` is `none`.
+- **`prefers-contrast: more` nulls the token and the sky disappears from BOTH**
+  the shell and the boot layer. Killing `background-image` instead would have
+  left the boot layer painting.
+- **Reduced motion**: `.m-spin` → `animation: none` (removed, not clamped to a
+  single pop); `.m-fill` → duration `1e-05s`, i.e. lands instantly.
+- **The live capsule, driven for real**: idle 0px and empty; offline 26px with
+  the right copy; and across a real gate toggle — `Saving…` → `Saved` → collapsed
+  at ~1.8s, with `.m-fill` moving 56% → 67% underneath it.
+- **The reverse morph, instrumented at the snapshot** rather than eyeballed.
+  Forward: `data-m-nav="forward"`, names on `a / p / span / span` (the card).
+  Back: `data-m-nav="back"`, names on `header / p / h1 / p` (the hero).
+- **The chevron pops**: `/deals` idx 1 → deal idx 2 → chevron → **idx 1**. Before
+  this change it went to 3.
+- **Sweep**: 5 routes × 3 widths (375/393/430) × 2 themes = 30 combinations, zero
+  horizontal overflow, all rendered. The `/deals` "offenders" are chips inside
+  their own horizontal scroller, which is the documented false positive.
+- **`/account`** carries the relocated badge row with its permission copy intact.
+
+## 10. Not verified on this host
 
 - **The iOS launch images themselves.** The files exist, the media queries are
   exhaustive per device and colour scheme, the tags are well-formed and the
   bytes decode — none of which proves iOS picks them. Needs hardware.
-- **iOS edge-swipe** and Android predictive back, for the same reason.
+- **iOS edge-swipe** and Android predictive back, for the same reason. The
+  committed-pop path they share with the chevron *is* verified.
+- **Scroll restoration under the reverse morph.** The seeded dataset is three
+  deals, so the list fits an 852px viewport (`scrollHeight === clientHeight`) and
+  there is no scroll to restore. The morph was verified without it; the two
+  together need a longer list.
+- **`/pwa-review`** was not re-run this phase. The last score was 136/192 (B).
