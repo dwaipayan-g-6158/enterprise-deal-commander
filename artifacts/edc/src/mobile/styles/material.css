@@ -21,8 +21,11 @@
  * one, and a faint ground bounce. One radial gradient reads as a vignette; three
  * read as light. */
 .m-shell {
-  background-color: hsl(var(--background));
-  background-image:
+  /* Named rather than written inline because the boot splash paints the same
+     sky on its own layer, so it can fade in from the flat canvas the iOS launch
+     image shows (see .m-boot-sky in motion.css). Two copies of a three-gradient
+     stack would drift the first time one of them is tuned. */
+  --m-sky-image:
     radial-gradient(
       122% 58% at 50% -10%,
       rgb(var(--m-sky-rgb) / var(--m-sky-alpha)),
@@ -38,6 +41,9 @@
       rgb(var(--m-ground-rgb) / var(--m-ground-alpha)),
       transparent 32%
     );
+
+  background-color: hsl(var(--background));
+  background-image: var(--m-sky-image);
   color: hsl(var(--foreground));
 
   /* Deliberately NOT background-attachment: fixed. The shell is already a
@@ -201,10 +207,15 @@
 
 /* Increase Contrast also removes the sky: the wash exists to be atmospheric,
    and atmosphere is exactly what someone enabling this setting is asking to
-   turn off. tokens.css raises the border and muted-foreground values to match. */
+   turn off. tokens.css raises the border and muted-foreground values to match.
+
+   Nulls the TOKEN rather than the property. Custom properties inherit, so this
+   reaches every surface that paints the sky — including the boot splash's own
+   layer, which is a descendant and would otherwise keep blooming a wash the app
+   underneath it has switched off. */
 @media (prefers-contrast: more) {
   .m-shell {
-    background-image: none;
+    --m-sky-image: none;
   }
   .m-glass,
   .m-glass-thin {

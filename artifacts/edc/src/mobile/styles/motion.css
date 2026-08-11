@@ -75,6 +75,49 @@
   scale: 1.04;
 }
 
+/* THE SEAM, and why the splash starts bare.
+ *
+ * .m-boot borrows .m-shell for its tokens, which also paints the time-of-day
+ * sky from frame one. The iOS launch image cannot know the time of day — it is
+ * a static PNG picked by screen size and colour scheme — so it shows the flat
+ * canvas. Left alone, the handoff from the OS image to the first React frame is
+ * a visible colour cut.
+ *
+ * So the splash starts on exactly what the PNG shows, and the sky arrives after
+ * it. The seam is not covered up; there is nothing to cover, because both
+ * surfaces begin on the same colour.
+ *
+ * Compound selector so this does not depend on motion.css loading after
+ * material.css. It does today (mobile-app.tsx imports in that order), but a
+ * rule that silently inverts if two imports are swapped is not worth the four
+ * characters saved. */
+.m-boot.m-shell {
+  background-image: none;
+}
+
+/* Negative z-index rather than positioning the content: .m-boot is fixed and so
+   always establishes a stacking context, which means -1 lands the sky above the
+   splash's own background-color and below every sibling — without touching the
+   mark or the wordmark. A positioned sibling at z-index 0 would paint OVER
+   them, because positioned elements beat non-positioned ones at the same
+   level. */
+.m-boot-sky {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background-image: var(--m-sky-image);
+  animation: m-boot-sky 600ms var(--m-ease-enter) both;
+}
+
+@keyframes m-boot-sky {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
 @keyframes m-boot-wordmark {
   from {
     opacity: 0;

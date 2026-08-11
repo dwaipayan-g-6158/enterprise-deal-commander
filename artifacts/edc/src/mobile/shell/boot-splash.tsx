@@ -51,6 +51,13 @@ function prefersReducedMotion(): boolean {
  * time-of-day sky the app itself is wearing — the launch screen is warm at
  * dawn and deep blue after dark rather than a flat brand colour.
  *
+ * That sky is faded in rather than present from the start, and the reason is
+ * the seam above this component: iOS shows a static launch image while the
+ * bundle boots, and a static image cannot know the time of day. Both surfaces
+ * therefore begin on the flat canvas and the sky blooms afterwards, so the
+ * handoff has no colour cut in it. The whole sequence — OS image, bloom, mark,
+ * dismiss — reads as one movement rather than three.
+ *
  * Three things keep it from being an annoyance: it plays once per app launch,
  * only in the installed app (in a browser tab a full-bleed overlay reads as a
  * stray modal), and not at all under prefers-reduced-motion, where a 1.4s
@@ -120,6 +127,11 @@ export function BootSplash() {
         phase === "leaving" && "pointer-events-none",
       )}
     >
+      {/* The sky, on its own layer so it can arrive rather than just be there.
+          .m-boot suppresses the shell's own wash and this fades the identical
+          gradient stack in over it — see .m-boot-sky in motion.css for why the
+          splash has to start on the flat canvas. */}
+      <div className="m-boot-sky" />
       <EdcLogoMark size={96} timeScale={MARK_TIME_SCALE} />
       <div className="m-boot-wordmark flex flex-col items-center text-center">
         <p className="text-sm font-bold uppercase leading-snug tracking-[0.18em]">
