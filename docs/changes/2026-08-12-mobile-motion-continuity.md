@@ -339,3 +339,79 @@ consistent, and the superseded asset had stopped existing entirely.
   there is no scroll to restore. The morph was verified without it; the two
   together need a longer list.
 - **`/pwa-review`** was not re-run this phase. The last score was 136/192 (B).
+
+---
+
+# Addendum — two glitches reported after the phase shipped
+
+Both intermittent, both timing races, both reproduced and measured before
+anything was changed.
+
+## The brief white screen on launch and refresh
+
+`<html>` carried **no theme class at all** at the first paint. next-themes
+applies it from JavaScript once React has mounted; in Next.js it ships a
+pre-paint script to cover that gap, but this is a plain Vite SPA where nothing
+runs before the module entry. So `:root`'s light tokens painted first, and on a
+dark device that is a white screen. `body`'s 2s `background-color` transition —
+the ambient time-band shift — then smeared the correction into a fade rather
+than a blink.
+
+Measured on the deployed build, dark device, cold cache, 6× CPU throttle: no
+class at the first frame, `body` at `rgb(249,250,251)`, the class arriving at
+344ms, the canvas genuinely light for 177ms. One capture had the fade still
+running **1.9s** in. It does not reproduce warm, which is exactly why it was
+intermittent for the user and invisible on a dev machine.
+
+`theme-provider.tsx`'s own docstring already said a home-screen icon opened at
+night "should not flash a white screen when the whole device is in dark mode".
+That was the intent; a tiny blocking inline script in `index.html` — before the
+module entry, reading the same key and vocabulary next-themes writes — is what
+makes it true. It cannot throw: a throw there would leave the class unset for
+the whole session, which is worse than the bug.
+
+Verified at the pixel level after deploying, cold and throttled on a dark
+device: mean frame brightness **27/255 at 80ms** and dark at every subsequent
+sample. Previously light for the first 74–177ms.
+
+## The Commander capsule disappearing
+
+The capsule hides on downward scroll and returns after a 420ms settle. It could
+not tell the reader's thumb from the app moving the container, so a single
+programmatic jump took it away for the full window. Measured: `scrollTop = 300`
+→ hidden at 120ms, back at 480ms.
+
+Three things do exactly that — scroll restoration on every back-navigation, any
+layout-driven scroll change, and `scrollIntoView` from the capsule's own
+jump-to-section list. **Using the jump hid the button that had just offered
+it**, which is the symptom as reported.
+
+`scroll-memory.ts` now owns a programmatic-scroll window, since it already owns
+the container. A timestamp rather than a flag: smooth scrolling keeps emitting
+events for hundreds of milliseconds after the call that started it, and there is
+no single event to clear a flag on (`scrollend` is too new to rely on). The
+capsule resyncs its origin and judges nothing while the window is open —
+resyncs rather than merely skipping, or the reader's next small scroll would
+look like the whole jump.
+
+Four sites claim their scrolls: `restoreScroll`, the Commander jump, the stage
+panel's guardrail reveal (a real instance of the same bug — it scrolls *down*,
+on the screen where the refusal has just appeared) and the tab bar's
+scroll-to-top. `segment-chips` is deliberately excluded: it scrolls a horizontal
+chip strip, a different container and intent. A completeness guard enumerates
+the mobile tree and fails if a new file scrolls without claiming it.
+
+Verified on the deployed build: back-navigation with a restored scroll keeps the
+capsule at opacity 1 throughout while restoring to 400px, and a genuine
+multi-step scroll still hides it. The feature works; it just no longer fires at
+the app's own scrolling.
+
+## What the instrumentation got wrong
+
+Two measurements contradicted each other for a while. An `addInitScript`
+sampler fires at document-start and can read `<html>` *before the parser reaches
+the head script* — a moment no user ever sees painted — and repeated
+`addInitScript` calls accumulate, so two samplers were writing to one array.
+Polling `evaluate` across a navigation boundary is unreliable for the same
+reason. The document's own structure (theme script at head index 2, first
+stylesheet at index 101) and a decoded screenshot are what settled it.
