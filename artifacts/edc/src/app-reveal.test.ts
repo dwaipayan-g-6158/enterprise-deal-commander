@@ -33,6 +33,22 @@ function rule(selector: string): string {
   return CSS.slice(at, CSS.indexOf("}", at));
 }
 
+/**
+ * The same, for a rule nested inside an `@media` block.
+ *
+ * `rule()` cannot do this job: `.app-reveal-lockup` appears three times in the
+ * file — once bare, once under the phone gate and once under reduced motion — and
+ * a bare `indexOf` would always return the first, so a gate assertion written with
+ * it would silently be checking the unguarded rule instead.
+ */
+function mediaRule(query: string, selector: string): string {
+  const block = CSS.indexOf(`@media ${query} {`);
+  expect(block, `@media ${query} should exist in index.css`).toBeGreaterThan(-1);
+  const at = CSS.indexOf(`${selector} {`, block);
+  expect(at, `${selector} should exist inside @media ${query}`).toBeGreaterThan(-1);
+  return CSS.slice(at, CSS.indexOf("}", at));
+}
+
 describe("the reveal has both a floor and a ceiling", () => {
   it("waits a minimum, so a warm refresh is one movement and not a flicker", () => {
     expect(SOURCE).toMatch(/FLOOR_MS\s*=\s*(\d+)/);
@@ -226,15 +242,94 @@ describe("the reveal is painted so it cannot cost a layout pass", () => {
   });
 
   it("paints the same token the body already carries", () => {
-    // The panel has to be invisible in both directions: index.html stamps theme
-    // and band before first paint, so body is already this colour. A brand colour
-    // or a spinner would turn a reveal into an interstitial.
+    // The panel's ARRIVAL has to stay invisible: index.html stamps theme and band
+    // before first paint, so body is already this colour. Still true with the
+    // phone lockup in it — the lockup is a mark and two lines of text on that same
+    // ground, not a brand colour, and there is deliberately no sky gradient.
     expect(rule(".app-reveal")).toContain("hsl(var(--background))");
   });
 
-  it("renders no content at all", () => {
-    // A logo or spinner inside a 250-1200ms window is a flash, not a signal.
-    expect(SOURCE).toMatch(/className="app-reveal"\s*\/>/);
+  it("carries the phone lockup", () => {
+    /**
+     * This REVERSES an earlier rule in this file, which asserted the panel had no
+     * children at all on the grounds that a logo inside a 250-1200ms window is a
+     * flash rather than a signal. That reasoning held for the case it was written
+     * against and does not hold for the one that turned up in measurement: on the
+     * mobile Command screen the mask reliably runs to its full ceiling, because
+     * the page has no data until ~2050ms. So the choice was never logo-versus-
+     * nothing, it was logo-versus-a-second-of-flat-colour-on-every-refresh.
+     *
+     * Desktop keeps the original contract, which is what the gate below is for.
+     */
+    expect(SOURCE).toMatch(/className="app-reveal-lockup"/);
+    expect(SOURCE).toContain("Enterprise Deal Commander");
+    expect(SOURCE).toContain("Mobile Edition");
+  });
+
+  it("gates the lockup off desktop, where the mask is still invisible", () => {
+    // Desktop reaches first content inside the floor, so it has nothing to cover
+    // and nothing to brand. A CSS gate rather than useMediaQuery: this paints in
+    // the same commit as the shell it covers, and a JS gate could disagree with
+    // ShellGate on render #1 — the very mistake ShellGate's own comment warns
+    // about when it picks useMediaQuery over useIsMobile.
+    expect(mediaRule("(min-width: 768px)", ".app-reveal-lockup")).toContain("display: none");
+    // 767/768 is the app's single "this is a phone" boundary.
+    expect(APP).toContain("(max-width: 767px)");
+  });
+
+  it("draws the mark static, because the mask can lift at the floor", () => {
+    // The entrance runs ~1.38s at the timeScale BootSplash uses, against a mask
+    // that may live 250ms — so an animated mark here would be cut a fifth of the
+    // way through its own draw. m-shell-skeleton.tsx reached the same conclusion
+    // for the same reason.
+    expect(SOURCE).toMatch(/<EdcLogoMark[^>]*animated=\{false\}/);
+  });
+
+  it("announces nothing, so the skeleton's live region is not talked over", () => {
+    // MobileShellSkeleton owns the one "Loading Deal Commander…" announcement in
+    // the whole boot stack. Words on screen do not change that: they are branding,
+    // and the status is already being read.
+    expect(SOURCE).toContain('aria-hidden="true"');
+    expect(SOURCE).not.toContain('role="status"');
+  });
+
+  it("styles the lockup from root tokens, never the lazy .m-shell ones", () => {
+    /**
+     * mobile/styles/{tokens,type}.css are imported at the LAZY mobile chunk's
+     * entry, so at this component's first paint `.m-display`, `.m-body`, `.m-muted`
+     * and every `--m-*` token are undefined. Using them here would render unstyled
+     * text on the one frame this component exists to control — and it would do it
+     * silently, which is why this is asserted rather than commented.
+     */
+    expect(SOURCE).not.toMatch(/className="[^"]*\bm-(?:hero|display|body|muted)\b/);
+    expect(rule(".app-reveal-sub")).toContain("hsl(var(--muted-foreground))");
+  });
+
+  it("keeps the lockup's type in step with the mobile ladder", () => {
+    // .app-reveal-title mirrors .m-display and .app-reveal-sub mirrors .m-body,
+    // with type.css owning the numbers. If the ladder moves and these do not, the
+    // refresh surface and the launch splash stop being the same lockup.
+    const ladder = readFileSync(join(SRC, "mobile", "styles", "type.css"), "utf8");
+    const display = ladder.slice(ladder.indexOf(".m-display {"));
+    const body = ladder.slice(ladder.indexOf(".m-body {"));
+
+    for (const value of ["1.12", "660", "-0.028em"]) {
+      expect(rule(".app-reveal-title"), `title should match .m-display's ${value}`).toContain(value);
+      expect(display.slice(0, display.indexOf("}"))).toContain(value);
+    }
+    for (const value of ["1.5", "400", "-0.006em"]) {
+      expect(rule(".app-reveal-sub"), `sub should match .m-body's ${value}`).toContain(value);
+      expect(body.slice(0, body.indexOf("}"))).toContain(value);
+    }
+  });
+
+  it("keeps the lockup visible under reduced motion, dropping only its entrance", () => {
+    // That preference pre-elapses the floor but leaves the data contract and the
+    // ceiling in place, so the mask still HOLDS — hiding the lockup would blank
+    // exactly the case it helps.
+    const reduced = mediaRule("(prefers-reduced-motion: reduce)", ".app-reveal-lockup");
+    expect(reduced).toContain("animation: none");
+    expect(reduced).not.toContain("display: none");
   });
 
   it("sits above every in-app overlay but below BootSplash and the Toaster", () => {

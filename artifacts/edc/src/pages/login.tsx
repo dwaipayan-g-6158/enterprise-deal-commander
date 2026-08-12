@@ -295,11 +295,31 @@ export default function Login() {
               phone — the rail, its glow and the whole cascade are display:none
               there — which is why the mark animates rather than just fading. */}
           <div
-            className="mb-8 flex flex-col items-center gap-3 text-center text-white lg:hidden"
+            className="mb-8 flex flex-col items-center gap-4 text-center text-white lg:hidden"
             style={ACCENT_SCOPE}
           >
             <EdcLogoMark size={56} timeScale={LOGO_TIME_SCALE} />
-            <Wordmark className="text-sm font-bold uppercase leading-snug tracking-[0.13em]" />
+            {/* Sizes are spelled out rather than borrowed from `.m-display`, and
+                that is not an oversight. mobile-app.tsx wraps this page in
+                `.m-shell` on a phone, but between 768px and 1023px the DESKTOP
+                shell serves this page and `lg:hidden` still shows this lockup —
+                with no `.m-shell` anywhere to define the class. The numbers below
+                are `.m-display` and `.m-body`; type.css owns them.
+
+                Tracking goes from +0.13em to −0.028em here. Wordmark's own note
+                explains the wide setting as the reason its blur resolves per word
+                rather than per character; that argument is about which unit reads
+                as type coming into focus, not about the tracking itself, so the
+                per-word entrance survives the tightening unchanged. */}
+            <div className="flex flex-col items-center gap-1.5">
+              <Wordmark className="block text-balance text-[2rem] font-[660] leading-[1.12] tracking-[-0.028em]" />
+              {/* text-white/55, not --muted-foreground: this lockup sits on the
+                  dark marketing canvas under ACCENT_SCOPE, where the themed token
+                  would resolve against the wrong ground. */}
+              <span className="text-base leading-normal tracking-[-0.006em] text-white/55">
+                Mobile Edition
+              </span>
+            </div>
           </div>
 
           {/* Transform-only, deliberately. This card wraps Catalyst's

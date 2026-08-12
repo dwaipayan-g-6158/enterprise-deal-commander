@@ -133,13 +133,23 @@ export function BootSplash() {
           splash has to start on the flat canvas. */}
       <div className="m-boot-sky" />
       <EdcLogoMark size={96} timeScale={MARK_TIME_SCALE} />
-      <div className="m-boot-wordmark flex flex-col items-center text-center">
-        <p className="text-sm font-bold uppercase leading-snug tracking-[0.18em]">
-          Enterprise Deal Commander
-        </p>
-        <p className="m-muted mt-1.5 text-[10px] font-medium uppercase tracking-[0.35em]">
-          Commander Console
-        </p>
+      {/* `.m-hero` rather than a hand-rolled caption, and this is the one screen
+          where that rung is the right call. The ladder reserves it for "the one
+          figure a screen is about, max one per screen" — a launch screen has no
+          figure, so the rung is free, and nothing else here competes for it. At
+          44px on a 390px canvas the name wraps to three lines and becomes the
+          screen rather than a label under a logo.
+
+          It also drops the old uppercase + 0.18em tracking, which existed as a
+          logotype exception to a ladder that had no rung big enough. There is one
+          now. Sentence case, per type.css's own policy note.
+
+          AppReveal carries the same lockup at `.m-display` for the refresh case;
+          the two are never on screen together (see app-reveal.tsx on z-order), so
+          they are free to differ in size. */}
+      <div className="m-boot-wordmark flex flex-col items-center gap-2 text-center">
+        <p className="m-hero text-balance">Enterprise Deal Commander</p>
+        <p className="m-body m-muted">Mobile Edition</p>
       </div>
     </div>
   );

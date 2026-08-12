@@ -417,8 +417,22 @@
    `background-color: hsl(var(--background))` and nothing else. The panel is the
    same colour the body already is (index.html stamps theme and time band before
    the first paint), so its appearance and its removal are both invisible — the
-   only thing anyone sees is the page fading up through it. A brand colour, a
-   spinner or a logo here would each turn a reveal into an interstitial.
+   only thing anyone sees is the page fading up through it. A brand colour or a
+   spinner here would each turn a reveal into an interstitial.
+
+   ON PHONES THAT RULE IS DELIBERATELY REVERSED, and the reason is measured. This
+   mask reliably runs to its full 1200ms ceiling on the mobile Command screen,
+   because that page genuinely has no data until ~2050ms. So "invisible" there does
+   not mean unnoticed — it means a flat, empty canvas for over a second on every
+   single refresh, which reads as an app that has died rather than one that is
+   fast. `.app-reveal-lockup` below is that second spent deliberately: a branded
+   interstitial instead of an accidental blank one.
+
+   Desktop keeps the original contract untouched, because the premise still holds
+   there — it reaches first content inside the 250ms floor, so there is nothing to
+   cover and nothing to brand. The `min-width: 768px` gate is what keeps the two
+   apart, on the same 767/768 boundary ShellGate splits the shells at. */
+/* The panel's own geometry.
 
    z-index 95 is chosen against two neighbours: above every z-50 surface in the
    app (dialogs, sheets, popovers, the desktop sidebar) so a restored route with an
@@ -438,12 +452,101 @@
   background-color: hsl(var(--background));
   opacity: 1;
   transition: opacity 200ms ease;
+  /* Centres the phone lockup. Costs desktop nothing — with the lockup gated off
+     below, this is a flex container with no children. */
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 .app-reveal[data-leaving] {
   opacity: 0;
   /* Released the instant the fade starts, so the app is usable through the last
      200ms rather than after it. */
   pointer-events: none;
+}
+
+/* ---------------------------------------------------------------------------
+   The phone lockup: mark, product name, edition line.
+
+   Styled from ROOT tokens, not `.m-shell`'s, and that is a hard constraint
+   rather than a preference. mobile/styles/{tokens,type}.css are imported at the
+   LAZY mobile chunk's entry (mobile/mobile-app.tsx), so at the moment this panel
+   first paints `.m-display`, `.m-body`, `.m-muted` and every `--m-*` token
+   simply do not exist yet. Reaching for them here would silently render
+   unstyled text on the one frame this component exists to control.
+
+   It is also the right answer on its own terms: the mask's whole no-colour-cut
+   property is that it is exactly the `--background` the body already carries, so
+   the lockup has to live in that same token set. For the same reason there is no
+   sky gradient here — `.m-boot-sky` is lazy, and layering a gradient would break
+   the very property that makes the panel's arrival invisible. BootSplash, which
+   runs inside the mobile chunk, keeps the sky.
+
+   The two type rules below mirror `.m-display` and `.m-body` + `.m-muted`;
+   mobile/styles/type.css is the source of truth for these numbers, and
+   app-reveal.test.ts asserts the two stay in step. The Dynamic Type multiplier is
+   read with a fallback of 1 so it is correct whether or not the mobile chunk has
+   landed by the time this paints. */
+.app-reveal-lockup {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.5rem;
+  padding: 0 2rem;
+  text-align: center;
+  /* A bloom, not a cut. On a very warm refresh the whole mask lives about 250ms,
+     and a lockup that hard-appears and hard-vanishes inside that window reads as
+     a flicker; fading up over 180ms makes the shortest case one movement instead
+     of two events. The 6px rise matches .m-boot-wordmark's, so the cold-launch
+     splash and this share one entrance. */
+  animation: app-reveal-lockup-in 180ms ease-out both;
+}
+@keyframes app-reveal-lockup-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.app-reveal-title {
+  margin: 0;
+  font-size: calc(2rem * var(--m-type-scale-display, 1));
+  line-height: 1.12;
+  font-weight: 660;
+  letter-spacing: -0.028em;
+  text-wrap: balance;
+}
+.app-reveal-sub {
+  margin: 0;
+  font-size: calc(1rem * var(--m-type-scale, 1));
+  line-height: 1.5;
+  font-weight: 400;
+  letter-spacing: -0.006em;
+  color: hsl(var(--muted-foreground));
+}
+
+/* Phones only. A CSS gate rather than useMediaQuery: no JS, and no chance of
+   disagreeing with ShellGate on the first render — which matters because
+   AppReveal paints in the same commit as the shell it sits over. 767/768 is the
+   app's single "this is a phone" boundary (App.tsx). */
+@media (min-width: 768px) {
+  .app-reveal-lockup {
+    display: none;
+  }
+}
+
+/* Under reduced motion the mask still HOLDS — that preference pre-elapses the
+   floor but leaves the data contract and the 1200ms ceiling in place — so the
+   lockup must stay visible here. Only its entrance is dropped. Explicit rather
+   than left to the global clamp below, which would run the same keyframes at
+   0.01ms to reach an identical result by accident. */
+@media (prefers-reduced-motion: reduce) {
+  .app-reveal-lockup {
+    animation: none;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

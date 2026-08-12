@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useIsFetching } from "@tanstack/react-query";
 import { useLocation } from "wouter";
+import { EdcLogoMark } from "@/components/edc-logo-mark";
 
 /**
  * Long enough that a warm refresh reads as one deliberate movement rather than a
@@ -120,6 +121,15 @@ function fontsAlreadyLoaded(): boolean {
  * visible under it), then a fade to the built page. There is no colour cut and no
  * gap to cover with static markup.
  *
+ * ## On phones the panel is branded, not blank
+ *
+ * Desktop reaches first content inside the 250ms floor, so its mask is invisible
+ * and empty is correct. Mobile does not: the Command screen has no data until
+ * ~2050ms, so this mask reliably runs to its full 1200ms ceiling, and an empty
+ * panel means a phone shows a flat canvas for over a second on every refresh.
+ * That is why `.app-reveal-lockup` exists — see index.css for the phone gate, the
+ * root-token constraint, and why there is no sky gradient in it.
+ *
  * ## Why it does not coordinate with BootSplash
  *
  * It does not have to, and the reason is worth stating so nobody adds the wiring.
@@ -127,10 +137,16 @@ function fontsAlreadyLoaded(): boolean {
  * the installed app BootSplash is already covering the screen, its floor (1450ms)
  * outlasts this ceiling (1200ms), so this panel's entire fade happens underneath
  * something opaque and is never seen. BootSplash then performs the only visible
- * reveal. In a browser tab, or under reduced motion, BootSplash renders nothing
- * and this does the work alone. Neither needs to know about the other, and
- * importing boot-splash.tsx here would pull the whole mobile chunk into the main
- * bundle to learn something the z-order already settles.
+ * reveal — which is also why the two lockups can differ in size (.m-hero there,
+ * .m-display here) without ever being on screen together.
+ *
+ * On a REFRESH of the installed app the roles invert, and that is the case the
+ * lockup was added for: BootSplash keys on sessionStorage, which survives a
+ * reload, so `alreadyPlayed()` is true and it renders nothing. Same in a browser
+ * tab, where it never renders at all. This panel is then the only branded surface
+ * there is. Neither component needs to know about the other, and importing
+ * boot-splash.tsx here would pull the whole mobile chunk into the main bundle to
+ * learn something the z-order already settles.
  */
 export function AppReveal() {
   const [location] = useLocation();
@@ -255,11 +271,31 @@ export function AppReveal() {
     <div
       // Decorative. Every screen underneath announces its own load through the
       // skeletons' live regions (AppShellSkeleton, MobileShellSkeleton), and a
-      // second announcement from an empty panel would talk over the one that
-      // actually says what is loading. Same reasoning as BootSplash's.
+      // second announcement from this panel would talk over the one that
+      // actually says what is loading. Same reasoning as BootSplash's, and it
+      // still holds now that the panel has a lockup in it: the words below are
+      // branding, not status, and the status is already being announced.
       aria-hidden="true"
       data-leaving={phase === "leaving" || undefined}
       className="app-reveal"
-    />
+    >
+      {/*
+       * Phones only — gated in CSS, see .app-reveal-lockup in index.css for the
+       * gate and for why this is styled from root tokens rather than `.m-shell`'s.
+       *
+       * `animated={false}` is load-bearing, not a shortcut. The mark's entrance
+       * runs 3.22s at timeScale 1 and about 1.38s at the 2.2 BootSplash uses,
+       * while THIS panel can lift as early as the 250ms floor — so an animated
+       * mark here would be torn down roughly a fifth of the way through its own
+       * draw, which reads as a glitch rather than a flourish. Same conclusion
+       * m-shell-skeleton.tsx reached for the same reason. The mark that draws is
+       * the one on BootSplash, whose 1450ms floor is set to outlast the sequence.
+       */}
+      <div className="app-reveal-lockup">
+        <EdcLogoMark size={72} animated={false} />
+        <p className="app-reveal-title">Enterprise Deal Commander</p>
+        <p className="app-reveal-sub">Mobile Edition</p>
+      </div>
+    </div>
   );
 }

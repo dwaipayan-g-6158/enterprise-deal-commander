@@ -106,9 +106,15 @@ describe("the skeleton hands over without moving anything", () => {
 
   it("puts the mark first, ahead of the title, as the live leading slot does", () => {
     const mark = SKELETON.indexOf("EdcLogoMark");
-    const title = SKELETON.indexOf('Skeleton className="h-4 w-36"');
-    expect(mark).toBeGreaterThan(-1);
-    expect(mark, "the mark leads the row, like MNavBar's leading slot").toBeLessThan(title);
+    // Anchored on MNavBar's own class recipe for the flexible text block, which
+    // the skeleton deliberately mirrors, rather than on a particular stand-in
+    // width. The previous version looked for a literal `h-4 w-36` and so asserted
+    // nothing at all once that width changed — indexOf returned -1 and the
+    // ordering comparison passed against a negative index.
+    const textBlock = SKELETON.indexOf("min-w-0 flex-1");
+    expect(mark, "the skeleton should still render the mark").toBeGreaterThan(-1);
+    expect(textBlock, "the skeleton should mirror MNavBar's text block").toBeGreaterThan(-1);
+    expect(mark, "the mark leads the row, like MNavBar's leading slot").toBeLessThan(textBlock);
   });
 
   it("renders the same 24px mark the live bar does", () => {
@@ -117,6 +123,14 @@ describe("the skeleton hands over without moving anything", () => {
 
   it("stays static, because it is torn down within a few hundred ms", () => {
     expect(SKELETON).toMatch(/animated=\{false\}/);
+  });
+
+  it("shows a back chevron instead of the mark on pushed screens", () => {
+    // MNavBar ignores `leading` entirely once `backHref` is set, so a pushed
+    // screen's skeleton must not draw the mark — it would appear for one frame
+    // and then vanish on handover. The mark therefore sits on the false branch of
+    // a `pushed` conditional rather than unconditionally in the row.
+    expect(SKELETON).toMatch(/plan\.pushed\s*\?[\s\S]{0,600}:\s*\([\s\S]{0,200}EdcLogoMark/);
   });
 });
 
