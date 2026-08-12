@@ -146,13 +146,11 @@ export function MemoryScreen() {
           the tab bar, so no extra padding here. */}
       <PullToRefresh
         onRefresh={refetch}
-        dock={(pullStyle) => (
-          // pullStyle rides on this element, never a wrapper — a transformed
-          // ancestor would capture the `fixed` and let the dock scroll away.
-          <div
-            style={pullStyle}
-            className="m-glass m-glass-bottom fixed inset-x-0 bottom-[var(--m-dock-bottom)] z-30 flex items-center gap-2 border-t border-border px-4 py-2.5"
-          >
+        dock={
+          // Motionless during a pull, matching Deals. Rendered through `dock` so
+          // it stays a sibling of the transformed content — a transformed
+          // ancestor would capture the `fixed` and let the bar scroll away.
+          <div className="m-glass m-glass-bottom fixed inset-x-0 bottom-[var(--m-dock-bottom)] z-30 flex items-center gap-2 border-t border-border px-4 py-2.5">
             <label className="sr-only" htmlFor="memory-search">
               Search archived deals
             </label>
@@ -190,7 +188,7 @@ export function MemoryScreen() {
               <SlidersHorizontal className="h-5 w-5" aria-hidden="true" />
             </DockButton>
           </div>
-        )}
+        }
       >
         <div className="space-y-3 p-4">
           {competitor ? (

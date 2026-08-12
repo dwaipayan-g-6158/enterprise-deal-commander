@@ -122,17 +122,16 @@ export function DealsScreen() {
 
       <PullToRefresh
         onRefresh={refetch}
-        dock={(pullStyle) => (
+        dock={
           // Docked above the tab bar, so the keyboard opens under the thumb
           // rather than shoving the whole screen up. The shell's pb-tabbar
           // already clears both this and the bar below it.
           //
-          // pullStyle rides on this element rather than a wrapper — see the prop
-          // docs; wrapping would capture the `fixed` and make it scroll away.
-          <div
-            style={pullStyle}
-            className="m-glass m-glass-bottom fixed inset-x-0 bottom-[var(--m-dock-bottom)] z-30 flex items-center gap-2 border-t border-border px-4 py-2.5"
-          >
+          // Deliberately motionless during a pull. This screen usually has no
+          // scroll range at all — a typical pipeline underfills the viewport — so
+          // every downward drag here is a pull-to-refresh, and a search field
+          // that shifted on every drag read as unstable. See pull-physics.ts.
+          <div className="m-glass m-glass-bottom fixed inset-x-0 bottom-[var(--m-dock-bottom)] z-30 flex items-center gap-2 border-t border-border px-4 py-2.5">
             <label className="sr-only" htmlFor="deals-search">
               Search deals
             </label>
@@ -170,7 +169,7 @@ export function DealsScreen() {
               <ArrowDownUp className="h-5 w-5" aria-hidden="true" />
             </DockButton>
           </div>
-        )}
+        }
       >
         <div className="space-y-3 p-4">
           {isError ? (

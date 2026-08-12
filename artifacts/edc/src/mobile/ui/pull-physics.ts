@@ -15,20 +15,35 @@ export const TRIGGER_PX = 68;
  */
 export const MAX_PULL_PX = 120;
 
-/**
- * How much of the content's travel a docked bottom bar takes on.
+/*
+ * There is deliberately no DOCK_PULL_RATIO any more, and the history is worth
+ * keeping so it is not reintroduced a third time.
  *
- * The docks used to take none of it: `PullToRefresh` translates its own children
- * and the docks are siblings, so a pull moved the list and left the search bar
- * frozen mid-screen. On a list long enough to reach the dock nobody noticed; on
- * a short one it read as a stuck control, which is how it was reported.
+ * The docked search bars on Deals and Memory originally took none of the pull:
+ * `PullToRefresh` transforms its own children and the docks are siblings, so a
+ * pull moved the list and left the bar still. That was reported as a stuck
+ * control, and the fix was to hand the dock a damped copy of the transform —
+ * 0.3 of the content's travel, at most 36px.
  *
- * Not 1. A dock that matched the content exactly would travel the full 120px —
- * it sits 64px above the bottom and is 71px tall, so at full pull almost all of
- * it would be behind the tab bar or off screen. At 0.3 it moves at most 36px:
- * enough to read as attached to the surface, never enough to leave.
+ * That was then reported the other way round, on the same screen and for a
+ * reason the first fix did not account for: **Deals has no scroll range at all**
+ * with a typical pipeline. Three active deals underfill the viewport, so
+ * `scrollHeight === clientHeight` and pull-to-refresh arms on EVERY downward
+ * drag — there is no ordinary scrolling to be had. A bar that travels on every
+ * drag reads as unstable rather than attached, because on an underfilled list no
+ * content ever reaches the dock for it to look attached TO.
+ *
+ * Measured on the deployed app at 390x844: Deals scroll range 0px, Memory 959px,
+ * both moving the dock exactly 24px on the same gesture. Same code, same
+ * behaviour; only the odds of entering it differ, which is why it looked like a
+ * Deals-only bug.
+ *
+ * The dock is now static, chosen over softening the ratio because half-measures
+ * leave both readings present and neither resolved. If the "stuck control"
+ * reading ever comes back on a genuinely long list, the answer is to keep the
+ * dock still and stop the content sliding behind it — not to start moving the
+ * one control on screen that the user is trying to aim at.
  */
-export const DOCK_PULL_RATIO = 0.3;
 
 /**
  * Maps raw finger travel to content displacement.
