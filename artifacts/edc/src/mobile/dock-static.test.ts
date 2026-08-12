@@ -77,6 +77,52 @@ describe("the dock lives outside the scroll container", () => {
   });
 });
 
+describe("every dock clears the tab bar", () => {
+  /**
+   * `MShell` renders `MTabBar` unconditionally — there is no push-screen variant —
+   * so EVERY docked bar has to sit above it, whether its screen was pushed or not.
+   *
+   * The Ask composer did not, and the cost was not cosmetic: at 390x844 the tab bar
+   * (z-40) covered 65px of the composer's 69px (z-30), so the field and the send
+   * button were not on screen at all and the three starter prompts were the only way
+   * to ask a question. The premise in its comment — "there is no tab bar on a pushed
+   * screen" — was simply false, and nothing checked it.
+   */
+  it("renders the tab bar with no route condition, which is why this rule exists", () => {
+    // If a push-screen variant is ever added, this fails and the rule below can be
+    // relaxed deliberately rather than by accident.
+    const tabBar = SHELL.indexOf("<MTabBar />");
+    expect(tabBar).toBeGreaterThan(-1);
+    const line = SHELL.slice(SHELL.lastIndexOf("\n", tabBar), tabBar);
+    expect(line, "the tab bar must not be conditional").not.toMatch(/[?&|]{1,2}|&&/);
+  });
+
+  it.each(DOCKED_SCREENS)("%s offsets its dock by --m-dock-bottom", (file) => {
+    const source = strip(read(file));
+    const dock = source.slice(source.indexOf("<MDock"));
+    const className = /className="([^"]*)"/.exec(dock)?.[1] ?? "";
+    expect(className, `${file}: dock must clear the tab bar`).toContain(
+      "bottom-[var(--m-dock-bottom)]",
+    );
+    // `bottom-0` is the exact shape of the bug: flush with the frame, under the bar.
+    expect(className, `${file}: bottom-0 puts the bar behind the tab bar`).not.toMatch(
+      /\bbottom-0\b/,
+    );
+  });
+
+  it.each(DOCKED_SCREENS)("%s does not add the safe-area inset a second time", (file) => {
+    // --m-dock-bottom is `--m-tabbar + env(safe-area-inset-bottom)`, and the tab bar
+    // carries its own pb-safe. A dock adding the inset to its padding as well pushes
+    // itself up by the inset twice over.
+    const source = strip(read(file));
+    const dock = source.slice(source.indexOf("<MDock"));
+    const className = /className="([^"]*)"/.exec(dock)?.[1] ?? "";
+    expect(className, `${file}: inset is already in --m-dock-bottom`).not.toContain(
+      "safe-area-inset-bottom",
+    );
+  });
+});
+
 describe("no screen places a docked bar of its own", () => {
   it.each(DOCKED_SCREENS)("%s uses MDock", (file) => {
     const source = strip(read(file));

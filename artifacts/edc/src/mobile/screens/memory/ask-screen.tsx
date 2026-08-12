@@ -166,12 +166,24 @@ export function AskScreen() {
         <div ref={endRef} />
       </div>
 
-      {/* The composer, docked. There is no tab bar on a pushed screen, so it sits
-          directly on the home-indicator inset rather than above the bar.
+      {/* The composer, docked above the tab bar — `--m-dock-bottom`, exactly like
+          the Deals and Memory search bars.
+
+          It used to sit at `bottom-0`, on the premise that "there is no tab bar on a
+          pushed screen". There is: `MShell` renders `MTabBar` unconditionally and has
+          no push-screen variant, so at 390x844 the bar (z-40) covered 65px of this
+          bar's 69px (z-30) and neither the field nor the send button was on screen at
+          all. The three starter prompts were the only way to ask anything, which is
+          how it passed for a design rather than a bug.
+
+          The safe-area inset is deliberately NOT in the padding any more: it belongs
+          to the tab bar's own `pb-safe` below, and `--m-dock-bottom` already adds it
+          as part of the offset. Keeping it here would count it twice.
+
           Through MDock like the search bars: this screen renders inside the
           scroller, and iOS composites a fixed element declared there with the
           list rather than pinning it. */}
-      <MDock className="bottom-0 px-4 pb-[calc(0.625rem+env(safe-area-inset-bottom))] pt-2.5">
+      <MDock className="bottom-[var(--m-dock-bottom)] px-4 py-2.5">
         <form
           onSubmit={(e) => {
             e.preventDefault();
