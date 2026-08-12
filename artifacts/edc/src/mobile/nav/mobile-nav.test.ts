@@ -7,6 +7,7 @@ import {
   hidesCommander,
   isLateralMove,
   isLateralRoot,
+  isQuietMove,
   MOBILE_TABS,
   INTELLIGENCE_LENSES,
   pathnameOf,
@@ -212,6 +213,31 @@ describe("hidesCommander", () => {
   it("ignores query and hash, which do not change the screen", () => {
     expect(hidesCommander("/deals?h=RED")).toBe(true);
     expect(hidesCommander("/account#top")).toBe(true);
+  });
+});
+
+describe("isQuietMove", () => {
+  it("is quiet for a replace that only changes the query on the same path", () => {
+    // The Deals search: one of these per settled keystroke.
+    expect(isQuietMove("/deals", "/deals?q=acme", true)).toBe(true);
+    expect(isQuietMove("/deals", "/deals", true)).toBe(true);
+  });
+
+  it("is NOT quiet for a push, even on the same path", () => {
+    // Filter, sort, group and saved-view changes push on purpose, so the back
+    // gesture undoes them. Those keep their cross-fade.
+    expect(isQuietMove("/deals", "/deals?h=RED", false)).toBe(false);
+  });
+
+  it("is NOT quiet for a replace across paths", () => {
+    // The Intelligence lens switcher replaces so the three lenses share one
+    // back-stack entry. It must still cross-fade.
+    expect(isQuietMove("/analytics", "/portfolio", true)).toBe(false);
+  });
+
+  it("compares pathnames, ignoring query and hash on both sides", () => {
+    expect(isQuietMove("/deals?q=a", "/deals?q=ab", true)).toBe(true);
+    expect(isQuietMove("/deals#top", "/deals?q=ab", true)).toBe(true);
   });
 });
 

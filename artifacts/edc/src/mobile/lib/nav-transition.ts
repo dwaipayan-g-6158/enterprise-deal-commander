@@ -8,7 +8,7 @@ import {
   type NavDirection,
 } from "./history-index";
 import { rememberScroll } from "./scroll-memory";
-import { isLateralMove } from "../nav/mobile-nav";
+import { isLateralMove, isQuietMove } from "../nav/mobile-nav";
 import {
   prefersReducedMotion,
   supportsViewTransitions,
@@ -69,11 +69,17 @@ export function runTransition(
    * scrollHeight.
    */
   afterCommit?: () => void,
+  /**
+   * Skip the animation, keeping every other effect. Typing in a list's search
+   * field replaces the URL once per settled keystroke; animating that
+   * cross-faded the whole root. See isQuietMove.
+   */
+  quiet?: boolean,
 ): void {
   const start = (document as Document & { startViewTransition?: StartViewTransition })
     .startViewTransition;
 
-  if (!start || prefersReducedMotion()) {
+  if (quiet || !start || prefersReducedMotion()) {
     update();
     afterCommit?.();
     return;
@@ -142,6 +148,9 @@ export function aroundNav(navigate: Navigate, to: string, options?: NavigateOpti
   rememberScroll(from.index);
 
   const direction = navDirection(from, { path: to, index: toIndex });
+  // Not `options.transition === false`: that branch returns before stampIndex,
+  // which would strip __mIndex off the replaced entry and break canPopWithinApp.
+  const quiet = isQuietMove(from.path, to, options?.replace === true);
   // Before runTransition, because startViewTransition captures the OLD snapshot
   // the moment it is called — a name written after that is a name the outgoing
   // frame never had, and the morph degrades to a plain slide with nothing
@@ -159,5 +168,6 @@ export function aroundNav(navigate: Navigate, to: string, options?: NavigateOpti
       // and a stale "from" would give the next gesture the wrong direction.
       noteNavigation(to, toIndex);
     },
+    quiet,
   );
 }

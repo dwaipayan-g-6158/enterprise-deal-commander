@@ -151,3 +151,23 @@ export function hidesCommander(path: string): boolean {
   const p = pathnameOf(path);
   return p === "/deals" || p === "/account" || p.startsWith("/memory") || p.startsWith("/settings");
 }
+
+/**
+ * Whether a navigation should complete with no animation at all.
+ *
+ * A design statement, not an optimisation. A PUSH carrying a new query is a
+ * discrete act the reader chose — a filter, a sort, a saved view — and
+ * cross-fading it is right. A REPLACE on the path already underfoot is a
+ * continuous adjustment of the list in front of them, and continuous
+ * adjustments do not animate: the Deals search replaces once per settled
+ * keystroke, and animating that cross-faded the whole root, the field being
+ * typed into included.
+ *
+ * `replace` is the discriminator rather than "same path", because filter, sort
+ * and group deliberately push (see use-roster-url.ts) and must keep their
+ * cross-fade. The shell's only other replace is the Intelligence lens switcher,
+ * which changes path and so is unaffected.
+ */
+export function isQuietMove(fromPath: string, toPath: string, replace: boolean): boolean {
+  return replace && pathnameOf(fromPath) === pathnameOf(toPath);
+}
