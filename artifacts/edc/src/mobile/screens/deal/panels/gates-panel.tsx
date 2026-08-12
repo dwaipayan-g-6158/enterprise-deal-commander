@@ -57,7 +57,19 @@ export function GatesPanel({ dealId }: PanelBodyProps) {
 
   return (
     <PanelBody
-      loading={intelQuery.isLoading && gatesQuery.isLoading}
+      // `||`, not `&&`, and it is the difference between this panel arriving in
+      // one piece or in two. This is the only panel with two queries feeding two
+      // stacked cards, and under `&&` the skeleton cleared as soon as EITHER
+      // resolved: the gates list rendered while `track` was still undefined, so
+      // the Progress card below was absent, and when intel landed it was inserted
+      // ABOVE content already on screen — pushing the list down by its own height
+      // plus the gap. Measured on the deployed app at 390x844: 132 + 12 = 144px,
+      // one shift worth 0.146 CLS, the worst of any mobile route.
+      //
+      // stage-panel.tsx has the same two-query shape and already used `||`.
+      loading={intelQuery.isLoading || gatesQuery.isLoading}
+      // `&&` is right HERE, though: one query failing while the other succeeds
+      // should still show what did arrive rather than an error screen.
       error={intelQuery.isError && gatesQuery.isError}
       empty={gates.length === 0 && !gatesQuery.isLoading}
       emptyTitle="No gates defined"
