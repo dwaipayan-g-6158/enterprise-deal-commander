@@ -17,19 +17,26 @@ import { canPopWithinApp } from "@/mobile/lib/history-index";
  * behind the bar instead of below it. Nothing caught it because a constant that
  * is only wrong relative to another constant still typechecks and still renders.
  *
- * Written to documentElement, not the header: a custom property inherits DOWN,
- * and every consumer is a sibling or a cousin, never a child.
+ * Written to the SHELL element, not the header and not documentElement. A custom
+ * property inherits down, and every consumer is a sibling or a cousin — but
+ * `--m-navbar-h` is declared in tokens.css on `.m-shell`, which sits between
+ * documentElement and every consumer. A value set on the root is therefore
+ * shadowed by that declaration and never seen: driving the deployed app, the
+ * Deals group header resolved `top` to the 61px fallback while the root
+ * correctly reported 125px. Setting it inline on `.m-shell` itself beats the
+ * stylesheet rule on the same element, which is what makes it take effect.
  */
 function usePublishedNavBarHeight(ref: React.RefObject<HTMLElement | null>) {
   useEffect(() => {
     const el = ref.current;
     if (!el || typeof ResizeObserver === "undefined") return;
 
+    // Fall back to the root only if the bar somehow renders outside the shell,
+    // so the property always lands somewhere rather than silently nowhere.
+    const target = el.closest<HTMLElement>(".m-shell") ?? document.documentElement;
+
     const publish = () => {
-      document.documentElement.style.setProperty(
-        "--m-navbar-h",
-        `${el.getBoundingClientRect().height}px`,
-      );
+      target.style.setProperty("--m-navbar-h", `${el.getBoundingClientRect().height}px`);
     };
     publish();
 
@@ -39,7 +46,7 @@ function usePublishedNavBarHeight(ref: React.RefObject<HTMLElement | null>) {
       observer.disconnect();
       // Fall back to the token's own value rather than leaving the last
       // screen's height behind for a screen that has no nav bar at all.
-      document.documentElement.style.removeProperty("--m-navbar-h");
+      target.style.removeProperty("--m-navbar-h");
     };
   }, [ref]);
 }
