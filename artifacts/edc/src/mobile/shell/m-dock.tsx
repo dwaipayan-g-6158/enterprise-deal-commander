@@ -49,7 +49,7 @@ export function MDock({
   return createPortal(
     <div
       className={cn(
-        "m-glass m-glass-bottom absolute inset-x-0 z-30 border-t border-border",
+        "m-glass m-glass-bottom m-vt-dock absolute inset-x-0 z-30 border-t border-border",
         className,
       )}
     >

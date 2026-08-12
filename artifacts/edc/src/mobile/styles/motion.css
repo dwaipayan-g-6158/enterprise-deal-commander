@@ -214,6 +214,14 @@
 .m-vt-capsule {
   view-transition-name: m-capsule;
 }
+/* The docked bar — the search fields on Deals and Memory, the composer on Ask.
+   Without a name of its own it rode inside the root snapshot, so switching
+   Memory ↔ Deals faded out a bar and faded in a visually identical one.
+   Only one dock is ever in the real DOM at a time (the outgoing screen is a
+   snapshot), so one shared name cannot collide. */
+.m-vt-dock {
+  view-transition-name: m-dock;
+}
 
 /* aroundNav bails out entirely under reduced motion, so nothing above should
    ever run. This is a backstop: a transition started by anything else — a
