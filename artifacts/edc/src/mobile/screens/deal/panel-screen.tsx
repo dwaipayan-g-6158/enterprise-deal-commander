@@ -1,6 +1,8 @@
 import type { ReactNode } from "react";
 import { Redirect } from "wouter";
 import { useGetDealIntelligence } from "@workspace/api-client-react";
+import { cn } from "@/lib/utils";
+import { useAppearOnSettle } from "@/mobile/hooks/use-appear-on-settle";
 import { MNavBar } from "@/mobile/shell/m-nav-bar";
 import { Shimmer, ShimmerLines } from "@/mobile/components/shimmer";
 import { EmptyState, ErrorState } from "@/mobile/components/states";
@@ -114,6 +116,9 @@ export function PanelBody({
   errorBody?: string;
   children: ReactNode;
 }) {
+  // Called before any early return — a hook cannot sit behind a branch.
+  const appear = useAppearOnSettle(loading);
+
   if (error) return <ErrorState title="Couldn't load this" body={errorBody} />;
 
   if (loading) {
@@ -131,5 +136,16 @@ export function PanelBody({
     return <EmptyState title={emptyTitle ?? "Nothing here yet"} body={emptyBody ?? ""} />;
   }
 
-  return <>{children}</>;
+  // A wrapper rather than the class on `children`, because children is whatever
+  // sixteen panels pass and cannot be assumed to accept a className.
+  //
+  // It MUST carry space-y-3. The cards were direct children of panel-screen's
+  // own `space-y-3` container, which puts the gap between them; a bare wrapper
+  // makes them grandchildren and collapses every gap on all sixteen panels.
+  // Reproducing it here is also symmetric with the loading branch above, which
+  // wraps its shimmers in exactly this class for exactly this reason.
+  //
+  // Empty and error states deliberately do not fade: they are destinations, not
+  // populations.
+  return <div className={cn("space-y-3", appear)}>{children}</div>;
 }
