@@ -321,6 +321,62 @@ export function isBlockingRedAlert(
   return alert.severity === "RED" && alert.disposition?.state !== "accept";
 }
 
+/** The deal shape `snapshotFieldValue` reads — only the five watched fields. */
+type SnoozeWatchedDeal = Parameters<typeof snapshotFieldValue>[1];
+
+/**
+ * A deal's dispositions with lapsed snoozes already dropped.
+ *
+ * Lazy snooze expiry (no cron/subscriber): a snooze lapses when the duration
+ * elapses OR the watched field's value no longer matches the snapshot taken at
+ * snooze time — whichever comes first. Expired rows are dropped from this read
+ * so the pattern reappears in `alerts` immediately, and best-effort deleted so
+ * they don't linger; if the delete fails, the same lapsed row is simply
+ * re-evaluated (and re-deleted) next read.
+ *
+ * Exported because the contextual V2 alerts (competitive + stakeholder) are
+ * merged into the response outside the engine, and they have to answer "is this
+ * dispositioned?" with the *same* notion of live that the engine patterns use.
+ * When this logic lived inline in `assembleDealIntelligence`, they could not
+ * reach it, so every contextual alert was hardcoded undispositioned and a
+ * disposition written against one silently did nothing on the next read.
+ */
+export async function getLiveDispositions(
+  catalystApp: CatalystApp,
+  dealId: string,
+  deal: SnoozeWatchedDeal,
+) {
+  const dispositionsRepo = createDealAlertDispositionsRepo(catalystApp);
+  const dispositionRows = await dispositionsRepo.list(dealId);
+
+  const now = new Date();
+  const expiredIds: string[] = [];
+  const liveDispositionRows = dispositionRows.filter((d) => {
+    if (d.disposition !== "snooze") return true;
+    const pastDuration = d.snoozeUntil != null && now >= d.snoozeUntil;
+    const fieldChanged =
+      d.snoozeFieldBaseline != null &&
+      d.snoozeUntilFieldChange != null &&
+      snapshotFieldValue(d.snoozeUntilFieldChange, deal) !== d.snoozeFieldBaseline;
+    const expired = pastDuration || fieldChanged;
+    if (expired) expiredIds.push(d.id);
+    return !expired;
+  });
+  if (expiredIds.length > 0) {
+    dispositionsRepo.deleteByIds(expiredIds).catch(() => {});
+  }
+
+  return liveDispositionRows.map((d) => ({
+    pattern_code: d.patternCode,
+    disposition: d.disposition as "acknowledge" | "accept" | "snooze",
+    rationale: d.rationale,
+    snooze_until_field_change: d.snoozeUntilFieldChange,
+    snooze_until: toISO(d.snoozeUntil),
+    created_by: d.createdBy,
+    created_at: toISO(d.createdAt),
+  }));
+}
+
 function enrichAlert(alert: IntelligenceOutput["governance"]["alerts"][number], interventionMap: Map<string, { checklistId: number; name: string }>) {
   return {
     ...alert,
@@ -443,41 +499,7 @@ export async function assembleDealIntelligence(catalystApp: CatalystApp, dealId:
     .filter((b) => !b.isResolved && severityNameById.has(b.severityId))
     .map((b) => ({ severity_name: severityNameById.get(b.severityId)! }));
 
-  const dispositionsRepo = createDealAlertDispositionsRepo(catalystApp);
-  const dispositionRows = await dispositionsRepo.list(dealId);
-
-  // Lazy snooze expiry (no cron/subscriber): a snooze lapses when the
-  // duration elapses OR the watched field's value no longer matches the
-  // snapshot taken at snooze time — whichever comes first. Expired rows are
-  // dropped from this read so the pattern reappears in `alerts` immediately,
-  // and best-effort deleted so they don't linger; if the delete fails, the
-  // same lapsed row is simply re-evaluated (and re-deleted) next read.
-  const now = new Date();
-  const expiredIds: string[] = [];
-  const liveDispositionRows = dispositionRows.filter((d) => {
-    if (d.disposition !== "snooze") return true;
-    const pastDuration = d.snoozeUntil != null && now >= d.snoozeUntil;
-    const fieldChanged =
-      d.snoozeFieldBaseline != null &&
-      d.snoozeUntilFieldChange != null &&
-      snapshotFieldValue(d.snoozeUntilFieldChange, deal) !== d.snoozeFieldBaseline;
-    const expired = pastDuration || fieldChanged;
-    if (expired) expiredIds.push(d.id);
-    return !expired;
-  });
-  if (expiredIds.length > 0) {
-    dispositionsRepo.deleteByIds(expiredIds).catch(() => {});
-  }
-
-  const dispositions = liveDispositionRows.map((d) => ({
-    pattern_code: d.patternCode,
-    disposition: d.disposition as "acknowledge" | "accept" | "snooze",
-    rationale: d.rationale,
-    snooze_until_field_change: d.snoozeUntilFieldChange,
-    snooze_until: toISO(d.snoozeUntil),
-    created_by: d.createdBy,
-    created_at: toISO(d.createdAt),
-  }));
+  const dispositions = await getLiveDispositions(catalystApp, dealId, deal);
 
   const auditRows = await createDealAuditLogRepo(catalystApp).list(dealId);
   const auditForMomentum = auditRows.map((a) => ({

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { BellOff, Check, ShieldCheck } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { formatDate, humanizeCode } from "@/lib/format";
+import { calendarDaysUntil, formatDate, humanizeCode } from "@/lib/format";
 import { RISK_LEVEL_CLASS } from "@/lib/semantic-colors";
 import { useGetDealIntelligence, type Alert } from "@workspace/api-client-react";
 import { AdminOnly } from "@/components/auth/write-gate";
@@ -155,7 +155,11 @@ export function AlertsPanel({ dealId }: PanelBodyProps) {
                   ...SNOOZE_DAYS.map((days) => ({
                     id: `snooze-${days}`,
                     label: `Snooze ${days} days`,
-                    detail: "Hidden until then. Still blocks a stage advance.",
+                    // Not "hidden": nothing in the engine hides a dispositioned
+                    // alert. `managedAlerts` holds every one of them regardless
+                    // of state, and the Managed card below renders that list. A
+                    // snooze differs from an acknowledge only in coming back.
+                    detail: `Moves to Managed, returns in ${days} days. Still blocks a stage advance.`,
                     icon: BellOff,
                     onSelect: () => void run(sheetFor, "snooze", { snoozeDays: days }),
                   })),
@@ -179,6 +183,36 @@ export function AlertsPanel({ dealId }: PanelBodyProps) {
   );
 }
 
+type AlertDisposition = NonNullable<Alert["disposition"]>;
+
+/**
+ * What a disposition actually did, led by the part that distinguishes it.
+ *
+ * For a snooze that is the return date and nothing else: every dispositioned
+ * alert — acknowledged, snoozed, accepted alike — sits in this same Managed
+ * card, so without the countdown a snooze and an acknowledge are the same row.
+ * That is the whole of what "snooze isn't working" turned out to look like from
+ * the outside, on the alerts whose disposition did save.
+ */
+function dispositionSummary(disposition: AlertDisposition): string {
+  if (disposition.state === "snooze") {
+    const days = calendarDaysUntil(disposition.snoozeUntil);
+    if (days == null) return "Snoozed · return date pending";
+    if (days <= 0) return "Snoozed · returns today";
+    return `Snoozed · returns in ${days} ${days === 1 ? "day" : "days"}`;
+  }
+  if (disposition.state === "accept") return "Accepted · stage guardrail cleared";
+  return "Acknowledged · still blocking";
+}
+
+/** Who and when, plus the rationale an accept carries. Empty when unknown. */
+function provenanceLine(disposition: AlertDisposition): string {
+  const who = disposition.createdBy ? `by ${disposition.createdBy}` : "";
+  const when = disposition.createdAt ? `on ${formatDate(disposition.createdAt, "—")}` : "";
+  const stamp = [who, when].filter(Boolean).join(" ");
+  return disposition.rationale ? [stamp, disposition.rationale].filter(Boolean).join(" — ") : stamp;
+}
+
 function AlertRow({
   alert,
   muted = false,
@@ -198,17 +232,12 @@ function AlertRow({
       <p className="m-body m-muted mt-0.5 text-pretty">{alertBody(alert)}</p>
 
       {alert.disposition ? (
-        <p className="m-caption m-muted mt-1.5">
-          {humanizeCode(alert.disposition.state)}
-          {alert.disposition.createdBy ? ` by ${alert.disposition.createdBy}` : ""}
-          {alert.disposition.createdAt
-            ? ` on ${formatDate(alert.disposition.createdAt, "—")}`
-            : ""}
-          {alert.disposition.snoozeUntil
-            ? ` · until ${formatDate(alert.disposition.snoozeUntil, "—")}`
-            : ""}
-          {alert.disposition.rationale ? ` — ${alert.disposition.rationale}` : ""}
-        </p>
+        <>
+          <p className="m-caption mt-1.5">{dispositionSummary(alert.disposition)}</p>
+          {provenanceLine(alert.disposition) ? (
+            <p className="m-caption m-muted mt-0.5">{provenanceLine(alert.disposition)}</p>
+          ) : null}
+        </>
       ) : null}
 
       {alert.intervention ? (

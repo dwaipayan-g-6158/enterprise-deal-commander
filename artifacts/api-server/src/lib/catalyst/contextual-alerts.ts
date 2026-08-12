@@ -11,10 +11,12 @@ import {
 import {
   evaluateCompetitivePatterns,
   evaluateStakeholderPatterns,
+  type Alert,
   type Severity,
   type Explanation,
 } from "@workspace/engine";
 import { competitorWinRates } from "./competitive";
+import { getDealWithLookups, getLiveDispositions } from "./intelligence";
 
 /** An alert shaped to match the engine `Alert` consumed by the intelligence response. */
 export interface MergeableAlert {
@@ -22,12 +24,24 @@ export interface MergeableAlert {
   severity: Severity;
   message: string;
   explanation: Explanation;
-  disposition: null;
+  disposition: Alert["disposition"];
 }
 
 /**
  * Compute the V2 competitive (F2) and stakeholder (F8) risk alerts for a deal so
  * they surface alongside the built-in engine patterns in the cockpit Risk tab.
+ *
+ * ## These carry dispositions, and getting that wrong was invisible
+ *
+ * These alerts never pass through the engine, so nothing here partitions them
+ * into managed/unmanaged for us — this function has to attach the disposition
+ * itself. It used to hardcode `null`, and because `routes/dispositions.ts`
+ * validates only that the *deal* exists (never that the pattern code is one the
+ * engine knows), dispositioning one of these returned 200 and wrote a real row
+ * that no read ever looked at. The alert reappeared undispositioned on the very
+ * next refetch, so the write looked like a no-op while quietly accumulating
+ * rows. It also meant `isBlockingRedAlert` could never see an `accept` here, so
+ * a RED contextual alert blocked stage advancement permanently.
  */
 export async function contextualAlertsFor(catalystApp: CatalystApp, dealId: string): Promise<MergeableAlert[]> {
   // Global per-competitor win rate (Won Against / (Won + Lost)), via the shared
@@ -73,16 +87,42 @@ export async function contextualAlertsFor(catalystApp: CatalystApp, dealId: stri
     })),
   );
 
-  return [...competitive, ...stakeholderAlerts].map((a) => ({
-    code: a.code,
-    severity: a.severity,
-    message: a.message,
-    explanation: {
-      inputs: [],
-      thresholdsUsed: [],
-      clearsWhen:
-        "Resolve the underlying competitive or stakeholder condition that triggered this alert.",
-    },
-    disposition: null,
-  }));
+  const contextual = [...competitive, ...stakeholderAlerts];
+  if (contextual.length === 0) return [];
+
+  // Read dispositions only once there is something they could apply to. Both
+  // reads are served by the per-request cache in the callers that already
+  // loaded the deal (the stage guardrail in routes/deals.ts is one).
+  const dealRow = await getDealWithLookups(catalystApp, dealId);
+  const dispositions = dealRow
+    ? await getLiveDispositions(catalystApp, dealId, dealRow.deal)
+    : [];
+  const dispositionByCode = new Map(dispositions.map((d) => [d.pattern_code, d]));
+
+  return contextual.map((a) => {
+    const disp = dispositionByCode.get(a.code);
+    return {
+      code: a.code,
+      severity: a.severity,
+      message: a.message,
+      explanation: {
+        inputs: [],
+        thresholdsUsed: [],
+        clearsWhen:
+          "Resolve the underlying competitive or stakeholder condition that triggered this alert.",
+      },
+      // Mirrors the engine's own mapping in buildAlert (lib/engine/src/index.ts)
+      // — these alerts bypass the engine, so the shape has to be built here.
+      disposition: disp
+        ? {
+            state: disp.disposition,
+            rationale: disp.rationale || null,
+            snoozeUntilFieldChange: disp.snooze_until_field_change || null,
+            snoozeUntil: disp.snooze_until || null,
+            createdBy: disp.created_by || null,
+            createdAt: disp.created_at || null,
+          }
+        : null,
+    };
+  });
 }

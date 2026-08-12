@@ -201,4 +201,53 @@ describe("PUT/PATCH /deals/:id — stage-advancement guardrail blocking-alert pr
     expect(captured).toBeDefined();
     expect(await currentStage(id)).toBe(commercial);
   });
+
+  // Contextual alerts (competitive/stakeholder) never pass through the engine,
+  // so `contextualAlertsFor` has to attach their disposition itself. It used to
+  // hardcode `null`, which meant `isBlockingRedAlert` could never see an accept
+  // here and a hostile decision-maker blocked the deal permanently — with the
+  // disposition row sitting in the table, written and read by nothing.
+  it("accepting a contextual RED alert clears the guardrail, like an engine one", async () => {
+    const id = await createDeal("accept-contextual", "Discovery");
+    await createStakeholdersRepo(initCatalystApp({ headers: {} })).create(id, {
+      name: "Hostile VP",
+      roleType: "Economic Buyer",
+      influenceLevel: "High",
+      sentiment: "Hostile",
+      isDecisionMaker: true,
+    });
+
+    const { thrown: dispThrown } = await callDisposition(id, "HOSTILE_STAKEHOLDER", {
+      disposition: "accept",
+      rationale: "CRO owns this relationship directly; escalation path agreed.",
+    });
+    expect(dispThrown).toBeUndefined();
+
+    const validation = await findStageId("Validation");
+    const { thrown } = await callUpdate(id, { sales_stage_id: validation });
+    expect(thrown).toBeUndefined();
+    expect(await currentStage(id)).toBe(validation);
+  });
+
+  it("acknowledging a contextual RED alert does NOT clear the guardrail", async () => {
+    const id = await createDeal("ack-contextual", "Discovery");
+    await createStakeholdersRepo(initCatalystApp({ headers: {} })).create(id, {
+      name: "Hostile VP",
+      roleType: "Economic Buyer",
+      influenceLevel: "High",
+      sentiment: "Hostile",
+      isDecisionMaker: true,
+    });
+
+    const { thrown: dispThrown } = await callDisposition(id, "HOSTILE_STAKEHOLDER", {
+      disposition: "acknowledge",
+    });
+    expect(dispThrown).toBeUndefined();
+
+    const validation = await findStageId("Validation");
+    const { thrown } = await callUpdate(id, { sales_stage_id: validation });
+    expect(thrown?.status).toBe(409);
+    expect(thrown?.patternCodes).toContain("HOSTILE_STAKEHOLDER");
+    expect(await currentStage(id)).not.toBe(validation);
+  });
 });

@@ -56,13 +56,25 @@ router.get(
     if (!data) throw notFound("Deal not found");
     // Merge V2 competitive (F2) + stakeholder (F8) alerts without mutating the
     // cached object: clone governance + alerts before appending.
+    //
+    // Partitioned the same way the engine partitions its own patterns, rather
+    // than appended wholesale to `alerts`. A dispositioned contextual alert
+    // belongs in `managedAlerts` — appending it to `alerts` regardless is what
+    // made a disposition on one of these look like it had done nothing, and it
+    // also left `unmanagedAlertCount` (which the roster preview reads)
+    // disagreeing with the list it is supposed to be counting.
     const extra = await contextualAlertsFor(catalystApp, dealId);
+    const extraUnmanaged = extra.filter((a) => a.disposition === null);
+    const extraManaged = extra.filter((a) => a.disposition !== null);
     const merged = extra.length
       ? {
           ...data,
           governance: {
             ...data.governance,
-            alerts: [...data.governance.alerts, ...extra],
+            alerts: [...data.governance.alerts, ...extraUnmanaged],
+            managedAlerts: [...data.governance.managedAlerts, ...extraManaged],
+            unmanagedAlertCount:
+              data.governance.unmanagedAlertCount + extraUnmanaged.length,
           },
         }
       : data;
