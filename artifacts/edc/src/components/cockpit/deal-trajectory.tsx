@@ -13,9 +13,22 @@ import { useGetDealTrajectory } from "@workspace/api-client-react";
 import {
   HEALTH_HSL,
   HEALTH_RGB,
-  HEALTH_LABEL as SHARED_HEALTH_LABEL,
   HEALTH_SHORT_LABEL as SHARED_HEALTH_SHORT_LABEL,
 } from "@/lib/semantic-colors";
+import {
+  HEALTH_LABEL,
+  dayCount,
+  deriveSummary,
+  toChartRows,
+  verdict,
+  type ChartRow,
+  type Health,
+  type Summary,
+  type Tone,
+  type Verdict,
+  type TrajectoryData,
+  type TrajectoryPoint,
+} from "@/components/cockpit/trajectory/summary";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -40,49 +53,19 @@ import {
 } from "@/components/dashboard/widgets/_shared";
 import { formatNum } from "@/lib/format";
 
-// ---- Local typed view of the loose analytics payload -------------------------
-type Health = "RED" | "YELLOW" | "GREEN" | null;
-
-interface TrajectoryPoint {
-  at: string;
-  score: number | null;
-  gatePct: number | null;
-  health: Health;
-  stage: string | null;
-  tcv: number | null;
-  playbookPct: number | null;
-  meddpiccPct: number | null;
-}
-
-interface StageChange {
-  at: string;
-  from: string | null;
-  to: string | null;
-}
-
-interface TrajectoryData {
-  points: TrajectoryPoint[];
-  stageChanges: StageChange[];
-}
-
-// A row enriched with a numeric x (epoch ms) for a stable time axis.
-interface ChartRow extends TrajectoryPoint {
-  t: number;
-}
-
+// ---- Typed view of the loose analytics payload -------------------------------
+// The types, the summary arithmetic and the verdict all live in ./trajectory/summary,
+// shared with the mobile panel. They were local to this file, and the mobile
+// panel consequently had no verdict and no deltas at all — it drew charts and
+// left the reader to do the comparison. Two shells deriving "is this deal
+// slipping?" by separate arithmetic would eventually disagree, and the one that
+// disagreed would be the one nobody was looking at.
 type Metric = "score" | "gate" | "tcv" | "playbook" | "meddpicc";
 
 // ---- Health wording + the dot color used inside the chart/tooltip ------------
-// All three are local aliases of the shared maps, narrowed to this file's own
-// nullable Health. Prose sentences take the long wording; the fixed-height KPI
-// cells and the one-line legend take the short form, which is the only one that
-// fits them.
-const HEALTH_LABEL: Record<NonNullable<Health>, string> = {
-  RED: SHARED_HEALTH_LABEL.RED,
-  YELLOW: SHARED_HEALTH_LABEL.YELLOW,
-  GREEN: SHARED_HEALTH_LABEL.GREEN,
-};
-
+// Prose sentences take the long wording (HEALTH_LABEL, from ./trajectory/summary);
+// the fixed-height KPI cells and the one-line legend take the short form, which
+// is the only one that fits them.
 const HEALTH_LABEL_SHORT: Record<NonNullable<Health>, string> = {
   RED: SHARED_HEALTH_SHORT_LABEL.RED,
   YELLOW: SHARED_HEALTH_SHORT_LABEL.YELLOW,
@@ -97,12 +80,6 @@ const HEALTH_HEX: Record<NonNullable<Health>, string> = {
   RED: HEALTH_HSL.RED,
   YELLOW: HEALTH_HSL.YELLOW,
   GREEN: HEALTH_HSL.GREEN,
-};
-
-const HEALTH_RANK: Record<NonNullable<Health>, number> = {
-  RED: 0,
-  YELLOW: 1,
-  GREEN: 2,
 };
 
 // ---- Metric descriptors ------------------------------------------------------
@@ -147,132 +124,6 @@ const fmtRange = (a: number, b: number) => {
   return sameDay ? fmtTick(a) : `${fmtTick(a)} – ${fmtTick(b)}`;
 };
 
-const dayCount = (a: number, b: number) =>
-  Math.max(1, Math.round((b - a) / 86_400_000) + 1);
-
-// ---------------------------------------------------------------------------
-// deriveSummary — pure: baseline (first non-null) → current (last non-null)
-// deltas for score/gate/tcv; health trend; current stage; time span.
-// ---------------------------------------------------------------------------
-function firstLast<T>(
-  rows: ChartRow[],
-  pick: (r: ChartRow) => T | null | undefined,
-): { first: T | null; last: T | null } {
-  let first: T | null = null;
-  let last: T | null = null;
-  for (const r of rows) {
-    const v = pick(r);
-    if (v != null) {
-      if (first == null) first = v;
-      last = v;
-    }
-  }
-  return { first, last };
-}
-
-interface Summary {
-  score: { first: number | null; last: number | null };
-  gate: { first: number | null; last: number | null };
-  tcv: { first: number | null; last: number | null };
-  health: { first: Health; last: Health };
-  healthTrend: "improved" | "worsened" | "flat";
-  stage: string | null;
-  spanStart: number;
-  spanEnd: number;
-  spanDays: number;
-}
-
-function deriveSummary(rows: ChartRow[]): Summary {
-  const score = firstLast(rows, (r) => r.score);
-  const gate = firstLast(rows, (r) => r.gatePct);
-  const tcv = firstLast(rows, (r) => r.tcv);
-  const healthFL = firstLast<NonNullable<Health>>(rows, (r) => r.health);
-  const stage = firstLast(rows, (r) => r.stage);
-
-  let healthTrend: Summary["healthTrend"] = "flat";
-  if (healthFL.first && healthFL.last) {
-    const d = HEALTH_RANK[healthFL.last] - HEALTH_RANK[healthFL.first];
-    healthTrend = d > 0 ? "improved" : d < 0 ? "worsened" : "flat";
-  }
-
-  const spanStart = rows[0]?.t ?? Date.now();
-  const spanEnd = rows[rows.length - 1]?.t ?? Date.now();
-
-  return {
-    score,
-    gate,
-    tcv,
-    health: { first: healthFL.first, last: healthFL.last },
-    healthTrend,
-    stage: stage.last,
-    spanStart,
-    spanEnd,
-    spanDays: dayCount(spanStart, spanEnd),
-  };
-}
-
-// ---------------------------------------------------------------------------
-// verdict — deterministic plain-language headline (NO LLM). Returns the lead
-// word separately so the header can color-emphasize it like the mockup's .up.
-// ---------------------------------------------------------------------------
-type Tone = "good" | "warn" | "bad";
-interface Verdict {
-  lead: string;
-  tone: Tone;
-  rest: string;
-}
-
-function verdict(s: Summary): Verdict {
-  const scoreDelta =
-    s.score.first != null && s.score.last != null
-      ? s.score.last - s.score.first
-      : 0;
-  const stage = s.stage ?? "this stage";
-
-  // Slipping — score fell meaningfully or health worsened.
-  if (scoreDelta <= -5 || s.healthTrend === "worsened") {
-    if (s.healthTrend === "worsened" && s.health.last) {
-      const drop = scoreDelta < 0 ? `score down ${Math.abs(scoreDelta)} pts, ` : "";
-      return {
-        lead: "Slipping",
-        tone: "bad",
-        rest: ` — ${drop}health fell to ${HEALTH_LABEL[s.health.last]}.`,
-      };
-    }
-    return {
-      lead: "Slipping",
-      tone: "bad",
-      rest: ` — score down ${Math.abs(scoreDelta)} pts in ${stage}.`,
-    };
-  }
-
-  // Climbing — score rose meaningfully or health improved.
-  if (scoreDelta >= 5 || s.healthTrend === "improved") {
-    const advanced = s.stage ? ` as the deal advanced into ${stage}` : "";
-    if (scoreDelta >= 5) {
-      return {
-        lead: "Climbing",
-        tone: "good",
-        rest: ` — score up ${scoreDelta} pts${advanced}.`,
-      };
-    }
-    return {
-      lead: "Climbing",
-      tone: "good",
-      rest:
-        s.healthTrend === "improved" && s.health.last
-          ? ` — health improved to ${HEALTH_LABEL[s.health.last]} in ${stage}.`
-          : ` — momentum building in ${stage}.`,
-    };
-  }
-
-  // Otherwise flat / stalling.
-  return {
-    lead: "Stalling",
-    tone: "warn",
-    rest: ` — flat for ${s.spanDays} ${s.spanDays === 1 ? "day" : "days"} in ${stage}.`,
-  };
-}
 
 const TONE_TEXT: Record<Tone, string> = {
   good: "text-emerald-500",
@@ -843,10 +694,7 @@ export function DealTrajectory({ dealId }: { dealId: string }) {
   let segments: StageSegment[] = [];
 
   if (isFull) {
-    rows = points
-      .map((p) => ({ ...p, t: Date.parse(p.at) }))
-      .filter((r) => !Number.isNaN(r.t))
-      .sort((a, b) => a.t - b.t);
+    rows = toChartRows(points);
     summary = deriveSummary(rows);
     v = verdict(summary);
     segments = stageSegments(rows);

@@ -9,14 +9,6 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 
-interface Factor {
-  featureId: string;
-  description: string;
-  rawScore: number;
-  weight: number;
-  contribution: number;
-}
-
 const confidenceColor: Record<string, string> = {
   HIGH: "bg-emerald-500 text-white",
   MEDIUM: "bg-amber-500 text-white",
@@ -30,8 +22,11 @@ export function ScorePanel({ dealId }: { dealId: string }) {
   if (isLoading) return <Skeleton className="h-64 w-full" />;
   if (!score) return <p className="text-muted-foreground">No score yet — check back once there's more deal data to work with.</p>;
 
-  const breakdown = (score.breakdown ?? []) as unknown as Factor[];
-  const sorted = [...breakdown].sort((a, b) => b.contribution - a.contribution);
+  // No cast. `breakdown` is `DealScoreFactor[]` in the generated client now —
+  // the local re-declaration this replaced happened to be right, while the
+  // mobile panel's equivalent guess was wrong for every field, and neither
+  // could be checked while the schema said `additionalProperties: true`.
+  const sorted = [...(score.breakdown ?? [])].sort((a, b) => b.contribution - a.contribution);
   const maxContribution = sorted.reduce(
     (max, f) => Math.max(max, f.contribution),
     0,

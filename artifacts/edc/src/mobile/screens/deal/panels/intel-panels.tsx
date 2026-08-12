@@ -9,6 +9,16 @@ import {
   useListStakeholders,
 } from "@workspace/api-client-react";
 import { HEALTH_CLASS, OUTCOME_CLASS, type Health } from "@/lib/semantic-colors";
+import {
+  HEALTH_LABEL,
+  deriveSummary,
+  stageDurations,
+  toChartRows,
+  verdict,
+  type Tone,
+  type TrajectoryData,
+} from "@/components/cockpit/trajectory/summary";
+import { TONE_AHEAD, TONE_SLIPPING, TONE_STALLED } from "@/mobile/lib/tones";
 import { MobileCard, CardHeader } from "@/mobile/components/mobile-card";
 import { MetaChip } from "@/mobile/components/badges";
 import { MChartFrame } from "@/mobile/charts/m-chart-frame";
@@ -18,29 +28,48 @@ import { HEALTH_PAINT, seriesPaint } from "@/mobile/charts/chart-colors";
 import { PanelBody, type PanelBodyProps } from "@/mobile/screens/deal/panel-screen";
 
 /**
- * The predictive close score, and the factors moving it.
+ * The predictive close score, and how it was arrived at.
  *
- * `breakdown` is an open record in the contract, so each row is read
- * defensively — a factor the server adds later renders as an unlabelled
- * contribution rather than crashing a screen someone is reading in a lobby.
+ * ## Every factor used to be called "Other"
+ *
+ * `breakdown` was `additionalProperties: true` in the contract, so this panel
+ * read it by guessing at field names — `item.factor ?? item.name ?? item.label`
+ * — and the engine emits none of the three. The guard fell through for all nine
+ * factors, every row rendered under the fallback label, and the neighbouring
+ * comment rationalised it as an expected edge case for one unknown factor. The
+ * numbers beside the labels were right the whole time, which is exactly why it
+ * survived: the panel looked populated. The schema is typed now
+ * (`DealScoreFactor`), so the field names are checked rather than guessed.
+ *
+ * ## Shortfall, not negative contribution
+ *
+ * `contribution` is `rawScore/100 × weight` with both terms non-negative, so it
+ * can never be below zero and the old red/`-` branches here were unreachable. A
+ * factor hurting the deal shows up as contribution far short of its weight, so
+ * that gap — the headroom — is what this draws, rather than inventing a
+ * direction the engine does not report.
  */
 export function ScorePanel({ dealId }: PanelBodyProps) {
   const query = useGetDealScore(dealId);
   const score = query.data?.data;
 
   const rows = useMemo(() => {
-    const items = (score?.breakdown ?? []) as Record<string, unknown>[];
-    return items
-      .map((item) => {
-        const rawLabel = item.factor ?? item.name ?? item.label;
-        const rawValue = item.contribution ?? item.weightedScore ?? item.value;
-        return {
-          label: typeof rawLabel === "string" ? humanizeCode(rawLabel) : "Other",
-          contribution: typeof rawValue === "number" ? rawValue : 0,
-        };
-      })
-      .sort((a, b) => Math.abs(b.contribution) - Math.abs(a.contribution));
+    return [...(score?.breakdown ?? [])]
+      .map((factor) => ({
+        // `description` is the engine's own sentence for the factor
+        // ("Technical validation progress"); featureId is the fallback only if
+        // a future factor ships without one.
+        label: factor.description || humanizeCode(factor.featureId),
+        rawScore: factor.rawScore,
+        weight: factor.weight,
+        contribution: factor.contribution,
+        /** Points this factor is leaving on the table. */
+        headroom: Math.max(0, factor.weight - factor.contribution),
+      }))
+      .sort((a, b) => b.headroom - a.headroom || b.contribution - a.contribution);
   }, [score]);
+
+  const totalWeight = rows.reduce((sum, row) => sum + row.weight, 0);
 
   return (
     <PanelBody
@@ -58,45 +87,52 @@ export function ScorePanel({ dealId }: PanelBodyProps) {
               {score.score}
               <span className="m-caption m-muted ml-1.5">/ 100</span>
             </p>
+            {/* computedAt is deliberately not shown: routes/v2/analytics.ts
+                stamps it with `new Date()` on every response, so it always
+                reads as today and tells the reader nothing. */}
             <p className="m-caption m-muted mt-1">
               {humanizeCode(score.confidence)} confidence
-              {score.computedAt ? ` · ${formatDate(score.computedAt, "—")}` : ""}
             </p>
           </MobileCard>
 
           {rows.length > 0 ? (
             <MobileCard>
-              <CardHeader label="What moves it" />
+              <CardHeader label="Where the points went" />
+              <p className="m-caption m-muted -mt-1 mb-3 text-pretty">
+                Each factor earns a share of its weight. Ordered by what is still
+                unearned.
+              </p>
               <ul className="space-y-3">
-                {/* Keyed by position, not label: two factors the server sends
-                    without a string label both fall back to "Other". The order
-                    is a deterministic sort of the same payload, so the index is
-                    stable. */}
-                {rows.map((row, i) => (
-                  <li key={i}>
+                {rows.map((row) => (
+                  <li key={row.label}>
                     <div className="m-caption flex items-baseline justify-between gap-3">
                       <span className="min-w-0 flex-1 truncate">{row.label}</span>
                       <span className="m-muted m-num shrink-0">
-                        {row.contribution > 0 ? "+" : ""}
-                        {row.contribution.toFixed(1)}
+                        {row.contribution} / {row.weight}
                       </span>
                     </div>
-                    {/* Magnitude relative to the strongest factor, not a share
-                        of anything — direction is carried by the sign above and
-                        by which side of the centre line the bar sits on. */}
-                    <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-muted">
+                    {/* Earned against the factor's own weight, with every bar
+                        drawn to a common scale (the total weight) so a 22-point
+                        factor visibly outranks a 5-point one. Scaling each bar
+                        to its own weight would draw both full and imply they
+                        matter equally. */}
+                    <div
+                      className="mt-1 flex h-1.5 overflow-hidden rounded-full bg-muted"
+                      aria-hidden="true"
+                    >
                       <div
-                        className={cn(
-                          "h-full rounded-full",
-                          row.contribution >= 0
-                            ? HEALTH_CLASS.GREEN.fill
-                            : HEALTH_CLASS.RED.fill,
-                        )}
-                        style={{
-                          width: `${(Math.abs(row.contribution) / Math.max(...rows.map((r) => Math.abs(r.contribution)), 1)) * 100}%`,
-                        }}
+                        className={cn("h-full", HEALTH_CLASS.GREEN.fill)}
+                        style={{ width: `${(row.contribution / totalWeight) * 100}%` }}
+                      />
+                      <div
+                        className={cn("h-full opacity-40", HEALTH_CLASS.RED.fill)}
+                        style={{ width: `${(row.headroom / totalWeight) * 100}%` }}
                       />
                     </div>
+                    <p className="m-caption m-muted mt-1">
+                      Scoring {row.rawScore}% of this factor
+                      {row.headroom > 0 ? ` · ${row.headroom} points unearned` : " · fully earned"}
+                    </p>
                   </li>
                 ))}
               </ul>
@@ -108,47 +144,75 @@ export function ScorePanel({ dealId }: PanelBodyProps) {
   );
 }
 
-/** The loose analytics payload this panel reads. */
-interface TrajectoryPoint {
-  at: string;
-  score: number | null;
-  gatePct: number | null;
-  health: string | null;
-  stage: string | null;
-  tcv: number | null;
-}
+const TONE_CLASS: Record<Tone, string> = {
+  good: TONE_AHEAD,
+  warn: TONE_SLIPPING,
+  bad: TONE_STALLED,
+};
 
-interface StageChange {
-  at: string;
-  from: string | null;
-  to: string | null;
-}
+/** The five series the endpoint carries, and how each one reads. */
+const TRAJECTORY_SERIES = [
+  {
+    key: "gatePct" as const,
+    label: "Technical gates",
+    paintIndex: 1,
+    format: (v: number) => `${Math.round(v)}%`,
+  },
+  {
+    key: "playbookPct" as const,
+    label: "Playbook adherence",
+    paintIndex: 2,
+    format: (v: number) => `${Math.round(v)}%`,
+  },
+  {
+    key: "meddpiccPct" as const,
+    label: "MEDDPICC qualification",
+    paintIndex: 4,
+    format: (v: number) => `${Math.round(v)}%`,
+  },
+  {
+    key: "tcv" as const,
+    label: "Contract value",
+    paintIndex: 3,
+    format: (v: number) => compactCurrency(v),
+  },
+];
 
 /**
- * How the deal got here.
+ * How the deal got here — the conclusion first, then the evidence.
  *
- * ## Its own screen, not a strip under the hero
+ * ## It used to make the reader do the arithmetic
  *
- * It used to sit beneath the Brief's headline, scrubbing the value and health
- * above it while every section below went on showing today. A screen where half
- * the figures are historical and half are current is a screen you have to
- * remember the rules of. Here everything is history, and the rule is obvious.
+ * This screen drew three charts and a list of stage moves, and left "so is this
+ * deal getting better or worse?" entirely to the reader. On a phone, held one-
+ * handed, that is the one question being asked, and a bar chart answers it only
+ * after you have found the first bar, found the last, and compared them. Desktop
+ * had a deterministic verdict headline and first-vs-current deltas the whole
+ * time; those are now shared rather than reimplemented, in
+ * `components/cockpit/trajectory/summary.ts`.
  *
- * Score is the scrubbable series because it is the one the whole app is built to
- * predict; gates and value ride alongside as sparklines, which carry shape at a
- * size where axes would be noise.
+ * ## Two series were being thrown away
+ *
+ * The endpoint returns seven metrics per point. This panel's local point type
+ * declared five, so `playbookPct` and `meddpiccPct` — playbook execution and
+ * qualification, both first-class signals elsewhere in the app, and one of them
+ * a scoring factor — were dropped on the floor with nothing to indicate it. The
+ * shared `TrajectoryPoint` now types all seven.
+ *
+ * Score stays the scrubbable series because it is the thing the app exists to
+ * predict; the rest ride as sparklines, which carry shape at a size where axes
+ * would be noise.
  */
 export function TrajectoryPanel({ dealId }: PanelBodyProps) {
   const query = useGetDealTrajectory(dealId);
-  const payload = query.data?.data as
-    | { points?: TrajectoryPoint[]; stageChanges?: StageChange[] }
-    | undefined;
+  const payload = query.data?.data as Partial<TrajectoryData> | undefined;
 
   const points = useMemo(() => payload?.points ?? [], [payload]);
-  const scored = useMemo(() => points.filter((p) => p.score != null), [points]);
-  const gated = useMemo(() => points.filter((p) => p.gatePct != null), [points]);
-  const valued = useMemo(() => points.filter((p) => p.tcv != null), [points]);
-  const stageChanges = payload?.stageChanges ?? [];
+  const rows = useMemo(() => toChartRows(points), [points]);
+  const summary = useMemo(() => (rows.length > 0 ? deriveSummary(rows) : null), [rows]);
+  const call = useMemo(() => (summary ? verdict(summary) : null), [summary]);
+  const stages = useMemo(() => stageDurations(rows), [rows]);
+  const scored = useMemo(() => rows.filter((p) => p.score != null), [rows]);
 
   return (
     <PanelBody
@@ -159,6 +223,52 @@ export function TrajectoryPanel({ dealId }: PanelBodyProps) {
       emptyBody="A trajectory needs at least two snapshots. They accumulate as the deal changes."
     >
       <>
+        {summary && call ? (
+          <MobileCard>
+            <p className="m-headline text-pretty">
+              <span className={TONE_CLASS[call.tone]}>{call.lead}</span>
+              {call.rest}
+            </p>
+            <p className="m-caption m-muted mt-1">
+              Across {summary.spanDays} {summary.spanDays === 1 ? "day" : "days"} of history
+            </p>
+
+            <dl className="mt-3 grid grid-cols-2 gap-x-3 gap-y-3">
+              <Movement
+                label="Close score"
+                first={summary.score.first}
+                last={summary.score.last}
+                format={(v) => String(Math.round(v))}
+              />
+              <Movement
+                label="Gates"
+                first={summary.gate.first}
+                last={summary.gate.last}
+                format={(v) => `${Math.round(v)}%`}
+              />
+              <Movement
+                label="Contract value"
+                first={summary.tcv.first}
+                last={summary.tcv.last}
+                format={(v) => compactCurrency(v)}
+              />
+              <div className="flex flex-col">
+                <dt className="m-label m-muted">Health</dt>
+                <dd className="m-title m-num mt-0.5">
+                  {summary.health.last ? HEALTH_LABEL[summary.health.last] : "—"}
+                </dd>
+                <p className="m-caption m-muted mt-0.5">
+                  {summary.healthTrend === "flat"
+                    ? "Unchanged"
+                    : summary.health.first
+                      ? `${summary.healthTrend === "improved" ? "Up" : "Down"} from ${HEALTH_LABEL[summary.health.first]}`
+                      : humanizeCode(summary.healthTrend)}
+                </p>
+              </div>
+            </dl>
+          </MobileCard>
+        ) : null}
+
         <MChartFrame
           title="Close score over time"
           subtitle="Drag to inspect."
@@ -179,47 +289,106 @@ export function TrajectoryPanel({ dealId }: PanelBodyProps) {
           />
         </MChartFrame>
 
-        {gated.length >= 2 ? (
-          <MobileCard>
-            <CardHeader label="Technical gates" />
-            <MSparkline
-              values={gated.map((p) => p.gatePct ?? 0)}
-              label="Gate completion"
-              format={(v) => `${Math.round(v)}%`}
-              paint={seriesPaint(1)}
-            />
-          </MobileCard>
-        ) : null}
+        {TRAJECTORY_SERIES.map((series) => {
+          const values = rows
+            .map((row) => row[series.key])
+            .filter((v): v is number => v != null);
+          // Two points is the floor for a line to mean anything; one point is a
+          // reading, not a trend.
+          if (values.length < 2) return null;
+          return (
+            <MobileCard key={series.key}>
+              <CardHeader label={series.label} />
+              <MSparkline
+                values={values}
+                label={series.label}
+                format={series.format}
+                paint={seriesPaint(series.paintIndex)}
+              />
+            </MobileCard>
+          );
+        })}
 
-        {valued.length >= 2 ? (
+        {stages.length > 0 ? (
           <MobileCard>
-            <CardHeader label="Contract value" />
-            <MSparkline
-              values={valued.map((p) => p.tcv ?? 0)}
-              label="Total contract value"
-              format={(v) => compactCurrency(v)}
-              paint={seriesPaint(3)}
-            />
-          </MobileCard>
-        ) : null}
-
-        {stageChanges.length > 0 ? (
-          <MobileCard>
-            <CardHeader label="Stage moves" />
-            <ul className="space-y-2">
-              {[...stageChanges].reverse().map((change, i) => (
-                <li key={i} className="m-caption flex items-baseline justify-between gap-3">
-                  <span className="min-w-0 flex-1 truncate">
-                    {change.from ?? "—"} → <span className="text-foreground">{change.to ?? "—"}</span>
-                  </span>
-                  <span className="m-muted shrink-0">{formatDate(change.at, "—")}</span>
+            <CardHeader label="Time in each stage" />
+            {/* Durations, not the raw stage-change log this replaced. "Moved to
+                Commercial on 3 Aug" needs the reader to subtract dates to learn
+                the thing that matters, which is that it has been sitting there
+                for three weeks. */}
+            <ul className="space-y-2.5">
+              {stages.map((stage) => (
+                <li key={`${stage.stage}-${stage.days}`}>
+                  <div className="m-caption flex items-baseline justify-between gap-3">
+                    <span className="min-w-0 flex-1 truncate">
+                      {stage.stage}
+                      {stage.isCurrent ? (
+                        <span className="m-muted"> · current</span>
+                      ) : null}
+                    </span>
+                    <span className="m-muted m-num shrink-0">{stage.days}d</span>
+                  </div>
+                  <div
+                    className="mt-1 h-1.5 overflow-hidden rounded-full bg-muted"
+                    aria-hidden="true"
+                  >
+                    <div
+                      className={cn(
+                        "h-full rounded-full",
+                        stage.health
+                          ? HEALTH_CLASS[stage.health].fill
+                          : "bg-muted-foreground/40",
+                      )}
+                      style={{
+                        width: `${(stage.days / Math.max(...stages.map((s) => s.days), 1)) * 100}%`,
+                      }}
+                    />
+                  </div>
                 </li>
               ))}
             </ul>
+            <p className="m-caption m-muted mt-2.5">
+              Bar length is time spent; colour is the worst health seen in that stage.
+            </p>
           </MobileCard>
         ) : null}
       </>
     </PanelBody>
+  );
+}
+
+/**
+ * One metric's baseline → current, with the change spelled out.
+ *
+ * The delta is the point of the cell, so it is stated in words rather than left
+ * as two numbers side by side for the reader to subtract.
+ */
+function Movement({
+  label,
+  first,
+  last,
+  format,
+}: {
+  label: string;
+  first: number | null;
+  last: number | null;
+  format: (value: number) => string;
+}) {
+  const delta = first != null && last != null ? last - first : null;
+  const tone = delta == null || delta === 0 ? "" : delta > 0 ? TONE_AHEAD : TONE_STALLED;
+
+  return (
+    <div className="flex flex-col">
+      <dt className="m-label m-muted">{label}</dt>
+      <dd className="m-title m-num mt-0.5">{last != null ? format(last) : "—"}</dd>
+      <p className={cn("m-caption mt-0.5", tone || "m-muted")}>
+        {delta == null
+          ? "No baseline yet"
+          : delta === 0
+            ? "Unchanged"
+            : `${delta > 0 ? "+" : "−"}${format(Math.abs(delta))} from ${format(first as number)}`}
+      </p>
+    </div>
   );
 }
 

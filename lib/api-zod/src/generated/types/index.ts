@@ -101,7 +101,7 @@ export * from './dealMemoryWinBackTimeline';
 export * from './dealResponse';
 export * from './dealRisk';
 export * from './dealScore';
-export * from './dealScoreBreakdownItem';
+export * from './dealScoreFactor';
 export * from './dealScoreResponse';
 export * from './dealUpdate';
 export * from './decision';

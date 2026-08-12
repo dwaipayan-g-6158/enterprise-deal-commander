@@ -20,6 +20,7 @@ import {
   calculateFlatTCV,
   type ScoringInput,
   type ScoringContext,
+  type ScoreFactorResult,
 } from "@workspace/engine";
 import { cache, CacheKeys, CacheTtl } from "../cache";
 import { mergeScoringWeights } from "../engine-config";
@@ -152,7 +153,17 @@ export async function buildScoringInput(catalystApp: CatalystApp, dealId: string
 export interface PersistedScore {
   score: number;
   confidence: string;
-  breakdown: unknown[];
+  /**
+   * The engine's own per-factor result, not a widened `unknown[]`.
+   *
+   * This was the point at which the typed `ScoreFactorResult[]` stopped being a
+   * type. Downstream, `openapi.yaml` described it as a free-form object, so
+   * every consumer re-declared the field names by hand — and the mobile score
+   * panel guessed wrong, reading `factor`/`name`/`label` where the engine emits
+   * `featureId`/`description`. Nine correctly-computed factors rendered as nine
+   * rows labelled "Other". Both ends are typed now; keep them that way.
+   */
+  breakdown: ScoreFactorResult[];
 }
 
 /**

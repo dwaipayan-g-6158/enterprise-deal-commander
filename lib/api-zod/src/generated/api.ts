@@ -1943,11 +1943,26 @@ export const GetDealScoreParams = zod.object({
   "dealId": zod.coerce.string()
 })
 
+export const getDealScoreResponseDataBreakdownItemRawScoreMin = 0;
+export const getDealScoreResponseDataBreakdownItemRawScoreMax = 100;
+
+export const getDealScoreResponseDataBreakdownItemWeightMin = 0;
+
+export const getDealScoreResponseDataBreakdownItemContributionMin = 0;
+
+
+
 export const GetDealScoreResponse = zod.object({
   "data": zod.object({
   "score": zod.number(),
   "confidence": zod.string(),
-  "breakdown": zod.array(zod.record(zod.string(), zod.unknown())),
+  "breakdown": zod.array(zod.object({
+  "featureId": zod.string(),
+  "description": zod.string(),
+  "rawScore": zod.number().min(getDealScoreResponseDataBreakdownItemRawScoreMin).max(getDealScoreResponseDataBreakdownItemRawScoreMax),
+  "weight": zod.number().min(getDealScoreResponseDataBreakdownItemWeightMin),
+  "contribution": zod.number().min(getDealScoreResponseDataBreakdownItemContributionMin)
+})),
   "computedAt": zod.string().nullish()
 })
 })

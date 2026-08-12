@@ -3636,12 +3636,36 @@ components:
       required: [data]
 
     # F3 Scoring
+    # One weighted factor's contribution to the predictive close score. Mirrors
+    # `ScoreFactorResult` in lib/engine/src/scoring.ts, which is where the values
+    # are produced.
+    #
+    # Typed rather than left as a free-form object: while `breakdown` was
+    # `additionalProperties: true`, every consumer re-declared the shape by hand
+    # and cast to it, and the mobile panel's hand-written guess
+    # (`item.factor ?? item.name ?? item.label`) matched no field the engine has
+    # ever emitted — so all nine rows rendered under the fallback label "Other",
+    # with correct numbers and no way to tell which factor each belonged to. A
+    # typecheck could not see it, because `unknown` accommodates any guess.
+    #
+    # `contribution` is `rawScore/100 * weight` and is therefore never negative:
+    # a factor hurting the score shows as contribution well below its weight,
+    # not as a minus sign.
+    DealScoreFactor:
+      type: object
+      properties:
+        featureId: { type: string }
+        description: { type: string }
+        rawScore: { type: integer, minimum: 0, maximum: 100 }
+        weight: { type: number, minimum: 0 }
+        contribution: { type: integer, minimum: 0 }
+      required: [featureId, description, rawScore, weight, contribution]
     DealScore:
       type: object
       properties:
         score: { type: integer }
         confidence: { type: string }
-        breakdown: { type: array, items: { type: object, additionalProperties: true } }
+        breakdown: { type: array, items: { $ref: "#/components/schemas/DealScoreFactor" } }
         computedAt: { type: ["string", "null"] }
       required: [score, confidence, breakdown]
     DealScoreResponse:

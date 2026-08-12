@@ -5,12 +5,12 @@
  * Enterprise Deal Commander (EDC) Phase 1 API
  * OpenAPI spec version: 1.0.0
  */
-import type { DealScoreBreakdownItem } from './dealScoreBreakdownItem';
+import type { DealScoreFactor } from './dealScoreFactor';
 
 export interface DealScore {
   score: number;
   confidence: string;
-  breakdown: DealScoreBreakdownItem[];
+  breakdown: DealScoreFactor[];
   /** @nullable */
   computedAt?: string | null;
 }

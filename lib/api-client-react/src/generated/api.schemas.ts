@@ -1580,12 +1580,24 @@ export interface GenericDataResponse {
   data: GenericDataResponseData;
 }
 
-export type DealScoreBreakdownItem = { [key: string]: unknown };
+export interface DealScoreFactor {
+  featureId: string;
+  description: string;
+  /**
+     * @minimum 0
+     * @maximum 100
+     */
+  rawScore: number;
+  /** @minimum 0 */
+  weight: number;
+  /** @minimum 0 */
+  contribution: number;
+}
 
 export interface DealScore {
   score: number;
   confidence: string;
-  breakdown: DealScoreBreakdownItem[];
+  breakdown: DealScoreFactor[];
   /** @nullable */
   computedAt?: string | null;
 }
