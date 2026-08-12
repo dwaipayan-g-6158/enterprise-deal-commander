@@ -25,12 +25,19 @@
  * served by the gateway cannot do.)
  */
 
-// A floor for when measurement fails outright, NOT a target. It was 260, which
-// was above the real email step: measured live, that step wants 164 (button
-// bottom 140 + BOTTOM_PADDING), so every frame got clamped UP and the card
-// carried 80px of dead space under the button. Kept above the SDK's own 150px,
-// which is the height that produced the original clipping.
-const MIN_HEIGHT = 170;
+/**
+ * A floor for when measurement fails outright, NOT a target. It was 260, which
+ * was above the real email step: measured live, that step wants 164 (button
+ * bottom 140 + BOTTOM_PADDING), so every frame got clamped UP and the card
+ * carried 80px of dead space under the button. Kept above the SDK's own 150px,
+ * which is the height that produced the original clipping.
+ *
+ * Exported because login.tsx reserves exactly this much space for the frame
+ * before it exists. Since every frame is clamped up to this, a reservation of
+ * the same size can never be too tall — and the two drifting apart is what put
+ * a 180px jump on the sign-in screen. See IFRAME_MIN_HEIGHT there.
+ */
+export const MIN_FRAME_HEIGHT = 170;
 // Guards against a runaway measurement forcing an absurd card.
 const MAX_HEIGHT = 720;
 // Zoho's own page padding stops short of the last link; without a little slack
@@ -216,7 +223,7 @@ export function attachCatalystIframeAutosize(
     const measured = measureContent(doc);
     if (!measured) return;
     const wanted = Math.ceil(measured) + BOTTOM_PADDING;
-    const next = Math.min(MAX_HEIGHT, Math.max(MIN_HEIGHT, wanted));
+    const next = Math.min(MAX_HEIGHT, Math.max(MIN_FRAME_HEIGHT, wanted));
 
     // Zoho's <body> carries a fixed ~520px height regardless of how little is
     // in it, so a frame sized to the actual content leaves the document

@@ -223,6 +223,38 @@
   view-transition-name: m-dock;
 }
 
+/* …but NOT while a modal is covering the app, and this is a correctness rule
+   rather than a refinement.
+
+   A named element is lifted out of the root snapshot into its own group, and the
+   whole view-transition pseudo tree paints ABOVE the top layer. So a named bar
+   escapes any modal that was covering it: the sheet is captured inside the root
+   snapshot and cannot win, whatever its z-index says.
+
+   Reported on Deals as "choosing a filter or sort flashes the bottom bar". The
+   cause is that the sort and filter sheets commit while they stay open — a
+   selection pushes a new query (use-roster-url.ts) and deliberately does not
+   close the sheet, so a lateral transition runs underneath it. Measured at
+   390x844: the sheet sits at z-50 spanning 146→844, the dock at z-30 and the tab
+   bar at z-40 beneath it, and for the ~200ms of the transition both were painted
+   over the top of it along with the capsule.
+
+   Suppressing the NAME rather than the transition is what keeps this narrow. The
+   root cross-fade still runs — invisible behind the sheet, and still correct for a
+   navigation that closes it — and the bars simply travel inside the root snapshot
+   for that one transition, where the modal's z-order applies to them again. They
+   are in the same place in both snapshots, so nothing about the hold-still
+   behaviour this file wants is lost; there is just no separate group to escape
+   with. `:has()` means no JS and nothing to keep in sync.
+
+   Every name declared above must be listed here. `mobile/vt-modal.test.ts`
+   asserts that, because the failure mode of forgetting one is a 200ms flash that
+   only appears with a sheet open — nothing a review would catch. */
+body:has([role="dialog"][data-state="open"], [role="alertdialog"][data-state="open"])
+  :is(.m-vt-navbar, .m-vt-tabbar, .m-vt-capsule, .m-vt-dock) {
+  view-transition-name: none;
+}
+
 /* aroundNav bails out entirely under reduced motion, so nothing above should
    ever run. This is a backstop: a transition started by anything else — a
    gesture the UA drives, say — still has to be silent. */

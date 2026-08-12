@@ -5,16 +5,32 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { renderSignInForm } from "@/lib/auth/catalyst-client";
-import { attachCatalystIframeAutosize } from "@/lib/auth/catalyst-iframe-autosize";
+import {
+  attachCatalystIframeAutosize,
+  MIN_FRAME_HEIGHT,
+} from "@/lib/auth/catalyst-iframe-autosize";
 import { injectCatalystIframeTheme } from "@/lib/auth/catalyst-iframe-link";
 
 const LOGIN_SLOT_ID = "catalyst-login-container";
-// Reserves space for Catalyst's typical email-step form so the card doesn't
-// visibly jump from a short box to the real content on first paint. Released
-// the moment the form is ready: the real email-step frame is ~164px, so holding
-// 340px afterwards stranded a fixed band of dead space under the button that
-// read as the card being mis-sized. Only the pre-paint reservation is wanted.
-const IFRAME_MIN_HEIGHT = 340;
+/**
+ * Space held for the sign-in frame before there is a frame.
+ *
+ * It is `MIN_FRAME_HEIGHT` — the floor the autosize clamps every frame up to —
+ * and being the SAME number is the whole point: a reservation equal to the floor
+ * can never be taller than the frame that replaces it, so the swap costs no
+ * layout change and strands no dead space.
+ *
+ * It was 340, released to 0 the moment `status` left "loading", and both halves
+ * of that were wrong. Measured on the deployed phone layout, the sequence was
+ * 476 → 152 → 319 → 344px of card height, because "ready" fires when
+ * `renderSignInForm` resolves and the SDK injects the iframe ~90ms LATER — so the
+ * reservation was dropped while the slot was still empty. The form column is
+ * vertically centred (`items-center`), so every one of those height changes moved
+ * the whole block: the lockup above the card travelled 180px down, 85px back up,
+ * then 10px more, which is the "Mobile Edition shifts on refresh" glitch. Nothing
+ * about the lockup itself moves — it is 173.7px tall in every frame.
+ */
+const IFRAME_MIN_HEIGHT = MIN_FRAME_HEIGHT;
 // How often to check whether the embedded sign-in completed. There is no
 // server callback route for Catalyst embedded auth — this app treats
 // GET /auth/me as the sole source of truth, same as everywhere else
@@ -323,11 +339,11 @@ export default function Login() {
           </div>
 
           {/* Transform-only, deliberately. This card wraps Catalyst's
-              cross-origin auth iframe, and it also collapses from the 340px
-              skeleton reservation to the real frame height once Catalyst
-              reports in. Animating height here would put that collapse and
-              this spring on the same property; keeping the spring on transform
-              leaves them as two separate beats. */}
+              cross-origin auth iframe, so its height is Catalyst's to change —
+              the frame grows between steps (email ~170, password ~248) and the
+              autosize animates that itself. Animating height here would put those
+              two on the same property; keeping the spring on transform leaves
+              them as separate beats. */}
           <div
             className="login-card-enter rounded-2xl border px-7 py-7 shadow-2xl"
             style={{ background: CARD_BG, borderColor: CARD_BORDER }}
@@ -357,7 +373,7 @@ export default function Login() {
             {/* The slot stays mounted in every state: the Catalyst SDK looks it
                 up by id, and it must already exist in the DOM when signIn()
                 runs. Only its reserved height collapses on failure, so the
-                error card isn't trailed by 340px of dead space. */}
+                error card isn't trailed by an empty band where a form would be. */}
             <div className="relative">
               {status === "loading" ? (
                 <>
@@ -375,7 +391,11 @@ export default function Login() {
                 ref={slotRef}
                 id={LOGIN_SLOT_ID}
                 className="relative w-full [&_iframe]:!w-full [&_iframe]:!border-0 [&_iframe]:!bg-transparent"
-                style={{ minHeight: status === "loading" ? IFRAME_MIN_HEIGHT : 0 }}
+                // Held through "loading" AND "ready", collapsed only on "error".
+                // Releasing it on "ready" is what dropped the floor out from under
+                // an empty slot — see IFRAME_MIN_HEIGHT. On error there is no form
+                // coming, so the space should go.
+                style={{ minHeight: status === "error" ? 0 : IFRAME_MIN_HEIGHT }}
               />
             </div>
 
