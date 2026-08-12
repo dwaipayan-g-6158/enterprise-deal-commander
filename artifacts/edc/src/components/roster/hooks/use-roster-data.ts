@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { keepPreviousData } from "@tanstack/react-query";
 import {
   getListDealsQueryKey,
   useGetRosterEnrichment,
@@ -18,7 +19,22 @@ export function useRosterData(params: { state: DealState; search: string }) {
   const dealsQuery = useListDeals(dealParams, {
     // Opt this query into focus refetch (the global default is off); Phase 8
     // layers a visible-tab interval on top.
-    query: { refetchOnWindowFocus: true, queryKey: getListDealsQueryKey(dealParams) },
+    //
+    // keepPreviousData, or every settled keystroke is a brand-new query key, and
+    // a brand-new key means isLoading — which tears the list down to shimmer
+    // between each character, blanks the nav subtitle, and can flash "No
+    // matches" for a half-typed term. Same fix, and the same reason, as
+    // mobile/screens/memory/memory-screen.tsx.
+    //
+    // Desktop shares this hook and already renders "· updating…" gated on
+    // isFetching (pages/deals.tsx). That hint never fired during a search
+    // before, because the list was torn down instead; this is what makes it work
+    // as written.
+    query: {
+      refetchOnWindowFocus: true,
+      queryKey: getListDealsQueryKey(dealParams),
+      placeholderData: keepPreviousData,
+    },
   });
   const enrichQuery = useGetRosterEnrichment();
 

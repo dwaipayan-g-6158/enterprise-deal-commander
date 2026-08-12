@@ -21,8 +21,15 @@ import { FilterSheet } from "@/mobile/screens/deals/filter-sheet";
 import { SortSheet } from "@/mobile/screens/deals/sort-sheet";
 import { useRosterUrl } from "@/mobile/screens/deals/use-roster-url";
 
-/** One keystroke per request is a request per keystroke. */
-const SEARCH_DEBOUNCE_MS = 280;
+/**
+ * One keystroke per request is a request per keystroke.
+ *
+ * 350 rather than 280: each settled keystroke is a 500-row Data Store read, and
+ * Catalyst's concurrency limit surfaces as a 429 that presents as a fast 500.
+ * Read lag is ~1–2s regardless, so the extra 70ms is invisible to the reader and
+ * measurably fewer requests.
+ */
+const SEARCH_DEBOUNCE_MS = 350;
 
 /**
  * The pipeline, as a card list.
