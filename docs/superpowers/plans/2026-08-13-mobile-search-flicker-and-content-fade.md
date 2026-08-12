@@ -593,10 +593,17 @@ Replace the body of `PanelBody` from the `if (error)` line through the final `re
   }
 
   // A wrapper rather than the class on `children`, because children is whatever
-  // sixteen panels pass and cannot be assumed to accept a className. Empty and
-  // error states deliberately do not fade: they are destinations, not
+  // sixteen panels pass and cannot be assumed to accept a className.
+  //
+  // It MUST carry space-y-3. The cards were direct children of panel-screen's
+  // own `space-y-3` container, which puts the gap between them; a bare wrapper
+  // makes them grandchildren and collapses every gap on all sixteen panels.
+  // Reproducing it here is also symmetric with the loading branch above, which
+  // wraps its shimmers in exactly this class for exactly this reason.
+  //
+  // Empty and error states deliberately do not fade: they are destinations, not
   // populations.
-  return <div className={cn(appear)}>{children}</div>;
+  return <div className={cn("space-y-3", appear)}>{children}</div>;
 ```
 
 - [ ] **Step 3: Run the panel suites and typecheck**
@@ -650,7 +657,11 @@ Replace the `body` assignment (lines 61–69):
   ) : empty ? (
     <p className="m-body m-muted py-6 text-center">{empty}</p>
   ) : (
-    <div className={cn(appear)}>{children}</div>
+    // `className={appear}` rather than `cn(appear)`: undefined omits the
+    // attribute entirely, where cn() would emit className="". No spacing class
+    // is needed here — unlike PanelBody, a chart's body is a single child and
+    // its parent section is not a space-y container.
+    <div className={appear}>{children}</div>
   );
 ```
 
@@ -760,10 +771,10 @@ The card at lines 199–201 is `<MobileCard><CardHeader label="Slowest against b
 
 ```tsx
         ) : (
-          <ul className={cn(velocityAppear)}>
+          <ul className={velocityAppear}>
 ```
 
-That `<ul>` opens on line 206 in the current file.
+That `<ul>` opens on line 206 in the current file. `className={velocityAppear}` rather than `cn(...)`: the `<ul>` carries no other class, and `undefined` omits the attribute where `cn()` would emit `className=""`. `cn` is therefore not needed in this file unless another edit introduces it.
 
 - [ ] **Step 5: Typecheck and run the suite**
 
@@ -941,8 +952,10 @@ import { useAppearOnSettle } from "@/mobile/hooks/use-appear-on-settle";
 Change the `<ul>` on line 84 to:
 
 ```tsx
-            <ul className={cn(appear)}>
+            <ul className={appear}>
 ```
+
+`className={appear}` rather than `cn(appear)`: the `<ul>` carries no other class, and `undefined` omits the attribute. This file's existing `cn` import stays for the uses already in it.
 
 The fade goes on the `<ul>`, inside the fixed `min-h-[336px]` box. That box exists because the swap must happen *inside* it or the box itself moves — 224px of measured shift. A fade on the `<ul>` changes opacity and a 4px translate only, so it cannot reintroduce that.
 
