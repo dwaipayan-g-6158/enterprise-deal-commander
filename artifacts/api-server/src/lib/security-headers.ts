@@ -56,6 +56,29 @@ const FONT_FILES = "https://fonts.gstatic.com";
  * Reading the file the server is actually about to serve removes the question.
  * It costs one read at startup and cannot disagree with reality.
  *
+ * ## …but the served BYTES are not what the browser hashes
+ *
+ * Reading the served file is necessary and was not sufficient, and this is the
+ * part that kept the script blocked. A CSP hash is computed over the script
+ * element's **child text content in the DOM**, not over the bytes on the wire —
+ * and the HTML parser's input-stream preprocessing has already rewritten every
+ * CRLF (and every lone CR) to a single LF before that text exists. So a CRLF file
+ * hashes one way on disk and another way in the browser, always.
+ *
+ * Measured on the deployed app: the header carried
+ * `sha256-Bqx36o5HnFsNVFnU/kSIfymFvqsC8oKwwcpIeuPrseU=` — a faithful hash of the
+ * served CRLF bytes — while Chrome computed
+ * `sha256-G9iEZuP1TUUgdsNpadTDmJqTMRTw3TGjtn4H6X+Uj8I=` from the parsed text and
+ * refused the script. Windows builds are CRLF because git checks out that way, so
+ * this affected every deploy from this host: the pre-paint theme stamp never ran,
+ * and dark mode went back to flashing white on launch — the exact bug that script
+ * exists to prevent, reintroduced by the policy meant to protect it. Nothing
+ * failed loudly; local dev never sees this header at all.
+ *
+ * Hence the newline normalisation below. It is not cosmetic tidying of the input —
+ * it is reproducing a step the parser performs, which is the only way to predict
+ * what the browser will hash.
+ *
  * Scripts with a `src` are skipped: those are covered by `'self'` already, and
  * hashing an external script's (empty) body would allow every empty inline
  * script on the origin.
@@ -66,10 +89,12 @@ export function inlineScriptHashes(html: string): string[] {
   for (const match of html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/gi)) {
     const [, attributes, body] = match;
     if (/\bsrc\s*=/i.test(attributes)) continue;
-    // The browser hashes the element's text content verbatim — no trimming, no
-    // normalising. Anything done to `body` here would produce a hash that never
-    // matches.
-    hashes.push(`'sha256-${createHash("sha256").update(body, "utf8").digest("base64")}'`);
+    // Exactly the HTML input-stream preprocessing rule: CRLF -> LF, then any
+    // remaining lone CR -> LF. Nothing else is touched — no trimming, no
+    // whitespace collapsing — because the parser does nothing else either, and
+    // anything extra would produce a hash that never matches.
+    const asParsed = body.replace(/\r\n?/g, "\n");
+    hashes.push(`'sha256-${createHash("sha256").update(asParsed, "utf8").digest("base64")}'`);
   }
 
   return hashes;

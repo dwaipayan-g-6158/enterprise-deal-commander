@@ -141,12 +141,48 @@ describe("the inline pre-paint script", () => {
     expect(hashes[0]).toMatch(/^'sha256-[A-Za-z0-9+/]{43}='$/);
   });
 
-  it("hashes the script body verbatim, because anything else never matches", () => {
-    // Trimming, re-indenting or normalising newlines all produce a hash the
-    // browser will not recognise, and the failure is silent.
+  it("hashes the body as the PARSER leaves it, not as the file stores it", () => {
+    /**
+     * This test used to assert the opposite — the body hashed verbatim — and that
+     * is what kept the script blocked on every Windows build.
+     *
+     * A CSP hash is computed over the script element's child text in the DOM, and
+     * the HTML parser's input-stream preprocessing has already turned every CRLF
+     * (and every lone CR) into one LF before that text exists. Git checks this repo
+     * out with CRLF, so the served file and the parsed text differ, always.
+     *
+     * Measured on the deployed app: the header carried the CRLF hash
+     * `Bqx36o5HnFsNVFnU/kSIfymFvqsC8oKwwcpIeuPrseU=` and Chrome computed
+     * `G9iEZuP1TUUgdsNpadTDmJqTMRTw3TGjtn4H6X+Uj8I=`, so the pre-paint theme stamp
+     * never ran and dark mode flashed white again.
+     */
     const body = INDEX_HTML.match(/<script>([\s\S]*?)<\/script>/)![1];
-    const expected = createHash("sha256").update(body, "utf8").digest("base64");
+    const asParsed = body.replace(/\r\n?/g, "\n");
+    const expected = createHash("sha256").update(asParsed, "utf8").digest("base64");
     expect(inlineScriptHashes(INDEX_HTML)[0]).toBe(`'sha256-${expected}'`);
+  });
+
+  it("gives a CRLF document and its LF twin the same hash", () => {
+    // The property that matters, stated without reference to how this checkout
+    // happens to be stored — so it holds on Windows and in CI alike. Had this
+    // existed, the bug above could not have shipped.
+    const lf = '<script>\nvar a = 1;\nvar b = 2;\n</script>';
+    const crlf = lf.replace(/\n/g, "\r\n");
+    const cr = lf.replace(/\n/g, "\r");
+    expect(inlineScriptHashes(crlf)).toEqual(inlineScriptHashes(lf));
+    expect(inlineScriptHashes(cr)).toEqual(inlineScriptHashes(lf));
+  });
+
+  it("still distinguishes scripts that genuinely differ", () => {
+    // The normalisation must not be so eager that it collapses real differences —
+    // a hash that matched everything would be worse than none.
+    expect(inlineScriptHashes("<script>var a = 1;</script>")).not.toEqual(
+      inlineScriptHashes("<script>var a = 2;</script>"),
+    );
+    // Indentation is part of the text the browser hashes; only newlines normalise.
+    expect(inlineScriptHashes("<script>\n  var a = 1;\n</script>")).not.toEqual(
+      inlineScriptHashes("<script>\nvar a = 1;\n</script>"),
+    );
   });
 
   it("ignores scripts with a src, which 'self' already covers", () => {
