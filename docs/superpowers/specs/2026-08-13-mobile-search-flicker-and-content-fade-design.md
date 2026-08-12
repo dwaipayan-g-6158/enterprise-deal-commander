@@ -177,6 +177,33 @@ A tab switch cross-fades correctly, but the snapshot it takes is of the screen's
 **loading** state, because the data has not arrived yet. When it does, the
 skeleton is replaced with no transition whatsoever.
 
+**Measured**, driving the shell on localhost with `/api/**` stalled and
+`/auth/me` stubbed, at 390×844. One Command → Deals tap produced exactly one
+`startViewTransition` call, `data-m-nav="lateral"` set at 5ms and cleared at
+388ms, and these animations on the pseudo-elements:
+
+```
+::view-transition-old(root)     m-lateral-out   200ms
+::view-transition-new(root)     m-lateral-in    200ms
+::view-transition-group(root)                   250ms
+::view-transition-group(m-navbar)               250ms   (lifted out — holds still)
+::view-transition-group(m-tabbar)               250ms   (lifted out — holds still)
+```
+
+At the end of it the arriving screen held **5 `.m-skeleton` blocks and 0 deal
+cards**, and there was no `.m-appear` anywhere on it. So the page-switch fade is
+not broken — it works exactly as designed, and what it delivers is a screen with
+no information on it. There is no `m-dock` pseudo in that list either, which
+independently confirms Fix D's premise.
+
+Two probe artifacts are worth recording, because both produced a confident wrong
+reading first. A second instrumentation pass on the same document wrapped the
+first, so one tab tap reported **two** `startViewTransition` calls and doubled
+every `data-m-nav` mark — which reads exactly like a double-navigation bug in
+`MTabBar` (there is none; it is a single `<Link>`). And Playwright's own `click`
+times out on a view transition, because it waits for a stability signal the
+transition never reports — dispatch the click from inside the page instead.
+
 Cards carry `.m-reveal`, which is scroll-driven — and its own doc note explains
 why it cannot help here: "cards already on screen at load are past the end of
 their range and render normally." Everything above the fold, which is everything
@@ -222,21 +249,44 @@ The logic is a pure function because `vitest.config.ts` sets
 React-rendering tests, so anything that must be verified has to be pure or
 grep-asserted.
 
-### Rollout
+### Rollout — at the boundaries, not per screen
 
-**One shared component covers sixteen screens.** `PanelBody`
-(`mobile/screens/deal/panel-screen.tsx:100`) already owns the
-error → loading → empty → content ladder for all sixteen deal panels, for the
-reason its doc gives: "sixteen panels each hand-rolling a shimmer, an error and
-an empty state is sixteen chances for them to disagree." One edit there is
-sixteen screens.
+The fade goes wherever a skeleton is *already* swapped for content, which in
+practice means the components that already take a `loading` prop. Four of them
+cover roughly twenty-three screens plus every chart:
 
-**The remaining screens wrap their content branch.** Fourteen files:
-`deals-screen`, `memory-screen`, `command-screen` (partly done — `PulseBlock` and
-`VerdictBlock` already use `.m-appear`), `pipeline-screen`, `flow-screen`,
-`portfolio-screen`, `portfolio-alerts-screen`, `losses-screen`,
-`loss-detail-screen`, `lens-screens`, `memory-detail-screen`,
-`memory-panel-screen`, `compare-screen`, `settings-screen`.
+- **`PanelBody`** (`mobile/screens/deal/panel-screen.tsx:100`) — the
+  error → loading → empty → content ladder for all sixteen deal panels, for the
+  reason its doc gives: "sixteen panels each hand-rolling a shimmer, an error and
+  an empty state is sixteen chances for them to disagree." One edit, sixteen
+  screens.
+- **`MChartFrame`** (`mobile/charts/m-chart-frame.tsx:61`) — the identical ladder
+  for every chart card.
+- **`LensScreen`** (`mobile/screens/intelligence/lens-screen.tsx:69`) — the three
+  Intelligence lenses.
+- **`LensFrame`** (`mobile/screens/memory/lens-screens.tsx:22`) — the four Memory
+  lenses.
+
+**The card is sometimes the right unit, not the screen.** Pipeline has four
+independent gates (sim, win/loss, funnel, velocity) and Memory panel has three;
+their cards settle at different moments. Putting one fade on such a screen's
+container would replay it over cards that had already popped in, so those screens
+pass no container-level `loading` and let `MChartFrame` — or their own per-card
+gate — fade each card as it lands. This is the single subtlety in the rollout and
+the reason it is expressed as boundaries rather than as "wrap each screen".
+
+The individually-shaped screens that own no shared boundary take the same
+one-line treatment on their own content container: `deals-screen`,
+`memory-screen`, `needs-block` (Command's only skeleton boundary — `PulseBlock`
+and `VerdictBlock` already use `.m-appear`), `settings-screen` (×5),
+`loss-detail-screen` (×3), `portfolio-alerts-screen`, `flow-screen` (×2),
+`compare-screen`, `memory-detail-screen`, `memory-panel-screen`,
+`movement-block`, and `deal-brief-screen`.
+
+**Two screens are permanently exempt**, and this is a design decision rather than
+deferred work. `brief-hero.tsx` holds the shared-card `view-transition-name`, so
+fading it animates the morph target into nothing. `ask-screen.tsx`'s shimmer is a
+pending answer inside a chat thread, not a screen populating.
 
 Error and empty states are left alone. They are destinations, not populations.
 
@@ -273,7 +323,7 @@ Every one is a node-environment `.test.ts`, matching what this package can run.
 | `mobile-nav.test.ts` (extend) | `isQuietMove` truth table: same path + replace → true; same path + push → false; different path + replace (the lens switch) → false; query/hash stripped before comparison. |
 | `nav-transition` index stamping | A quiet navigation still stamps `__mIndex`. This is the guard against reaching for `transition: false`, which would break the back chevron. |
 | `appear.test.ts` | `appearsOnSettle` truth table, including the first-render-already-settled case. |
-| appear-coverage grep test | Every screen under `mobile/screens/**` that renders a loading branch applies the appear class to its content branch. Modelled on `panel-loading-gate.test.ts`, and for the same reason: it is what stops screen #27 from forgetting. |
+| appear-coverage grep test | Every screen under `mobile/screens/**` that draws a skeleton participates in the fade. Modelled on `panel-loading-gate.test.ts`, and for the same reason: it is what stops screen #27 from forgetting. Detection keys on `Shimmer`, **not** on `isLoading` — `flow-screen` gates on `!health` and `deal-brief-screen` never mentions `isLoading` at all, so an `isLoading` grep would silently exempt exactly the screens most likely to be missed. |
 
 ## Verification
 
