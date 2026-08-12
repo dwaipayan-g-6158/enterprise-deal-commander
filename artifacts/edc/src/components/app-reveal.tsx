@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useIsFetching } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { EdcLogoMark } from "@/components/edc-logo-mark";
+import { isOutsideShell } from "@/lib/shell-routes";
 
 /**
  * Long enough that a warm refresh reads as one deliberate movement rather than a
@@ -84,20 +85,11 @@ const QUIET_MS = 150;
  * `/share/:token` is public and never resolves a session, so a contract that
  * waits on one would always run to the ceiling.
  *
- * Anchored at ^ and terminated with (?:[/?]|$) for the same reason the service
- * worker's denylist is: an unanchored /login/ would also match /deals?ref=/login,
- * and a bare prefix would match a future /logindiagnostics.
+ * The patterns themselves live in `lib/shell-routes.ts`, because ShellGate's
+ * Suspense fallback needs the same set for a closely-related reason — a shell
+ * skeleton in front of the sign-in page reads as "you are already logged in" —
+ * and two copies of this list would drift. See there for the anchoring rules.
  */
-const EXEMPT_ROUTES = [
-  /^\/login(?:[/?]|$)/,
-  /^\/share(?:[/?]|$)/,
-  /^\/__catalyst(?:[/?]|$)/,
-  /^\/accounts(?:[/?]|$)/,
-];
-
-export function isExemptRoute(path: string): boolean {
-  return EXEMPT_ROUTES.some((route) => route.test(path));
-}
 
 function prefersReducedMotion(): boolean {
   return window.matchMedia?.("(prefers-reduced-motion: reduce)").matches === true;
@@ -173,7 +165,7 @@ export function AppReveal() {
   // resurrect it, and re-evaluating the exemption on every navigation would do
   // exactly that when someone moves from /login into the app.
   const [phase, setPhase] = useState<"masking" | "leaving" | "gone">(() =>
-    isExemptRoute(location) ? "gone" : "masking",
+    isOutsideShell(location) ? "gone" : "masking",
   );
   const [floorElapsed, setFloorElapsed] = useState(() => prefersReducedMotion());
   const [fontsReady, setFontsReady] = useState(fontsAlreadyLoaded);

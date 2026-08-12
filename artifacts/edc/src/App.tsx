@@ -1,5 +1,5 @@
 import { lazy, Suspense } from "react";
-import { Router as WouterRouter } from "wouter";
+import { Router as WouterRouter, useLocation } from "wouter";
 import { QueryClient, QueryClientProvider, MutationCache } from "@tanstack/react-query";
 import { toast } from "@/hooks/use-toast";
 import { Toaster } from "@/components/ui/toaster";
@@ -14,6 +14,7 @@ import { FocusModeProvider } from "@/lib/presence/focus-mode-context";
 import { AppShellSkeleton } from "@/components/app-shell-skeleton";
 import { MobileShellSkeleton } from "@/mobile/shell/m-shell-skeleton";
 import { AppReveal } from "@/components/app-reveal";
+import { isOutsideShell } from "@/lib/shell-routes";
 import { useMediaQuery } from "@/hooks/use-media-query";
 
 // Each shell is a separate chunk: a phone never downloads the desktop cockpit,
@@ -74,11 +75,31 @@ const queryClient = new QueryClient({
  */
 function ShellGate() {
   const isMobile = useMediaQuery("(max-width: 767px)");
-  return (
-    <Suspense fallback={isMobile ? <MobileShellSkeleton /> : <AppShellSkeleton />}>
-      {isMobile ? <MobileApp /> : <DesktopApp />}
-    </Suspense>
-  );
+  const [location] = useLocation();
+
+  /**
+   * No shell chrome in front of a route that renders no shell.
+   *
+   * Both skeletons are previews of the signed-in app — the desktop one draws a
+   * 256px sidebar with seven nav rows, an avatar and two buttons; the mobile one a
+   * nav bar and the four-item tab bar. In front of the sign-in page that is not a
+   * loading state, it is a false claim: measured on the deployed build, a refresh
+   * of `/login` showed the full desktop shell from 61ms to 342ms and only then the
+   * sign-in card. Reported as "it gives the impression that I am already logged
+   * in", and it is the same on a phone.
+   *
+   * `null` rather than a login-shaped placeholder. The body already carries the
+   * right background (index.html stamps theme and time band before first paint),
+   * the page brings its own entrance, and the card already has a skeleton inside
+   * it for the Catalyst frame — so an empty canvas is both the honest state and the
+   * one with nothing to hand off from.
+   *
+   * `lib/shell-routes.ts` owns the list; AppReveal reads the same one.
+   */
+  const shellIsComing = !isOutsideShell(location);
+  const fallback = shellIsComing ? (isMobile ? <MobileShellSkeleton /> : <AppShellSkeleton />) : null;
+
+  return <Suspense fallback={fallback}>{isMobile ? <MobileApp /> : <DesktopApp />}</Suspense>;
 }
 
 function App() {

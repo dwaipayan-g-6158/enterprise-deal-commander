@@ -24,6 +24,10 @@ const SRC = import.meta.dirname;
 const RAW = readFileSync(join(SRC, "components", "app-reveal.tsx"), "utf8");
 const SOURCE = stripCodeComments(RAW);
 const APP = stripCodeComments(readFileSync(join(SRC, "App.tsx"), "utf8"));
+// The route patterns moved to their own module when ShellGate started needing the
+// same set — see lib/shell-routes.ts. Still asserted from here, because "the mask
+// stays off these four" is this component's contract wherever the list lives.
+const ROUTES = stripCodeComments(readFileSync(join(SRC, "lib", "shell-routes.ts"), "utf8"));
 const CSS = readFileSync(join(SRC, "index.css"), "utf8");
 
 /** `.app-reveal { ... }` and its `[data-leaving]` variant. */
@@ -162,9 +166,9 @@ describe("the reveal stays off the routes it must not cover", () => {
    * seeing none of the others.
    */
   const patterns = (() => {
-    const start = SOURCE.indexOf("EXEMPT_ROUTES");
-    expect(start, "EXEMPT_ROUTES should exist").toBeGreaterThan(-1);
-    return SOURCE.slice(start, SOURCE.indexOf("];", start));
+    const start = ROUTES.indexOf("ROUTES_OUTSIDE_SHELL");
+    expect(start, "ROUTES_OUTSIDE_SHELL should exist").toBeGreaterThan(-1);
+    return ROUTES.slice(start, ROUTES.indexOf("];", start));
   })();
 
   it("never covers the Catalyst gateway's own documents", () => {
@@ -217,7 +221,7 @@ describe("the reveal stays off the routes it must not cover", () => {
     // This is a boot mask. Re-evaluating the exemption per navigation would drop
     // an opaque panel over the app when someone moves from /login into it.
     // `useState<...>(` — the generic sits between the name and the paren.
-    expect(SOURCE).toMatch(/useState[^(]*\(\(\)\s*=>\s*isExemptRoute/);
+    expect(SOURCE).toMatch(/useState[^(]*\(\(\)\s*=>\s*isOutsideShell/);
   });
 
   it("still declares boot over on an exempt route", () => {
