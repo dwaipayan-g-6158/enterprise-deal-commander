@@ -1,9 +1,48 @@
-import type { ReactNode } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 import { Link } from "wouter";
 import { ChevronLeft } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { MLiveCapsule } from "@/mobile/shell/m-live-capsule";
 import { canPopWithinApp } from "@/mobile/lib/history-index";
+
+/**
+ * Publish the bar's real height as --m-navbar-h, for anything that has to sit
+ * below it: a sticky group header, a scroll-margin on a jump target.
+ *
+ * Measured rather than declared because the height is not a property of the nav
+ * bar, it is a property of the screen — a reserved subtitle adds 20px, a chips
+ * row 60px, and the live capsule animates its own height open and shut while
+ * the reader watches. The Deals group header is the cautionary tale: it assumed
+ * 3.5rem, the bar was standing at ~7.7rem, and the header spent its life parked
+ * behind the bar instead of below it. Nothing caught it because a constant that
+ * is only wrong relative to another constant still typechecks and still renders.
+ *
+ * Written to documentElement, not the header: a custom property inherits DOWN,
+ * and every consumer is a sibling or a cousin, never a child.
+ */
+function usePublishedNavBarHeight(ref: React.RefObject<HTMLElement | null>) {
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+
+    const publish = () => {
+      document.documentElement.style.setProperty(
+        "--m-navbar-h",
+        `${el.getBoundingClientRect().height}px`,
+      );
+    };
+    publish();
+
+    const observer = new ResizeObserver(publish);
+    observer.observe(el);
+    return () => {
+      observer.disconnect();
+      // Fall back to the token's own value rather than leaving the last
+      // screen's height behind for a screen that has no nav bar at all.
+      document.documentElement.style.removeProperty("--m-navbar-h");
+    };
+  }, [ref]);
+}
 
 export interface MNavBarProps {
   title: ReactNode;
@@ -69,8 +108,12 @@ export function MNavBar({
   collapseTitle = false,
   className,
 }: MNavBarProps) {
+  const ref = useRef<HTMLElement>(null);
+  usePublishedNavBarHeight(ref);
+
   return (
     <header
+      ref={ref}
       className={cn(
         // m-vt-navbar lifts the bar out of the route transition's root snapshot,
         // so it cross-fades in place while content slides underneath — an iOS

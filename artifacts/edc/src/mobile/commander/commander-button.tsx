@@ -1,24 +1,42 @@
 import { useLocation } from "wouter";
-import { ListTree, Search, SlidersHorizontal, Target, type LucideIcon } from "lucide-react";
+import { ListTree, Search, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useCommander } from "@/mobile/commander/commander-context";
 import { hidesCommander } from "@/mobile/nav/mobile-nav";
+import { useWriteStatusOptional } from "@/mobile/write/write-status-context";
+
+interface Affordance {
+  label: string;
+  Icon: LucideIcon;
+  /** Secondary material — see .m-capsule-quiet. */
+  quiet: boolean;
+}
 
 /**
- * What the capsule does here, said twice — once in the label, once in the
- * glyph. It used to draw lucide's `Command`, the Apple *keyboard* key, on a
- * device with no keyboard; the capsule is not a command palette on a phone
- * and should not wear its shortcut.
+ * What the capsule does here, said three ways — label, glyph, and material.
+ *
+ * It used to draw lucide's `Command`, the Apple *keyboard* key, on a device
+ * with no keyboard; the capsule is not a command palette on a phone and should
+ * not wear its shortcut.
+ *
+ * ## Driven by what the screen registered, not by its path
+ *
+ * The variants used to be chosen by pathname, and two of the four branches were
+ * unreachable: `/deals` bails in `hidesCommander` before this is called, and
+ * `hasJumpTargets` was permanently false because `useJumpTargets` had no call
+ * sites anywhere. The visible consequence was on `/analytics`, where the label
+ * read "Jump to metric" over a sheet that could not jump to anything — the
+ * "On this screen" group it needed was fed by that same dead hook. It opened
+ * the identical sheet as "Search or jump", drawn in the identical pill, which
+ * is exactly what it was reported as.
+ *
+ * Now a screen earns the jump affordance by registering targets. A screen that
+ * registers none gets the search capsule, and the label is true either way.
  */
-function affordanceFor(path: string, hasJumpTargets: boolean): { label: string; Icon: LucideIcon } {
-  if (path.startsWith("/deals/")) {
-    return hasJumpTargets
-      ? { label: "Navigate deal", Icon: ListTree }
-      : { label: "Search or jump", Icon: Search };
-  }
-  if (path === "/deals") return { label: "Filter & find", Icon: SlidersHorizontal };
-  if (path.startsWith("/analytics")) return { label: "Jump to metric", Icon: Target };
-  return { label: "Search or jump", Icon: Search };
+function affordanceFor(hasJumpTargets: boolean): Affordance {
+  return hasJumpTargets
+    ? { label: "Jump to section", Icon: ListTree, quiet: true }
+    : { label: "Search or jump", Icon: Search, quiet: false };
 }
 
 /**
@@ -47,12 +65,23 @@ function affordanceFor(path: string, hasJumpTargets: boolean): { label: string; 
 export function CommanderButton() {
   const [path] = useLocation();
   const { open, setOpen, jumpTargets } = useCommander();
+  const writeStatus = useWriteStatusOptional();
 
   // Which screens it stays off, and why, lives in nav/mobile-nav.ts so it is
   // testable. It is also hidden while the sheet it opens is open.
-  if (open || hidesCommander(path)) return null;
+  //
+  // And while an undo window is open. The undo bar occupies the SAME band —
+  // both sat at bottom-[var(--m-float-bottom)] at z-40 — and the capsule is
+  // mounted after <main> in the shell, so it painted straight over the undo
+  // message on every deal panel. Ceding the corner is the right resolution
+  // rather than restacking: two controls fighting for one thumb zone is the
+  // defect, the undo window lasts seconds, and undoing the gate you just
+  // toggled is by far the more urgent of the two. It also resolves a silent
+  // second bug — both elements carry `m-vt-capsule`, and a duplicated
+  // view-transition-name disables the transition for BOTH (see motion.css).
+  if (open || writeStatus?.undo || hidesCommander(path)) return null;
 
-  const { label, Icon } = affordanceFor(path, jumpTargets.length > 0);
+  const { label, Icon, quiet } = affordanceFor(jumpTargets.length > 0);
 
   return (
     <button
@@ -62,7 +91,7 @@ export function CommanderButton() {
       className={cn(
         // m-vt-capsule: like the tab bar, the capsule holds still while the
         // screen changes behind it.
-        "m-press m-vt-capsule absolute bottom-[calc(4rem+env(safe-area-inset-bottom)+0.75rem)] left-1/2 z-40",
+        "m-press m-vt-capsule absolute bottom-[var(--m-float-bottom)] left-1/2 z-40",
         "flex h-14 items-center justify-center gap-2 px-6",
         // .m-capsule carries the whole material — fill, label colour, pill
         // radius, elevation, specular edge and ring. It is a single class
@@ -71,7 +100,10 @@ export function CommanderButton() {
         // near-black canvas measures 1.01:1 against it and is simply not
         // visible as a shape, so "most prominent" can only mean light there.
         // Hard-coding text-white here would have made the dark label unreadable.
-        "m-capsule",
+        //
+        // The quiet variant swaps that inverted fill for the shell's ordinary
+        // glass, so the two states differ by material and not only by glyph.
+        quiet ? "m-glass m-capsule-quiet" : "m-capsule",
         // Centring, and it stays a `translate` rather than a `transform` so it
         // composes with .m-press's scale on tap instead of cancelling it — the
         // same trap the scroll-driven reveals hit.

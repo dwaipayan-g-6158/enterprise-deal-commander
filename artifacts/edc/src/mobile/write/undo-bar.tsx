@@ -55,7 +55,7 @@ export function UndoBar({ onUndo }: { onUndo: (entry: NonNullable<ReturnType<typ
   return (
     <div
       // Above the tab bar and the capsule, clear of the home indicator.
-      className="m-card m-vt-capsule absolute inset-x-4 bottom-[calc(4rem+env(safe-area-inset-bottom)+0.75rem)] z-40 overflow-hidden"
+      className="m-card m-vt-capsule absolute inset-x-4 bottom-[var(--m-float-bottom)] z-40 overflow-hidden"
       role="status"
     >
       <div className="flex items-center gap-3 px-4 py-3">

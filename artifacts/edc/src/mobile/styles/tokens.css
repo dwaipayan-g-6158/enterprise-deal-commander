@@ -98,6 +98,31 @@
      the shell a little margin on Android too. */
   --m-tap: 48px;
 
+  /* --- Chrome heights ---------------------------------------------------
+   * How much edge the fixed chrome claims, named once.
+   *
+   * The bottom furniture is a fixed height, so it is a constant here. It was
+   * previously restated by hand at five call sites — `4rem` in both docked
+   * search bars, `4rem + 0.75rem` in the Commander capsule and the undo bar,
+   * `7.5rem` in the Memory compare bar, `h-16` on the tab bar itself.
+   *
+   * The NAV BAR is deliberately not a constant. Its height depends on what the
+   * screen puts in it: a reserved subtitle block, a chips or segmented row, the
+   * live capsule when it opens. Deals assumed "a nav bar is its title row" and
+   * pinned its group header at 3.5rem under a bar standing at ~7.7rem, so the
+   * header parked 67px BEHIND the thing it was trying to sit below. A second
+   * hard-coded guess would just be a new wrong number on the next screen that
+   * puts something else in its bar — so MNavBar measures itself and publishes
+   * --m-navbar-h. The value below is only the pre-measurement fallback, and
+   * matches a bare title row (min-h-11 + py-2 + the 1px keyline). */
+  --m-navbar-h: 3.8125rem;
+  --m-tabbar: 4rem;
+  /* The band the capsule and the undo bar share, measured from the viewport
+     bottom: clear of the tab bar, plus the 0.75rem gap above it. */
+  --m-float-bottom: calc(var(--m-tabbar) + env(safe-area-inset-bottom) + 0.75rem);
+  /* Where a docked bar (search input) sits — directly on top of the tab bar. */
+  --m-dock-bottom: calc(var(--m-tabbar) + env(safe-area-inset-bottom));
+
   /* --- Elevation --------------------------------------------------------
    * E0 canvas · E1 card · E2 sticky chrome · E3 sheet · E4 floating capsule.
    * Light separates planes with a keyline plus shadow. Direction is split into

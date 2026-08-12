@@ -9,6 +9,8 @@ import {
   useFlowRecycle,
 } from "@/components/cockpit/flow/use-flow";
 import { OUTCOME_CLASS } from "@/lib/semantic-colors";
+import { useJumpTargets } from "@/mobile/commander/use-jump-targets";
+import type { JumpTarget } from "@/mobile/commander/commander-context";
 import { MNavBar } from "@/mobile/shell/m-nav-bar";
 import { MobileCard, CardHeader } from "@/mobile/components/mobile-card";
 import { Shimmer } from "@/mobile/components/shimmer";
@@ -76,13 +78,34 @@ export function FlowScreen() {
   const refresh = () =>
     Promise.all([healthQuery.refetch(), matrixQuery.refetch(), recycleQuery.refetch()]);
 
+  // The first two cards always render (they carry their own loading and empty
+  // states); the third is conditional on the recycle query landing.
+  const jumpTargets = useMemo<JumpTarget[]>(() => {
+    const targets: JumpTarget[] = [
+      {
+        anchorId: "flow-health",
+        label: "Pipeline health",
+        detail: health ? `${Math.round(health.score)}/100` : undefined,
+      },
+      {
+        anchorId: "flow-transitions",
+        label: "Where deals actually move",
+        detail: transitions.length > 0 ? String(transitions.length) : undefined,
+      },
+    ];
+    if (recycle) targets.push({ anchorId: "flow-recycle", label: "Value in and out" });
+    return targets;
+  }, [health, transitions, recycle]);
+
+  useJumpTargets(jumpTargets);
+
   return (
     <>
       <MNavBar title="Flow" backHref="/analytics" backLabel="Back to Intelligence" />
 
       <PullToRefresh onRefresh={refresh}>
         <div className="space-y-3 p-4">
-          <MobileCard>
+          <MobileCard id="flow-health">
             <CardHeader label="Pipeline health" />
             {!health ? (
               <Shimmer className="h-24" />
@@ -117,7 +140,7 @@ export function FlowScreen() {
             )}
           </MobileCard>
 
-          <MobileCard>
+          <MobileCard id="flow-transitions">
             <CardHeader label="Where deals actually move" />
             {matrixQuery.isLoading ? (
               <Shimmer className="h-32" />
@@ -196,7 +219,7 @@ const KIND_FILL: Record<string, string> = {
  */
 function RecycleCard({ recycle }: { recycle: RecycleExit }) {
   return (
-    <MobileCard>
+    <MobileCard id="flow-recycle">
       <CardHeader label="Value in and out" />
       <ul className="space-y-2">
         {recycle.waterfall.map((step: WaterfallStep, i) => {

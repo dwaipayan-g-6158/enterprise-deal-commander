@@ -151,7 +151,7 @@ export function MemoryScreen() {
           // ancestor would capture the `fixed` and let the dock scroll away.
           <div
             style={pullStyle}
-            className="m-glass m-glass-bottom fixed inset-x-0 bottom-[calc(4rem+env(safe-area-inset-bottom))] z-30 flex items-center gap-2 border-t border-border px-4 py-2.5"
+            className="m-glass m-glass-bottom fixed inset-x-0 bottom-[var(--m-dock-bottom)] z-30 flex items-center gap-2 border-t border-border px-4 py-2.5"
           >
             <label className="sr-only" htmlFor="memory-search">
               Search archived deals

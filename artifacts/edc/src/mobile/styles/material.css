@@ -82,6 +82,11 @@ html[data-app-ready] .m-shell {
   border: 1px solid hsl(var(--card-border));
   border-radius: var(--m-radius-card);
   box-shadow: var(--m-e1);
+  /* Every card is a potential jump destination, and the nav bar is sticky —
+     scrollIntoView would otherwise park the card's top edge underneath it and
+     hide exactly the header the reader asked to be taken to. Costs nothing on
+     a card nobody jumps to. */
+  scroll-margin-top: calc(var(--m-navbar-h) + 0.5rem);
 }
 
 /* --- Liquid Glass ---------------------------------------------------------
@@ -179,6 +184,27 @@ html[data-app-ready] .m-shell {
     0 0 0 1px hsl(var(--m-capsule-ring) / var(--m-capsule-ring-alpha));
   backdrop-filter: blur(24px) saturate(160%);
   -webkit-backdrop-filter: blur(24px) saturate(160%);
+}
+
+/* --- E4 (quiet): the capsule's secondary state ----------------------------
+ * Same geometry and position, glass instead of the inverted fill.
+ *
+ * The capsule has two jobs and they are not equal. Searching the whole
+ * portfolio is the primary one and keeps the E4 material; jumping between
+ * sections of the screen you are already on is a convenience. They used to be
+ * drawn identically — same pill, same fill, same height, same position — and
+ * differed only by a 20px glyph and a word, which is not a difference anyone
+ * reads at thumb speed.
+ *
+ * Glass rather than a new colour: it is already the shell's secondary surface
+ * (nav bar, docked search), so the pair reads as one system and the foreground
+ * contrast on it has been measured. Pair with .m-glass, which supplies the
+ * fill; this adds only the pill geometry and its edge. */
+.m-capsule-quiet {
+  border-radius: var(--m-radius-pill);
+  box-shadow:
+    var(--m-e2),
+    0 0 0 1px hsl(var(--border));
 }
 
 /* --- Fallbacks ------------------------------------------------------------

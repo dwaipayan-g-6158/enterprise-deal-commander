@@ -415,6 +415,10 @@ describe("every token is accounted for", () => {
   const NON_COLOUR = new Set([
     "radius", "m-radius-card", "m-radius-sheet", "m-radius-nested", "m-radius-pill",
     "m-tap",
+    // Chrome geometry. --m-navbar-h is only the pre-measurement fallback; the
+    // live value is published by MNavBar from its own measured height, because
+    // the bar's height is a property of what the screen puts in it.
+    "m-navbar-h", "m-tabbar", "m-float-bottom", "m-dock-bottom",
     "m-e1", "m-e2", "m-e3", "m-e4", "m-specular",
     "m-glass-alpha", "m-glass-thin-alpha", "m-glass-tint-alpha",
     "m-glass-specular-alpha", "m-glass-rim-alpha", "m-glass-shadow-alpha",

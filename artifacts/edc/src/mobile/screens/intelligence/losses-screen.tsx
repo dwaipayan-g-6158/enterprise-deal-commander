@@ -1,7 +1,10 @@
+import { useMemo } from "react";
 import { Link } from "wouter";
 import { ChevronRight } from "lucide-react";
 import { compactCurrency, humanizeCode } from "@/lib/format";
 import { useGetCompetitiveLoss, useGetLossDashboard } from "@workspace/api-client-react";
+import { useJumpTargets } from "@/mobile/commander/use-jump-targets";
+import type { JumpTarget } from "@/mobile/commander/commander-context";
 import { MobileCard, CardHeader } from "@/mobile/components/mobile-card";
 import { Shimmer } from "@/mobile/components/shimmer";
 import { EmptyState } from "@/mobile/components/states";
@@ -33,12 +36,54 @@ export function LossesScreen() {
   const competitiveQuery = useGetCompetitiveLoss();
 
   const dashboard = dashboardQuery.data?.data;
-  const competitors = [...(competitiveQuery.data?.data?.byCompetitor ?? [])]
-    .sort((a, b) => b.lossTcv - a.lossTcv)
-    .slice(0, COMPETITORS_SHOWN);
+  // Memoized, not just derived: it feeds the jump targets below, and
+  // useJumpTargets re-publishes whenever its array identity changes — an array
+  // rebuilt every render would publish, re-render, and publish again.
+  const byCompetitor = competitiveQuery.data?.data?.byCompetitor;
+  const competitors = useMemo(
+    () =>
+      [...(byCompetitor ?? [])]
+        .sort((a, b) => b.lossTcv - a.lossTcv)
+        .slice(0, COMPETITORS_SHOWN),
+    [byCompetitor],
+  );
 
   const refresh = () => Promise.all([dashboardQuery.refetch(), competitiveQuery.refetch()]);
   const lossCount = dashboard?.volume.lossCount ?? 0;
+
+  // Mirrors each card's own render condition, so the capsule never offers to
+  // scroll to a section that this data did not produce. Memoized because
+  // useJumpTargets re-publishes on identity change.
+  const jumpTargets = useMemo<JumpTarget[]>(() => {
+    if (!dashboard || lossCount === 0) return [];
+    const targets: JumpTarget[] = [
+      {
+        anchorId: "losses-pulse",
+        label: "Loss pulse",
+        detail: dashboard.lossPulse != null ? `${Math.round(dashboard.lossPulse)}/100` : undefined,
+      },
+    ];
+    if (dashboard.compositionByCategory.length > 0) {
+      targets.push({ anchorId: "losses-why", label: "Why we lost" });
+    }
+    if (dashboard.topPatterns.length > 0) {
+      targets.push({
+        anchorId: "losses-patterns",
+        label: "Patterns that fired",
+        detail: String(dashboard.topPatterns.length),
+      });
+    }
+    if (competitors.length > 0) {
+      targets.push({
+        anchorId: "losses-competitors",
+        label: "Lost to",
+        detail: String(competitors.length),
+      });
+    }
+    return targets;
+  }, [dashboard, lossCount, competitors]);
+
+  useJumpTargets(jumpTargets);
 
   return (
     <LensScreen
@@ -56,7 +101,7 @@ export function LossesScreen() {
         />
       ) : (
         <>
-          <MobileCard>
+          <MobileCard id="losses-pulse">
             <CardHeader label="Loss pulse" />
             <p className="m-hero m-num">
               {dashboard.lossPulse != null ? Math.round(dashboard.lossPulse) : "—"}
@@ -87,7 +132,7 @@ export function LossesScreen() {
           </MobileCard>
 
           {dashboard.compositionByCategory.length > 0 ? (
-            <MobileCard>
+            <MobileCard id="losses-why">
               <CardHeader label="Why we lost" />
               <MRing
                 data={dashboard.compositionByCategory.map((row, i) => ({
@@ -104,7 +149,7 @@ export function LossesScreen() {
           ) : null}
 
           {dashboard.topPatterns.length > 0 ? (
-            <MobileCard>
+            <MobileCard id="losses-patterns">
               <CardHeader label="Patterns that fired" />
               <ul className="space-y-2.5">
                 {dashboard.topPatterns.map((pattern) => (
@@ -134,7 +179,7 @@ export function LossesScreen() {
           ) : null}
 
           {competitors.length > 0 ? (
-            <MobileCard>
+            <MobileCard id="losses-competitors">
               <CardHeader label="Lost to" />
               <ul className="space-y-3">
                 {competitors.map((competitor) => (

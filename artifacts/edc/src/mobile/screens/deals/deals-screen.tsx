@@ -131,7 +131,7 @@ export function DealsScreen() {
           // docs; wrapping would capture the `fixed` and make it scroll away.
           <div
             style={pullStyle}
-            className="m-glass m-glass-bottom fixed inset-x-0 bottom-[calc(4rem+env(safe-area-inset-bottom))] z-30 flex items-center gap-2 border-t border-border px-4 py-2.5"
+            className="m-glass m-glass-bottom fixed inset-x-0 bottom-[var(--m-dock-bottom)] z-30 flex items-center gap-2 border-t border-border px-4 py-2.5"
           >
             <label className="sr-only" htmlFor="deals-search">
               Search deals
@@ -242,10 +242,18 @@ function GroupSection({
   return (
     <section className="space-y-3">
       {showHeader ? (
-        // top-[calc(...)] rather than top-0: the nav bar is sticky too, and a
-        // group header that stops at the top of the scrollport slides underneath
-        // it instead of stacking below it.
-        <div className="m-glass sticky top-[calc(3.5rem+env(safe-area-inset-top))] z-20 -mx-1 flex items-baseline gap-2 rounded-lg px-3 py-2">
+        // Offset rather than top-0: the nav bar is sticky too, and a group
+        // header that stops at the top of the scrollport slides underneath it
+        // instead of stacking below it.
+        //
+        // --m-navbar-h is the bar's MEASURED height, published by MNavBar. The
+        // hard-coded 3.5rem this replaces was the height of a bare title row,
+        // but this screen's bar also carries a reserved subtitle and the saved-
+        // views chips — ~7.7rem in total — so the header stopped 67px behind the
+        // bar and the frosted glass painted straight over it. It already
+        // includes the safe-area inset (getBoundingClientRect covers padding),
+        // so adding env(safe-area-inset-top) here would double-count it.
+        <div className="m-glass sticky top-[var(--m-navbar-h)] z-20 -mx-1 flex items-baseline gap-2 rounded-lg px-3 py-2">
           <h2 className="m-label truncate">{group.label}</h2>
           <span className="m-caption m-muted m-num shrink-0">{group.rows.length}</span>
           <span className="m-caption m-muted m-num ml-auto shrink-0">{money(group.totalTCV)}</span>

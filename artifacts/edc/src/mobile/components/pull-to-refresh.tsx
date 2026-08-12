@@ -174,9 +174,22 @@ export function PullToRefresh({
       >
         <RefreshRing progress={progress} spinning={refreshing} confirming={confirming} />
       </div>
-      <div style={{ transform: `translateY(${pull}px)`, transition }}>{children}</div>
+      {/* `none` at rest, not translateY(0px). A transform — even an identity
+          one — makes this div a containing block AND a stacking context for
+          everything inside it, which quietly capped any sticky descendant's
+          z-index at this element's own. The Deals group header is sticky and
+          lives in here: at z-20 it could never rise above the z-30 nav bar no
+          matter what offset it was given, so fixing the offset alone would not
+          have been enough. Only during an actual pull is the transform real,
+          and the dock stays outside it regardless (see below). */}
+      <div
+        style={{ transform: pull === 0 ? "none" : `translateY(${pull}px)`, transition }}
+      >
+        {children}
+      </div>
       {/* Outside the transformed element on purpose: the dock is `fixed`, and a
-          transformed ancestor would capture it as its containing block. */}
+          transformed ancestor would capture it as its containing block. Still
+          true during a pull, which is the only time the transform is real. */}
       {dock?.({ transform: `translateY(${pull * DOCK_PULL_RATIO}px)`, transition })}
       <span role="status" className="sr-only">
         {refreshing ? "Refreshing" : ""}

@@ -13,13 +13,24 @@ import { cn } from "@/lib/utils";
  * normally, and so does everything on a screen too short to scroll.
  */
 export function MobileCard({
+  id,
   children,
   className,
 }: {
+  /**
+   * Anchor for the Commander capsule's "Jump to section" list, which scrolls by
+   * `document.getElementById`. `.m-card` carries the matching scroll-margin so
+   * the card lands below the sticky nav bar rather than under it.
+   */
+  id?: string;
   children: ReactNode;
   className?: string;
 }) {
-  return <section className={cn("m-card m-reveal p-4", className)}>{children}</section>;
+  return (
+    <section id={id} className={cn("m-card m-reveal p-4", className)}>
+      {children}
+    </section>
+  );
 }
 
 /**

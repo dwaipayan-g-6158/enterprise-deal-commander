@@ -9,6 +9,8 @@ import {
   type RiskCell,
 } from "@workspace/api-client-react";
 import { riskBand } from "@/components/cockpit/portfolio-presentation";
+import { useJumpTargets } from "@/mobile/commander/use-jump-targets";
+import type { JumpTarget } from "@/mobile/commander/commander-context";
 import { MobileCard, CardHeader } from "@/mobile/components/mobile-card";
 import { Shimmer } from "@/mobile/components/shimmer";
 import { EmptyState } from "@/mobile/components/states";
@@ -47,6 +49,38 @@ export function PortfolioScreen() {
   const refresh = () => Promise.all([analysisQuery.refetch(), mixQuery.refetch()]);
   const currency = summary?.reportingCurrency ?? "USD";
 
+  // Mirrors each card's render condition — RiskRail returns null on an empty
+  // cell list, so the count has to be checked here too rather than assumed.
+  const jumpTargets = useMemo<JumpTarget[]>(() => {
+    if (!analysis) return [];
+    const targets: JumpTarget[] = [];
+    if (summary) targets.push({ anchorId: "portfolio-concentration", label: "Concentration" });
+    if (byManager.length > 0) {
+      targets.push({
+        anchorId: "portfolio-by-manager",
+        label: "Risk by account manager",
+        detail: String(byManager.length),
+      });
+    }
+    if (byLead.length > 0) {
+      targets.push({
+        anchorId: "portfolio-by-lead",
+        label: "Risk by technical lead",
+        detail: String(byLead.length),
+      });
+    }
+    if (mix && mix.pipelineBySuite.length > 0) {
+      targets.push({
+        anchorId: "portfolio-by-suite",
+        label: "Pipeline by suite",
+        detail: String(mix.pipelineBySuite.length),
+      });
+    }
+    return targets;
+  }, [analysis, summary, byManager, byLead, mix]);
+
+  useJumpTargets(jumpTargets);
+
   return (
     <LensScreen
       subtitle={
@@ -64,7 +98,7 @@ export function PortfolioScreen() {
       ) : (
         <>
           {summary ? (
-            <MobileCard>
+            <MobileCard id="portfolio-concentration">
               <CardHeader label="Concentration" />
               <dl className="grid grid-cols-2 gap-x-3 gap-y-3">
                 <Figure
@@ -90,11 +124,21 @@ export function PortfolioScreen() {
             </MobileCard>
           ) : null}
 
-          <RiskRail title="Risk by account manager" cells={byManager} currency={currency} />
-          <RiskRail title="Risk by technical lead" cells={byLead} currency={currency} />
+          <RiskRail
+            id="portfolio-by-manager"
+            title="Risk by account manager"
+            cells={byManager}
+            currency={currency}
+          />
+          <RiskRail
+            id="portfolio-by-lead"
+            title="Risk by technical lead"
+            cells={byLead}
+            currency={currency}
+          />
 
           {mix && mix.pipelineBySuite.length > 0 ? (
-            <MobileCard>
+            <MobileCard id="portfolio-by-suite">
               <CardHeader label="Pipeline by suite" />
               <ul className="space-y-2.5">
                 {[...mix.pipelineBySuite]
@@ -153,16 +197,19 @@ function RiskRail({
   title,
   cells,
   currency,
+  id,
 }: {
   title: string;
   cells: RiskCell[];
   currency: string;
+  /** Jump anchor. The caller only registers one when `cells` is non-empty. */
+  id?: string;
 }) {
   if (cells.length === 0) return null;
   const peak = Math.max(...cells.map((c) => c.riskScore), 1);
 
   return (
-    <MobileCard>
+    <MobileCard id={id}>
       <CardHeader label={title} />
       <ul className="space-y-3">
         {cells.map((cell) => {
