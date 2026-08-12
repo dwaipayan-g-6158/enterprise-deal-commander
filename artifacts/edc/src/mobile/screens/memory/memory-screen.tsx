@@ -23,6 +23,7 @@ import { DockButton } from "@/mobile/components/dock-button";
 import { Shimmer } from "@/mobile/components/shimmer";
 import { EmptyState, ErrorState } from "@/mobile/components/states";
 import { PullToRefresh } from "@/mobile/components/pull-to-refresh";
+import { MDock } from "@/mobile/shell/m-dock";
 import { MSheet } from "@/mobile/ui/m-sheet";
 import { haptic } from "@/mobile/lib/haptics";
 import { MEMORY_LENSES } from "@/mobile/nav/routes";
@@ -143,53 +144,49 @@ export function MemoryScreen() {
       </MNavBar>
 
       {/* The shell's pb-tabbar already clears the docked search bar as well as
-          the tab bar, so no extra padding here. */}
-      <PullToRefresh
-        onRefresh={refetch}
-        dock={
-          // Motionless during a pull, matching Deals. Rendered through `dock` so
-          // it stays a sibling of the transformed content — a transformed
-          // ancestor would capture the `fixed` and let the bar scroll away.
-          <div className="m-glass m-glass-bottom fixed inset-x-0 bottom-[var(--m-dock-bottom)] z-30 flex items-center gap-2 border-t border-border px-4 py-2.5">
-            <label className="sr-only" htmlFor="memory-search">
-              Search archived deals
-            </label>
-            <div className="flex min-w-0 flex-1 items-center gap-2 rounded-full border border-border bg-card px-4">
-              <Search className="m-muted h-4 w-4 shrink-0" aria-hidden="true" />
-              <input
-                id="memory-search"
-                type="search"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search accounts, lessons, competitors"
-                // 16px minimum, or iOS zooms the viewport on focus.
-                className="m-tap h-12 w-full min-w-0 bg-transparent text-base outline-none placeholder:text-muted-foreground"
-              />
-              {query ? (
-                <button
-                  type="button"
-                  onClick={() => setQuery("")}
-                  aria-label="Clear search"
-                  className="m-press shrink-0"
-                >
-                  <X className="m-muted h-4 w-4" aria-hidden="true" />
-                </button>
-              ) : null}
-            </div>
-            {/* Sliders, not a checkmark. This sits immediately right of a text
-                field on a screen with no search button — a tick there is read as
-                "submit", and tapping it opened the archive filter instead. The
-                label matches the sheet it opens, too. */}
-            <DockButton
-              label="Filter the archive"
-              badge={competitor ? 1 : undefined}
-              onPress={() => setFacetsOpen(true)}
+          the tab bar, so no extra padding here. MDock portals the bar out to the
+          shell frame; a bar declared inside this screen would be a descendant of
+          the scroller, which iOS composites with the list. */}
+      <MDock className="bottom-[var(--m-dock-bottom)] flex items-center gap-2 px-4 py-2.5">
+        <label className="sr-only" htmlFor="memory-search">
+          Search archived deals
+        </label>
+        <div className="flex min-w-0 flex-1 items-center gap-2 rounded-full border border-border bg-card px-4">
+          <Search className="m-muted h-4 w-4 shrink-0" aria-hidden="true" />
+          <input
+            id="memory-search"
+            type="search"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search accounts, lessons, competitors"
+            // 16px minimum, or iOS zooms the viewport on focus.
+            className="m-tap h-12 w-full min-w-0 bg-transparent text-base outline-none placeholder:text-muted-foreground"
+          />
+          {query ? (
+            <button
+              type="button"
+              onClick={() => setQuery("")}
+              aria-label="Clear search"
+              className="m-press shrink-0"
             >
-              <SlidersHorizontal className="h-5 w-5" aria-hidden="true" />
-            </DockButton>
-          </div>
-        }
-      >
+              <X className="m-muted h-4 w-4" aria-hidden="true" />
+            </button>
+          ) : null}
+        </div>
+        {/* Sliders, not a checkmark. This sits immediately right of a text field
+            on a screen with no search button — a tick there is read as "submit",
+            and tapping it opened the archive filter instead. The label matches
+            the sheet it opens, too. */}
+        <DockButton
+          label="Filter the archive"
+          badge={competitor ? 1 : undefined}
+          onPress={() => setFacetsOpen(true)}
+        >
+          <SlidersHorizontal className="h-5 w-5" aria-hidden="true" />
+        </DockButton>
+      </MDock>
+
+      <PullToRefresh onRefresh={refetch}>
         <div className="space-y-3 p-4">
           {competitor ? (
             <button

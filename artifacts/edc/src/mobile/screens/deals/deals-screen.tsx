@@ -15,6 +15,7 @@ import { DockButton } from "@/mobile/components/dock-button";
 import { Shimmer } from "@/mobile/components/shimmer";
 import { EmptyState, ErrorState } from "@/mobile/components/states";
 import { PullToRefresh } from "@/mobile/components/pull-to-refresh";
+import { MDock } from "@/mobile/shell/m-dock";
 import { DealCard } from "@/mobile/screens/deals/deal-card";
 import { FilterSheet } from "@/mobile/screens/deals/filter-sheet";
 import { SortSheet } from "@/mobile/screens/deals/sort-sheet";
@@ -120,57 +121,52 @@ export function DealsScreen() {
         />
       </MNavBar>
 
-      <PullToRefresh
-        onRefresh={refetch}
-        dock={
-          // Docked above the tab bar, so the keyboard opens under the thumb
-          // rather than shoving the whole screen up. The shell's pb-tabbar
-          // already clears both this and the bar below it.
-          //
-          // Deliberately motionless during a pull. This screen usually has no
-          // scroll range at all — a typical pipeline underfills the viewport — so
-          // every downward drag here is a pull-to-refresh, and a search field
-          // that shifted on every drag read as unstable. See pull-physics.ts.
-          <div className="m-glass m-glass-bottom fixed inset-x-0 bottom-[var(--m-dock-bottom)] z-30 flex items-center gap-2 border-t border-border px-4 py-2.5">
-            <label className="sr-only" htmlFor="deals-search">
-              Search deals
-            </label>
-            <div className="flex min-w-0 flex-1 items-center gap-2 rounded-full border border-border bg-card px-4">
-              <Search className="m-muted h-4 w-4 shrink-0" aria-hidden="true" />
-              <input
-                id="deals-search"
-                type="search"
-                value={typed}
-                onChange={(e) => setTyped(e.target.value)}
-                placeholder="Deal, account, competitor"
-                // 16px minimum, or iOS zooms the viewport on focus.
-                className="m-tap h-12 w-full min-w-0 bg-transparent text-base outline-none placeholder:text-muted-foreground"
-              />
-              {typed ? (
-                <button
-                  type="button"
-                  onClick={() => setTyped("")}
-                  aria-label="Clear search"
-                  className="m-press shrink-0"
-                >
-                  <X className="m-muted h-4 w-4" aria-hidden="true" />
-                </button>
-              ) : null}
-            </div>
-
-            <DockButton
-              label="Filter deals"
-              badge={url.activeFilterCount}
-              onPress={() => setFilterOpen(true)}
+      {/* Docked above the tab bar, so the keyboard opens under the thumb rather
+          than shoving the whole screen up. The shell's pb-tabbar already clears
+          both this and the bar below it.
+          MDock portals it out to the shell frame and owns the positioning — this
+          screen must not place it itself, because a bar declared in here is a
+          descendant of the scroller, which iOS composites with the list. */}
+      <MDock className="bottom-[var(--m-dock-bottom)] flex items-center gap-2 px-4 py-2.5">
+        <label className="sr-only" htmlFor="deals-search">
+          Search deals
+        </label>
+        <div className="flex min-w-0 flex-1 items-center gap-2 rounded-full border border-border bg-card px-4">
+          <Search className="m-muted h-4 w-4 shrink-0" aria-hidden="true" />
+          <input
+            id="deals-search"
+            type="search"
+            value={typed}
+            onChange={(e) => setTyped(e.target.value)}
+            placeholder="Deal, account, competitor"
+            // 16px minimum, or iOS zooms the viewport on focus.
+            className="m-tap h-12 w-full min-w-0 bg-transparent text-base outline-none placeholder:text-muted-foreground"
+          />
+          {typed ? (
+            <button
+              type="button"
+              onClick={() => setTyped("")}
+              aria-label="Clear search"
+              className="m-press shrink-0"
             >
-              <SlidersHorizontal className="h-5 w-5" aria-hidden="true" />
-            </DockButton>
-            <DockButton label="Sort and group" onPress={() => setSortOpen(true)}>
-              <ArrowDownUp className="h-5 w-5" aria-hidden="true" />
-            </DockButton>
-          </div>
-        }
-      >
+              <X className="m-muted h-4 w-4" aria-hidden="true" />
+            </button>
+          ) : null}
+        </div>
+
+        <DockButton
+          label="Filter deals"
+          badge={url.activeFilterCount}
+          onPress={() => setFilterOpen(true)}
+        >
+          <SlidersHorizontal className="h-5 w-5" aria-hidden="true" />
+        </DockButton>
+        <DockButton label="Sort and group" onPress={() => setSortOpen(true)}>
+          <ArrowDownUp className="h-5 w-5" aria-hidden="true" />
+        </DockButton>
+      </MDock>
+
+      <PullToRefresh onRefresh={refetch}>
         <div className="space-y-3 p-4">
           {isError ? (
             <ErrorState

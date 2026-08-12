@@ -20,42 +20,25 @@ const CONFIRM_MS = 340;
  * passive, where preventDefault is ignored, and without it iOS rubber-bands
  * the scroll container underneath the gesture.
  *
- * ## Docked bars stay still, via `dock`
+ * ## Docked bars are no longer this component's concern
  *
- * Only this component's own children are transformed, so anything rendered
- * beside it — the search docks on Deals and Memory — holds position while the
- * list moves under the finger. That is the intended behaviour: the dock is the
- * one control on screen the user may be reaching for, and a target that moves
- * during the gesture is worse than one that sits out of it.
+ * There used to be a `dock` render prop here — first so the bar could be handed
+ * a damped copy of the pull transform, later just to keep it out of the
+ * transformed element. Both reasons are gone. The bar does not move with the pull
+ * (pull-physics.ts records why that was tried and reverted), and it is no longer
+ * in this subtree at all: `MDock` portals it out to the shell frame, because a
+ * bar that must not move with the scroller cannot be a descendant of the
+ * scroller on iOS. See m-dock.tsx.
  *
- * `dock` therefore exists for POSITION, not for motion: it renders the bar
- * outside the transformed element, because a transformed ancestor would become
- * the containing block for a `position: fixed` descendant and demote the dock
- * from viewport-pinned to a box that scrolls away with the list.
- *
- * It briefly took a damped copy of the transform instead. See pull-physics.ts
- * for why that was tried, why it was reverted, and the measurements behind both
- * — the short version is that Deals has no scroll range, so every drag there is
- * a pull, and a bar that moves on every drag reads as unstable.
+ * Only this component's own children are transformed, so a pull moves the list
+ * and nothing else.
  */
 export function PullToRefresh({
   onRefresh,
   children,
-  dock,
 }: {
   onRefresh: () => Promise<unknown> | unknown;
   children: ReactNode;
-  /**
-   * Bottom furniture that holds position while the list pulls — the search bars
-   * on Deals and Memory.
-   *
-   * Rendered as a SIBLING of the transformed content, never inside it, which is
-   * the whole reason this prop exists rather than the screens just placing the
-   * bar themselves: a transformed ancestor becomes the containing block for a
-   * `position: fixed` descendant, which would demote the dock from
-   * viewport-pinned to a box that scrolls away with the list.
-   */
-  dock?: ReactNode;
 }) {
   const scrollRef = useShellScrollRef();
   const [pull, setPull] = useState(0);
@@ -194,13 +177,6 @@ export function PullToRefresh({
       >
         {children}
       </div>
-      {/* Outside the transformed element on purpose: the dock is `fixed`, and a
-          transformed ancestor would capture it as its containing block. Still
-          true during a pull, which is the only time the transform is real.
-
-          No transform of its own, so it stays exactly where it is for the whole
-          gesture — see this component's docblock and pull-physics.ts. */}
-      {dock}
       <span role="status" className="sr-only">
         {refreshing ? "Refreshing" : ""}
       </span>

@@ -5,6 +5,7 @@ import { useAskDealMemory } from "@workspace/api-client-react";
 import { cn } from "@/lib/utils";
 import { HEALTH_CLASS } from "@/lib/semantic-colors";
 import { MNavBar } from "@/mobile/shell/m-nav-bar";
+import { MDock } from "@/mobile/shell/m-dock";
 import { Shimmer } from "@/mobile/components/shimmer";
 import {
   appendMessage,
@@ -166,8 +167,11 @@ export function AskScreen() {
       </div>
 
       {/* The composer, docked. There is no tab bar on a pushed screen, so it sits
-          directly on the home-indicator inset rather than above the bar. */}
-      <div className="m-glass m-glass-bottom fixed inset-x-0 bottom-0 z-30 border-t border-border px-4 pb-[calc(0.625rem+env(safe-area-inset-bottom))] pt-2.5">
+          directly on the home-indicator inset rather than above the bar.
+          Through MDock like the search bars: this screen renders inside the
+          scroller, and iOS composites a fixed element declared there with the
+          list rather than pinning it. */}
+      <MDock className="bottom-0 px-4 pb-[calc(0.625rem+env(safe-area-inset-bottom))] pt-2.5">
         <form
           onSubmit={(e) => {
             e.preventDefault();
@@ -197,7 +201,7 @@ export function AskScreen() {
             <ArrowUp className="h-5 w-5" aria-hidden="true" />
           </button>
         </form>
-      </div>
+      </MDock>
     </>
   );
 }

@@ -3,6 +3,7 @@ import {
   useContext,
   useEffect,
   useRef,
+  useState,
   type ReactNode,
   type RefObject,
 } from "react";
@@ -30,6 +31,32 @@ export function useShellScrollRef(): RefObject<HTMLElement | null> {
   const ref = useContext(ScrollContainerContext);
   if (!ref) throw new Error("useShellScrollRef must be used within an MShell");
   return ref;
+}
+
+const DockHostContext = createContext<HTMLElement | null>(null);
+
+/**
+ * Where a screen's docked bottom bar must be mounted: OUTSIDE the scroll
+ * container, as a sibling of `main`.
+ *
+ * ## This is an iOS correctness requirement, not tidiness
+ *
+ * The docked search bars used to be `position: fixed` and rendered inside the
+ * screen — which puts them inside `main`, the scroller. Chromium follows the
+ * spec there and pins them to the viewport; **WebKit composites a fixed element
+ * that lives inside an `overflow: auto` scroller into that scroller's own
+ * layer**, so on iOS Safari and in the installed PWA the bar drifted with the
+ * list. `backdrop-filter` makes it worse by forcing a layer that gets promoted
+ * along with it.
+ *
+ * `MTabBar` never had the bug and is the reference implementation: same
+ * `.m-glass` backdrop, but `absolute` inside this frame rather than `fixed`
+ * inside the scroller. Docks now do exactly the same thing, which is what
+ * `MDock` is for. State rather than a ref, because a portal target has to be a
+ * real node before anything can render into it.
+ */
+export function useShellDockHost(): HTMLElement | null {
+  return useContext(DockHostContext);
 }
 
 /**
@@ -70,6 +97,8 @@ export function MShell({ children }: { children: ReactNode }) {
 function MShellFrame({ children }: { children: ReactNode }) {
   const scrollRef = useRef<HTMLElement | null>(null);
   const frameRef = useRef<HTMLDivElement | null>(null);
+  /** Portal target for screens' docked bars — see useShellDockHost. */
+  const [dockHost, setDockHost] = useState<HTMLDivElement | null>(null);
   useAppResumeRefetch();
 
   // Dynamic Type. Re-measured on pageshow as well as at mount: iOS text size is
@@ -129,6 +158,7 @@ function MShellFrame({ children }: { children: ReactNode }) {
 
   return (
     <ScrollContainerContext.Provider value={scrollRef}>
+      <DockHostContext.Provider value={dockHost}>
       <CommanderProvider>
         <div
           ref={frameRef}
@@ -164,6 +194,13 @@ function MShellFrame({ children }: { children: ReactNode }) {
           >
             {children}
           </main>
+          {/* The docks' mount point, and it is deliberately a sibling of `main`
+              rather than anything inside it — see useShellDockHost for the iOS
+              compositing reason. An unstyled, in-flow div of zero height: the
+              frame is `flex flex-col` with no gap, so it costs no layout, and
+              leaving it `static` means a dock's `absolute` resolves against
+              `.m-shell` exactly as MTabBar's does. */}
+          <div ref={setDockHost} />
           <CommanderButton />
           <MTabBar />
           <CommanderSheet />
@@ -178,6 +215,7 @@ function MShellFrame({ children }: { children: ReactNode }) {
           <MAppBadge />
         </div>
       </CommanderProvider>
+      </DockHostContext.Provider>
     </ScrollContainerContext.Provider>
   );
 }
