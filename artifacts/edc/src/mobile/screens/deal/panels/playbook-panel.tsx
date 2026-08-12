@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Ban, Check, RotateCcw, SkipForward } from "lucide-react";
+import { Ban, Check, NotebookPen, RotateCcw, SkipForward } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatDate } from "@/lib/format";
 import { useGetPlaybookJourney } from "@workspace/api-client-react";
@@ -55,6 +55,12 @@ const STATUS_MARK: Record<StepStatus, { label: string; icon: typeof Check; tone:
   blocked: { label: "Blocked", icon: Ban, tone: "border-destructive bg-destructive/10 text-destructive" },
 };
 
+/** Order the note screen offers the three states in. */
+const STATUS_CHOICES: StepStatus[] = ["completed", "skipped", "blocked"];
+
+/** Matches the server: `note` is text, and long prose belongs on the deal. */
+const NOTE_MAX_LENGTH = 500;
+
 /**
  * The deal's playbooks, and the steps you tick walking out of the meeting.
  *
@@ -76,16 +82,49 @@ export function PlaybookPanel({ dealId }: PanelBodyProps) {
   const { setStatus, reopenStep, isPending } = usePlaybookStep(dealId);
   const canWrite = useCanWrite();
   const [sheetFor, setSheetFor] = useState<{ entry: JourneyEntry; step: Step } | null>(null);
+  const [noteFor, setNoteFor] = useState<{ entry: JourneyEntry; step: Step } | null>(null);
   const [outcome, setOutcome] = useState<WriteOutcome | null>(null);
 
   const journey = ((query.data?.data as { journey?: JourneyEntry[] } | undefined)?.journey ??
     []) as JourneyEntry[];
   const started = journey.filter((e) => e.assignmentId);
 
-  async function run(entry: JourneyEntry, step: Step, status: StepStatus) {
-    if (!entry.assignmentId) return;
-    setOutcome(
-      await setStatus(entry.assignmentId, step.id, status, { label: step.stepName }),
+  async function run(
+    entry: JourneyEntry,
+    step: Step,
+    status: StepStatus,
+    note?: string | null,
+  ) {
+    if (!entry.assignmentId) return null;
+    const result = await setStatus(entry.assignmentId, step.id, status, {
+      label: step.stepName,
+      note,
+    });
+    setOutcome(result);
+    return result;
+  }
+
+  // The note editor is a full screen, not a sheet, for the reason AcceptScreen
+  // documents in alerts-panel.tsx: vaul repositions when the keyboard opens and
+  // fights iOS precisely while someone is typing. MActionSheet also has no input
+  // slot by design — its rows are label/detail/icon/onSelect only.
+  if (noteFor) {
+    return (
+      <NoteScreen
+        step={noteFor.step}
+        state={noteFor.entry.stepStates?.[noteFor.step.id]}
+        pending={isPending}
+        onCancel={() => {
+          setNoteFor(null);
+          setOutcome(null);
+        }}
+        onSave={async (status, note) => {
+          const result = await run(noteFor.entry, noteFor.step, status, note);
+          // Stay put on failure so the note somebody just typed is not thrown
+          // away — same rule as the accept rationale.
+          if (!result) setNoteFor(null);
+        }}
+      />
     );
   }
 
@@ -199,6 +238,23 @@ export function PlaybookPanel({ dealId }: PanelBodyProps) {
                     onSelect: () => void run(sheetFor.entry, sheetFor.step, "blocked"),
                   },
                   {
+                    // The three rows above stay one tap each — ticking a step
+                    // walking out of a meeting is the whole point of the panel.
+                    // This is the way in for the cases where the state alone
+                    // does not say enough, and for editing what was written
+                    // before.
+                    id: "note",
+                    label: sheetFor.entry.stepStates?.[sheetFor.step.id]?.note
+                      ? "Edit the note"
+                      : "Add a note",
+                    detail: "Say why, and set the state at the same time.",
+                    icon: NotebookPen,
+                    onSelect: () => {
+                      setNoteFor(sheetFor);
+                      setOutcome(null);
+                    },
+                  },
+                  {
                     id: "reopen",
                     label: "Reopen",
                     detail: "Back to not started.",
@@ -219,6 +275,107 @@ export function PlaybookPanel({ dealId }: PanelBodyProps) {
         />
       </>
     </PanelBody>
+  );
+}
+
+/**
+ * Setting a step's state and saying why, on one screen.
+ *
+ * ## One screen for both writing and editing
+ *
+ * A note and a state are one decision — "skipped, because procurement moved the
+ * review" is a single thought — so they are captured together rather than in two
+ * steps. The same screen edits: it opens prefilled with whatever is already
+ * recorded, which is what makes an actioned step revisable at all. Previously
+ * nothing on the phone could reach `note`, despite the whole path down to the
+ * optimistic patch already accepting one, and StepRow already rendering it.
+ *
+ * The state is preselected to the step's current one so re-saving a note cannot
+ * silently change the state as a side effect.
+ */
+function NoteScreen({
+  step,
+  state,
+  pending,
+  onCancel,
+  onSave,
+}: {
+  step: Step;
+  state: StepStateView | undefined;
+  pending: boolean;
+  onCancel: () => void;
+  onSave: (status: StepStatus, note: string | null) => void;
+}) {
+  const [status, setStatus] = useState<StepStatus>(state?.status ?? "completed");
+  const [note, setNote] = useState(state?.note ?? "");
+
+  const trimmed = note.trim();
+  const remaining = NOTE_MAX_LENGTH - trimmed.length;
+
+  return (
+    <section className="m-card p-4">
+      <h2 className="m-headline">{step.stepName}</h2>
+      <p className="m-body m-muted mt-1 text-pretty">{step.recommendedAction}</p>
+
+      <p className="m-label m-muted mt-4">State</p>
+      <div className="mt-1.5 flex gap-2" role="radiogroup" aria-label="Step state">
+        {STATUS_CHOICES.map((choice) => {
+          const selected = choice === status;
+          return (
+            <button
+              key={choice}
+              type="button"
+              role="radio"
+              aria-checked={selected}
+              onClick={() => setStatus(choice)}
+              className={cn(
+                "m-label m-press m-tap flex-1 rounded-full border py-2.5",
+                selected
+                  ? "border-primary bg-primary text-primary-foreground"
+                  : "border-border text-muted-foreground",
+              )}
+            >
+              {STATUS_MARK[choice].label}
+            </button>
+          );
+        })}
+      </div>
+
+      <label htmlFor="step-note" className="m-label m-muted mt-4 block">
+        Note <span className="font-normal">(optional)</span>
+      </label>
+      <textarea
+        id="step-note"
+        value={note}
+        onChange={(e) => setNote(e.target.value)}
+        rows={4}
+        maxLength={NOTE_MAX_LENGTH}
+        // 16px minimum, or iOS zooms the viewport on focus.
+        className="mt-1.5 w-full resize-none rounded-xl border border-border bg-card p-3 text-base outline-none"
+        placeholder="What happened, or what is holding it up."
+      />
+      <p className="m-caption m-muted mt-1">
+        {remaining <= 50 ? `${remaining} characters left` : "Shown against the step for the team."}
+      </p>
+
+      <button
+        type="button"
+        disabled={pending}
+        // An empty note clears the stored one rather than writing "" — null is
+        // what the API and the optimistic patch both treat as "no note".
+        onClick={() => onSave(status, trimmed ? trimmed : null)}
+        className="m-label m-press m-tap mt-3 w-full rounded-full border border-primary py-3 text-primary disabled:opacity-40"
+      >
+        Save
+      </button>
+      <button
+        type="button"
+        onClick={onCancel}
+        className="m-label m-press m-tap m-muted mt-1 w-full py-3"
+      >
+        Cancel
+      </button>
+    </section>
   );
 }
 
