@@ -48,9 +48,47 @@ const REVEAL_FALLBACK_MS = 250;
 const MIN_BUTTON_WIDTH = 40;
 const MIN_BUTTON_HEIGHT = 20;
 
+/**
+ * Every place a document's own vertical scroll offset can hide.
+ *
+ * Split out as a pure choice for the same reason as `pickButtonAnchor`: it is
+ * the correction that keeps the measurement below scroll-invariant, and it was
+ * silently reading zero for the whole life of this file.
+ *
+ * Zoho's document is quirks mode (`compatMode === "BackCompat"`) AND this
+ * sheet puts `overflow: hidden` on the root. Together those make
+ * `document.scrollingElement` **null** and park the offset in
+ * `defaultView.scrollY` alone: measured live on the password step,
+ * `scrollY === 16` while `body.scrollTop` and `documentElement.scrollTop` both
+ * read `0`. So the original `body.scrollTop` read — documented as
+ * load-bearing — had been adding nothing, and every measurement taken while
+ * the frame was scrolled came out short by exactly the scroll amount.
+ *
+ * Precedence, not a sum, and not a max: in quirks mode `scrollY` and
+ * `body.scrollTop` are two views of the SAME scroll, so adding them
+ * double-counts. `scrollY` is the viewport offset by definition in every
+ * mode, so it wins whenever a window exists; the element offsets are the
+ * fallback for a detached document, and for the older shape of this bug where
+ * `body` was itself the scroll container (`height: 100%`, measured at
+ * `scrollTop: 88`) and the viewport never moved.
+ */
+export interface ScrollOffsetSource {
+  /** `defaultView.scrollY` — undefined when the document has no window. */
+  viewScrollY?: number;
+  documentElementScrollTop?: number;
+  bodyScrollTop?: number;
+}
+
+/** The document's vertical scroll offset, from whichever source reports it. */
+export function pickScrollOffset(source: ScrollOffsetSource): number {
+  const { viewScrollY, documentElementScrollTop, bodyScrollTop } = source;
+  if (viewScrollY) return viewScrollY;
+  return documentElementScrollTop || bodyScrollTop || 0;
+}
+
 /** One candidate control, reduced to the geometry the choice depends on. */
 export interface ButtonAnchorCandidate {
-  /** Bottom edge in BODY-relative coords — `rect.bottom + body.scrollTop`. */
+  /** Bottom edge in DOCUMENT-relative coords — `rect.bottom + scroll offset`. */
   bottom: number;
   width: number;
   height: number;
@@ -64,10 +102,11 @@ export interface ButtonAnchorCandidate {
  * Split out as pure geometry so the selection rules are unit-testable without a
  * DOM (this package's Vitest runs in a `node` environment).
  *
- * Body-relative, not viewport-relative, and that distinction is load-bearing:
- * Zoho auto-scrolls its own body on OTP focus, so a viewport-relative bottom
- * shrinks as the body scrolls, which feeds back into a smaller frame and
- * eventually clips the form.
+ * Document-relative, not viewport-relative, and that distinction is
+ * load-bearing: Zoho auto-scrolls the frame whenever a field takes focus, so a
+ * viewport-relative bottom shrinks as it scrolls, which feeds back into a
+ * smaller frame and eventually clips the form. `pickScrollOffset` supplies the
+ * correction — see the note there for where that offset actually hides.
  */
 export function pickButtonAnchor(candidates: readonly ButtonAnchorCandidate[]): number | null {
   let lowest: number | null = null;
@@ -102,7 +141,11 @@ export function pickButtonAnchor(candidates: readonly ButtonAnchorCandidate[]): 
  */
 function measureContent(doc: Document): number {
   const view = doc.defaultView;
-  const scrollTop = doc.body ? doc.body.scrollTop : 0;
+  const scrollTop = pickScrollOffset({
+    viewScrollY: view ? view.scrollY : undefined,
+    documentElementScrollTop: doc.documentElement ? doc.documentElement.scrollTop : undefined,
+    bodyScrollTop: doc.body ? doc.body.scrollTop : undefined,
+  });
 
   const candidates: ButtonAnchorCandidate[] = [];
   for (const el of doc.querySelectorAll<HTMLElement>('button, input[type="submit"], .btn')) {
@@ -123,7 +166,11 @@ function measureContent(doc: Document): number {
     const rect = el.getBoundingClientRect();
     if (rect.height <= 0 || rect.width <= 0) continue;
     if (view && view.getComputedStyle(el).visibility === "hidden") continue;
-    if (rect.bottom > lowest) lowest = rect.bottom;
+    // Same `scrollTop` correction as the button branch above. It was missing
+    // here, which left one function computing two different coordinate spaces —
+    // harmless only for as long as the correction was silently zero.
+    const bottom = rect.bottom + scrollTop;
+    if (bottom > lowest) lowest = bottom;
   }
   if (lowest > 0) return lowest;
   return Math.max(
@@ -184,18 +231,54 @@ export function attachCatalystIframeAutosize(
     // belongs to the IFRAME's realm, so it fails an instanceof against this
     // page's constructor even though it is a perfectly ordinary <html>. That
     // guard silently skipped this whole block on the first attempt.
+    const fits = next >= wanted;
     const root = doc.documentElement as unknown as { style?: CSSStyleDeclaration };
     if (root.style) {
-      root.style.overflow = next >= wanted ? "hidden" : "";
+      root.style.overflow = fits ? "hidden" : "";
     }
 
-    if (Math.abs(next - iframe.getBoundingClientRect().height) <= 2) return;
-    // Animated so a step change reads as the panel breathing rather than
-    // snapping. Timed to match the stylesheet's own 0.22s step cross-fade;
-    // `setProperty(..., "important")` because the Tailwind arbitrary variants on
-    // the slot set !important on the iframe's own box properties.
-    iframe.style.setProperty("transition", "height 0.2s cubic-bezier(0.4, 0, 0.2, 1)", "important");
-    iframe.style.setProperty("height", `${next}px`, "important");
+    if (Math.abs(next - iframe.getBoundingClientRect().height) > 2) {
+      // Animated so a step change reads as the panel breathing rather than
+      // snapping. Timed to match the stylesheet's own 0.22s step cross-fade;
+      // `setProperty(..., "important")` because the Tailwind arbitrary variants
+      // on the slot set !important on the iframe's own box properties.
+      iframe.style.setProperty(
+        "transition",
+        "height 0.2s cubic-bezier(0.4, 0, 0.2, 1)",
+        "important",
+      );
+      iframe.style.setProperty("height", `${next}px`, "important");
+    }
+
+    // Put the frame back at the top. Catalyst focuses the step's field as soon as
+    // it renders it, and the browser scrolls the frame's own viewport to reveal
+    // it — the frame is deliberately shorter than Zoho's document (it clips the
+    // orphan tail below the button), so there is always range to scroll. With
+    // `overflow: hidden` on the root nothing can scroll it back, so the top of
+    // the form stays cut off for good: measured on the deployed password step at
+    // `scrollY: 16`, which sliced 6px off the top of the "<email> / Change" row —
+    // its border and rounded corners with it. The email-OTP step had it worse at
+    // 40, where it swallowed the "OTP sent to …" banner whole.
+    //
+    // Fixing the measurement alone does NOT recover this, which is why both
+    // halves are here. A correct measurement grows the frame from 232 to 248, but
+    // the content is 268, so 16 remains a legal scroll position and the browser
+    // has no reason to leave it.
+    //
+    // AFTER the height write above, deliberately: a step that grows would
+    // otherwise spend a frame at the old height with the scroll already at zero,
+    // which is long enough to flash a clipped button. It is outside that `if`
+    // just as deliberately — the height is often already correct while the scroll
+    // still needs undoing, and that case is the reported bug.
+    //
+    // Gated on `fits`, the same predicate as hiding the child's scrollbar above
+    // and for the mirror-image reason: when the frame holds everything we meant
+    // to show, any offset is hiding content and belongs at zero; when the
+    // measurement had to be clamped the overflow is real, the scrollbar stays,
+    // and the reader's scroll position is theirs to keep. Verified against the
+    // live form that this never fights the browser — once the document sits at
+    // zero with a correctly sized frame, focusing a field does not re-scroll it.
+    if (fits) doc.defaultView?.scrollTo(0, 0);
   };
 
   const scheduleApply = (iframe: HTMLIFrameElement): void => {
