@@ -47,8 +47,29 @@
     <script>
       (function () {
         try {
+          // The sign-in page is always dark, whatever the preference says, and it
+          // has to be decided here for the same reason the theme is.
+          // pages/login.tsx paints its own shell from an inlined .dark palette
+          // (SHELL_BG) — it must, because the Catalyst sign-in iframe is themed by
+          // a single static stylesheet that cannot follow 16 token permutations. So
+          // in light mode body painted rgb(243,244,247) for ~370ms and the page then
+          // cut to near-black. Nothing covers that gap: /login is deliberately
+          // exempt from AppReveal, and ShellGate renders no shell skeleton there
+          // (both via lib/shell-routes.ts), so this canvas IS the loading state.
+          //
+          // The trade is deliberate. A signed-in light-mode visitor who opens
+          // /login now gets a dark canvas before useAuthGuard redirects them to a
+          // light app — the same flash, moved off the common path onto a rare one.
+          // Session state cannot be known before paint, so one of the two has it.
+          //
+          // `location.pathname` carries no query string, so `?next=…` needs no
+          // handling and a trailing slash is the only variant. Matched at the END so
+          // a BASE_PATH prefix still resolves — wouter's base applies to routes, not
+          // to this. `/logindiagnostics` does not match, and must not start to.
+          var alwaysDark = /\/login\/?$/.test(location.pathname);
           var stored = localStorage.getItem("theme");
           var dark =
+            alwaysDark ||
             stored === "dark" ||
             ((!stored || stored === "system") &&
               window.matchMedia("(prefers-color-scheme: dark)").matches);

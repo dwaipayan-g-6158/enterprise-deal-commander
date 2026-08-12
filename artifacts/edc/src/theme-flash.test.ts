@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { SRC } from "./mobile/module-graph";
+import { isOutsideShell } from "./lib/shell-routes";
 
 /**
  * The theme has to be on `<html>` before the first paint.
@@ -98,6 +99,52 @@ describe("pre-paint theme", () => {
  * Stamping it here makes the first painted colour the final one. The tween that
  * made the correction visible is separately gated — see the last block below.
  */
+describe("the sign-in route is dark before anything paints", () => {
+  /**
+   * /login opts out of the theme system — it paints its own shell from an inlined
+   * .dark palette, because the Catalyst sign-in iframe is themed by one static
+   * stylesheet that cannot follow every token permutation. So a light-mode refresh
+   * painted body at rgb(243,244,247) for ~370ms and then cut to near-black, with
+   * nothing over the gap: /login is exempt from AppReveal and ShellGate draws no
+   * skeleton there.
+   *
+   * The path test is a duplicate of a rule that also lives in lib/shell-routes.ts,
+   * for the same reason the time-band boundaries below are duplicated: nothing
+   * importable can run this early. So it is parsed and EXECUTED here rather than
+   * string-matched — a pattern that is present but wrong passes a grep.
+   */
+  const literal = /alwaysDark\s*=\s*(.+)\.test\(location\.pathname\)/.exec(INLINE);
+
+  it("decides it from the path, inside the same pre-paint script", () => {
+    expect(literal, "no location.pathname test for the sign-in route").not.toBeNull();
+  });
+
+  it("feeds that into the dark decision instead of computing it and dropping it", () => {
+    expect(INLINE).toMatch(/var dark\s*=\s*alwaysDark\s*\|\|/);
+  });
+
+  it("matches the sign-in route, including under a BASE_PATH prefix", () => {
+    const re = new RegExp(literal![1].replace(/^\/|\/$/g, ""));
+    expect(re.test("/login")).toBe(true);
+    expect(re.test("/login/")).toBe(true);
+    // Matched at the end precisely so a deployment under a sub-path still works.
+    expect(re.test("/app/login")).toBe(true);
+  });
+
+  it("does not match a route that merely starts the same", () => {
+    const re = new RegExp(literal![1].replace(/^\/|\/$/g, ""));
+    expect(re.test("/logindiagnostics")).toBe(false);
+    expect(re.test("/")).toBe(false);
+    expect(re.test("/deals")).toBe(false);
+  });
+
+  it("agrees with the shell-routes list that /login is not the app", () => {
+    // The two encode one fact — this route renders no shell and follows no theme.
+    // If /login ever stops being special there, this stops being right here.
+    expect(isOutsideShell("/login")).toBe(true);
+  });
+});
+
 describe("pre-paint time band", () => {
   /** The band boundaries, as the shared module states them. */
   const TIME_BANDS = readFileSync(join(SRC, "lib", "greetings", "time-bands.ts"), "utf8");
