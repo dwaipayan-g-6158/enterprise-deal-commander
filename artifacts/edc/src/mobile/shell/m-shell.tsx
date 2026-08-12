@@ -187,10 +187,16 @@ function MShellFrame({ children }: { children: ReactNode }) {
             // content it holds.
             tabIndex={-1}
             ref={scrollRef}
-            // overscroll-contain stops a rubber-band at the end of a list from
-            // scrolling the page behind it (and, in the installed PWA, from
-            // triggering the OS pull-to-dismiss).
-            className="flex-1 overflow-y-auto overscroll-y-contain pb-tabbar"
+            // `none`, not `contain`. Both stop a rubber-band at the end of a
+            // list from scrolling the page behind it (and, in the installed PWA,
+            // from triggering the OS pull-to-dismiss) — but `contain` only blocks
+            // the CHAINING and still lets this scroller bounce on its own, which
+            // is the bounce visible at the ends of a long list like Memory. The
+            // document-level half of this is in mobile/styles/material.css.
+            //
+            // Pull-to-refresh is unaffected: it is JS-driven off touchmove with
+            // its own preventDefault, and never used the native overscroll.
+            className="flex-1 overflow-y-auto overscroll-y-none pb-tabbar"
           >
             {children}
           </main>

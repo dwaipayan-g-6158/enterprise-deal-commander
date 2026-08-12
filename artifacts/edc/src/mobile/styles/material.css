@@ -5,6 +5,36 @@
  * Commander capsule, touch affordances and loading states.
  * ========================================================================== */
 
+/* --- No document rubber-band ----------------------------------------------
+ * The one thing standing between this shell and a bottom bar that bounces.
+ *
+ * On iOS, a vertical drag that no scroller consumes rubber-bands the whole web
+ * view — and the compositor translates the ENTIRE document to do it, so every
+ * bar anchored to the bottom moves with it no matter how it is positioned. That
+ * is why it survived making the docks `absolute` siblings of the scroller: the
+ * frame itself was being dragged. On Deals it fires on *every* drag, because a
+ * typical pipeline underfills the viewport and `main` has no scroll range at all,
+ * so no drag there is ever a scroll.
+ *
+ * `overscroll-behavior: none` is the whole fix. It suppresses the bounce and the
+ * chaining while leaving ordinary scrolling untouched, and it leaves the app's
+ * own pull-to-refresh alone because that is JS-driven off touchmove with its own
+ * `preventDefault` — it never relied on the native overscroll.
+ *
+ * It lives in a MOBILE stylesheet on purpose. These sheets are imported at the
+ * lazy mobile chunk's entry, so they only ever load on a phone viewport — which
+ * scopes a document-level rule to the mobile shell without needing `:has()` or a
+ * class on `html`. Desktop keeps its elastic scrolling.
+ *
+ * Deliberately NOT paired with `position: fixed` / `overflow: hidden` on body:
+ * that is the pre-iOS-16 sledgehammer, and it would also lock /login, which
+ * loads this same chunk and manages its own height.
+ * ------------------------------------------------------------------------- */
+html,
+body {
+  overscroll-behavior: none;
+}
+
 /* --- The frame ------------------------------------------------------------
  * The shell is a fixed 100dvh box that never itself scrolls; <main> inside it
  * does. That is what lets the ambient sky stay where the sky is while content
