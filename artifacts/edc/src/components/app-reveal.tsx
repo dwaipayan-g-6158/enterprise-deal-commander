@@ -25,6 +25,24 @@ const CEILING_MS = 1200;
 const FADE_MS = 200;
 
 /**
+ * How fast the phone lockup's mark draws itself in, and it is derived from the
+ * ceiling rather than chosen for looks.
+ *
+ * The mark's sequence is four staggered petals: the last one begins at 1.62s and
+ * its fill lands at 1.62 + 0.72 + 0.7 = 3.04s (edc-logo-mark.tsx owns those
+ * numbers). Divided by 3.2 that is ~950ms, which fits inside CEILING_MS with
+ * ~250ms to spare — so online, where the ceiling is what lifts the mask, every
+ * petal has landed before the fade starts.
+ *
+ * Deliberately NOT the 2.2 BootSplash uses. That yields ~1.38s, which outruns
+ * this ceiling and gets cut around 87% through — and a mark caught mid-draw does
+ * not read as an interrupted flourish, it reads as a rendering bug: four petal
+ * outlines with no fill. m-shell-skeleton.tsx declines to animate at all for the
+ * same reason.
+ */
+const MARK_TIME_SCALE = 3.2;
+
+/**
  * How long the query cache has to stay quiet before "quiet" is believed.
  *
  * MEASURED on the deployed Command page, and this number is the whole reason the
@@ -283,16 +301,24 @@ export function AppReveal() {
        * Phones only — gated in CSS, see .app-reveal-lockup in index.css for the
        * gate and for why this is styled from root tokens rather than `.m-shell`'s.
        *
-       * `animated={false}` is load-bearing, not a shortcut. The mark's entrance
-       * runs 3.22s at timeScale 1 and about 1.38s at the 2.2 BootSplash uses,
-       * while THIS panel can lift as early as the 250ms floor — so an animated
-       * mark here would be torn down roughly a fifth of the way through its own
-       * draw, which reads as a glitch rather than a flourish. Same conclusion
-       * m-shell-skeleton.tsx reached for the same reason. The mark that draws is
-       * the one on BootSplash, whose 1450ms floor is set to outlast the sequence.
+       * The mark draws ONLINE and is static OFFLINE, and that split is the whole
+       * trick: it makes the animation conditional on knowing there is time for it,
+       * rather than a gamble on how long this panel happens to live.
+       *
+       * Online the ceiling is what lifts the mask — the page has no data until
+       * ~2050ms — so the panel reliably survives ~1200ms and a ~950ms draw
+       * (MARK_TIME_SCALE) completes inside it. Offline `leave()` fires at the
+       * 250ms floor, because a disabled session query means the data half of the
+       * readiness contract can never be satisfied; a draw started there would be
+       * cut about a quarter through, which is the exact glitch this is avoiding.
+       *
+       * Reused rather than re-derived: `offline` is already read at mount for the
+       * readiness contract below, so this adds no new dependency. Reduced motion
+       * needs no branch either — EdcLogoMark checks it itself and renders the
+       * petals filled with no draw.
        */}
       <div className="app-reveal-lockup">
-        <EdcLogoMark size={72} animated={false} />
+        <EdcLogoMark size={72} animated={!offline} timeScale={MARK_TIME_SCALE} />
         <p className="app-reveal-title">Enterprise Deal Commander</p>
         <p className="app-reveal-sub">Mobile Edition</p>
       </div>

@@ -277,12 +277,53 @@ describe("the reveal is painted so it cannot cost a layout pass", () => {
     expect(APP).toContain("(max-width: 767px)");
   });
 
-  it("draws the mark static, because the mask can lift at the floor", () => {
-    // The entrance runs ~1.38s at the timeScale BootSplash uses, against a mask
-    // that may live 250ms — so an animated mark here would be cut a fifth of the
-    // way through its own draw. m-shell-skeleton.tsx reached the same conclusion
-    // for the same reason.
-    expect(SOURCE).toMatch(/<EdcLogoMark[^>]*animated=\{false\}/);
+  it("draws the mark online and leaves it static offline", () => {
+    // Conditional on knowing there is TIME for the draw, rather than a gamble on
+    // how long the panel happens to live. Online the ceiling lifts the mask, so
+    // ~1200ms is available; offline leave() fires at the 250ms floor, where a
+    // draw would be cut about a quarter through — four petal outlines with no
+    // fill, which reads as a rendering bug rather than an interrupted flourish.
+    expect(SOURCE).toMatch(/<EdcLogoMark[^>]*animated=\{!offline\}/);
+  });
+
+  it("draws fast enough to finish inside the ceiling", () => {
+    /**
+     * The load-bearing arithmetic. The mark's last petal begins at DELAYS[3] and
+     * its fill lands FILL_LAG + FILL_DUR later, so the sequence ends at
+     * 1.62 + 0.72 + 0.7 = 3.04s at timeScale 1. Divided by this scale it must fit
+     * inside CEILING_MS, or the mask lifts mid-draw.
+     *
+     * Read from edc-logo-mark.tsx rather than hardcoded: if someone retimes the
+     * petals, this fails instead of silently shipping a cut-off mark.
+     */
+    const scale = Number(SOURCE.match(/MARK_TIME_SCALE\s*=\s*([\d.]+)/)![1]);
+    const ceiling = Number(SOURCE.match(/CEILING_MS\s*=\s*(\d+)/)![1]);
+
+    const mark = stripCodeComments(
+      readFileSync(join(SRC, "components", "edc-logo-mark.tsx"), "utf8"),
+    );
+    const delays = JSON.parse(mark.match(/DELAYS\s*=\s*(\[[^\]]+\])/)![1]) as number[];
+    const fillLag = Number(mark.match(/FILL_LAG\s*=\s*([\d.]+)/)![1]);
+    const fillDur = Number(mark.match(/FILL_DUR\s*=\s*([\d.]+)/)![1]);
+    const drawDur = Number(mark.match(/DRAW_DUR\s*=\s*([\d.]+)/)![1]);
+
+    const last = delays[delays.length - 1];
+    const sequenceMs = (Math.max(last + drawDur, last + fillLag + fillDur) / scale) * 1000;
+
+    expect(sequenceMs, "the draw must complete before the mask lifts").toBeLessThan(ceiling);
+    // And not so fast it reads as a pop rather than a draw.
+    expect(sequenceMs).toBeGreaterThan(400);
+  });
+
+  it("is faster than BootSplash's scale, because its window is shorter", () => {
+    // BootSplash has a 1450ms floor set to outlast the sequence; this has a
+    // 1200ms ceiling. Borrowing 2.2 here would overrun it.
+    const here = Number(SOURCE.match(/MARK_TIME_SCALE\s*=\s*([\d.]+)/)![1]);
+    const splash = stripCodeComments(
+      readFileSync(join(SRC, "mobile", "shell", "boot-splash.tsx"), "utf8"),
+    );
+    const there = Number(splash.match(/MARK_TIME_SCALE\s*=\s*([\d.]+)/)![1]);
+    expect(here).toBeGreaterThan(there);
   });
 
   it("announces nothing, so the skeleton's live region is not talked over", () => {
