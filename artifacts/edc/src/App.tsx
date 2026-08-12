@@ -14,7 +14,7 @@ import { FocusModeProvider } from "@/lib/presence/focus-mode-context";
 import { AppShellSkeleton } from "@/components/app-shell-skeleton";
 import { MobileShellSkeleton } from "@/mobile/shell/m-shell-skeleton";
 import { AppReveal } from "@/components/app-reveal";
-import { isOutsideShell } from "@/lib/shell-routes";
+import { isOutsideShell, isSignInRoute, SIGN_IN_CANVAS } from "@/lib/shell-routes";
 import { useMediaQuery } from "@/hooks/use-media-query";
 
 // Each shell is a separate chunk: a phone never downloads the desktop cockpit,
@@ -88,16 +88,31 @@ function ShellGate() {
    * sign-in card. Reported as "it gives the impression that I am already logged
    * in", and it is the same on a phone.
    *
-   * `null` rather than a login-shaped placeholder. The body already carries the
-   * right background (index.html stamps theme and time band before first paint),
-   * the page brings its own entrance, and the card already has a skeleton inside
-   * it for the Catalyst frame — so an empty canvas is both the honest state and the
-   * one with nothing to hand off from.
+   * What replaces it is a bare canvas, not a lighter placeholder: the page brings
+   * its own entrance and its card already has a skeleton inside it for the Catalyst
+   * frame, so there is nothing for a placeholder to hand off from.
    *
-   * `lib/shell-routes.ts` owns the list; AppReveal reads the same one.
+   * Sign-in gets that canvas in ITS OWN colour, and the reason is the one thing
+   * index.html's pre-paint stamp cannot cover. The stamp forces dark on this route
+   * so the first painted frame matches the page — but next-themes restores the
+   * stored preference the moment React mounts, and this Suspense gap is entirely
+   * after that. Measured: a light-mode reader saw dark for a few frames, then
+   * rgb(243,244,247) for the ~370ms the lazy shell chunk took, then the near-black
+   * page. Painting the gap ourselves is what makes those three one colour. `/share`
+   * is deliberately excluded — it is public but fully themed, so it must keep the
+   * reader's own background.
+   *
+   * `lib/shell-routes.ts` owns the routes and the colour; AppReveal reads the same
+   * list to know what not to mask.
    */
   const shellIsComing = !isOutsideShell(location);
-  const fallback = shellIsComing ? (isMobile ? <MobileShellSkeleton /> : <AppShellSkeleton />) : null;
+  const fallback = shellIsComing ? (
+    isMobile ? <MobileShellSkeleton /> : <AppShellSkeleton />
+  ) : isSignInRoute(location) ? (
+    // Decorative: MobileShellSkeleton and AppShellSkeleton own the only load
+    // announcements in the boot stack, and the sign-in page announces its own form.
+    <div aria-hidden="true" className="fixed inset-0" style={{ background: SIGN_IN_CANVAS }} />
+  ) : null;
 
   return <Suspense fallback={fallback}>{isMobile ? <MobileApp /> : <DesktopApp />}</Suspense>;
 }

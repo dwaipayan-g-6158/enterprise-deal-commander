@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { isOutsideShell } from "./shell-routes";
+import { isOutsideShell, isSignInRoute, SIGN_IN_CANVAS } from "./shell-routes";
 import { stripCodeComments } from "../mobile/class-scan";
 
 /**
@@ -57,10 +57,42 @@ describe("ShellGate's Suspense fallback", () => {
     expect(APP).toMatch(/fallback=\{fallback\}/);
   });
 
-  it("renders no chrome at all on those routes rather than a lighter skeleton", () => {
-    // The body already carries the right background (index.html stamps theme and
-    // time band pre-paint) and the sign-in page brings its own entrance, so there
-    // is nothing for a placeholder to hand off to.
-    expect(APP).toMatch(/shellIsComing\s*\?[\s\S]{0,160}:\s*null/);
+  it("paints the sign-in gap in the page's own colour, and nothing elsewhere", () => {
+    // The pre-paint stamp cannot cover this window: next-themes restores the stored
+    // preference at mount, and the whole Suspense gap is after that. So a light-mode
+    // reader got dark, then light for ~370ms, then the near-black page.
+    expect(APP).toContain("SIGN_IN_CANVAS");
+    expect(APP).toContain("isSignInRoute");
+    // /share is outside the shell but fully themed, so it must still get nothing.
+    expect(APP).toMatch(/:\s*null/);
+  });
+});
+
+describe("the sign-in canvas colour", () => {
+  it("is the colour the sign-in page actually paints", () => {
+    // One value, two users. A near-miss between them would read as a flash at the
+    // handoff from the gap to the page, which is exactly what this replaced.
+    const login = readFileSync(
+      join(import.meta.dirname, "..", "pages", "login.tsx"),
+      "utf8",
+    );
+    expect(login).toContain("SIGN_IN_CANVAS");
+    expect(login, "the page must not restate the literal").not.toMatch(
+      /SHELL_BG\s*=\s*"hsl\(/,
+    );
+  });
+
+  it("is dark, since that is the whole point of forcing it", () => {
+    // Guards against someone "tidying" it into a token that follows the theme —
+    // which would put the light background straight back.
+    expect(SIGN_IN_CANVAS).toBe("hsl(220 10% 8%)");
+  });
+
+  it("applies to sign-in only, not to every route outside the shell", () => {
+    expect(isSignInRoute("/login")).toBe(true);
+    expect(isSignInRoute("/login?next=%2Fdeals")).toBe(true);
+    expect(isSignInRoute("/share/abc")).toBe(false);
+    expect(isSignInRoute("/logindiagnostics")).toBe(false);
+    expect(isSignInRoute("/deals")).toBe(false);
   });
 });

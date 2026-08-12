@@ -9,6 +9,7 @@ import {
   attachCatalystIframeAutosize,
   MIN_FRAME_HEIGHT,
 } from "@/lib/auth/catalyst-iframe-autosize";
+import { SIGN_IN_CANVAS } from "@/lib/shell-routes";
 import { injectCatalystIframeTheme } from "@/lib/auth/catalyst-iframe-link";
 
 const LOGIN_SLOT_ID = "catalyst-login-container";
@@ -42,7 +43,10 @@ const AUTH_POLL_MS = 3000;
 // system (see the docstring below), so it cannot use the `bg-card`/`text-
 // foreground` utilities — those would follow a light-mode preference and leave
 // a dark Zoho form on a white card. Keep in sync with index.css's .dark block.
-const SHELL_BG = "hsl(220 10% 8%)";
+// Imported rather than restated: App.tsx paints this exact colour for the ~370ms
+// before this page's chunk lands, and a near-miss between the two would read as a
+// flash at the handoff. lib/shell-routes.ts owns the value.
+const SHELL_BG = SIGN_IN_CANVAS;
 const RAIL_BORDER = "hsl(220 10% 20%)"; // --border
 const CARD_BG = "hsl(220 10% 12%)"; // --card
 const CARD_BORDER = "hsl(220 10% 20%)";
