@@ -532,6 +532,28 @@ export interface DealBlockerSeed {
 }
 
 /**
+ * One row of the Decision Log — what a meeting produced, and who owes what by
+ * when.
+ *
+ * Seeded because nothing else writes this table. The desktop Decision Log form
+ * was the only creator in the whole app, so on freshly seeded data the panel
+ * was permanently empty on both shells and read as broken rather than as empty.
+ */
+export interface DealDecisionSeed {
+  decisionText: string;
+  rationale?: string;
+  owner: string;
+  /** Defaults to `DECISION_STATUS.pending` when omitted. */
+  status?: "Pending" | "In Progress" | "Completed" | "Overridden";
+  /** `decided_at` = now − this many days. */
+  decidedDaysAgo: number;
+  /** `due_date` = today + this many days (negative = overdue, which the UI marks). */
+  dueInDays?: number;
+  /** `completed_at` = now − this many days. Only meaningful with status "Completed". */
+  completedDaysAgo?: number;
+}
+
+/**
  * One demo deal, fully declarative.
  *
  * All lookups are by name/code; all dates are day offsets relative to seed
@@ -574,6 +596,7 @@ export interface DealSeed {
   /** Extra drivers mirrored into `deal_compliance_drivers` beyond the primary one. */
   extraComplianceDriverNames?: string[];
   blockers?: DealBlockerSeed[];
+  decisions?: DealDecisionSeed[];
   /** Replicate the post-mortem subscriber's `deal_memory` archive for this loss. */
   archiveAsLost?: boolean;
 }
@@ -614,6 +637,24 @@ export const DEAL_SEEDS: DealSeed[] = [
     blockers: [
       { categoryName: "Technical", severityName: "High", description: "Performance benchmark not yet scheduled with customer infra team." },
     ],
+    decisions: [
+      {
+        decisionText: "Scope the first phase to ADAudit Plus only.",
+        rationale: "The SOX deadline will not survive a suite-wide rollout, and the audit only needs AD change reporting.",
+        owner: "Sarah Chen",
+        status: "Completed",
+        decidedDaysAgo: 21,
+        completedDaysAgo: 14,
+      },
+      {
+        decisionText: "Book the performance benchmark with the customer's infra team.",
+        rationale: "Gate 3 cannot pass without it, and it is the blocker holding the technical track.",
+        owner: "Marcus Webb",
+        decidedDaysAgo: 9,
+        // Overdue on purpose: exercises the red past-due tone in the mobile panel.
+        dueInDays: -3,
+      },
+    ],
   },
   // Deal 2: Healthy validation-stage deal (EUR) with services. EUR is
   // deliberate, not a stray inconsistency with the other seeded deals' USD:
@@ -647,6 +688,24 @@ export const DEAL_SEEDS: DealSeed[] = [
     // Multi-driver demo: Beacon is also driven by GDPR alongside its primary PCI-DSS.
     extraComplianceDriverNames: ["GDPR"],
     crossSellCodes: ["EVENTLOG_ANALYZER", "DATA_SECURITY_PLUS", "CLOUD_SECURITY_PLUS"],
+    decisions: [
+      {
+        decisionText: "Size the deployment for 1,500 log sources, not the 800 originally quoted.",
+        rationale: "The customer's own inventory came back higher after the GDPR scope was added.",
+        owner: "Priya Natarajan",
+        status: "Completed",
+        decidedDaysAgo: 12,
+        completedDaysAgo: 8,
+      },
+      {
+        decisionText: "Hold commercial terms until Gate 3 passes.",
+        rationale: "Blueprint is technical-win-first; pricing before the workflow proof invites a discount conversation with nothing to anchor it.",
+        owner: "David Park",
+        status: "In Progress",
+        decidedDaysAgo: 6,
+        dueInDays: 14,
+      },
+    ],
   },
   // Deal 3: Procurement stage, near close, mega deal, stale
   {

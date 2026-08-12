@@ -16,12 +16,13 @@ import { Plus, Check } from "lucide-react";
 import { AdminOnly } from "@/components/auth/write-gate";
 import { useCanWrite } from "@/lib/auth/role-context";
 import { formatDate } from "@/lib/format";
+import { DECISION_STATUS, isDecisionCompleted } from "@/lib/decision-status";
 
 const statusColor: Record<string, string> = {
-  Pending: "bg-amber-500 text-white",
-  "In Progress": "bg-blue-500 text-white",
-  Completed: "bg-emerald-500 text-white",
-  Overridden: "bg-muted text-muted-foreground",
+  [DECISION_STATUS.pending]: "bg-amber-500 text-white",
+  [DECISION_STATUS.inProgress]: "bg-blue-500 text-white",
+  [DECISION_STATUS.completed]: "bg-emerald-500 text-white",
+  [DECISION_STATUS.overridden]: "bg-muted text-muted-foreground",
 };
 
 export function DecisionsPanel({ dealId }: { dealId: string }) {
@@ -52,7 +53,11 @@ export function DecisionsPanel({ dealId }: { dealId: string }) {
   };
 
   const complete = async (id: string) => {
-    await update.mutateAsync({ dealId, id, data: { status: "Completed" } as never });
+    await update.mutateAsync({
+      dealId,
+      id,
+      data: { status: DECISION_STATUS.completed } as never,
+    });
     await invalidate();
   };
 
@@ -77,7 +82,7 @@ export function DecisionsPanel({ dealId }: { dealId: string }) {
             </div>
             <p className="text-sm font-medium">{d.decisionText}</p>
             <p className="text-xs text-muted-foreground">Owner: {d.owner}</p>
-            {d.status !== "Completed" && (
+            {!isDecisionCompleted(d.status) && (
               <AdminOnly>
                 <Button size="sm" variant="outline" onClick={() => complete(d.id)}>
                   <Check className="h-4 w-4 mr-1" /> Mark complete

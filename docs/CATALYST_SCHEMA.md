@@ -214,6 +214,34 @@ Two things worth knowing if this is ever revisited:
     `artifacts/api-server/src/routes/deals.validation.test.ts`, which asserts both the
     rejections and the accepted boundaries.
 
+## A table this document missed: `v2_deal_decisions`
+
+The Decision Log's table was provisioned, is written by
+`artifacts/api-server/src/routes/v2/crud.ts` and read by the Decisions panel on both shells, and
+was documented nowhere here — it appears in neither the table count above nor the natural-key
+list. Recorded now, because in a hand-maintained Data Store an undocumented table is one nobody
+knows to create in a new environment.
+
+Columns (introspected, and matching
+`artifacts/api-server/src/test-support/datastore-columns.generated.ts`):
+`id`, `deal_id`, `meeting_session_id`, `decision_text`, `rationale`, `owner`, `status`,
+`decided_at`, `due_date`, `completed_at`, `commander_id`, `created_at`, `updated_at`.
+
+Two things worth knowing before touching it:
+
+- **No `natural_key`.** Unlike most child tables there is no uniqueness constraint — a decision
+  is an event, and the same text can legitimately be logged twice.
+- **`status` is free text in the contract**, typed `{ type: string }` in `openapi.yaml` with no
+  enum. The repository writes `"Pending"` on create and stamps `completed_at` on exactly
+  `"Completed"`, so the casing is load-bearing while nothing enforces it. The frontend now names
+  the four values once in `artifacts/edc/src/lib/decision-status.ts`; use it rather than
+  re-typing the literal. The mobile panel previously compared against lowercase `"completed"`,
+  which no row has ever held, and its Completed section could therefore never populate.
+
+Confirmed empty in Development on 2026-08-12 — which is why the Decisions panel showed nothing.
+Nothing seeded it: `POST /admin/seed` skipped the table entirely and the desktop Decision Log
+form was the only creator in the app. `seedDealsCatalyst` now writes it.
+
 ## Stratus offload and durable webhook retry — BOTH BUILT (2026-08-07)
 
 Previously deferred as latent; both are now shipped and verified live. Kept here because the

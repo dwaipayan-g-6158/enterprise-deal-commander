@@ -120,6 +120,7 @@ const TABLE = {
   dealBlockers: "deal_blockers",
   dealMemory: "v2_deal_memory",
   dealCompetitors: "v2_deal_competitors",
+  dealDecisions: "v2_deal_decisions",
 } as const;
 
 /* ------------------------------------------------------------------ Helpers */
@@ -638,6 +639,7 @@ export async function seedDealsCatalyst(catalystApp: CatalystApp): Promise<SeedS
     [TABLE.dealBlockers]: 0,
     [TABLE.dealMemory]: 0,
     [TABLE.dealCompetitors]: 0,
+    [TABLE.dealDecisions]: 0,
   };
 
   const existingDeals = await fetchAllRows(catalystApp, TABLE.enterpriseDeals);
@@ -787,6 +789,33 @@ export async function seedDealsCatalyst(catalystApp: CatalystApp): Promise<SeedS
     })),
   );
 
+  // Decision Log. Nothing else in the app writes this table — the desktop form
+  // was its only creator — so without these rows the Decisions panel is empty
+  // on freshly seeded data and reads as broken rather than as unused.
+  // `commander_id` is null: these are demo rows with no signed-in author, and
+  // the column is only used to attribute a decision to the commander who
+  // recorded it.
+  const decisionRows = seeded.flatMap(({ id, seed }) =>
+    (seed.decisions ?? []).map((d) => ({
+      id: crypto.randomUUID(),
+      deal_id: id,
+      meeting_session_id: null,
+      decision_text: d.decisionText,
+      rationale: d.rationale ?? null,
+      owner: d.owner,
+      status: d.status ?? "Pending",
+      decided_at: formatCatalystDateTime(daysAgo(d.decidedDaysAgo)),
+      due_date: d.dueInDays === undefined ? null : dateInDays(d.dueInDays),
+      completed_at:
+        d.completedDaysAgo === undefined
+          ? null
+          : formatCatalystDateTime(daysAgo(d.completedDaysAgo)),
+      commander_id: null,
+      created_at: now,
+      updated_at: now,
+    })),
+  );
+
   // The post-mortem subscriber (lib/subscribers/post-mortem.ts) only archives
   // to deal_memory on a live `deal.stage_changed` event; direct seed inserts
   // never fire that event, so replicate its archive shape here for seeded
@@ -841,6 +870,7 @@ export async function seedDealsCatalyst(catalystApp: CatalystApp): Promise<SeedS
     [TABLE.dealBlockers, blockerRows],
     [TABLE.dealMemory, memoryRows],
     [TABLE.dealCompetitors, competitorLinkRows],
+    [TABLE.dealDecisions, decisionRows],
   ];
   for (const [table, rows] of writes) {
     await insertRows(catalystApp, table, rows);
