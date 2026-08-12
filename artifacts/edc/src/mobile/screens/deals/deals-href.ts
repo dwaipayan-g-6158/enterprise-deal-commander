@@ -3,6 +3,7 @@ import { encodeRosterUrl } from "../../../components/roster/model/roster-url";
 import {
   DEFAULT_FILTERS,
   DEFAULT_SORT,
+  DEFAULT_STALE_STAGE_DAYS,
   type GroupBy,
   type RosterFilters,
   type RosterView,
@@ -57,6 +58,7 @@ export function countActiveFilters(f: RosterFilters): number {
   if (f.stage.length) n++;
   if (f.health.length) n++;
   if (f.velocity.length) n++;
+  if (f.staleMinDays != null) n++;
   if (f.accountManager.length) n++;
   if (f.technicalLead.length) n++;
   if (f.tags.length) n++;
@@ -74,8 +76,18 @@ export function countActiveFilters(f: RosterFilters): number {
 export const DEALS_LINKS = {
   /** Deals the engine has flagged red. */
   red: () => dealsHref({ health: ["RED"] }),
-  /** Deals that have stopped moving against their stage benchmark. */
-  stalled: () => dealsHref({ velocity: ["STALLED", "SLOW"] }, { sort: [{ key: "velocity", dir: "desc" }] }),
+  /**
+   * Deals that have sat in their current stage too long.
+   *
+   * Takes the threshold the figure was counted with — `summary.staleStageDays` —
+   * so the list is provably the same set as the number that was tapped. This
+   * used to filter on `velocity: ["STALLED", "SLOW"]`, which is a *relative*
+   * measure: a deal alone in its stage has no benchmark, buckets to NO_DATE and
+   * is excluded, so a tile reading "2" opened a list reading "0". On a pipeline
+   * where every stage holds one deal, that list could never be non-empty.
+   */
+  stalled: (minDays: number = DEFAULT_STALE_STAGE_DAYS) =>
+    dealsHref({ staleMinDays: minDays }, { sort: [{ key: "velocity", dir: "desc" }] }),
   /** Deals due inside thirty days, soonest first. */
   closingSoon: () =>
     dealsHref({ closePreset: "30d" }, { sort: [{ key: "expectedCloseDate", dir: "asc" }] }),

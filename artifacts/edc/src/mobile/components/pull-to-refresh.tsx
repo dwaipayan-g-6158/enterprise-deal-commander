@@ -1,8 +1,14 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import { haptic } from "@/mobile/lib/haptics";
 import { useShellScrollRef } from "@/mobile/shell/m-shell";
-import { isArmed, pullDistance, pullProgress, TRIGGER_PX } from "@/mobile/ui/pull-physics";
+import {
+  DOCK_PULL_RATIO,
+  isArmed,
+  pullDistance,
+  pullProgress,
+  TRIGGER_PX,
+} from "@/mobile/ui/pull-physics";
 
 /** One beat of "that worked" before the content settles back. */
 const CONFIRM_MS = 340;
@@ -19,13 +25,30 @@ const CONFIRM_MS = 340;
  * touchmove has to be non-passive: React registers its touch handlers as
  * passive, where preventDefault is ignored, and without it iOS rubber-bands
  * the scroll container underneath the gesture.
+ *
+ * ## Docked bars travel too, via `dock`
+ *
+ * Only this component's own children are transformed, so anything rendered
+ * beside it — the search docks on Deals and Memory — sat perfectly still while
+ * the list moved under the finger. `dock` exists so those bars can be handed
+ * the matching transform instead of being left behind.
  */
 export function PullToRefresh({
   onRefresh,
   children,
+  dock,
 }: {
   onRefresh: () => Promise<unknown> | unknown;
   children: ReactNode;
+  /**
+   * Bottom furniture that should follow the pull, damped by DOCK_PULL_RATIO.
+   *
+   * Receives the style to spread onto the docked element ITSELF. Never wrap it:
+   * a transformed ancestor becomes the containing block for a `position: fixed`
+   * descendant, which would demote the dock from viewport-pinned to a box that
+   * scrolls away with the list.
+   */
+  dock?: (pullStyle: CSSProperties) => ReactNode;
 }) {
   const scrollRef = useShellScrollRef();
   const [pull, setPull] = useState(0);
@@ -132,6 +155,16 @@ export function PullToRefresh({
 
   const progress = pullProgress(pull);
 
+  // Untransitioned while the finger is down so the content tracks it exactly.
+  // On release it springs: a plain ease lands flat, and the slight overshoot is
+  // what makes the gesture feel elastic rather than mechanical.
+  //
+  // Shared with the dock deliberately — two different transitions would let the
+  // bar and the list settle at different moments, which reads worse than the
+  // frozen dock this replaced.
+  const transition =
+    pull === 0 || refreshing || confirming ? "transform 320ms var(--m-ease-spring)" : "none";
+
   return (
     <div className="relative">
       <div
@@ -141,21 +174,10 @@ export function PullToRefresh({
       >
         <RefreshRing progress={progress} spinning={refreshing} confirming={confirming} />
       </div>
-      <div
-        style={{
-          transform: `translateY(${pull}px)`,
-          // Untransitioned while the finger is down so the content tracks it
-          // exactly. On release it springs: a plain ease lands flat, and the
-          // slight overshoot is what makes the gesture feel elastic rather
-          // than mechanical.
-          transition:
-            pull === 0 || refreshing || confirming
-              ? "transform 320ms var(--m-ease-spring)"
-              : "none",
-        }}
-      >
-        {children}
-      </div>
+      <div style={{ transform: `translateY(${pull}px)`, transition }}>{children}</div>
+      {/* Outside the transformed element on purpose: the dock is `fixed`, and a
+          transformed ancestor would capture it as its containing block. */}
+      {dock?.({ transform: `translateY(${pull * DOCK_PULL_RATIO}px)`, transition })}
       <span role="status" className="sr-only">
         {refreshing ? "Refreshing" : ""}
       </span>

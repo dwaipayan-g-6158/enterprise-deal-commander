@@ -256,6 +256,27 @@ describe("intelligence summary — alert TCV and true counts", () => {
     expect(summary.criticalAlertsTotal).toBe(summary.criticalAlerts.length);
   });
 
+  // The client builds the Stalled drill-down link from this number. It used to
+  // filter on the RELATIVE velocity buckets instead, which exclude any deal
+  // without stage peers — so the tile reported 2 and the list it opened reported
+  // 0. Shipping the threshold is what lets the link select the same set, so it
+  // has to actually be the threshold the count was taken with.
+  it("ships the stale threshold it counted with", async () => {
+    await insertDeal({ stageName: "Discovery", productRevenue: "100000.00", daysInStage: 60 });
+    await insertDeal({ stageName: "Discovery", productRevenue: "100000.00", daysInStage: 22 });
+    await insertDeal({ stageName: "Discovery", productRevenue: "100000.00", daysInStage: 21 });
+
+    const summary = await computeSummary(app());
+
+    expect(summary.staleStageDays).toBe(21);
+    // Strictly greater than, matching the predicate: the 21-day deal is not stale.
+    expect(summary.staleDealsTotal).toBe(2);
+    expect(
+      summary.staleDeals.every((d) => d.daysInStage > summary.staleStageDays),
+      "every listed deal must satisfy the shipped threshold",
+    ).toBe(true);
+  });
+
   it("carries a numeric TCV on every critical alert and never exceeds totalTCV with tcvAtRiskRed", async () => {
     // Validation, not Discovery: a Discovery deal raises no RED alert, which
     // left this loop iterating over an empty list and asserting nothing.

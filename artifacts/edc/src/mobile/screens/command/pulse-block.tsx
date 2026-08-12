@@ -36,6 +36,7 @@ export function PulseBlock({
   health,
   tcvAtRisk,
   staleDeals,
+  staleStageDays,
   coverage,
   money,
 }: {
@@ -43,6 +44,11 @@ export function PulseBlock({
   health: { GREEN: number; YELLOW: number; RED: number } | undefined;
   tcvAtRisk: number | undefined;
   staleDeals: number | undefined;
+  /**
+   * The threshold `staleDeals` was counted with, passed straight into the
+   * drill-down link so the list cannot disagree with the figure above it.
+   */
+  staleStageDays: number | undefined;
   coverage: Coverage | undefined;
   money: (n: number) => string;
 }) {
@@ -108,7 +114,7 @@ export function PulseBlock({
           label="Stalled"
           value={staleDeals != null ? String(staleDeals) : undefined}
           tone={staleDeals != null && staleDeals > 0 ? "caution" : "default"}
-          href={DEALS_LINKS.stalled()}
+          href={DEALS_LINKS.stalled(staleStageDays)}
           hint="Losing pace"
         />
       </div>

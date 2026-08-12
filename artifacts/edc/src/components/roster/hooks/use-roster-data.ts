@@ -50,9 +50,18 @@ export function useRosterData(params: { state: DealState; search: string }) {
   return {
     rows,
     total: dealsQuery.data?.meta?.total ?? rows.length,
-    isLoading: dealsQuery.isLoading,
-    isError: dealsQuery.isError,
+    // Both queries, not just the deals one. Every enrichment-derived field falls
+    // back to null above, so a slow or failed enrichment produced rows that
+    // looked complete but had no score, no daysInStage and NO_DATE velocity —
+    // and any view filtering on those rendered an empty list with no spinner and
+    // no error, which reads as "you have no deals like that" rather than "this
+    // hasn't loaded".
+    isLoading: dealsQuery.isLoading || enrichQuery.isLoading,
+    isError: dealsQuery.isError || enrichQuery.isError,
     isFetching: dealsQuery.isFetching || enrichQuery.isFetching,
-    refetch: dealsQuery.refetch,
+    // Retries both, now that a failure in either surfaces as isError — a
+    // pull-to-refresh that only retried the half that was already fine would
+    // leave the error state on screen with no way out.
+    refetch: () => Promise.all([dealsQuery.refetch(), enrichQuery.refetch()]),
   };
 }

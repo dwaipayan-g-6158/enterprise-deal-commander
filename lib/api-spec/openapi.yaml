@@ -2724,6 +2724,12 @@ components:
           type: array
           items: { $ref: "#/components/schemas/StaleDeal" }
         staleDealsTotal: { type: integer }
+        # The `stale_stage_days` threshold staleDeals/staleDealsTotal were
+        # computed against. Shipped so a drill-down link can filter on the same
+        # number the figure was counted with, instead of re-deriving staleness
+        # from the relative velocity buckets — which exclude any deal with no
+        # stage peers and so could never match what this count reports.
+        staleStageDays: { type: integer }
         changesSinceLastReview: { $ref: "#/components/schemas/ChangesSinceLastReview" }
       required:
         [
@@ -2737,6 +2743,7 @@ components:
           criticalAlertsTotal,
           staleDeals,
           staleDealsTotal,
+          staleStageDays,
         ]
     SummaryResponse:
       type: object

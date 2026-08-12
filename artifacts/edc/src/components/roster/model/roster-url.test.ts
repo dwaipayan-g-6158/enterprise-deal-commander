@@ -20,6 +20,7 @@ describe("encode/decode round-trip", () => {
         stage: ["Negotiation", "Closing"],
         health: ["RED", "YELLOW"],
         velocity: ["STALLED"],
+        staleMinDays: 21,
         tcvMin: 1000,
         scoreMax: 80,
         closePreset: "30d",
@@ -37,6 +38,25 @@ describe("encode/decode round-trip", () => {
     const decoded = decodeRosterUrl(qs);
     expect(decoded.viewId).toBe("red-alerts");
     expect(decoded.view).toEqual(view);
+  });
+
+  it("round-trips staleMinDays, including 0", () => {
+    // The dashboard's Stalled link is the only writer of this key, and an
+    // unrecognised key is dropped in silence — the list would render unfiltered
+    // and look like "everything is stalled" rather than erroring.
+    for (const days of [0, 21, 45]) {
+      const qs = encodeRosterUrl({
+        ...defaultView,
+        filters: { ...DEFAULT_FILTERS, staleMinDays: days },
+      });
+      expect(qs).toBe(`sd=${days}`);
+      expect(decodeRosterUrl(qs).view.filters.staleMinDays).toBe(days);
+    }
+  });
+
+  it("leaves staleMinDays null when absent", () => {
+    expect(encodeRosterUrl(defaultView).includes("sd=")).toBe(false);
+    expect(decodeRosterUrl("").view.filters.staleMinDays).toBeNull();
   });
 
   it("omits defaults from the query string", () => {

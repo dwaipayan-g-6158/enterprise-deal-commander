@@ -1,5 +1,10 @@
-import { useState } from "react";
-import { useSearchDealMemory, useGetMemoryFacets } from "@workspace/api-client-react";
+import { useMemo, useState } from "react";
+import { keepPreviousData } from "@tanstack/react-query";
+import {
+  getSearchDealMemoryQueryKey,
+  useGetMemoryFacets,
+  useSearchDealMemory,
+} from "@workspace/api-client-react";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -13,6 +18,10 @@ import {
 import { Search, X } from "lucide-react";
 import { MemoryResultCard } from "./memory-result-card";
 import { useSavedMemorySearches } from "@/hooks/use-saved-memory-searches";
+import { useDebouncedValue } from "@/hooks/use-debounced-value";
+
+/** Matches the mobile archive search, so the two shells feel the same. */
+const SEARCH_DEBOUNCE_MS = 280;
 
 interface FacetBucket { value: string; count: number }
 interface FacetsPayload {
@@ -41,12 +50,28 @@ export function SearchTab({
   const facetsQuery = useGetMemoryFacets();
   const facets = facetsQuery.data?.data as FacetsPayload | undefined;
 
-  const params: Record<string, string> = {};
-  if (q.trim()) params.q = q.trim();
-  if (outcome !== "all") params.outcome = outcome;
-  if (competitor !== "all") params.competitor = competitor;
-  if (pricingModel !== "all") params.pricingModel = pricingModel;
-  const { data, isLoading, isError } = useSearchDealMemory(params as never);
+  // The field tracks the finger; the request trails it. Without this the query
+  // key changed on every keystroke, so the archive was searched once per
+  // character and the result list was torn down and rebuilt each time.
+  const debouncedQ = useDebouncedValue(q.trim(), SEARCH_DEBOUNCE_MS);
+
+  const params = useMemo(() => {
+    const next: Record<string, string> = {};
+    if (debouncedQ) next.q = debouncedQ;
+    if (outcome !== "all") next.outcome = outcome;
+    if (competitor !== "all") next.competitor = competitor;
+    if (pricingModel !== "all") next.pricingModel = pricingModel;
+    return next;
+  }, [debouncedQ, outcome, competitor, pricingModel]);
+
+  // Holds the previous results while the next page is in flight, so refining a
+  // search updates the list in place instead of blanking it.
+  const { data, isLoading, isError } = useSearchDealMemory(params as never, {
+    query: {
+      queryKey: getSearchDealMemoryQueryKey(params as never),
+      placeholderData: keepPreviousData,
+    },
+  });
   const results = data?.data ?? [];
   const hasActiveFilter = Boolean(params.q || params.outcome || params.competitor || params.pricingModel);
 

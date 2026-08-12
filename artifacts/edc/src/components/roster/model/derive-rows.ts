@@ -78,6 +78,14 @@ function passesFilters(row: RosterRow, view: RosterView, now: number): boolean {
   if (f.health.length && !f.health.includes(row.healthStatus)) return false;
   if (f.velocity.length && !f.velocity.includes(row.velocity)) return false;
 
+  // Absolute staleness, on purpose. `daysInStage` is populated for every deal,
+  // whereas `benchmarkDays` — and therefore `row.velocity` — is null whenever a
+  // deal has no stage peers to be compared against. Filtering on the bucket
+  // silently dropped exactly the deals the dashboard was counting.
+  if (f.staleMinDays != null && !(row.daysInStage != null && row.daysInStage > f.staleMinDays)) {
+    return false;
+  }
+
   const tcv = comparableTCV(row);
   if (f.tcvMin != null && tcv < f.tcvMin) return false;
   if (f.tcvMax != null && tcv > f.tcvMax) return false;

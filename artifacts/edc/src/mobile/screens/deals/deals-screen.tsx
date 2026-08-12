@@ -1,8 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { ArrowDownUp, Search, SlidersHorizontal, X } from "lucide-react";
-import { cn } from "@/lib/utils";
 import { compactCurrency } from "@/lib/format";
-import { useDebouncedValue } from "@/mobile/hooks/use-debounced-value";
+import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { useRosterData } from "@/components/roster/hooks/use-roster-data";
 import { useDerivedRows } from "@/components/roster/hooks/use-derived-rows";
 import { isDefaultView } from "@/components/roster/model/roster-url";
@@ -12,6 +11,7 @@ import { MNavBar } from "@/mobile/shell/m-nav-bar";
 import { MNavBrand } from "@/mobile/shell/m-nav-brand";
 import { MAvatar } from "@/mobile/shell/m-avatar";
 import { SegmentChips, type Segment } from "@/mobile/components/segment-chips";
+import { DockButton } from "@/mobile/components/dock-button";
 import { Shimmer } from "@/mobile/components/shimmer";
 import { EmptyState, ErrorState } from "@/mobile/components/states";
 import { PullToRefresh } from "@/mobile/components/pull-to-refresh";
@@ -120,7 +120,58 @@ export function DealsScreen() {
         />
       </MNavBar>
 
-      <PullToRefresh onRefresh={refetch}>
+      <PullToRefresh
+        onRefresh={refetch}
+        dock={(pullStyle) => (
+          // Docked above the tab bar, so the keyboard opens under the thumb
+          // rather than shoving the whole screen up. The shell's pb-tabbar
+          // already clears both this and the bar below it.
+          //
+          // pullStyle rides on this element rather than a wrapper — see the prop
+          // docs; wrapping would capture the `fixed` and make it scroll away.
+          <div
+            style={pullStyle}
+            className="m-glass m-glass-bottom fixed inset-x-0 bottom-[calc(4rem+env(safe-area-inset-bottom))] z-30 flex items-center gap-2 border-t border-border px-4 py-2.5"
+          >
+            <label className="sr-only" htmlFor="deals-search">
+              Search deals
+            </label>
+            <div className="flex min-w-0 flex-1 items-center gap-2 rounded-full border border-border bg-card px-4">
+              <Search className="m-muted h-4 w-4 shrink-0" aria-hidden="true" />
+              <input
+                id="deals-search"
+                type="search"
+                value={typed}
+                onChange={(e) => setTyped(e.target.value)}
+                placeholder="Deal, account, competitor"
+                // 16px minimum, or iOS zooms the viewport on focus.
+                className="m-tap h-12 w-full min-w-0 bg-transparent text-base outline-none placeholder:text-muted-foreground"
+              />
+              {typed ? (
+                <button
+                  type="button"
+                  onClick={() => setTyped("")}
+                  aria-label="Clear search"
+                  className="m-press shrink-0"
+                >
+                  <X className="m-muted h-4 w-4" aria-hidden="true" />
+                </button>
+              ) : null}
+            </div>
+
+            <DockButton
+              label="Filter deals"
+              badge={url.activeFilterCount}
+              onPress={() => setFilterOpen(true)}
+            >
+              <SlidersHorizontal className="h-5 w-5" aria-hidden="true" />
+            </DockButton>
+            <DockButton label="Sort and group" onPress={() => setSortOpen(true)}>
+              <ArrowDownUp className="h-5 w-5" aria-hidden="true" />
+            </DockButton>
+          </div>
+        )}
+      >
         <div className="space-y-3 p-4">
           {isError ? (
             <ErrorState
@@ -147,48 +198,6 @@ export function DealsScreen() {
           )}
         </div>
       </PullToRefresh>
-
-      {/* Docked above the tab bar, so the keyboard opens under the thumb rather
-          than shoving the whole screen up. The shell's pb-tabbar already clears
-          both this and the bar below it. */}
-      <div className="m-glass m-glass-bottom fixed inset-x-0 bottom-[calc(4rem+env(safe-area-inset-bottom))] z-30 flex items-center gap-2 border-t border-border px-4 py-2.5">
-        <label className="sr-only" htmlFor="deals-search">
-          Search deals
-        </label>
-        <div className="flex min-w-0 flex-1 items-center gap-2 rounded-full border border-border bg-card px-4">
-          <Search className="m-muted h-4 w-4 shrink-0" aria-hidden="true" />
-          <input
-            id="deals-search"
-            type="search"
-            value={typed}
-            onChange={(e) => setTyped(e.target.value)}
-            placeholder="Deal, account, competitor"
-            // 16px minimum, or iOS zooms the viewport on focus.
-            className="m-tap h-12 w-full min-w-0 bg-transparent text-base outline-none placeholder:text-muted-foreground"
-          />
-          {typed ? (
-            <button
-              type="button"
-              onClick={() => setTyped("")}
-              aria-label="Clear search"
-              className="m-press shrink-0"
-            >
-              <X className="m-muted h-4 w-4" aria-hidden="true" />
-            </button>
-          ) : null}
-        </div>
-
-        <DockButton
-          label="Filter deals"
-          badge={url.activeFilterCount}
-          onPress={() => setFilterOpen(true)}
-        >
-          <SlidersHorizontal className="h-5 w-5" aria-hidden="true" />
-        </DockButton>
-        <DockButton label="Sort and group" onPress={() => setSortOpen(true)}>
-          <ArrowDownUp className="h-5 w-5" aria-hidden="true" />
-        </DockButton>
-      </div>
 
       <FilterSheet
         open={filterOpen}
@@ -249,40 +258,5 @@ function GroupSection({
         <DealCard key={deal.id} deal={deal} />
       ))}
     </section>
-  );
-}
-
-/** A 48px control in the dock, with an optional count on it. */
-function DockButton({
-  label,
-  badge,
-  onPress,
-  children,
-}: {
-  label: string;
-  badge?: number;
-  onPress: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onPress}
-      aria-label={badge ? `${label}, ${badge} active` : label}
-      className={cn(
-        "m-press relative flex h-12 w-12 shrink-0 items-center justify-center rounded-full border border-border bg-card",
-        badge ? "text-primary" : "text-foreground",
-      )}
-    >
-      {children}
-      {badge ? (
-        <span
-          aria-hidden="true"
-          className="m-micro m-num absolute -right-0.5 -top-0.5 flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1 text-primary-foreground"
-        >
-          {badge}
-        </span>
-      ) : null}
-    </button>
   );
 }

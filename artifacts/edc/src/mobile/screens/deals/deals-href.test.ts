@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { decodeRosterUrl } from "../../../components/roster/model/roster-url";
-import { DEFAULT_FILTERS } from "../../../components/roster/model/roster-types";
+import { computeDerivedRows } from "../../../components/roster/model/derive-rows";
+import {
+  DEFAULT_FILTERS,
+  DEFAULT_STALE_STAGE_DAYS,
+  type RosterRow,
+} from "../../../components/roster/model/roster-types";
 import { countActiveFilters, DEALS_LINKS, dealsHref } from "./deals-href";
 
 /** What the Deals screen will actually make of a link. */
@@ -47,10 +52,22 @@ describe("dealsHref", () => {
       expect(view.filters.velocity).toEqual([]);
     });
 
-    it("stalled covers both losing-pace buckets", () => {
+    it("stalled filters on days-in-stage, not the velocity buckets", () => {
+      // It used to send `velocity: ["STALLED", "SLOW"]`. Those buckets are
+      // relative to a deal's stage peers, so a deal with no peers has a null
+      // benchmark, buckets to NO_DATE and is excluded — while the dashboard
+      // figure counts it. The tile read "2" and opened a list reading "0".
       const { view } = decode(DEALS_LINKS.stalled());
-      expect(view.filters.velocity).toEqual(["STALLED", "SLOW"]);
+      expect(view.filters.velocity).toEqual([]);
+      expect(view.filters.staleMinDays).toBe(DEFAULT_STALE_STAGE_DAYS);
       expect(view.sort).toEqual([{ key: "velocity", dir: "desc" }]);
+    });
+
+    it("stalled carries the threshold the count was taken with", () => {
+      // The live `stale_stage_days` wins over the default, so retuning it in
+      // Settings keeps the list and the figure describing the same set.
+      const { view } = decode(DEALS_LINKS.stalled(45));
+      expect(view.filters.staleMinDays).toBe(45);
     });
 
     it("closing soon sorts by the date it filters on", () => {
@@ -72,10 +89,92 @@ describe("dealsHref", () => {
         const filtered =
           view.filters.health.length > 0 ||
           view.filters.velocity.length > 0 ||
+          view.filters.staleMinDays != null ||
           view.filters.closePreset !== "any";
         expect(filtered, name).toBe(name !== "all");
       }
     });
+  });
+});
+
+describe("the Stalled figure and the list behind it", () => {
+  // The exact shape that made this fail in production: a small pipeline holding
+  // one open deal per stage. `computeVelocityRows` benchmarks a deal against the
+  // MEDIAN OF ITS PEERS, so a deal with no peers gets `benchmarkDays: null` and
+  // `velocityStatus: "INSUFFICIENT_DATA"` — which `deriveVelocityBucket` maps to
+  // NO_DATE, and NO_DATE is in no velocity filter.
+  const ALONE_IN_STAGE = [
+    { id: "cobalt", salesStage: "Procurement", daysInStage: 39 },
+    { id: "atlas", salesStage: "Commercial", daysInStage: 33 },
+    { id: "beacon", salesStage: "Validation", daysInStage: 14 },
+  ];
+
+  function rosterRow(p: { id: string; salesStage: string; daysInStage: number }): RosterRow {
+    return {
+      id: p.id,
+      dealName: p.id,
+      accountName: "Acct",
+      accountManager: "Dana",
+      technicalLead: "Lee",
+      salesStageId: 1,
+      salesStage: p.salesStage,
+      productRevenue: 0,
+      servicesRevenue: 0,
+      dealCurrency: "USD",
+      calculatedTCV: 100,
+      normalizedTCV: 100,
+      healthStatus: "GREEN",
+      score: null,
+      scoreDelta: null,
+      gatesPct: 0,
+      daysInStage: p.daysInStage,
+      daysSinceLastActivity: null,
+      // No peers in stage ⇒ no benchmark ⇒ NO_DATE. This is the whole bug.
+      benchmarkDays: null,
+      deltaDays: null,
+      riskScore: null,
+      riskLevel: null,
+      velocity: "NO_DATE",
+      competitorId: null,
+      expectedCloseDate: null,
+    } as unknown as RosterRow;
+  }
+
+  const rows = ALONE_IN_STAGE.map(rosterRow);
+  const NOW = new Date(2026, 5, 27, 12).getTime();
+
+  /** What `computeSummary` counts: absolute days in stage, nothing relative. */
+  function serverStaleCount(threshold: number): number {
+    return rows.filter((r) => (r.daysInStage ?? 0) > threshold).length;
+  }
+
+  it("shows exactly the deals the figure counted", () => {
+    const expected = serverStaleCount(DEFAULT_STALE_STAGE_DAYS);
+    expect(expected).toBe(2);
+
+    const { view } = decode(DEALS_LINKS.stalled(DEFAULT_STALE_STAGE_DAYS));
+    const derived = computeDerivedRows(rows, view, NOW);
+
+    expect(derived.matchedCount).toBe(expected);
+    expect(derived.groups.flatMap((g) => g.rows.map((r) => r.id)).sort()).toEqual([
+      "atlas",
+      "cobalt",
+    ]);
+  });
+
+  it("agrees with the figure at whatever threshold is configured", () => {
+    for (const threshold of [0, 13, 21, 35, 39, 100]) {
+      const { view } = decode(DEALS_LINKS.stalled(threshold));
+      const derived = computeDerivedRows(rows, view, NOW);
+      expect(derived.matchedCount, `threshold ${threshold}`).toBe(serverStaleCount(threshold));
+    }
+  });
+
+  it("would have matched nothing under the old velocity filter", () => {
+    // Kept as the regression's epitaph: every one of these rows is NO_DATE, so
+    // the previous link could not have matched a single deal however stale.
+    const { view } = decode(dealsHref({ velocity: ["STALLED", "SLOW"] }));
+    expect(computeDerivedRows(rows, view, NOW).matchedCount).toBe(0);
   });
 });
 

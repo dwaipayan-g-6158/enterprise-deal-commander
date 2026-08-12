@@ -101,6 +101,18 @@ export interface RosterFilters {
   stage: string[];
   health: Health[];
   velocity: VelocityBucket[];
+  /**
+   * Keep only deals that have sat in their stage longer than this many days.
+   *
+   * Deliberately separate from `velocity`. The velocity buckets are *relative* —
+   * they compare a deal against the median of its stage peers — so a deal with
+   * no peers has no benchmark, buckets to NO_DATE, and drops out of every
+   * velocity filter. The dashboard's "Stalled" figure is *absolute*
+   * (`daysInStage > stale_stage_days`), so counting with one and filtering with
+   * the other produced a tile reading 2 above a list reading 0. This dimension
+   * is the absolute rule, expressed so a link can carry it.
+   */
+  staleMinDays: number | null;
   // "More filters"
   tcvMin: number | null;
   tcvMax: number | null;
@@ -144,6 +156,7 @@ export const DEFAULT_FILTERS: RosterFilters = {
   stage: [],
   health: [],
   velocity: [],
+  staleMinDays: null,
   tcvMin: null,
   tcvMax: null,
   scoreMin: null,
@@ -155,6 +168,18 @@ export const DEFAULT_FILTERS: RosterFilters = {
   hasCompetitors: null,
   committed: null,
 };
+
+/**
+ * Fallback for the `stale_stage_days` engine threshold, mirroring the server's
+ * own default in `computeSummary`.
+ *
+ * Only a fallback. Anywhere the live threshold is reachable — the Command
+ * screen reads it off the intelligence summary — that value wins, so a team who
+ * has retuned the threshold in Settings gets a list that still matches the
+ * figure they clicked. This exists for the static built-in view, which has no
+ * query to read.
+ */
+export const DEFAULT_STALE_STAGE_DAYS = 21;
 
 export const DEFAULT_SORT: SortSpec[] = [{ key: "calculatedTCV", dir: "desc" }];
 

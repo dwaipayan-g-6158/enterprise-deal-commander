@@ -22,5 +22,6 @@ export interface Summary {
   criticalAlertsTotal: number;
   staleDeals: StaleDeal[];
   staleDealsTotal: number;
+  staleStageDays: number;
   changesSinceLastReview?: ChangesSinceLastReview;
 }

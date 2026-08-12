@@ -173,6 +173,9 @@ export async function computeSummary(catalystApp: CatalystApp) {
     criticalAlertsTotal: criticalAlerts.length,
     staleDeals: staleDeals.slice(0, DETAIL_LIST_LIMIT),
     staleDealsTotal: staleDeals.length,
+    // Shipped alongside the count so a drill-down can filter on the very
+    // threshold the count used, rather than approximating it.
+    staleStageDays,
     changesSinceLastReview: {
       dealsWithChanges,
       topMovers: movers.slice(0, 5),

@@ -1,7 +1,12 @@
 // Built-in saved views. These always exist (cannot be deleted/edited); user
 // custom views live alongside them in localStorage. `id` is stable so a `?view=`
 // pointer in a shared URL resolves correctly.
-import { DEFAULT_FILTERS, DEFAULT_SORT, type SavedView } from "./roster-types";
+import {
+  DEFAULT_FILTERS,
+  DEFAULT_SORT,
+  DEFAULT_STALE_STAGE_DAYS,
+  type SavedView,
+} from "./roster-types";
 
 function view(partial: Partial<SavedView["view"]["filters"]>, rest: Partial<SavedView["view"]> = {}): SavedView["view"] {
   return {
@@ -28,7 +33,15 @@ export const BUILTIN_VIEWS: SavedView[] = [
     id: "stalled",
     name: "Stalled",
     builtIn: true,
-    view: view({ velocity: ["STALLED", "SLOW"] }, { sort: [{ key: "velocity", dir: "desc" }] }),
+    // Days-in-stage, not the velocity buckets. Those are relative to a deal's
+    // stage peers, so any deal without peers has no benchmark and is excluded —
+    // which made this chip render an empty list on a pipeline holding one deal
+    // per stage. A static view has no query to read the live threshold from, so
+    // it takes the documented default.
+    view: view(
+      { staleMinDays: DEFAULT_STALE_STAGE_DAYS },
+      { sort: [{ key: "velocity", dir: "desc" }] },
+    ),
   },
   {
     id: "closing-soon",

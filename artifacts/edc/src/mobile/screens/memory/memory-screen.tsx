@@ -1,7 +1,9 @@
 import { useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { Link, useLocation } from "wouter";
-import { Check, ChevronRight, Search, X } from "lucide-react";
+import { Check, ChevronRight, Search, SlidersHorizontal, X } from "lucide-react";
+import { keepPreviousData } from "@tanstack/react-query";
 import {
+  getSearchDealMemoryQueryKey,
   useGetMemoryFacets,
   useSearchDealMemory,
   type DealMemory,
@@ -11,12 +13,13 @@ import { cn } from "@/lib/utils";
 import { OUTCOME_CLASS } from "@/lib/semantic-colors";
 import { normalizeOutcome, OUTCOME_LABEL } from "@/mobile/lib/outcome";
 import { armSharedCard, useSharedCardStyle } from "@/mobile/lib/shared-card";
-import { useDebouncedValue } from "@/mobile/hooks/use-debounced-value";
+import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { MNavBar } from "@/mobile/shell/m-nav-bar";
 import { MNavBrand } from "@/mobile/shell/m-nav-brand";
 import { MAvatar } from "@/mobile/shell/m-avatar";
 import { OutcomePill } from "@/mobile/components/badges";
 import { SegmentChips, type Segment } from "@/mobile/components/segment-chips";
+import { DockButton } from "@/mobile/components/dock-button";
 import { Shimmer } from "@/mobile/components/shimmer";
 import { EmptyState, ErrorState } from "@/mobile/components/states";
 import { PullToRefresh } from "@/mobile/components/pull-to-refresh";
@@ -97,12 +100,28 @@ export function MemoryScreen() {
     [debounced, outcome, competitor],
   );
 
-  const { data, isLoading, isError, refetch } = useSearchDealMemory(params);
+  // keepPreviousData, or every settled keystroke is a brand-new query key, and a
+  // brand-new key means isLoading — which tears the whole result list down to
+  // shimmer between each character. Holding the previous page means the list
+  // updates in place instead of blinking.
+  const { data, isLoading, isError, refetch } = useSearchDealMemory(params, {
+    query: {
+      queryKey: getSearchDealMemoryQueryKey(params),
+      placeholderData: keepPreviousData,
+    },
+  });
   const facetsQuery = useGetMemoryFacets();
   const facets = facetsQuery.data?.data as FacetsPayload | undefined;
   const results = data?.data ?? [];
 
   const searching = debounced.length >= MIN_QUERY_LENGTH || competitor != null;
+
+  // The lens list hides on the FIRST keystroke, not at MIN_QUERY_LENGTH. Gating
+  // it on `searching` meant a five-row block was yanked out from under the
+  // results on the 2nd character and put back on backspace — a layout jump in
+  // the middle of typing, with the keyboard up. Intent is "someone is searching",
+  // and that starts at one character even though the request does not.
+  const typing = query.trim().length > 0 || competitor != null;
 
   return (
     <>
@@ -125,7 +144,54 @@ export function MemoryScreen() {
 
       {/* The shell's pb-tabbar already clears the docked search bar as well as
           the tab bar, so no extra padding here. */}
-      <PullToRefresh onRefresh={refetch}>
+      <PullToRefresh
+        onRefresh={refetch}
+        dock={(pullStyle) => (
+          // pullStyle rides on this element, never a wrapper — a transformed
+          // ancestor would capture the `fixed` and let the dock scroll away.
+          <div
+            style={pullStyle}
+            className="m-glass m-glass-bottom fixed inset-x-0 bottom-[calc(4rem+env(safe-area-inset-bottom))] z-30 flex items-center gap-2 border-t border-border px-4 py-2.5"
+          >
+            <label className="sr-only" htmlFor="memory-search">
+              Search archived deals
+            </label>
+            <div className="flex min-w-0 flex-1 items-center gap-2 rounded-full border border-border bg-card px-4">
+              <Search className="m-muted h-4 w-4 shrink-0" aria-hidden="true" />
+              <input
+                id="memory-search"
+                type="search"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search accounts, lessons, competitors"
+                // 16px minimum, or iOS zooms the viewport on focus.
+                className="m-tap h-12 w-full min-w-0 bg-transparent text-base outline-none placeholder:text-muted-foreground"
+              />
+              {query ? (
+                <button
+                  type="button"
+                  onClick={() => setQuery("")}
+                  aria-label="Clear search"
+                  className="m-press shrink-0"
+                >
+                  <X className="m-muted h-4 w-4" aria-hidden="true" />
+                </button>
+              ) : null}
+            </div>
+            {/* Sliders, not a checkmark. This sits immediately right of a text
+                field on a screen with no search button — a tick there is read as
+                "submit", and tapping it opened the archive filter instead. The
+                label matches the sheet it opens, too. */}
+            <DockButton
+              label="Filter the archive"
+              badge={competitor ? 1 : undefined}
+              onPress={() => setFacetsOpen(true)}
+            >
+              <SlidersHorizontal className="h-5 w-5" aria-hidden="true" />
+            </DockButton>
+          </div>
+        )}
+      >
         <div className="space-y-3 p-4">
           {competitor ? (
             <button
@@ -171,7 +237,7 @@ export function MemoryScreen() {
             ))
           )}
 
-          {!searching && results.length > 0 ? (
+          {!typing && results.length > 0 ? (
             <nav aria-label="Archive lenses" className="pt-1">
               <p className="m-label m-muted mb-1.5 px-1">Ask the archive</p>
               <ul className="m-card overflow-hidden">
@@ -219,45 +285,6 @@ export function MemoryScreen() {
           </button>
         </div>
       ) : null}
-
-      <div className="m-glass m-glass-bottom fixed inset-x-0 bottom-[calc(4rem+env(safe-area-inset-bottom))] z-30 flex items-center gap-2 border-t border-border px-4 py-2.5">
-        <label className="sr-only" htmlFor="memory-search">
-          Search archived deals
-        </label>
-        <div className="flex min-w-0 flex-1 items-center gap-2 rounded-full border border-border bg-card px-4">
-          <Search className="m-muted h-4 w-4 shrink-0" aria-hidden="true" />
-          <input
-            id="memory-search"
-            type="search"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search accounts, lessons, competitors"
-            // 16px minimum, or iOS zooms the viewport on focus.
-            className="m-tap h-12 w-full min-w-0 bg-transparent text-base outline-none placeholder:text-muted-foreground"
-          />
-          {query ? (
-            <button
-              type="button"
-              onClick={() => setQuery("")}
-              aria-label="Clear search"
-              className="m-press shrink-0"
-            >
-              <X className="m-muted h-4 w-4" aria-hidden="true" />
-            </button>
-          ) : null}
-        </div>
-        <button
-          type="button"
-          onClick={() => setFacetsOpen(true)}
-          aria-label="Filter by competitor"
-          className={cn(
-            "m-press flex h-12 w-12 shrink-0 items-center justify-center rounded-full border border-border bg-card",
-            competitor ? "text-primary" : "text-foreground",
-          )}
-        >
-          <Check className="h-5 w-5" aria-hidden="true" />
-        </button>
-      </div>
 
       <MSheet
         open={facetsOpen}

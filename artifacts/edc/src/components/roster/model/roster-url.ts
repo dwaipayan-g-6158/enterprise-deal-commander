@@ -92,6 +92,7 @@ export function encodeRosterUrl(view: RosterView, viewId?: string | null): strin
   if (f.stage.length) p.set("sg", csv(f.stage));
   if (f.health.length) p.set("h", csv(f.health));
   if (f.velocity.length) p.set("v", csv(f.velocity));
+  if (f.staleMinDays != null) p.set("sd", String(f.staleMinDays));
   if (f.tcvMin != null) p.set("tmin", String(f.tcvMin));
   if (f.tcvMax != null) p.set("tmax", String(f.tcvMax));
   if (f.scoreMin != null) p.set("smin", String(f.scoreMin));
@@ -128,6 +129,7 @@ export function decodeRosterUrl(search: string): { view: RosterView; viewId: str
     stage: splitCsv(p.get("sg")),
     health: intersect(splitCsv(p.get("h")), HEALTHS),
     velocity: intersect(splitCsv(p.get("v")), VELOCITIES),
+    staleMinDays: parseNum(p.get("sd")),
     tcvMin: parseNum(p.get("tmin")),
     tcvMax: parseNum(p.get("tmax")),
     scoreMin: parseNum(p.get("smin")),

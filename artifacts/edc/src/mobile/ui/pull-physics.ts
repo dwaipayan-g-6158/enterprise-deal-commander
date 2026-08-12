@@ -16,6 +16,21 @@ export const TRIGGER_PX = 68;
 export const MAX_PULL_PX = 120;
 
 /**
+ * How much of the content's travel a docked bottom bar takes on.
+ *
+ * The docks used to take none of it: `PullToRefresh` translates its own children
+ * and the docks are siblings, so a pull moved the list and left the search bar
+ * frozen mid-screen. On a list long enough to reach the dock nobody noticed; on
+ * a short one it read as a stuck control, which is how it was reported.
+ *
+ * Not 1. A dock that matched the content exactly would travel the full 120px —
+ * it sits 64px above the bottom and is 71px tall, so at full pull almost all of
+ * it would be behind the tab bar or off screen. At 0.3 it moves at most 36px:
+ * enough to read as attached to the surface, never enough to leave.
+ */
+export const DOCK_PULL_RATIO = 0.3;
+
+/**
  * Maps raw finger travel to content displacement.
  *
  * Exponential rather than the previous linear `travel * 0.5` capped at 96. A

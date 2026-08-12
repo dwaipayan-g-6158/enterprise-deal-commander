@@ -1088,6 +1088,7 @@ export const GetIntelligenceSummaryResponse = zod.object({
   "daysInStage": zod.number()
 })),
   "staleDealsTotal": zod.number(),
+  "staleStageDays": zod.number(),
   "changesSinceLastReview": zod.object({
   "dealsWithChanges": zod.number(),
   "topMovers": zod.array(zod.object({

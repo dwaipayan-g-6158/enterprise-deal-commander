@@ -151,6 +151,7 @@ export function CommandScreen() {
             health={data.summary?.dealsByHealth}
             tcvAtRisk={data.summary?.tcvAtRiskRed}
             staleDeals={data.summary?.staleDealsTotal}
+            staleStageDays={data.summary?.staleStageDays}
             coverage={data.coverage}
             money={money}
           />
