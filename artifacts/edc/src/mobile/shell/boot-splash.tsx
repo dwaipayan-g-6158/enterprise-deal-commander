@@ -121,7 +121,7 @@ export function BootSplash() {
       aria-hidden="true"
       data-leaving={phase === "leaving"}
       className={cn(
-        "m-boot m-shell fixed inset-0 z-[100] flex flex-col items-center justify-center gap-6 px-8",
+        "m-boot m-shell fixed inset-0 z-[100] flex flex-col items-center justify-center gap-4 px-8",
         // Released the instant the fade starts, so the app is tappable
         // through the last 320ms rather than after it.
         phase === "leaving" && "pointer-events-none",
@@ -132,23 +132,18 @@ export function BootSplash() {
           gradient stack in over it — see .m-boot-sky in motion.css for why the
           splash has to start on the flat canvas. */}
       <div className="m-boot-sky" />
-      <EdcLogoMark size={96} timeScale={MARK_TIME_SCALE} />
-      {/* `.m-hero` rather than a hand-rolled caption, and this is the one screen
-          where that rung is the right call. The ladder reserves it for "the one
-          figure a screen is about, max one per screen" — a launch screen has no
-          figure, so the rung is free, and nothing else here competes for it. At
-          44px on a 390px canvas the name wraps to three lines and becomes the
-          screen rather than a label under a logo.
+      <EdcLogoMark size={56} timeScale={MARK_TIME_SCALE} />
+      {/* `.m-display`, not `.m-hero` — this is the first of three consecutive
+          branded surfaces a logged-out user can meet in a row (this splash, the
+          refresh mask in app-reveal.tsx, then the /login lockup itself), and all
+          three now hold one shared size so the mark never resizes on the way to
+          sign-in. `.m-display` is exactly what the other two already use.
 
           It also drops the old uppercase + 0.18em tracking, which existed as a
           logotype exception to a ladder that had no rung big enough. There is one
-          now. Sentence case, per type.css's own policy note.
-
-          AppReveal carries the same lockup at `.m-display` for the refresh case;
-          the two are never on screen together (see app-reveal.tsx on z-order), so
-          they are free to differ in size. */}
-      <div className="m-boot-wordmark flex flex-col items-center gap-2 text-center">
-        <p className="m-hero text-balance">Enterprise Deal Commander</p>
+          now. Sentence case, per type.css's own policy note. */}
+      <div className="m-boot-wordmark flex flex-col items-center gap-1.5 text-center">
+        <p className="m-display text-balance">Enterprise Deal Commander</p>
         <p className="m-body m-muted">Mobile Edition</p>
       </div>
     </div>

@@ -491,7 +491,7 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 1.5rem;
+  gap: 1rem;
   padding: 0 2rem;
   text-align: center;
   /* A bloom, not a cut. On a very warm refresh the whole mask lives about 250ms,
@@ -510,6 +510,12 @@
     opacity: 1;
     transform: translateY(0);
   }
+}
+.app-reveal-words {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.375rem;
 }
 .app-reveal-title {
   margin: 0;

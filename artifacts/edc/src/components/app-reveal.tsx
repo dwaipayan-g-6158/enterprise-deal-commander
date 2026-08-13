@@ -147,8 +147,9 @@ function fontsAlreadyLoaded(): boolean {
  * the installed app BootSplash is already covering the screen, its floor (1450ms)
  * outlasts this ceiling (1200ms), so this panel's entire fade happens underneath
  * something opaque and is never seen. BootSplash then performs the only visible
- * reveal — which is also why the two lockups can differ in size (.m-hero there,
- * .m-display here) without ever being on screen together.
+ * reveal. The two never coordinate at runtime, but they are held to the same mark
+ * and type size on purpose: a logged-out user can meet BootSplash, this panel, and
+ * the /login lockup in a row, and none of them should resize on the way to sign-in.
  *
  * On a REFRESH of the installed app the roles invert, and that is the case the
  * lockup was added for: BootSplash keys on sessionStorage, which survives a
@@ -310,9 +311,11 @@ export function AppReveal() {
        * petals filled with no draw.
        */}
       <div className="app-reveal-lockup">
-        <EdcLogoMark size={72} animated={!offline} timeScale={MARK_TIME_SCALE} />
-        <p className="app-reveal-title">Enterprise Deal Commander</p>
-        <p className="app-reveal-sub">Mobile Edition</p>
+        <EdcLogoMark size={56} animated={!offline} timeScale={MARK_TIME_SCALE} />
+        <div className="app-reveal-words">
+          <p className="app-reveal-title">Enterprise Deal Commander</p>
+          <p className="app-reveal-sub">Mobile Edition</p>
+        </div>
       </div>
     </div>
   );
