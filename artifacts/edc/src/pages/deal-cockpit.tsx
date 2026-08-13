@@ -54,7 +54,7 @@ import { MeddpiccPanel } from "@/components/cockpit/v2/meddpicc-panel";
 import { PricingPanel } from "@/components/cockpit/v2/pricing-panel";
 import { DealTagsBar } from "@/components/cockpit/v2/deal-tags-bar";
 import { formatCurrency } from "@/components/cockpit/use-invalidate";
-import { formatDate } from "@/lib/format";
+import { formatDate, formatTerm } from "@/lib/format";
 import {
   extractDealRisk,
   healthToRiskLevel,
@@ -410,7 +410,7 @@ export default function DealCockpit() {
               </div>
               <div className="flex justify-between py-2">
                 <span className="text-muted-foreground text-sm">Term</span>
-                <span>{intel.financials.termYears} Years</span>
+                <span>{formatTerm(intel.financials.termYears, intel.financials.isPerpetualTerm)}</span>
               </div>
             </CardContent>
           </Card>

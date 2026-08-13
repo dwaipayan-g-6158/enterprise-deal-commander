@@ -176,6 +176,7 @@ export interface Deal {
   pricingModelId?: number;
   pricingModel?: string;
   contractTermYears?: number;
+  isPerpetualTerm?: boolean;
   dealCurrency: string;
   /** @nullable */
   expectedCloseDate?: string | null;
@@ -261,6 +262,7 @@ export interface DealInput {
      * @maximum 10
      */
   contract_term_years: number;
+  is_perpetual_term?: boolean;
   /**
      * @minLength 3
      * @maxLength 3
@@ -339,6 +341,7 @@ export interface DealUpdate {
      * @maximum 10
      */
   contract_term_years?: number;
+  is_perpetual_term?: boolean;
   /**
      * @minLength 3
      * @maxLength 3
@@ -611,6 +614,7 @@ export interface IntelligenceFinancials {
   servicesRevenue: number;
   pricingModel: string;
   termYears: number;
+  isPerpetualTerm?: boolean;
   dealCurrency: string;
   /** @nullable */
   expectedCloseDate?: string | null;

@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { Link } from "wouter";
 import { ChevronRight, ShieldAlert } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { compactCurrency, formatDate, humanizeCode } from "@/lib/format";
+import { compactCurrency, formatDate, formatTerm, humanizeCode } from "@/lib/format";
 import { HEALTH_CLASS } from "@/lib/semantic-colors";
 import { sharedCardSeed } from "@/mobile/lib/shared-card";
 import { MNavBar } from "@/mobile/shell/m-nav-bar";
@@ -199,7 +199,7 @@ export function DealBriefScreen({ id }: { id: string }) {
               <Figure label="Product" value={money(financials.productRevenue)} />
               <Figure label="Services" value={money(financials.servicesRevenue)} />
               <Figure label="Pricing" value={financials.pricingModel} />
-              <Figure label="Term" value={`${financials.termYears} yr`} />
+              <Figure label="Term" value={formatTerm(financials.termYears, financials.isPerpetualTerm, "short")} />
               {score ? (
                 <Figure
                   label="Close score"

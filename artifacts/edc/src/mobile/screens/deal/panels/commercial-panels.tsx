@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { cn } from "@/lib/utils";
-import { compactCurrency, formatDate, money } from "@/lib/format";
+import { compactCurrency, formatDate, formatTerm, money } from "@/lib/format";
 import {
   useGetDealIntelligence,
   useGetPricingSchedule,
@@ -38,7 +38,7 @@ export function EconomicsPanel({ dealId }: PanelBodyProps) {
             </p>
             <p className="m-caption m-muted mt-1">
               {money(financials.calculatedTCV)} {financials.dealCurrency} ·{" "}
-              {financials.termYears} year term
+              {formatTerm(financials.termYears, financials.isPerpetualTerm, "phrase")}
             </p>
             {financials.dealCurrency !== financials.reportingCurrency ? (
               <p className="m-caption m-muted mt-1">

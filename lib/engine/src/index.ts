@@ -99,6 +99,10 @@ export interface RawDeal {
   product_revenue: string | number;
   pricing_model: string;
   contract_term_years: string | number;
+  /** True when the contract term is perpetual (no expiry); `contract_term_years`
+   *  still carries its filler value of `1` in that case. Optional so existing
+   *  `RawDeal` literals (fixtures, older callers) keep compiling as `false`. */
+  is_perpetual_term?: boolean;
   deal_currency: string;
   expected_close_date: string | null;
   win_probability_pct: number | null;
@@ -215,6 +219,7 @@ interface DealContext {
   servicesTier: string;
   pricingModel: string;
   termYears: number;
+  isPerpetualTerm: boolean;
   expectedCloseDate: string | null;
   blueprintNotes: string | null;
   winProbability: number | null;
@@ -1003,6 +1008,7 @@ export interface IntelligenceOutput {
     servicesRevenue: number;
     pricingModel: string;
     termYears: number;
+    isPerpetualTerm: boolean;
     dealCurrency: string;
     expectedCloseDate: string | null;
     daysToClose: number | null;
@@ -1065,6 +1071,7 @@ export function processDealIntelligence(
 ): IntelligenceOutput {
   const baseProductRevenue = parseFloat(String(deal.product_revenue || 0));
   const termYears = parseInt(String(deal.contract_term_years || 1), 10);
+  const isPerpetualTerm = deal.is_perpetual_term === true;
   const attachedServicesRevenue = parseFloat(
     String(deal.services_revenue || 0),
   );
@@ -1221,6 +1228,7 @@ export function processDealIntelligence(
     servicesTier: deal.services_tier,
     pricingModel: deal.pricing_model,
     termYears,
+    isPerpetualTerm,
     expectedCloseDate: deal.expected_close_date,
     blueprintNotes: deal.manager_strategic_blueprint,
     winProbability: deal.win_probability_pct,
@@ -1400,6 +1408,7 @@ export function processDealIntelligence(
       servicesTier: dealContext.servicesTier,
       pricingModel: dealContext.pricingModel,
       termYears,
+      isPerpetualTerm,
       crossSellPitchedCount: pitchedCount,
       progressPct: technicalProgressPct,
     }),
@@ -1455,6 +1464,7 @@ export function processDealIntelligence(
       servicesRevenue: attachedServicesRevenue,
       pricingModel: deal.pricing_model,
       termYears,
+      isPerpetualTerm,
       dealCurrency: deal.deal_currency,
       expectedCloseDate: deal.expected_close_date,
       daysToClose,

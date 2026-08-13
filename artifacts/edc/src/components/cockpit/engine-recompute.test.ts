@@ -159,6 +159,7 @@ function serialize(gt: GroundTruth, server: IntelligenceOutput) {
     productRevenue: Number(gt.rawDeal.product_revenue),
     pricingModel: gt.rawDeal.pricing_model,
     contractTermYears: Number(gt.rawDeal.contract_term_years),
+    isPerpetualTerm: gt.rawDeal.is_perpetual_term ?? false,
     dealCurrency: gt.rawDeal.deal_currency,
     expectedCloseDate: gt.rawDeal.expected_close_date,
     winProbabilityPct: gt.rawDeal.win_probability_pct,
@@ -446,6 +447,17 @@ function cleanDeal(): GroundTruth {
   };
 }
 
+/**
+ * Otherwise identical to cleanDeal, but is_perpetual_term: true — the field
+ * `serialize()` used to silently drop (the client would reconstruct `false`
+ * regardless of what the server actually read). Exists specifically so that
+ * gap can't regress silently: cleanDeal alone never exercises a `true` value.
+ */
+function perpetualDeal(): GroundTruth {
+  const gt = cleanDeal();
+  return { ...gt, rawDeal: { ...gt.rawDeal, id: "deal-perpetual", is_perpetual_term: true } };
+}
+
 describe("Risk Simulator vs server intelligence parity", () => {
   beforeAll(() => {
     vi.useFakeTimers();
@@ -548,6 +560,31 @@ describe("Risk Simulator vs server intelligence parity", () => {
     expect(client.financials.normalizedTCV).not.toBe(
       client.financials.calculatedTCV,
     );
+  });
+
+  it("threads is_perpetual_term through so the client's Financial Structure signal agrees with the server's", () => {
+    const gt = perpetualDeal();
+    const server = runServer(gt);
+    const { deal, intel } = serialize(gt, server);
+    const client = runClient(gt, deal, intel);
+
+    assertParity(client, server);
+    expect(client.financials.isPerpetualTerm).toBe(true);
+    expect(server.financials.isPerpetualTerm).toBe(true);
+
+    // Directly compare the Financial Structure dimension's term signal, rather
+    // than relying on it having pushed governance.healthStatus across a risk
+    // boundary — a silent isPerpetualTerm drop would not necessarily do that,
+    // but it always changes this signal's rawScore.
+    const serverTerm = server.risk.dimensions
+      .find((d) => d.name === "Financial Structure")
+      ?.signals.find((s) => s.factor.includes("term,"));
+    const clientTerm = client.risk.dimensions
+      .find((d) => d.name === "Financial Structure")
+      ?.signals.find((s) => s.factor.includes("term,"));
+    expect(serverTerm?.rawScore).toBe(20);
+    expect(clientTerm?.rawScore).toBe(20);
+    expect(clientTerm?.factor).toContain("perpetual term");
   });
 
   it("stays faithful under a simulator what-if override (passing Gate 3)", () => {

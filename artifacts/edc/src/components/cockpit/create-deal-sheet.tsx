@@ -16,7 +16,15 @@ import {
   getListComplianceDriversQueryKey,
 } from "@workspace/api-client-react";
 import { ProductPicker } from "./product-picker";
-import { isPerpetualModel, clampTerm, clampRevenue, revenueHint } from "./deal-form-helpers";
+import {
+  clampTerm,
+  clampRevenue,
+  revenueHint,
+  encodeTerm,
+  decodeTerm,
+  PERPETUAL_TERM_VALUE,
+  TERM_YEAR_OPTIONS,
+} from "./deal-form-helpers";
 import { todayISO } from "@/lib/format";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -57,6 +65,7 @@ interface FormState {
   product_revenue: number;
   services_revenue: number;
   contract_term_years: number;
+  is_perpetual_term: boolean;
   expected_close_date: string;
   landed_at: string;
   win_probability_pct: number | "";
@@ -116,6 +125,7 @@ export function CreateDealSheet({
     product_revenue: 0,
     services_revenue: 0,
     contract_term_years: 1,
+    is_perpetual_term: false,
     expected_close_date: "",
     landed_at: todayISO(),
     win_probability_pct: "",
@@ -129,7 +139,6 @@ export function CreateDealSheet({
   const { register, control, handleSubmit, setValue, watch, reset } = useForm<FormState>({
     defaultValues,
   });
-  const isPerpetual = isPerpetualModel(models?.data, watch("pricing_model_id"));
 
   const handleCreateCompetitor = async (name: string) => {
     try {
@@ -198,6 +207,7 @@ export function CreateDealSheet({
       product_revenue: clampRevenue(values.product_revenue),
       services_revenue: clampRevenue(values.services_revenue),
       contract_term_years: clampTerm(values.contract_term_years),
+      is_perpetual_term: values.is_perpetual_term,
       deal_currency: "USD",
       expected_close_date: values.expected_close_date || null,
       landed_at: values.landed_at || null,
@@ -406,25 +416,27 @@ export function CreateDealSheet({
 
           <div className="grid grid-cols-2 gap-4">
             <div className="grid gap-2">
-              <div className="flex items-baseline justify-between gap-2">
-                <Label htmlFor="create-term" className={isPerpetual ? "text-muted-foreground" : undefined}>
-                  Term (yrs)
-                </Label>
-              </div>
-              <Input
-                id="create-term"
-                type="number"
-                min={1}
-                max={10}
-                disabled={isPerpetual}
-                aria-describedby={isPerpetual ? "create-term-na" : undefined}
-                {...register("contract_term_years", { valueAsNumber: true })}
-              />
-              {isPerpetual && (
-                <p id="create-term-na" className="text-xs text-muted-foreground">
-                  Not applicable for Perpetual License.
-                </p>
-              )}
+              <Label htmlFor="create-term">Term (yrs)</Label>
+              <Select
+                value={decodeTerm(watch("contract_term_years"), watch("is_perpetual_term"))}
+                onValueChange={(v) => {
+                  const t = encodeTerm(v);
+                  setValue("contract_term_years", t.contractTermYears);
+                  setValue("is_perpetual_term", t.isPerpetualTerm);
+                }}
+              >
+                <SelectTrigger id="create-term">
+                  <SelectValue placeholder="Select term" />
+                </SelectTrigger>
+                <SelectContent>
+                  {TERM_YEAR_OPTIONS.map((y) => (
+                    <SelectItem key={y} value={String(y)}>
+                      {y}
+                    </SelectItem>
+                  ))}
+                  <SelectItem value={PERPETUAL_TERM_VALUE}>Perpetual</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
             <div className="grid gap-2">
               <Label>Win %</Label>

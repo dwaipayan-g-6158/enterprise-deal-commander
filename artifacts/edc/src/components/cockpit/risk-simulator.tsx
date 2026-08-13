@@ -12,6 +12,12 @@ import {
   type EngineOverrides,
 } from "./engine-recompute";
 import {
+  encodeTerm,
+  decodeTerm,
+  PERPETUAL_TERM_VALUE,
+  TERM_YEAR_OPTIONS,
+} from "./deal-form-helpers";
+import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -56,6 +62,7 @@ interface SimState {
   services_tier: string;
   pricing_model: string;
   contract_term_years: number;
+  is_perpetual_term: boolean;
   expected_close_date: string;
   gates: Record<string, boolean>;
 }
@@ -101,6 +108,7 @@ export function RiskSimulator({
       services_tier: deal.servicesTier ?? intel.financials.servicesTier,
       pricing_model: deal.pricingModel ?? intel.financials.pricingModel,
       contract_term_years: deal.contractTermYears ?? 1,
+      is_perpetual_term: deal.isPerpetualTerm ?? false,
       expected_close_date: deal.expectedCloseDate?.slice(0, 10) ?? "",
       gates: Object.fromEntries(
         intel.technicalTrack.gates.map((g) => [g.gateCode, g.isCompleted]),
@@ -122,6 +130,7 @@ export function RiskSimulator({
     servicesTier: s.services_tier,
     pricingModel: s.pricing_model,
     termYears: s.contract_term_years,
+    isPerpetualTerm: s.is_perpetual_term,
     expectedCloseDate: s.expected_close_date || null,
     gates: s.gates,
   });
@@ -232,13 +241,29 @@ export function RiskSimulator({
             <div className="grid grid-cols-2 gap-4">
               <div className="grid gap-2">
                 <Label>Term (yrs)</Label>
-                <Input
-                  type="number"
-                  min={1}
-                  max={10}
-                  value={sim.contract_term_years}
-                  onChange={(e) => set("contract_term_years", Number(e.target.value))}
-                />
+                <Select
+                  value={decodeTerm(sim.contract_term_years, sim.is_perpetual_term)}
+                  onValueChange={(v) => {
+                    const t = encodeTerm(v);
+                    setSim((p) => ({
+                      ...p,
+                      contract_term_years: t.contractTermYears,
+                      is_perpetual_term: t.isPerpetualTerm,
+                    }));
+                  }}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {TERM_YEAR_OPTIONS.map((y) => (
+                      <SelectItem key={y} value={String(y)}>
+                        {y}
+                      </SelectItem>
+                    ))}
+                    <SelectItem value={PERPETUAL_TERM_VALUE}>Perpetual</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
               <div className="grid gap-2">
                 <Label>Expected Close</Label>

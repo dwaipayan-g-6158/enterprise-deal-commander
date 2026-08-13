@@ -2095,6 +2095,7 @@ components:
         pricingModelId: { type: integer }
         pricingModel: { type: string }
         contractTermYears: { type: integer }
+        isPerpetualTerm: { type: boolean }
         dealCurrency: { type: string }
         expectedCloseDate: { type: ["string", "null"] }
         landedAt: { type: ["string", "null"] }
@@ -2174,6 +2175,7 @@ components:
         product_revenue: { type: number, minimum: 0 }
         pricing_model_id: { type: integer }
         contract_term_years: { type: integer, minimum: 1, maximum: 10 }
+        is_perpetual_term: { type: boolean }
         deal_currency: { type: string, minLength: 3, maxLength: 3 }
         expected_close_date: { type: ["string", "null"] }
         landed_at: { type: ["string", "null"] }
@@ -2224,6 +2226,7 @@ components:
         product_revenue: { type: number, minimum: 0 }
         pricing_model_id: { type: integer }
         contract_term_years: { type: integer, minimum: 1, maximum: 10 }
+        is_perpetual_term: { type: boolean }
         deal_currency: { type: string, minLength: 3, maxLength: 3 }
         expected_close_date: { type: ["string", "null"] }
         landed_at: { type: ["string", "null"] }
@@ -2492,6 +2495,7 @@ components:
         servicesRevenue: { type: number }
         pricingModel: { type: string }
         termYears: { type: integer }
+        isPerpetualTerm: { type: boolean }
         dealCurrency: { type: string }
         expectedCloseDate: { type: ["string", "null"] }
         daysToClose: { type: ["integer", "null"] }

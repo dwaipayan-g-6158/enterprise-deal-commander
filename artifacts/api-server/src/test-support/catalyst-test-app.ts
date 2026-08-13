@@ -413,13 +413,23 @@ export const STAGES = {
  * select one by NAME — "Multi-Year Committed" in particular, because it is the
  * one whose TCV is `productRevenue * contractTermYears + servicesRevenue`
  * rather than a flat sum — so seeding a single made-up row is not enough.
+ *
+ * "Perpetual License" (id 3) is a RETIRED row — see RETIRED_PRICING_MODELS
+ * below, seeded `is_active: "false"` by seedStandardLookups so listActive()
+ * returns 3 models here exactly as it does in production. It's kept (not
+ * deleted) because the row still exists live, deactivated the same way. "id
+ * 4" was renamed from "Usage-Based" to "User/Device Based" in place — the id
+ * is what a real deal's `pricing_model_id` references, not the name.
  */
 export const PRICING_MODELS = {
   "Annual Subscription": 1,
   "Multi-Year Committed": 2,
   "Perpetual License": 3,
-  "Usage-Based": 4,
+  "User/Device Based": 4,
 } as const;
+
+/** Pricing model names seeded with `is_active: "false"` — see PRICING_MODELS. */
+const RETIRED_PRICING_MODELS = new Set(["Perpetual License"]);
 
 export const SERVICES_TIERS = {
   None: 1,
@@ -453,7 +463,7 @@ export function seedStandardLookups(store: CatalystTestStore): void {
     Object.entries(PRICING_MODELS).map(([model_name, id]) => ({
       id: String(id),
       model_name,
-      is_active: "true",
+      is_active: RETIRED_PRICING_MODELS.has(model_name) ? "false" : "true",
     })),
   );
   store.seedRaw(

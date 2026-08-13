@@ -106,6 +106,7 @@ export function snapshotFingerprint(input: FingerprintInput): string {
     num(deal.contractTermYears),
     num(deal.winProbabilityPct),
     deal.committed ? "1" : "0",
+    deal.isPerpetualTerm ? "1" : "0",
   ].join("|");
 
   return [

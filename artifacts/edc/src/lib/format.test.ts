@@ -12,6 +12,8 @@ import {
   todayUTCISO,
   calendarDaysUntil,
   daysLeftInLocalQuarter,
+  formatTerm,
+  PERPETUAL_TERM_LABEL,
 } from "./format";
 
 describe("formatDate — date-only strings (never constructs a Date)", () => {
@@ -317,5 +319,37 @@ describe("compactCurrency — the consolidated compact-money helper", () => {
     for (const n of [0, 999, 1_000, 999_999, 2_340_000, -5_000]) {
       expect(compactUSD(n)).toBe(compactCurrency(n, "USD"));
     }
+  });
+});
+
+describe("formatTerm — the one spelling of a deal's contract term", () => {
+  it("isPerpetual wins over any years value, including the filler 1", () => {
+    expect(formatTerm(1, true)).toBe(PERPETUAL_TERM_LABEL);
+    expect(formatTerm(7, true)).toBe(PERPETUAL_TERM_LABEL);
+  });
+
+  it("renders each style for a non-perpetual term", () => {
+    expect(formatTerm(3, false, "long")).toBe("3 Years");
+    expect(formatTerm(3, false, "short")).toBe("3 yr");
+    expect(formatTerm(3, false, "phrase")).toBe("3 year term");
+  });
+
+  it("defaults to the long style", () => {
+    expect(formatTerm(3, false)).toBe("3 Years");
+  });
+
+  it("renders each style for a perpetual term", () => {
+    expect(formatTerm(1, true, "long")).toBe("Perpetual");
+    expect(formatTerm(1, true, "short")).toBe("Perpetual");
+    // Mid-caption prose ("... · perpetual term") wants a lowercase, not the
+    // capitalized label — the only style-dependent branch on the perpetual side.
+    expect(formatTerm(1, true, "phrase")).toBe("perpetual term");
+  });
+
+  it("clamps a non-finite/out-of-range years value the same way clampTerm does", () => {
+    expect(formatTerm(Number.NaN, false)).toBe("1 Years");
+    expect(formatTerm(0, false)).toBe("1 Years");
+    expect(formatTerm(99, false)).toBe("10 Years");
+    expect(formatTerm(undefined, false)).toBe("1 Years");
   });
 });

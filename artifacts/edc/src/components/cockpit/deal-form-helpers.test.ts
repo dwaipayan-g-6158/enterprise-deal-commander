@@ -1,33 +1,17 @@
 import { describe, expect, it } from "vitest";
-import { isPerpetualModel, clampTerm, clampRevenue, revenueHint } from "./deal-form-helpers";
-
-const MODELS = [
-  { id: 1, modelName: "Annual Subscription" },
-  { id: 2, modelName: "Multi-Year Committed" },
-  { id: 3, modelName: "Perpetual License" },
-  { id: 4, modelName: "Usage-Based" },
-];
-
-describe("isPerpetualModel", () => {
-  it("matches the Perpetual License row by id", () => {
-    expect(isPerpetualModel(MODELS, 3)).toBe(true);
-  });
-  it("is false for other models", () => {
-    expect(isPerpetualModel(MODELS, 1)).toBe(false);
-    expect(isPerpetualModel(MODELS, 2)).toBe(false);
-    expect(isPerpetualModel(MODELS, 4)).toBe(false);
-  });
-  it("is false while the lookup is still loading (models undefined)", () => {
-    expect(isPerpetualModel(undefined, 3)).toBe(false);
-  });
-  it("is false for an unset id", () => {
-    expect(isPerpetualModel(MODELS, undefined)).toBe(false);
-    expect(isPerpetualModel(MODELS, 0)).toBe(false);
-  });
-  it("is false for an unknown id", () => {
-    expect(isPerpetualModel(MODELS, 999)).toBe(false);
-  });
-});
+import type { Deal } from "@workspace/api-client-react";
+import {
+  clampTerm,
+  clampRevenue,
+  revenueHint,
+  encodeTerm,
+  decodeTerm,
+  dealToFormState,
+  emptyOrNumber,
+  isSameFormState,
+  PERPETUAL_TERM_VALUE,
+  TERM_YEAR_OPTIONS,
+} from "./deal-form-helpers";
 
 describe("clampTerm", () => {
   const cases: [unknown, number][] = [
@@ -58,6 +42,44 @@ describe("clampTerm", () => {
       expect(result).toBeGreaterThanOrEqual(1);
       expect(result).toBeLessThanOrEqual(10);
     }
+  });
+});
+
+describe("encodeTerm / decodeTerm", () => {
+  it("round-trips every numeric option", () => {
+    for (const y of TERM_YEAR_OPTIONS) {
+      const encoded = encodeTerm(String(y));
+      expect(encoded).toEqual({ contractTermYears: y, isPerpetualTerm: false });
+      expect(decodeTerm(encoded.contractTermYears, encoded.isPerpetualTerm)).toBe(String(y));
+    }
+  });
+
+  it("encodes the perpetual sentinel to a valid filler year plus the flag", () => {
+    expect(encodeTerm(PERPETUAL_TERM_VALUE)).toEqual({ contractTermYears: 1, isPerpetualTerm: true });
+  });
+
+  it("decodes a perpetual deal back to the sentinel, never '1 year'", () => {
+    // The filler contractTermYears=1 must not read back as a plain numeric
+    // term — isPerpetualTerm wins regardless of what the filler value is.
+    expect(decodeTerm(1, true)).toBe(PERPETUAL_TERM_VALUE);
+    expect(decodeTerm(7, true)).toBe(PERPETUAL_TERM_VALUE);
+  });
+
+  it("decodes a non-perpetual deal to its numeric option", () => {
+    expect(decodeTerm(3, false)).toBe("3");
+    expect(decodeTerm(3, undefined)).toBe("3");
+  });
+
+  it("decodes an out-of-contract stored value onto a real Select option, never an empty trigger", () => {
+    expect(decodeTerm(0, false)).toBe("1");
+    expect(decodeTerm(99, false)).toBe("10");
+    expect(decodeTerm(NaN, false)).toBe("1");
+  });
+
+  it("clamps a non-finite/out-of-range numeric encode into the server contract", () => {
+    expect(encodeTerm("0")).toEqual({ contractTermYears: 1, isPerpetualTerm: false });
+    expect(encodeTerm("99")).toEqual({ contractTermYears: 10, isPerpetualTerm: false });
+    expect(encodeTerm("not-a-number")).toEqual({ contractTermYears: 1, isPerpetualTerm: false });
   });
 });
 
@@ -104,5 +126,78 @@ describe("revenueHint", () => {
   });
   it("renders negatives so an out-of-contract value is visible", () => {
     expect(revenueHint(-10000)).toBe("= -$10K");
+  });
+});
+
+describe("emptyOrNumber", () => {
+  const cases: [unknown, number | ""][] = [
+    ["", ""],
+    [null, ""],
+    [undefined, ""],
+    ["abc", ""],
+    [NaN, ""],
+    ["0", 0],
+    ["75", 75],
+    [1500, 1500],
+  ];
+  it.each(cases)("emptyOrNumber(%p) === %p", (input, expected) => {
+    expect(emptyOrNumber(input)).toBe(expected);
+  });
+
+  it("never yields NaN, so a cleared field stays comparable", () => {
+    // The whole point: `valueAsNumber: true` turned a cleared box into NaN, and
+    // NaN !== NaN made every isSameFormState() check below false forever.
+    for (const [input] of cases) {
+      expect(Number.isNaN(emptyOrNumber(input))).toBe(false);
+    }
+  });
+});
+
+describe("dealToFormState / isSameFormState", () => {
+  const deal = {
+    dealName: "Project Atlas",
+    accountName: "Acme Corp",
+    accountManager: "Ada",
+    technicalLead: "Grace",
+    salesStageId: 2,
+    productRevenue: 100_000,
+    servicesRevenue: 20_000,
+    dealCurrency: "USD",
+  } as Deal;
+
+  it("collapses absent nullable columns to the controlled-input empty string", () => {
+    const form = dealToFormState(deal);
+    expect(form.crm_record_url).toBe("");
+    expect(form.win_probability_pct).toBe("");
+    expect(form.estimated_log_sources).toBe("");
+    expect(form.competitor_id).toBe("");
+  });
+
+  it("supplies the same fallbacks the form's own defaults use", () => {
+    const form = dealToFormState(deal);
+    expect(form.contract_term_years).toBe(1);
+    expect(form.is_perpetual_term).toBe(false);
+    expect(form.pricing_model_id).toBe(0);
+    expect(form.committed).toBe(false);
+  });
+
+  it("truncates the date columns to the yyyy-mm-dd the pickers expect", () => {
+    const form = dealToFormState({
+      ...deal,
+      expectedCloseDate: "2026-08-14T00:00:00.000Z",
+      landedAt: "2026-01-02T09:30:00.000Z",
+    } as Deal);
+    expect(form.expected_close_date).toBe("2026-08-14");
+    expect(form.landed_at).toBe("2026-01-02");
+  });
+
+  it("matches an identical projection and separates a changed one", () => {
+    expect(isSameFormState(dealToFormState(deal), dealToFormState(deal))).toBe(true);
+    expect(
+      isSameFormState(
+        dealToFormState(deal),
+        dealToFormState({ ...deal, productRevenue: 500_000 } as Deal),
+      ),
+    ).toBe(false);
   });
 });

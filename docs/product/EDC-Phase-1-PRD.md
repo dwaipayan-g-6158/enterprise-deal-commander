@@ -313,6 +313,18 @@ INSERT INTO pricing_models (model_name) VALUES
     ('Usage-Based'),
     ('Hybrid');
 
+<!-- Schema note (post-launch, kept alongside the original spec above rather
+than editing it in place): "Hybrid" was retired shortly after launch
+(deactivated, not deleted — same treatment below). Later, "Perpetual License"
+was retired the same way: a contract term never expiring is a property of the
+TERM, not of how the deal is priced, so it moved to a dedicated
+`enterprise_deals.is_perpetual_term` boolean and the pricing model row was
+deactivated rather than kept as a second axis for the same concept.
+"Usage-Based" was renamed in place to "User/Device Based" (same id, same
+row — a real deal referenced it by id, so this was an UPDATE, never a
+delete-and-re-add). The live pricing_models table today has exactly three
+active rows: Annual Subscription, Multi-Year Committed, User/Device Based. -->
+
 -- Services Tiers
 CREATE TABLE services_tiers (
     id SERIAL PRIMARY KEY,

@@ -18,6 +18,7 @@ export interface IntelligenceFinancials {
   servicesRevenue: number;
   pricingModel: string;
   termYears: number;
+  isPerpetualTerm?: boolean;
   dealCurrency: string;
   /** @nullable */
   expectedCloseDate?: string | null;

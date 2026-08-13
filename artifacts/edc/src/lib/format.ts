@@ -157,6 +157,38 @@ export function formatNum(n: unknown): string {
   return round2(n).toLocaleString("en-US", { maximumFractionDigits: 2 });
 }
 
+// ---- Contract term -----------------------------------------------------
+
+/** The one spelling of "this deal never expires" — kept out of
+ *  @workspace/engine (whose risk-explanation prose has its own lowercase
+ *  "perpetual term" wording; see dimensions.ts signal 5.3) so a form-copy
+ *  tweak here never silently rewrites historical risk explanations. */
+export const PERPETUAL_TERM_LABEL = "Perpetual";
+
+/**
+ * Renders a deal's contract term for display, in one of three house styles —
+ * consolidating what was three near-identical inline expressions (deal
+ * cockpit's "N Years", the mobile brief's "N yr", the mobile economics
+ * panel's "N year term") that each needed to special-case Perpetual
+ * separately. `years` goes through the same non-finite -> 1 guard as
+ * `clampTerm` (deal-form-helpers.ts) since a perpetual deal's
+ * `contract_term_years` is a filler value that must never leak into prose.
+ */
+export function formatTerm(
+  years: unknown,
+  isPerpetual: boolean | undefined,
+  style: "long" | "short" | "phrase" = "long",
+): string {
+  if (isPerpetual) {
+    return style === "phrase" ? `${PERPETUAL_TERM_LABEL.toLowerCase()} term` : PERPETUAL_TERM_LABEL;
+  }
+  const n = Math.round(Number(years));
+  const safe = Number.isFinite(n) ? Math.min(10, Math.max(1, n)) : 1;
+  if (style === "short") return `${safe} yr`;
+  if (style === "phrase") return `${safe} year term`;
+  return `${safe} Years`;
+}
+
 // ---- Humanizing raw identifiers ---------------------------------------
 //
 // The audit log and the v2 activity log both store raw machine identifiers

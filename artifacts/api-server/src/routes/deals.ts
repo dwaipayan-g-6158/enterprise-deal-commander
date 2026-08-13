@@ -288,6 +288,7 @@ router.post("/deals", async (req: Request, res: Response) => {
       productRevenue: String(body.product_revenue),
       pricingModelId: body.pricing_model_id,
       contractTermYears: body.contract_term_years,
+      isPerpetualTerm: body.is_perpetual_term ?? false,
       dealCurrency: body.deal_currency ?? "USD",
       expectedCloseDate: body.expected_close_date ?? null,
       landedAt: body.landed_at ?? new Date().toISOString().slice(0, 10),
@@ -440,6 +441,10 @@ const updateDealHandler = async (req: Request, res: Response) => {
       body.contract_term_years,
     );
     updates.contractTermYears = body.contract_term_years;
+  }
+  if (body.is_perpetual_term !== undefined) {
+    track("is_perpetual_term", existing.isPerpetualTerm, body.is_perpetual_term);
+    updates.isPerpetualTerm = body.is_perpetual_term;
   }
   if (body.deal_currency !== undefined) {
     track("deal_currency", existing.dealCurrency, body.deal_currency);

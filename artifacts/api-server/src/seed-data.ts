@@ -36,11 +36,16 @@ export interface PricingModelSeed {
   modelName: string;
 }
 
+// "Perpetual License" is intentionally ABSENT — its contract-term concept
+// moved to enterprise_deals.is_perpetual_term (a Term selection, not a
+// pricing model). The table still holds that row; seedLookupsCatalyst
+// deactivates it via deactivateIfPresent rather than seeding it, mirroring
+// how "Hybrid" is handled. "Usage-Based" is renamed in place to "User/Device
+// Based" via renameIfPresent, which runs before this list is seeded.
 export const PRICING_MODELS: PricingModelSeed[] = [
   { modelName: "Annual Subscription" },
   { modelName: "Multi-Year Committed" },
-  { modelName: "Perpetual License" },
-  { modelName: "Usage-Based" },
+  { modelName: "User/Device Based" },
 ];
 
 export interface ServicesTierSeed {
@@ -572,6 +577,8 @@ export interface DealSeed {
   productRevenue: string;
   pricingModelName: string;
   contractTermYears: number;
+  /** Defaults to `false` — none of the seeded demo deals are perpetual. */
+  isPerpetualTerm?: boolean;
   dealCurrency: string;
   /** `expected_close_date` = today + this many days (negative = in the past). */
   expectedCloseInDays: number;

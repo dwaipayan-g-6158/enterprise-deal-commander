@@ -15,7 +15,19 @@ import {
   type Deal,
 } from "@workspace/api-client-react";
 import { ProductPicker } from "./product-picker";
-import { isPerpetualModel, clampTerm, clampRevenue, revenueHint } from "./deal-form-helpers";
+import {
+  clampTerm,
+  clampRevenue,
+  revenueHint,
+  encodeTerm,
+  decodeTerm,
+  dealToFormState,
+  emptyOrNumber,
+  isSameFormState,
+  PERPETUAL_TERM_VALUE,
+  TERM_YEAR_OPTIONS,
+  type DealFormState,
+} from "./deal-form-helpers";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   Sheet,
@@ -45,28 +57,6 @@ import { useToast } from "@/hooks/use-toast";
 import { ToastAction } from "@/components/ui/toast";
 import { useCockpitInvalidate } from "./use-invalidate";
 import { GuardrailNotice } from "./risk/guardrail-notice";
-
-interface FormState {
-  deal_name: string;
-  account_name: string;
-  crm_record_url: string;
-  account_manager: string;
-  technical_lead: string;
-  sales_stage_id: number;
-  pricing_model_id: number;
-  services_tier_id: number;
-  product_revenue: number;
-  services_revenue: number;
-  contract_term_years: number;
-  expected_close_date: string;
-  landed_at: string;
-  win_probability_pct: number | "";
-  committed: boolean;
-  manager_strategic_blueprint: string;
-  speaker_notes: string;
-  competitor_id: number | "";
-  estimated_log_sources: number | "";
-}
 
 export function EditDealSheet({
   deal,
@@ -116,34 +106,65 @@ export function EditDealSheet({
     label: d.name,
   }));
 
-  const { register, control, handleSubmit, setValue, watch, reset, formState } = useForm<FormState>({
-    defaultValues: {
-      deal_name: deal.dealName,
-      account_name: deal.accountName,
-      crm_record_url: deal.crmRecordUrl ?? "",
-      account_manager: deal.accountManager,
-      technical_lead: deal.technicalLead,
-      sales_stage_id: deal.salesStageId,
-      pricing_model_id: deal.pricingModelId ?? 0,
-      services_tier_id: deal.servicesTierId ?? 0,
-      product_revenue: deal.productRevenue,
-      services_revenue: deal.servicesRevenue,
-      contract_term_years: deal.contractTermYears ?? 1,
-      expected_close_date: deal.expectedCloseDate?.slice(0, 10) ?? "",
-      landed_at: deal.landedAt?.slice(0, 10) ?? "",
-      win_probability_pct: deal.winProbabilityPct ?? "",
-      committed: deal.committed ?? false,
-      manager_strategic_blueprint: deal.managerStrategicBlueprint ?? "",
-      speaker_notes: deal.speakerNotes ?? "",
-      competitor_id: deal.competitorId ?? "",
-      estimated_log_sources: deal.estimatedLogSources ?? "",
-    },
-  });
-  const isPerpetual = isPerpetualModel(models?.data, watch("pricing_model_id"));
+  const { register, control, handleSubmit, setValue, watch, reset, formState } =
+    useForm<DealFormState>({ defaultValues: dealToFormState(deal) });
 
   const autosaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const undoDataRef = useRef<FormState | null>(null);
-  const onAutoSaveRef = useRef<((values: FormState) => Promise<void>) | null>(null);
+  const undoDataRef = useRef<DealFormState | null>(null);
+  const onAutoSaveRef = useRef<((values: DealFormState) => Promise<void>) | null>(null);
+  const suppressAutoSaveRef = useRef(false);
+  const wasOpenRef = useRef(false);
+  const lastSavedRef = useRef<DealFormState | null>(null);
+
+  /**
+   * Re-point the form at `next` without the change looking like a user edit.
+   *
+   * Every `reset()` notifies react-hook-form's `watch` subscribers, which would
+   * schedule an auto-save, which would reset again. Filtering the subscription
+   * on the callback's `type === "change"` does NOT work here: the Selects,
+   * Comboboxes, Switch and DatePickers all write through
+   * `setValue(..., { shouldDirty: true })`, which notifies with no `type` — that
+   * filter would silently kill auto-save for most of the form. RHF notifies
+   * synchronously inside `reset()`, so a flag set around the call is enough.
+   */
+  const resetSilently = (next: DealFormState) => {
+    suppressAutoSaveRef.current = true;
+    reset(next);
+    suppressAutoSaveRef.current = false;
+  };
+
+  // Re-seed the form on every closed -> open transition.
+  //
+  // This sheet is mounted unconditionally by deal-cockpit.tsx and so never
+  // unmounts, and RHF reads `defaultValues` only on the first render — without
+  // this, the mount-time snapshot is the only deal the form would ever see.
+  // Gating on the TRANSITION rather than on `open` alone is what keeps the
+  // auto-save's own refetch (which changes `deal` while the sheet is already
+  // open) from wiping out whatever the user is mid-way through typing.
+  //
+  // The deal prop is NOT unconditionally authoritative, which is the subtle
+  // part. Catalyst's Data Store has a read lag of a second or two, so the
+  // refetch that follows a save can legitimately still return the pre-save row —
+  // re-seeding from that would undo the edit through a different door than the
+  // bug this effect exists to fix. So: our own last save wins until the server
+  // is observed to agree with it, at which point the server takes over again and
+  // changes made elsewhere are picked up.
+  useEffect(() => {
+    if (open && !wasOpenRef.current) {
+      const fromServer = dealToFormState(deal);
+      const lastSaved = lastSavedRef.current;
+      if (lastSaved && !isSameFormState(fromServer, lastSaved)) {
+        resetSilently(lastSaved);
+      } else {
+        lastSavedRef.current = null;
+        resetSilently(fromServer);
+        setInterestIds(deal.productsOfInterest?.map((p) => p.productId) ?? []);
+        setDriverIds((deal.complianceDrivers ?? []).map((d) => d.id));
+      }
+    }
+    wasOpenRef.current = open;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, deal]);
 
   // Surface dirty state to the parent cockpit's deal-switch guard.
   const { isDirty } = formState;
@@ -158,8 +179,10 @@ export function EditDealSheet({
   useEffect(() => {
     if (!open) return;
     const subscription = watch(() => {
+      if (suppressAutoSaveRef.current) return;
       if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
       autosaveTimerRef.current = setTimeout(() => {
+        autosaveTimerRef.current = null;
         if (onAutoSaveRef.current) void handleSubmit(onAutoSaveRef.current)();
       }, 1000);
     });
@@ -169,7 +192,24 @@ export function EditDealSheet({
     };
   }, [open, watch, handleSubmit]);
 
-  const buildPayload = (values: FormState): Record<string, unknown> => {
+  /**
+   * Save a change still inside the 1s debounce window rather than losing it.
+   *
+   * Closing the sheet used to just let the effect cleanup above clear the timer,
+   * which silently discarded whatever was typed in the last second. Auto-save
+   * offers no discard affordance anyway — everything older than a second is
+   * already committed, and the toast's Undo is the way back.
+   *
+   * The null check matters: without it every close would fire a redundant PUT.
+   */
+  const flushPendingAutoSave = () => {
+    if (!autosaveTimerRef.current) return;
+    clearTimeout(autosaveTimerRef.current);
+    autosaveTimerRef.current = null;
+    if (onAutoSaveRef.current) void handleSubmit(onAutoSaveRef.current)();
+  };
+
+  const buildPayload = (values: DealFormState): Record<string, unknown> => {
     const data: Record<string, unknown> = {
       deal_name: values.deal_name,
       account_name: values.account_name,
@@ -182,6 +222,7 @@ export function EditDealSheet({
       product_revenue: clampRevenue(values.product_revenue),
       services_revenue: clampRevenue(values.services_revenue),
       contract_term_years: clampTerm(values.contract_term_years),
+      is_perpetual_term: values.is_perpetual_term,
       expected_close_date: values.expected_close_date || null,
       landed_at: values.landed_at || null,
       win_probability_pct:
@@ -203,12 +244,17 @@ export function EditDealSheet({
   };
 
   // Auto-save handler — saves without closing the sheet; offers an undo.
-  onAutoSaveRef.current = async (values: FormState) => {
+  onAutoSaveRef.current = async (values: DealFormState) => {
     const prevUndo = undoDataRef.current;
     undoDataRef.current = values;
     try {
       await updateDeal.mutateAsync({ id: deal.id, data: buildPayload(values) as never });
       await invalidate();
+      // What was just persisted becomes the form's new baseline, so a later
+      // reset() can no longer resurrect pre-edit values, and `isDirty` correctly
+      // drops back to false now that nothing is unsaved.
+      lastSavedRef.current = values;
+      resetSilently(values);
       toast({
         title: "Auto-saved",
         description: "Changes saved automatically.",
@@ -216,7 +262,9 @@ export function EditDealSheet({
           <ToastAction
             altText="Undo last change"
             onClick={() => {
-              reset(prevUndo);
+              // Silent, then submitted explicitly: a plain reset() here would
+              // ALSO schedule a debounced auto-save, firing two PUTs per undo.
+              resetSilently(prevUndo);
               undoDataRef.current = null;
               if (onAutoSaveRef.current) void handleSubmit(onAutoSaveRef.current)();
             }}
@@ -280,11 +328,12 @@ export function EditDealSheet({
     return undefined;
   };
 
-  const onSubmit = async (values: FormState) => {
+  const onSubmit = async (values: DealFormState) => {
     const data = buildPayload(values);
     try {
       await updateDeal.mutateAsync({ id: deal.id, data: data as never });
       await invalidate();
+      resetSilently(values);
       toast({ title: "Deal updated", description: "Changes saved and intelligence recalculated." });
       setGuardrail(null);
       setOverrideReason("");
@@ -312,7 +361,14 @@ export function EditDealSheet({
       open={open}
       onOpenChange={(v) => {
         if (!v) {
-          reset();
+          // NOT reset(). A bare reset() restores the values RHF captured when
+          // this component first mounted — which, since deal-cockpit.tsx keeps
+          // it mounted for the life of the route, is the deal as it was when the
+          // page loaded. That silently rolled every field back to its pre-edit
+          // value on close, and the next auto-save then wrote those stale values
+          // over what had just been saved. The form is re-seeded on open
+          // instead; see the transition effect above.
+          flushPendingAutoSave();
           setGuardrail(null);
           setOverrideReason("");
         }
@@ -482,29 +538,36 @@ export function EditDealSheet({
 
           <div className="grid grid-cols-2 gap-4">
             <div className="grid gap-2">
-              <div className="flex items-baseline justify-between gap-2">
-                <Label htmlFor="edit-term" className={isPerpetual ? "text-muted-foreground" : undefined}>
-                  Term (yrs)
-                </Label>
-              </div>
-              <Input
-                id="edit-term"
-                type="number"
-                min={1}
-                max={10}
-                disabled={isPerpetual}
-                aria-describedby={isPerpetual ? "edit-term-na" : undefined}
-                {...register("contract_term_years", { valueAsNumber: true })}
-              />
-              {isPerpetual && (
-                <p id="edit-term-na" className="text-xs text-muted-foreground">
-                  Not applicable for Perpetual License.
-                </p>
-              )}
+              <Label htmlFor="edit-term">Term (yrs)</Label>
+              <Select
+                value={decodeTerm(watch("contract_term_years"), watch("is_perpetual_term"))}
+                onValueChange={(v) => {
+                  const t = encodeTerm(v);
+                  setValue("contract_term_years", t.contractTermYears, { shouldDirty: true });
+                  setValue("is_perpetual_term", t.isPerpetualTerm, { shouldDirty: true });
+                }}
+              >
+                <SelectTrigger id="edit-term">
+                  <SelectValue placeholder="Select term" />
+                </SelectTrigger>
+                <SelectContent>
+                  {TERM_YEAR_OPTIONS.map((y) => (
+                    <SelectItem key={y} value={String(y)}>
+                      {y}
+                    </SelectItem>
+                  ))}
+                  <SelectItem value={PERPETUAL_TERM_VALUE}>Perpetual</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
             <div className="grid gap-2">
               <Label>Win %</Label>
-              <Input type="number" min={0} max={100} {...register("win_probability_pct", { valueAsNumber: true })} />
+              <Input
+                type="number"
+                min={0}
+                max={100}
+                {...register("win_probability_pct", { setValueAs: emptyOrNumber })}
+              />
             </div>
           </div>
 
@@ -570,7 +633,7 @@ export function EditDealSheet({
                 type="number"
                 min={0}
                 placeholder="e.g. 1500"
-                {...register("estimated_log_sources", { valueAsNumber: true })}
+                {...register("estimated_log_sources", { setValueAs: emptyOrNumber })}
               />
             </div>
           </div>

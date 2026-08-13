@@ -217,6 +217,29 @@ async function deactivateIfPresent(
   }
 }
 
+/**
+ * Rename a lookup row IN PLACE, preserving its `id`/ROWID — used when a
+ * display name changes but existing rows still reference the old id (e.g. a
+ * real deal's `pricing_model_id`). MUST run before `seedMissingRows` for the
+ * same table: that helper keys on the name column, so a rename landing
+ * afterwards produces a duplicate row instead of a rename. Early-returns once
+ * `toValue` is already present, which is both what makes a re-run a no-op and
+ * what stops it clobbering a hand-created row already carrying the new name.
+ */
+export async function renameIfPresent(
+  catalystApp: CatalystApp,
+  table: string,
+  keyColumn: string,
+  fromValue: string,
+  toValue: string,
+): Promise<void> {
+  const rows = await fetchAllRows(catalystApp, table);
+  if (rows.some((r) => r[keyColumn] === toValue)) return;
+  for (const row of rows.filter((r) => r[keyColumn] === fromValue)) {
+    await updateRow(catalystApp, table, row["ROWID"], { [keyColumn]: toValue });
+  }
+}
+
 /* ------------------------------------------------------------- Phase: lookups */
 
 /**
@@ -244,6 +267,12 @@ export async function seedLookupsCatalyst(catalystApp: CatalystApp): Promise<See
     }),
   });
 
+  // "Usage-Based" renamed IN PLACE — a real Production deal (ESAB) references
+  // pricing_model_id = 4, so this must not become a delete-and-re-add. Runs
+  // BEFORE seedMissingRows below, which keys on model_name and would otherwise
+  // insert a duplicate row rather than renaming the existing one.
+  await renameIfPresent(catalystApp, TABLE.pricingModels, "model_name", "Usage-Based", "User/Device Based");
+
   await seedMissingRows(catalystApp, summary, {
     table: TABLE.pricingModels,
     seeds: PRICING_MODELS,
@@ -254,6 +283,10 @@ export async function seedLookupsCatalyst(catalystApp: CatalystApp): Promise<See
   });
   // B1: "Hybrid" retired — deactivate any pre-existing row so listActive() hides it.
   await deactivateIfPresent(catalystApp, TABLE.pricingModels, "model_name", "Hybrid");
+  // "Perpetual License" retired — the 20-point term-risk penalty moved to
+  // enterprise_deals.is_perpetual_term. Row is kept (deactivated, not deleted)
+  // so any historical reference still resolves through listAll().
+  await deactivateIfPresent(catalystApp, TABLE.pricingModels, "model_name", "Perpetual License");
 
   await seedMissingRows(catalystApp, summary, {
     table: TABLE.servicesTiers,
@@ -706,6 +739,7 @@ export async function seedDealsCatalyst(catalystApp: CatalystApp): Promise<SeedS
     product_revenue: seed.productRevenue,
     pricing_model_id: String(pricingId(seed.pricingModelName)),
     contract_term_years: seed.contractTermYears,
+    is_perpetual_term: formatBoolean(seed.isPerpetualTerm ?? false),
     deal_currency: seed.dealCurrency,
     expected_close_date: dateInDays(seed.expectedCloseInDays),
     // `landed_at` is deliberately left unset, matching seed.ts (which omits it

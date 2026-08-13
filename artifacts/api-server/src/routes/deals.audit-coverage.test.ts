@@ -138,6 +138,7 @@ describe("PUT /deals/:id — audit coverage", () => {
       product_revenue: 4242,
       pricing_model_id: models[1].id,
       contract_term_years: 3,
+      is_perpetual_term: true,
       deal_currency: "EUR",
       expected_close_date: "2027-03-31",
       landed_at: "2026-01-15",

@@ -67,6 +67,7 @@ export interface EnterpriseDeal {
   productRevenue: string;
   pricingModelId: number;
   contractTermYears: number;
+  isPerpetualTerm: boolean;
   dealCurrency: string;
   expectedCloseDate: string | null;
   landedAt: string | null;
@@ -103,6 +104,7 @@ function rowToEnterpriseDeal(r: RawRow): EnterpriseDeal {
     productRevenue: r["product_revenue"],
     pricingModelId: Number(r["pricing_model_id"]),
     contractTermYears: Number(r["contract_term_years"]),
+    isPerpetualTerm: parseBoolean(r["is_perpetual_term"]),
     dealCurrency: r["deal_currency"],
     expectedCloseDate: r["expected_close_date"] || null,
     landedAt: r["landed_at"] || null,
@@ -137,6 +139,7 @@ export interface CreateEnterpriseDealInput {
   productRevenue: string;
   pricingModelId: number;
   contractTermYears: number;
+  isPerpetualTerm?: boolean;
   dealCurrency: string;
   expectedCloseDate?: string | null;
   landedAt?: string | null;
@@ -155,8 +158,9 @@ export interface CreateEnterpriseDealInput {
 }
 
 export type UpdateEnterpriseDealInput = Partial<
-  Omit<CreateEnterpriseDealInput, "committed"> & {
+  Omit<CreateEnterpriseDealInput, "committed" | "isPerpetualTerm"> & {
     committed: boolean;
+    isPerpetualTerm: boolean;
     lossReason: string | null;
     complianceDeadline: string | null;
     stageEnteredAt: Date;
@@ -192,6 +196,7 @@ export function createEnterpriseDealsRepo(catalystApp: CatalystApp) {
           product_revenue: input.productRevenue,
           pricing_model_id: String(input.pricingModelId),
           contract_term_years: input.contractTermYears,
+          is_perpetual_term: formatBoolean(input.isPerpetualTerm ?? false),
           deal_currency: input.dealCurrency,
           expected_close_date: input.expectedCloseDate ?? null,
           landed_at: input.landedAt ?? new Date().toISOString().slice(0, 10),
@@ -242,6 +247,8 @@ export function createEnterpriseDealsRepo(catalystApp: CatalystApp) {
       if (updates.productRevenue !== undefined) values["product_revenue"] = updates.productRevenue;
       if (updates.pricingModelId !== undefined) values["pricing_model_id"] = String(updates.pricingModelId);
       if (updates.contractTermYears !== undefined) values["contract_term_years"] = updates.contractTermYears;
+      if (updates.isPerpetualTerm !== undefined)
+        values["is_perpetual_term"] = formatBoolean(updates.isPerpetualTerm);
       if (updates.dealCurrency !== undefined) values["deal_currency"] = updates.dealCurrency;
       if (updates.expectedCloseDate !== undefined) values["expected_close_date"] = updates.expectedCloseDate;
       if (updates.landedAt !== undefined) values["landed_at"] = updates.landedAt;

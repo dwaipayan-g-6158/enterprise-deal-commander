@@ -105,6 +105,12 @@ const DATE_FIELDS = new Set([
   "stage_entered_at",
 ]);
 
+// `lookups.pricingModels` comes from useListPricingModels(), i.e. `listActive()`
+// — so a `pricing_model_id` audit row pointing at a deactivated row (e.g. the
+// retired "Perpetual License", id 3) would fall through to the "#3" fallback
+// below. Safe today: no deal in any environment references that id, and none
+// can be created once it's out of the dropdown, so no such audit row can be
+// written. Not worth a `listAll` lookup endpoint on that assumption alone.
 function fkName(field: string, raw: string, lookups: AuditLookups): string | null {
   const id = Number(raw);
   if (!Number.isFinite(id)) return null;

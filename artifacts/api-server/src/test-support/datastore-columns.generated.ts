@@ -1,4 +1,4 @@
-// GENERATED from the live Catalyst Data Store schema (Development, 2026-08-07).
+// GENERATED from the live Catalyst Data Store schema (Development, 2026-08-13).
 //
 // Regenerate by dumping GET /baas/v1/project/{id}/table/{TABLE_NAME}/column for
 // every table. Address that endpoint by table NAME, never by the table_id the
@@ -34,7 +34,7 @@ export const DATASTORE_COLUMNS: Readonly<Record<string, readonly string[]>> = {
   "deal_technical_gates": ["id", "deal_id", "gate_code", "is_completed", "completed_at", "completed_by", "notes", "created_at", "updated_at", "natural_key"],
   "deal_types": ["name", "description", "sort_order", "is_active", "id"],
   "engine_thresholds": ["parameter_key", "parameter_value", "data_type_", "description", "updated_at", "id"],
-  "enterprise_deals": ["id", "deal_name", "account_name", "crm_record_url", "account_manager", "technical_lead", "sales_stage_id", "stage_entered_at", "product_revenue", "pricing_model_id", "contract_term_years", "deal_currency", "expected_close_date", "landed_at", "win_probability_pct", "committed", "services_revenue", "services_tier_id", "manager_strategic_blueprint", "loss_reason", "speaker_notes", "loss_archetype_id", "competitor_id", "compliance_driver_id", "compliance_deadline", "estimated_log_sources", "ad360_seat_count", "ad360_feature_notes", "archived_at", "deleted_at", "created_at", "updated_at", "natural_key"],
+  "enterprise_deals": ["id", "deal_name", "account_name", "crm_record_url", "account_manager", "technical_lead", "sales_stage_id", "stage_entered_at", "product_revenue", "pricing_model_id", "contract_term_years", "is_perpetual_term", "deal_currency", "expected_close_date", "landed_at", "win_probability_pct", "committed", "services_revenue", "services_tier_id", "manager_strategic_blueprint", "loss_reason", "speaker_notes", "loss_archetype_id", "competitor_id", "compliance_driver_id", "compliance_deadline", "estimated_log_sources", "ad360_seat_count", "ad360_feature_notes", "archived_at", "deleted_at", "created_at", "updated_at", "natural_key"],
   "fx_rates": ["base_currency", "quote_currency", "rate", "as_of", "natural_key", "id"],
   "gate_definitions": ["gate_group", "gate_code", "label", "description", "sort_order", "prerequisite_gate_codes", "is_active", "id"],
   "intervention_checklists": ["trigger_pattern_code", "name", "steps", "is_active", "natural_key", "id"],

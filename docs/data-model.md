@@ -48,6 +48,7 @@ erDiagram
         numeric product_revenue
         text pricing_model
         int contract_term_years
+        bool is_perpetual_term "filler 1 in contract_term_years when true"
         text deal_currency
         numeric services_revenue
         text services_tier

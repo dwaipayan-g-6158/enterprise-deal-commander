@@ -314,6 +314,7 @@ describe("scoreFinancialStructure", () => {
     servicesTier: "Standard",
     pricingModel: "Annual Subscription",
     termYears: 3,
+    isPerpetualTerm: false,
     crossSellPitchedCount: 0,
     progressPct: 80,
   };
@@ -340,6 +341,45 @@ describe("scoreFinancialStructure", () => {
     });
     const cs = r.signals.find((s) => s.factor.toLowerCase().includes("cross-sell"));
     expect(cs?.rawScore).toBeGreaterThan(0);
+  });
+
+  // Signal 5.3's Perpetual penalty moved from "pricingModel === 'Perpetual
+  // License'" to "isPerpetualTerm === true" (the model was retired; the term
+  // flag replaces it). These pin the exact numbers so the move is provably a
+  // relocation, not a scoring change.
+  describe("Perpetual term penalty (moved from pricing model to term flag)", () => {
+    it("isPerpetualTerm carries the same 20-point penalty at the same 0.35 weight", () => {
+      const r = scoreFinancialStructure({ ...base, isPerpetualTerm: true });
+      const term = r.signals.find((s) => s.factor.includes("term,"));
+      expect(term?.rawScore).toBe(20);
+      expect(term?.weight).toBe(0.35);
+    });
+
+    it("pins the composite score the old model-keyed input used to produce", () => {
+      // base: 5.1 services (tcv 100000 < 200000) = 0 * 0.35; 5.2 cross-sell
+      // (count 0) = 0 * 0.30; 5.3 term (isPerpetualTerm) = 20 * 0.35.
+      // weightedSum = 7, totalWeight = 1.0 -> score = 7.
+      const r = scoreFinancialStructure({ ...base, isPerpetualTerm: true });
+      expect(r.score).toBe(7);
+    });
+
+    it("the penalty does not double-fire off pricingModel now that isPerpetualTerm is false", () => {
+      const r = scoreFinancialStructure({
+        ...base,
+        pricingModel: "Perpetual License",
+        termYears: 5,
+        isPerpetualTerm: false,
+      });
+      const term = r.signals.find((s) => s.factor.includes("term,"));
+      expect(term?.rawScore).toBe(0);
+    });
+
+    it("the factor string reads 'perpetual term', never a numeric filler year", () => {
+      const r = scoreFinancialStructure({ ...base, termYears: 1, isPerpetualTerm: true });
+      const term = r.signals.find((s) => s.factor.includes("term,"));
+      expect(term?.factor).toContain("perpetual term");
+      expect(term?.factor).not.toContain("1-year term");
+    });
   });
 });
 

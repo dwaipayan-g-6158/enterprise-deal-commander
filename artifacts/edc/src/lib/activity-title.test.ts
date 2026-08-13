@@ -40,6 +40,9 @@ describe("fieldLabel", () => {
     expect(fieldLabel("pricing_model_id")).toBe("Pricing Model");
     expect(fieldLabel("deal_currency")).toBe("Deal Currency");
     expect(fieldLabel("is_completed")).toBe("Completed");
+    // Same "is_" strip as is_completed above — no FIELD_LABELS override
+    // needed for the new Term-perpetual flag.
+    expect(fieldLabel("is_perpetual_term")).toBe("Perpetual Term");
   });
 });
 

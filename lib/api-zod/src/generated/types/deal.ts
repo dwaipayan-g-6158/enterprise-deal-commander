@@ -26,6 +26,7 @@ export interface Deal {
   pricingModelId?: number;
   pricingModel?: string;
   contractTermYears?: number;
+  isPerpetualTerm?: boolean;
   dealCurrency: string;
   /** @nullable */
   expectedCloseDate?: string | null;

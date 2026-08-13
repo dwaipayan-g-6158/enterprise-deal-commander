@@ -33,12 +33,16 @@ const CRITICAL_GATES = ["G3_PERFORMANCE_PASSED", "G5_CTO_SIGNED_OFF"];
  * engine by every server join (see RawDeal.pricing_model in ./index). Hoisted
  * here so there is exactly one spelling instead of one hardcoded literal per
  * call site.
+ *
+ * "Perpetual License" is a retired row (deactivated, not deleted — see
+ * seed.ts) and deliberately has no entry here any more: its 20-point term-risk
+ * penalty moved to a dedicated `enterprise_deals.is_perpetual_term` flag
+ * (signal 5.3 below), decoupling "how it's priced" from "how long it runs".
  */
 export const PRICING_MODEL = {
   ANNUAL: "Annual Subscription",
   MULTI_YEAR: "Multi-Year Committed",
-  PERPETUAL: "Perpetual License",
-  USAGE_BASED: "Usage-Based",
+  USER_DEVICE: "User/Device Based",
 } as const;
 
 /** Weighted-mean of signal raw scores, normalized by the weights actually present. */
@@ -446,6 +450,7 @@ export function scoreFinancialStructure(i: {
   servicesTier: string;
   pricingModel: string;
   termYears: number;
+  isPerpetualTerm: boolean;
   crossSellPitchedCount: number;
   progressPct: number;
 }): DimensionFnResult {
@@ -489,11 +494,11 @@ export function scoreFinancialStructure(i: {
   let termRisk = 0;
   const term = i.termYears;
   const model = i.pricingModel;
-  if (model === PRICING_MODEL.PERPETUAL) termRisk = 20;
+  if (i.isPerpetualTerm) termRisk = 20;
   else if (model === PRICING_MODEL.ANNUAL && tcv >= 1000000) termRisk = 30;
   else if (model === PRICING_MODEL.MULTI_YEAR && term < 2 && tcv >= 500000) termRisk = 25;
   signals.push({
-    factor: `${model}, ${term}-year term, ${tcv} TCV`,
+    factor: `${model}, ${i.isPerpetualTerm ? "perpetual" : `${term}-year`} term, ${tcv} TCV`,
     rawScore: termRisk,
     weight: 0.35,
   });

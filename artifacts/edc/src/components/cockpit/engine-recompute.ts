@@ -43,6 +43,7 @@ export interface EngineOverrides {
   servicesTier?: string;
   pricingModel?: string;
   termYears?: number;
+  isPerpetualTerm?: boolean;
   expectedCloseDate?: string | null;
   /** Map of gateCode -> isCompleted overriding the live gate state. */
   gates?: Record<string, boolean>;
@@ -123,6 +124,7 @@ export function recomputeIntelligence(
     product_revenue: overrides.productRevenue ?? deal.productRevenue,
     pricing_model: overrides.pricingModel ?? deal.pricingModel ?? intel.financials.pricingModel,
     contract_term_years: overrides.termYears ?? deal.contractTermYears ?? 1,
+    is_perpetual_term: overrides.isPerpetualTerm ?? deal.isPerpetualTerm ?? false,
     deal_currency: deal.dealCurrency,
     expected_close_date:
       overrides.expectedCloseDate !== undefined

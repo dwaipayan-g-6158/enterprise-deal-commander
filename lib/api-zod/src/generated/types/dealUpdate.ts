@@ -38,6 +38,7 @@ export interface DealUpdate {
      * @maximum 10
      */
   contract_term_years?: number;
+  is_perpetual_term?: boolean;
   /**
      * @minLength 3
      * @maxLength 3
