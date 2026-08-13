@@ -31,7 +31,7 @@ const SORT_KEYS: ColumnId[] = [
 const GROUPS: { id: GroupBy; label: string }[] = [
   { id: "none", label: "None" },
   { id: "salesStage", label: "Stage" },
-  { id: "healthStatus", label: "Health" },
+  { id: "healthStatus", label: "Status" },
   { id: "accountManager", label: "Owner" },
 ];
 

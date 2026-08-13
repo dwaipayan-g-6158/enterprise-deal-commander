@@ -18,7 +18,7 @@ export interface FilterOption {
   label: string;
 }
 
-// Generic multi-select used by the Stage / Health / Velocity / AM / TL filters.
+// Generic multi-select used by the Stage / Status / Velocity / AM / TL filters.
 // Popover + searchable Command list of toggle rows; the trigger shows a count
 // badge when anything is selected.
 export function MultiSelectFilter({

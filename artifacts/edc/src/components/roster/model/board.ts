@@ -5,7 +5,7 @@
 import type { PipelineStage } from "@workspace/api-client-react";
 // Relative, not `@/` — this module is node-tested through a vitest config with
 // no alias resolution (same reason risk-model.ts imports it relatively).
-import { HEALTH_SHORT_LABEL } from "../../../lib/semantic-colors";
+import { HEALTH_SHORT_LABEL, OUTCOME_LABEL } from "../../../lib/semantic-colors";
 import type { RosterRow } from "./roster-types";
 
 // A deal's sales stage can be terminal (the deal is decided) while its lifecycle
@@ -54,6 +54,10 @@ export interface BoardColumn {
  * convention healthToRiskLevel encodes.
  */
 export function isAtRisk(row: RosterRow): boolean {
+  // A decided deal carries no risk of not closing. Both riskLevel and
+  // healthStatus keep whatever they last computed while it was live, so without
+  // this guard a won deal bands under "At Risk" in its own Closed-Won column.
+  if (terminalOutcome(row.salesStage)) return false;
   return row.riskLevel === "HIGH" || (row.riskLevel == null && row.healthStatus === "RED");
 }
 
@@ -73,7 +77,12 @@ function bandsFor(bandBy: BandBy): BandDef[] {
         { key: "onTrack", label: "On Track", match: () => true },
       ];
     case "health":
+      // Won/Lost sit above the health bands on purpose: rows fall into the
+      // FIRST match, so a decided deal has to be claimed before the health
+      // bands (and their catch-all) can file it under a stale severity.
       return [
+        { key: "won", label: OUTCOME_LABEL.won, match: (r) => terminalOutcome(r.salesStage) === "won" },
+        { key: "lost", label: OUTCOME_LABEL.lost, match: (r) => terminalOutcome(r.salesStage) === "lost" },
         { key: "red", label: HEALTH_SHORT_LABEL.RED, match: (r) => r.healthStatus === "RED" },
         { key: "yellow", label: HEALTH_SHORT_LABEL.YELLOW, match: (r) => r.healthStatus === "YELLOW" },
         { key: "green", label: HEALTH_SHORT_LABEL.GREEN, match: () => true },

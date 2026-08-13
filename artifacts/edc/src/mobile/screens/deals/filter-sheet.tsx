@@ -2,7 +2,7 @@ import { useMemo } from "react";
 import { Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { compactCurrency } from "@/lib/format";
-import { HEALTH_LABEL, type Health } from "@/lib/semantic-colors";
+import { HEALTH_SHORT_LABEL, type Health } from "@/lib/semantic-colors";
 import { VELOCITY_LABEL } from "@/components/roster/model/velocity";
 import type {
   CloseDatePreset,
@@ -137,8 +137,8 @@ export function FilterSheet({
     >
       <div className="space-y-5 pt-1">
         <ChipGroup
-          label="Health"
-          options={HEALTHS.map((h) => ({ id: h, label: HEALTH_LABEL[h] }))}
+          label="Status"
+          options={HEALTHS.map((h) => ({ id: h, label: HEALTH_SHORT_LABEL[h] }))}
           selected={filters.health}
           onToggle={(id) => onChange({ health: toggle(filters.health, id as Health) })}
         />

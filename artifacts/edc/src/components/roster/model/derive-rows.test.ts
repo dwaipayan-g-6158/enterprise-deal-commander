@@ -312,4 +312,44 @@ describe("computeDerivedRows — grouping", () => {
     expect(out.groups).toHaveLength(1);
     expect(out.groups[0].key).toBe("");
   });
+
+  // Grouping by health used to file decided deals under whatever health the
+  // engine last computed for them, so a Closed-Won deal sat inside "YELLOW"
+  // alongside live deals that genuinely need work.
+  it("groups decided deals under WON/LOST rather than their stale health", () => {
+    const rows = [
+      row({ healthStatus: "YELLOW", salesStage: "Closed-Won" }),
+      row({ healthStatus: "RED", salesStage: "Closed-Lost" }),
+      row({ healthStatus: "YELLOW", salesStage: "Validation" }),
+    ];
+    const out = computeDerivedRows(
+      rows,
+      viewWith({ closure: "all" }, { group: "healthStatus" }),
+      NOW,
+    );
+    expect(out.groups.map((g) => g.key)).toEqual(["YELLOW", "WON", "LOST"]);
+    expect(out.groups[0].rows).toHaveLength(1);
+  });
+
+  it("orders decided groups after every live health group", () => {
+    const rows = [
+      row({ salesStage: "Closed-Lost", healthStatus: "GREEN" }),
+      row({ healthStatus: "GREEN" }),
+      row({ salesStage: "Closed-Won", healthStatus: "GREEN" }),
+      row({ healthStatus: "RED" }),
+    ];
+    const out = computeDerivedRows(
+      rows,
+      viewWith({ closure: "all" }, { group: "healthStatus" }),
+      NOW,
+    );
+    expect(out.groups.map((g) => g.key)).toEqual(["RED", "GREEN", "WON", "LOST"]);
+  });
+
+  // redCount drives the "· N Critical" subtotal. A decided deal is not critical.
+  it("keeps decided deals out of the redCount subtotal", () => {
+    const rows = [row({ healthStatus: "RED", salesStage: "Closed-Lost" })];
+    const out = computeDerivedRows(rows, viewWith({ closure: "all" }), NOW);
+    expect(out.groups[0].redCount).toBe(0);
+  });
 });

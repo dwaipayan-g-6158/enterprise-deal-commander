@@ -21,7 +21,15 @@ export interface DerivedRows {
   matchedCount: number; // rows after client filters
 }
 
-const HEALTH_ORDER: Record<string, number> = { RED: 0, YELLOW: 1, GREEN: 2 };
+// WON/LOST are not health values — they are what the health group becomes for a
+// decided deal, which has no risk of not closing left to report. Ranked after
+// every live band so the pipeline you can still act on stays at the top.
+const HEALTH_ORDER: Record<string, number> = { RED: 0, YELLOW: 1, GREEN: 2, WON: 3, LOST: 4 };
+
+/** Drives the "· N Critical" subtotal. A decided deal is never critical. */
+function isCritical(row: RosterRow): boolean {
+  return row.healthStatus === "RED" && terminalOutcome(row.salesStage) == null;
+}
 
 // Cross-currency-comparable TCV, with the same null fallback everywhere it's
 // aggregated or compared. The TCV range filter and the group/no-group
@@ -75,7 +83,12 @@ function passesFilters(row: RosterRow, view: RosterView, now: number): boolean {
   const f = view.filters;
   if (!passesClosure(row, f.closure)) return false;
   if (f.stage.length && !f.stage.includes(row.salesStage)) return false;
-  if (f.health.length && !f.health.includes(row.healthStatus)) return false;
+  // The health filter offers live severities only, so a decided deal can never
+  // satisfy it — its status is Won/Lost, not the severity it happened to hold
+  // on its last live day. Without this it would answer "Needs Attention".
+  if (f.health.length && (terminalOutcome(row.salesStage) != null || !f.health.includes(row.healthStatus))) {
+    return false;
+  }
   if (f.velocity.length && !f.velocity.includes(row.velocity)) return false;
 
   // Absolute staleness, on purpose. `daysInStage` is populated for every deal,
@@ -130,8 +143,10 @@ function groupValue(row: RosterRow, group: GroupBy): string {
   switch (group) {
     case "salesStage":
       return row.salesStage;
-    case "healthStatus":
-      return row.healthStatus;
+    case "healthStatus": {
+      const outcome = terminalOutcome(row.salesStage);
+      return outcome ? outcome.toUpperCase() : row.healthStatus;
+    }
     case "accountManager":
       return row.accountManager;
     default:
@@ -152,7 +167,7 @@ export function computeDerivedRows(rows: RosterRow[], view: RosterView, now: num
 
   if (view.group === "none") {
     const totalTCV = sorted.reduce((s, r) => s + comparableTCV(r), 0);
-    const redCount = sorted.filter((r) => r.healthStatus === "RED").length;
+    const redCount = sorted.filter(isCritical).length;
     return {
       groups: [{ key: "", label: "", rows: sorted, totalTCV, redCount }],
       flat: sorted,
@@ -173,7 +188,7 @@ export function computeDerivedRows(rows: RosterRow[], view: RosterView, now: num
     label: key || "—",
     rows: gRows,
     totalTCV: gRows.reduce((s, r) => s + comparableTCV(r), 0),
-    redCount: gRows.filter((r) => r.healthStatus === "RED").length,
+    redCount: gRows.filter(isCritical).length,
   }));
 
   groups.sort((a, b) => {

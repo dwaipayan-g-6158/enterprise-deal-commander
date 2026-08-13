@@ -1,8 +1,9 @@
 import { Link } from "wouter";
 import { cn } from "@/lib/utils";
 import { formatCurrency } from "@/components/cockpit/use-invalidate";
-import { HealthBadge, RiskCell, ScoreCell, VelocityCell, CloseDateCell, LastActivityCell, HEALTH_BORDER, RISK_BORDER, TerminalStageBadge } from "./cells";
-import type { Health, RosterRow } from "./model/roster-types";
+import { StatusBadge, RiskCell, ScoreCell, VelocityCell, CloseDateCell, LastActivityCell, rowAccent } from "./cells";
+import { terminalOutcome } from "./model/board";
+import type { RosterRow } from "./model/roster-types";
 
 // Card view used at mobile + tablet widths (the table would force horizontal
 // scroll there). One card per deal with the key triage signals; tapping the
@@ -16,16 +17,15 @@ export function RosterCardList({ rows }: { rows: RosterRow[] }) {
           href={`/deals/${deal.id}`}
           className={cn(
             "block rounded-lg border p-4 transition-colors hover:border-primary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-            deal.riskLevel ? RISK_BORDER[deal.riskLevel] : HEALTH_BORDER[deal.healthStatus],
+            rowAccent(deal),
           )}
         >
           <div className="flex items-start justify-between gap-2">
             <span className="font-semibold">{deal.accountName}</span>
-            <HealthBadge health={deal.healthStatus} />
+            <StatusBadge row={deal} />
           </div>
           <div className="flex items-center gap-1.5 mt-1">
             <p className="text-sm text-muted-foreground">{deal.dealName}</p>
-            <TerminalStageBadge stage={deal.salesStage} />
           </div>
           <p className="text-xl font-bold font-mono mt-1 tabular-nums">
             {formatCurrency(deal.calculatedTCV ?? 0, deal.dealCurrency)}
@@ -33,7 +33,7 @@ export function RosterCardList({ rows }: { rows: RosterRow[] }) {
           <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
             <span>{deal.salesStage}</span>
             <span className="inline-flex items-center gap-1">
-              Risk <RiskCell score={deal.riskScore} level={deal.riskLevel} />
+              Risk <RiskCell score={deal.riskScore} level={deal.riskLevel} decided={terminalOutcome(deal.salesStage) != null} />
             </span>
             <span className="inline-flex items-center gap-1">
               Score <ScoreCell score={deal.score} delta={deal.scoreDelta} />
@@ -43,7 +43,7 @@ export function RosterCardList({ rows }: { rows: RosterRow[] }) {
             </span>
             <LastActivityCell days={deal.daysSinceLastActivity} />
             <span className="inline-flex items-center gap-1">
-              Close <CloseDateCell iso={deal.expectedCloseDate} />
+              Close <CloseDateCell iso={deal.expectedCloseDate} decided={terminalOutcome(deal.salesStage) != null} />
             </span>
           </div>
         </Link>

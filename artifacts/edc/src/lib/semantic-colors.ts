@@ -206,6 +206,13 @@ export const HEALTH_SHORT_LABEL: Record<Health, string> = {
   RED: "Critical",
 };
 
+/** Reads in the same slot as HEALTH_LABEL — a decided deal shows its outcome
+ *  where a live one shows its health. */
+export const OUTCOME_LABEL: Record<Outcome, string> = {
+  won: "Won",
+  lost: "Lost",
+};
+
 interface OutcomeClass {
   text: string;
   bg: string;

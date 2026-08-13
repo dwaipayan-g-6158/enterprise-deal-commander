@@ -72,7 +72,11 @@ export const COLUMNS: Record<ColumnId, ColumnDef> = {
   },
   healthStatus: {
     id: "healthStatus",
-    label: "Health",
+    // "Status", not "Health": the cell shows health for a live deal and the
+    // outcome (Won/Lost) for a decided one, and health is not a thing a decided
+    // deal has. The column *id* stays `healthStatus` — it is the persisted key
+    // in saved views and URLs, and renaming it would break both.
+    label: "Status",
     align: "left",
     defaultWidth: 110,
     sortable: true,

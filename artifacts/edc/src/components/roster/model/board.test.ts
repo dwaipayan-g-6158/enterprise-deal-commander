@@ -83,6 +83,15 @@ describe("isAtRisk", () => {
     // An explicit non-HIGH riskLevel wins over RED health.
     expect(isAtRisk(row({ riskLevel: "LOW", healthStatus: "RED" }))).toBe(false);
   });
+
+  // A decided deal cannot be at risk of not closing — it already closed. Both
+  // riskLevel and healthStatus keep their last live value, so without this the
+  // Closed-Won column bands a won deal under "At Risk".
+  it("is false for decided deals whatever risk or health says", () => {
+    expect(isAtRisk(row({ salesStage: "Closed-Won", riskLevel: "HIGH" }))).toBe(false);
+    expect(isAtRisk(row({ salesStage: "Closed-Lost", riskLevel: "HIGH" }))).toBe(false);
+    expect(isAtRisk(row({ salesStage: "Closed-Won", riskLevel: null, healthStatus: "RED" }))).toBe(false);
+  });
 });
 
 describe("buildBoard", () => {

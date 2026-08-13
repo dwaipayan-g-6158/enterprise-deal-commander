@@ -4,10 +4,13 @@ import { cn } from "@/lib/utils";
 import {
   HEALTH_CLASS,
   HEALTH_LABEL,
+  OUTCOME_CLASS,
+  OUTCOME_LABEL,
   RISK_LEVEL_CLASS,
   RISK_LEVEL_SHORT_LABEL,
   type Health,
 } from "@/lib/semantic-colors";
+import { terminalOutcome } from "@/components/roster/model/board";
 import type { RiskLevel } from "@/components/cockpit/risk/risk-model";
 import { VELOCITY_LABEL } from "@/components/roster/model/velocity";
 import type { VelocityBucket } from "@/components/roster/model/roster-types";
@@ -76,6 +79,36 @@ export function HealthDot({ health, className }: { health: Health; className?: s
       )}
       role="img"
       aria-label={HEALTH_LABEL[health]}
+    />
+  );
+}
+
+/**
+ * The phone's equivalent of the roster's StatusBadge: a decided deal has no
+ * risk of not closing left to report, so it shows its outcome colour instead of
+ * a health colour. Kept beside HealthDot rather than folded into it so nothing
+ * named "health" renders an outcome.
+ */
+export function StatusDot({
+  health,
+  stage,
+  className,
+}: {
+  health: Health;
+  stage: string | null | undefined;
+  className?: string;
+}) {
+  const outcome = terminalOutcome(stage);
+  if (!outcome) return <HealthDot health={health} className={className} />;
+  return (
+    <span
+      className={cn(
+        "m-tint-shift inline-block h-2 w-2 shrink-0 rounded-full",
+        OUTCOME_CLASS[outcome].dot,
+        className,
+      )}
+      role="img"
+      aria-label={OUTCOME_LABEL[outcome]}
     />
   );
 }

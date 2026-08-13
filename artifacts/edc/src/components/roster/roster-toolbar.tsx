@@ -14,7 +14,7 @@ import { MoreFiltersPanel } from "./more-filters-panel";
 import { ColumnCustomizer } from "./column-customizer";
 import { DensityToggle } from "./density-toggle";
 import { VELOCITY_FILTER_OPTIONS, VELOCITY_LABEL } from "./model/velocity";
-import { HEALTH_LABEL } from "@/lib/semantic-colors";
+import { HEALTH_SHORT_LABEL } from "@/lib/semantic-colors";
 import type { BandBy } from "./model/board";
 import type {
   ColumnLayout,
@@ -31,24 +31,30 @@ import type {
 const GROUP_OPTIONS: { value: GroupBy; label: string }[] = [
   { value: "none", label: "No grouping" },
   { value: "salesStage", label: "Group: Stage" },
-  { value: "healthStatus", label: "Group: Health" },
+  { value: "healthStatus", label: "Group: Status" },
   { value: "accountManager", label: "Group: Account Mgr" },
 ];
 
 const BAND_OPTIONS: { value: BandBy; label: string }[] = [
   { value: "risk", label: "Band: Risk" },
-  { value: "health", label: "Band: Health" },
+  { value: "health", label: "Band: Status" },
   { value: "committed", label: "Band: Committed" },
   { value: "none", label: "Band: None" },
 ];
 
-// The long wording, not the short form: a filter list has room, and matching the
-// Health column's badge text exactly is what makes the filter obviously the same
-// axis as the column.
+// Labelled "Status" to match the column it narrows — a filter called "Health"
+// sitting beside a "Status" column reads as a different axis. It offers the
+// three live severities only, and that is not a gap: Won/Lost is the
+// Active/Closed/All *tab* (filters.closure), not a value in this list, and a
+// decided deal can never satisfy this filter anyway (see passesFilters).
+// HEALTH_SHORT_LABEL, matching the column pill, the board bands and the group
+// subtotal — one axis, one vocabulary. The list has room for "Needs Attention",
+// but picking that and getting rows labelled "Attention" reads as two different
+// things; agreeing with what the rows actually say is worth more than the word.
 const HEALTH_OPTIONS: FilterOption[] = [
-  { value: "RED", label: HEALTH_LABEL.RED },
-  { value: "YELLOW", label: HEALTH_LABEL.YELLOW },
-  { value: "GREEN", label: HEALTH_LABEL.GREEN },
+  { value: "RED", label: HEALTH_SHORT_LABEL.RED },
+  { value: "YELLOW", label: HEALTH_SHORT_LABEL.YELLOW },
+  { value: "GREEN", label: HEALTH_SHORT_LABEL.GREEN },
 ];
 
 const VELOCITY_OPTIONS: FilterOption[] = VELOCITY_FILTER_OPTIONS.map((v) => ({ value: v, label: VELOCITY_LABEL[v] }));
@@ -130,7 +136,7 @@ export function RosterToolbar({
         onChange={(v) => setFilters({ stage: v })}
       />
       <MultiSelectFilter
-        label="Health"
+        label="Status"
         options={HEALTH_OPTIONS}
         selected={filters.health}
         onChange={(v) => setFilters({ health: v as Health[] })}

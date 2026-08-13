@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatCurrency } from "@/components/cockpit/use-invalidate";
 import { formatDate } from "@/lib/format";
-import { HealthBadge, ScoreCell, VelocityCell, LastActivityCell } from "./cells";
+import { StatusBadge, ScoreCell, VelocityCell, LastActivityCell } from "./cells";
 import { useDealPreview } from "./hooks/use-deal-preview";
 import { extractDealRisk, sortActions } from "@/components/cockpit/risk/risk-model";
 import { HEALTH_CLASS } from "@/lib/semantic-colors";
@@ -58,7 +58,7 @@ export function PreviewContent({
             <div className="text-xs text-muted-foreground">{row.accountName}</div>
             <div className="font-semibold leading-tight">{row.dealName}</div>
           </div>
-          <HealthBadge health={row.healthStatus} />
+          <StatusBadge row={row} />
         </div>
         <div className="grid grid-cols-2 gap-3">
           <Stat label="TCV">

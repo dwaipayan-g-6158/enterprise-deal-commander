@@ -6,7 +6,7 @@ import { compactCurrency, calendarDaysUntil } from "@/lib/format";
 import { HEALTH_CLASS } from "@/lib/semantic-colors";
 import type { RosterRow } from "@/components/roster/model/roster-types";
 import { armSharedCard, useSharedCardStyle } from "@/mobile/lib/shared-card";
-import { HealthDot, MetaChip, VelocityMark } from "@/mobile/components/badges";
+import { StatusDot, MetaChip, VelocityMark } from "@/mobile/components/badges";
 import { TONE_AHEAD } from "@/mobile/lib/tones";
 
 /**
@@ -66,7 +66,7 @@ export function DealCard({ deal }: { deal: RosterRow }) {
             {deal.accountName}
           </p>
           <h3 className="m-title mt-0.5 flex items-center gap-2">
-            <HealthDot health={deal.healthStatus} />
+            <StatusDot health={deal.healthStatus} stage={deal.salesStage} />
             <span className="truncate" data-shared-part="title" style={shared("title")}>
               {deal.dealName}
             </span>

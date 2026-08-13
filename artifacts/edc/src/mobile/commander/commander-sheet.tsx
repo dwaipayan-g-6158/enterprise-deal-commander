@@ -16,7 +16,7 @@ import { MOBILE_TABS } from "@/mobile/nav/mobile-nav";
 import { useCommander } from "@/mobile/commander/commander-context";
 import { MSheet } from "@/mobile/ui/m-sheet";
 import { ListRow } from "@/mobile/components/list-row";
-import { HealthDot } from "@/mobile/components/badges";
+import { StatusDot } from "@/mobile/components/badges";
 
 /** Name matches shown before the list gets longer than it is useful. */
 const MAX_DEAL_MATCHES = 8;
@@ -129,7 +129,7 @@ export function CommanderSheet() {
           {nameMatches.map((deal) => (
             <Row
               key={deal.id}
-              icon={<HealthDot health={deal.healthStatus} />}
+              icon={<StatusDot health={deal.healthStatus} stage={deal.salesStage} />}
               label={deal.dealName}
               sub={deal.accountName}
               detail={compactCurrency(deal.calculatedTCV ?? 0, deal.dealCurrency ?? "USD")}

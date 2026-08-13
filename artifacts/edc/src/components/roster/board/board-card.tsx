@@ -4,20 +4,18 @@ import { Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatCurrency } from "@/components/cockpit/use-invalidate";
 import {
-  HealthBadge,
+  StatusBadge,
   RiskCell,
   ScoreCell,
   GatesCell,
   VelocityCell,
   CloseDateCell,
   LastActivityCell,
-  TerminalStageBadge,
-  HEALTH_BORDER,
-  RISK_BORDER,
+  rowAccent,
 } from "../cells";
 import { RowContextMenu, type RowActions } from "../row-context-menu";
-import type { BoardStage } from "../model/board";
-import type { Health, RosterRow } from "../model/roster-types";
+import { terminalOutcome, type BoardStage } from "../model/board";
+import type { RosterRow } from "../model/roster-types";
 
 export const DEAL_DND_MIME = "application/x-edc-deal";
 
@@ -50,6 +48,10 @@ export const BoardCard = memo(function BoardCard({
   onDragEnd: () => void;
 }) {
   const draggable = !readOnly && !terminal && !moving;
+  // Deliberately NOT the `terminal` prop above: that is the *column's* flag
+  // (stage.terminal !== null), which drives drag affordances. This is a
+  // statement about the deal in this card, so it reads the deal's own stage.
+  const decided = terminalOutcome(row.salesStage) != null;
 
   const actions: RowActions = {
     ...rowActions,
@@ -82,12 +84,12 @@ export const BoardCard = memo(function BoardCard({
           "rounded-lg border bg-card p-3 transition-colors hover:border-primary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
           draggable ? "cursor-grab active:cursor-grabbing" : "cursor-pointer",
           moving && "opacity-60 pointer-events-none",
-          row.riskLevel ? RISK_BORDER[row.riskLevel] : HEALTH_BORDER[row.healthStatus],
+          rowAccent(row),
         )}
       >
         <div className="flex items-start justify-between gap-2">
           <span className="text-sm font-semibold leading-tight">{row.accountName}</span>
-          <HealthBadge health={row.healthStatus} />
+          <StatusBadge row={row} />
         </div>
         <div className="mt-0.5 flex items-center gap-1.5">
           <Link
@@ -97,7 +99,6 @@ export const BoardCard = memo(function BoardCard({
           >
             {row.dealName}
           </Link>
-          <TerminalStageBadge stage={row.salesStage} />
           {row.committed && (
             <span
               title="Committed"
@@ -112,7 +113,7 @@ export const BoardCard = memo(function BoardCard({
         </p>
         <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
           <span className="inline-flex items-center gap-1">
-            Risk <RiskCell score={row.riskScore} level={row.riskLevel} />
+            Risk <RiskCell score={row.riskScore} level={row.riskLevel} decided={decided} />
           </span>
           <span className="inline-flex items-center gap-1">
             Score <ScoreCell score={row.score} delta={row.scoreDelta} />
@@ -122,7 +123,7 @@ export const BoardCard = memo(function BoardCard({
           {row.daysInStage != null && <span className="tabular-nums">{row.daysInStage}d in stage</span>}
           <LastActivityCell days={row.daysSinceLastActivity} />
           <span className="inline-flex items-center gap-1">
-            Close <CloseDateCell iso={row.expectedCloseDate} />
+            Close <CloseDateCell iso={row.expectedCloseDate} decided={decided} />
           </span>
         </div>
       </div>

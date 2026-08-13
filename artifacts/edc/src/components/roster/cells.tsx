@@ -8,27 +8,69 @@ import { daysUntil } from "@/components/dashboard/widgets/_shared";
 import { formatDate } from "@/lib/format";
 import { formatCurrency } from "@/components/cockpit/use-invalidate";
 import { RISK_LEVEL_CLASS, RISK_LEVEL_LABEL, type RiskLevel } from "@/components/cockpit/risk/risk-model";
-import { HEALTH_BADGE_CLASS, HEALTH_CLASS, HEALTH_LABEL, OUTCOME_CLASS } from "@/lib/semantic-colors";
+import { HEALTH_BADGE_CLASS, HEALTH_SHORT_LABEL, OUTCOME_CLASS, OUTCOME_LABEL, type Outcome } from "@/lib/semantic-colors";
 import { VELOCITY_LABEL } from "./model/velocity";
 import { terminalOutcome } from "./model/board";
+import { rowAccent } from "./model/row-accent";
 import type { ColumnId, Health, RosterRow, VelocityBucket } from "./model/roster-types";
 
-// `terminalOutcome` moved to the pure board model; re-exported here so existing
-// importers (and the table badge below) keep their import path.
-export { terminalOutcome };
+// `terminalOutcome` lives in the pure board model and `rowAccent` in the pure
+// row-accent model; both re-exported here so the three row-rendering surfaces
+// keep importing everything they need from one place.
+export { terminalOutcome, rowAccent };
+
+/**
+ * Both status pills share this: one width, centred content, so the Status
+ * column reads as a column instead of a ragged edge.
+ *
+ * 80px is sized to the widest label the slot can hold — "Attention" measures
+ * 74.9px. It only works alongside HEALTH_SHORT_LABEL below: the long
+ * "Needs Attention" is 114.5px, which would force every "Won" out to a block
+ * 51px wider than its text. Re-measure before widening a label.
+ */
+const STATUS_PILL = "min-w-20 justify-center";
 
 export function HealthBadge({ health }: { health: Health }) {
   return (
     <Badge
       variant={health === "RED" ? "destructive" : health === "YELLOW" ? "default" : "secondary"}
       className={cn(
+        STATUS_PILL,
         health === "YELLOW" && HEALTH_BADGE_CLASS.YELLOW,
         health === "GREEN" && HEALTH_BADGE_CLASS.GREEN,
       )}
     >
-      {HEALTH_LABEL[health]}
+      {/* Short form on purpose — see STATUS_PILL. The filter list keeps the long
+          wording, where there is room for it. */}
+      {HEALTH_SHORT_LABEL[health]}
     </Badge>
   );
+}
+
+// Deliberately built on the same <Badge> as HealthBadge rather than on
+// TerminalStageBadge's hand-rolled span: it stands in the same column, so it
+// has to match the health pill's geometry exactly (px-2.5 py-0.5 text-xs
+// rounded-md, plus STATUS_PILL's width). Only the fill differs.
+// TerminalStageBadge stays small because its remaining job is the board
+// *column header*, a different slot.
+export function OutcomeBadge({ outcome }: { outcome: Outcome }) {
+  const Icon = outcome === "won" ? Trophy : Ban;
+  return (
+    <Badge variant="default" className={cn(STATUS_PILL, "gap-1", OUTCOME_CLASS[outcome].badge)}>
+      <Icon className="h-3 w-3" aria-hidden /> {OUTCOME_LABEL[outcome]}
+    </Badge>
+  );
+}
+
+/**
+ * Health measures risk of *not closing*, which a decided deal no longer
+ * carries — so a terminal stage shows its outcome in the slot a live deal uses
+ * for health. One dispatch point, so the table, card list, preview and board
+ * card can't drift apart.
+ */
+export function StatusBadge({ row }: { row: RosterRow }) {
+  const outcome = terminalOutcome(row.salesStage);
+  return outcome ? <OutcomeBadge outcome={outcome} /> : <HealthBadge health={row.healthStatus} />;
 }
 
 export function ScoreCell({ score, delta }: { score: number | null; delta?: number | null }) {
@@ -67,8 +109,23 @@ export function LastActivityCell({ days }: { days: number | null }) {
   return <span className={cn("font-mono text-xs tabular-nums", tone)}>act. {days}d</span>;
 }
 
-export function RiskCell({ score, level }: { score: number | null; level: RiskLevel | null }) {
-  if (score == null || !level) return <span className="text-muted-foreground">—</span>;
+/**
+ * `decided` renders the same em-dash as missing data, and that is the honest
+ * output: risk is computed at read time and never stored, so the number on a
+ * closed deal is not the risk it carried at close — it is a fresh calculation
+ * against today's dates (Temporal Pressure keys off daysToClose), and it drifts
+ * for as long as the deal sits there. Showing nothing beats showing that.
+ */
+export function RiskCell({
+  score,
+  level,
+  decided = false,
+}: {
+  score: number | null;
+  level: RiskLevel | null;
+  decided?: boolean;
+}) {
+  if (decided || score == null || !level) return <span className="text-muted-foreground">—</span>;
   const c = RISK_LEVEL_CLASS[level];
   return (
     <span className="inline-flex items-center gap-1.5" aria-label={`Risk ${score}, ${RISK_LEVEL_LABEL[level]}`}>
@@ -113,9 +170,14 @@ export function TcvCell({ row }: { row: RosterRow }) {
   return <span className="font-mono tabular-nums">{formatCurrency(row.calculatedTCV ?? 0, row.dealCurrency)}</span>;
 }
 
-export function CloseDateCell({ iso }: { iso: string | null | undefined }) {
+/**
+ * The date stays — it is a real fact about the deal. Only the overdue tone is
+ * suppressed when `decided`: `daysUntil < 0` is true of every past date, so a
+ * deal that closed successfully in June was being painted like a crisis.
+ */
+export function CloseDateCell({ iso, decided = false }: { iso: string | null | undefined; decided?: boolean }) {
   const label = formatDate(iso);
-  const overdue = (daysUntil(iso) ?? 1) < 0;
+  const overdue = !decided && (daysUntil(iso) ?? 1) < 0;
   return <span className={cn("font-mono text-xs tabular-nums", overdue ? "text-red-500" : "text-muted-foreground")}>{label ?? "—"}</span>;
 }
 
@@ -172,6 +234,9 @@ export function TerminalStageBadge({ stage }: { stage: string | null | undefined
 
 /** Dispatcher used by the table body. `select` and the deal-name link are handled by the row. */
 export function RosterCellContent({ columnId, row }: { columnId: ColumnId; row: RosterRow }) {
+  // Computed once per row: a decided deal keeps its facts (TCV, gates, dates)
+  // and loses its live signals (health, risk, overdue urgency).
+  const decided = terminalOutcome(row.salesStage) != null;
   switch (columnId) {
     case "dealName":
       return (
@@ -184,7 +249,6 @@ export function RosterCellContent({ columnId, row }: { columnId: ColumnId; row: 
             >
               {row.dealName}
             </Link>
-            <TerminalStageBadge stage={row.salesStage} />
           </span>
           <MatchedInHint sources={row.matchedIn} />
         </div>
@@ -196,9 +260,9 @@ export function RosterCellContent({ columnId, row }: { columnId: ColumnId; row: 
     case "calculatedTCV":
       return <TcvCell row={row} />;
     case "healthStatus":
-      return <HealthBadge health={row.healthStatus} />;
+      return <StatusBadge row={row} />;
     case "riskLevel":
-      return <RiskCell score={row.riskScore} level={row.riskLevel} />;
+      return <RiskCell score={row.riskScore} level={row.riskLevel} decided={decided} />;
     case "score":
       return <ScoreCell score={row.score} delta={row.scoreDelta} />;
     case "gatesPct":
@@ -212,24 +276,9 @@ export function RosterCellContent({ columnId, row }: { columnId: ColumnId; row: 
     case "technicalLead":
       return <span className="text-muted-foreground">{row.technicalLead}</span>;
     case "expectedCloseDate":
-      return <CloseDateCell iso={row.expectedCloseDate} />;
+      return <CloseDateCell iso={row.expectedCloseDate} decided={decided} />;
     default:
       return null;
   }
 }
 
-// GREEN/LOW are deliberately "" (no border) — not derived from HEALTH_CLASS/
-// RISK_LEVEL_CLASS, whose LOW row now carries a real (sky) borderL. Preserve
-// the existing "no border for the healthy case" behavior explicitly.
-export const HEALTH_BORDER: Record<Health, string> = {
-  RED: `border-l-2 ${HEALTH_CLASS.RED.borderL}`,
-  YELLOW: `border-l-2 ${HEALTH_CLASS.YELLOW.borderL}`,
-  GREEN: "",
-};
-
-export const RISK_BORDER: Record<RiskLevel, string> = {
-  HIGH: `border-l-2 ${RISK_LEVEL_CLASS.HIGH.borderL}`,
-  ELEVATED: `border-l-2 ${RISK_LEVEL_CLASS.ELEVATED.borderL}`,
-  MODERATE: `border-l-2 ${RISK_LEVEL_CLASS.MODERATE.borderL}`,
-  LOW: "",
-};

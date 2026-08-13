@@ -1,6 +1,7 @@
 import { X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { HEALTH_SHORT_LABEL } from "@/lib/semantic-colors";
 import { DEFAULT_FILTERS, type RosterFilters } from "./model/roster-types";
 import { VELOCITY_LABEL } from "./model/velocity";
 import type { FilterOption } from "./multi-select-filter";
@@ -31,7 +32,12 @@ function buildChips(
 
   if (f.search.trim()) chips.push({ key: "q", label: `“${f.search.trim()}”`, onRemove: () => setFilters({ search: "" }) });
   f.stage.forEach((s) => chips.push({ key: `sg-${s}`, label: s, onRemove: removeFrom("stage", s) }));
-  f.health.forEach((h) => chips.push({ key: `h-${h}`, label: h, onRemove: removeFrom("health", h) }));
+  // HEALTH_SHORT_LABEL, not the raw enum: the filter list offers "Critical", so
+  // a chip reading "RED" looks like a different selection than the one just
+  // made. Short form so the chip, the list and the row pill all agree.
+  f.health.forEach((h) =>
+    chips.push({ key: `h-${h}`, label: HEALTH_SHORT_LABEL[h] ?? h, onRemove: removeFrom("health", h) }),
+  );
   f.velocity.forEach((v) =>
     chips.push({ key: `v-${v}`, label: VELOCITY_LABEL[v] ?? v, onRemove: removeFrom("velocity", v) }),
   );
